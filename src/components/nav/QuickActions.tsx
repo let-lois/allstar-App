@@ -1,0 +1,101 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { BottomSheet } from '../ui/BottomSheet'
+import { haptic } from '../../lib/haptics'
+import {
+  IconCalendar,
+  IconCamera,
+  IconNote,
+  IconPlus,
+  IconRoute,
+} from './icons'
+import { useAppStore } from '../../store/useAppStore'
+
+/**
+ * Floating quick-action button.
+ *
+ * Sits above the bottom nav on the right — reachable by thumb, out of the way
+ * of list content. Opens a sheet of full-width targets rather than a radial
+ * menu, because reps hit this while moving.
+ */
+export function QuickActions() {
+  const [open, setOpen] = useState(false)
+  const nav = useNavigate()
+  const route = useAppStore((s) => s.route)
+
+  const activeStop = route?.stops.find((s) => s.status === 'active')
+
+  const actions: { label: string; hint: string; icon: JSX.Element; run: () => void }[] = [
+    {
+      label: 'Start next visit',
+      hint: activeStop ? 'Next stop on your route' : 'Pick a property first',
+      icon: <IconRoute />,
+      run: () => (activeStop ? nav(`/property/${activeStop.propertyId}?start=1`) : nav('/map')),
+    },
+    {
+      label: 'Add lead',
+      hint: 'Drop a new property at your location',
+      icon: <IconPlus />,
+      run: () => nav('/lead/new'),
+    },
+    {
+      label: 'Take photo',
+      hint: 'Attach to a property',
+      icon: <IconCamera />,
+      run: () =>
+        activeStop ? nav(`/property/${activeStop.propertyId}?capture=1`) : nav('/leads'),
+    },
+    {
+      label: 'Add note',
+      hint: 'Quick note or dictation',
+      icon: <IconNote />,
+      run: () => (activeStop ? nav(`/property/${activeStop.propertyId}?note=1`) : nav('/leads')),
+    },
+    {
+      label: 'Schedule',
+      hint: 'Appointment or follow-up',
+      icon: <IconCalendar />,
+      run: () => nav('/schedule/new'),
+    },
+  ]
+
+  return (
+    <>
+      <button
+        onClick={() => {
+          haptic('tap')
+          setOpen(true)
+        }}
+        aria-label="Quick actions"
+        className="press focusable fixed right-4 z-30 grid h-14 w-14 place-items-center rounded-full bg-brand-500 text-white shadow-float md:hidden"
+        style={{ bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
+      >
+        <IconPlus />
+      </button>
+
+      <BottomSheet open={open} onClose={() => setOpen(false)} title="Quick actions" detents={[0.6]}>
+        <ul className="space-y-2 pt-1">
+          {actions.map((a) => (
+            <li key={a.label}>
+              <button
+                onClick={() => {
+                  setOpen(false)
+                  a.run()
+                }}
+                className="press focusable flex min-h-[64px] w-full items-center gap-3 rounded-2xl border border-slate-200 px-4 text-left active:bg-slate-50"
+              >
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
+                  {a.icon}
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-semibold">{a.label}</span>
+                  <span className="block truncate text-xs text-ink-mute">{a.hint}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </BottomSheet>
+    </>
+  )
+}

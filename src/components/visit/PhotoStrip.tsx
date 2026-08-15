@@ -1,0 +1,227 @@
+import { useState } from 'react'
+import type { Photo, PhotoCategory } from '../../types'
+import { PHOTO_CATEGORIES } from '../../data/outcomes'
+import { compressImage, openCamera, openLibrary } from '../../lib/media'
+import { useAppStore } from '../../store/useAppStore'
+import { BottomSheet } from '../ui/BottomSheet'
+import { haptic } from '../../lib/haptics'
+import { IconCamera } from '../nav/icons'
+
+/**
+ * Camera-first attachment strip.
+ *
+ * The flow is: tap camera → OS camera opens → shoot → pick a category → done.
+ * The category sheet appears *after* the shot, never before, so the rep is
+ * never standing there answering a form question with the ladder in one hand.
+ */
+export function PhotoStrip({
+  propertyId,
+  visitId,
+  photos,
+}: {
+  propertyId: string
+  visitId?: string
+  photos: Photo[]
+}) {
+  const addPhoto = useAppStore((s) => s.addPhoto)
+  const [pending, setPending] = useState<
+    { dataUrl: string; width: number; height: number; bytes: number }[]
+  >([])
+  const [busy, setBusy] = useState(false)
+  const [viewing, setViewing] = useState<number | null>(null)
+
+  const handleFiles = async (files: File[]) => {
+    setBusy(true)
+    try {
+      // Compress on-device before anything touches storage or the queue.
+      const compressed = await Promise.all(files.map((f) => compressImage(f)))
+      setPending(compressed)
+    } catch {
+      setBusy(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const commit = async (category: PhotoCategory) => {
+    haptic('confirm')
+    const batch = pending
+    setPending([])
+    for (const img of batch) {
+      await addPhoto(propertyId, img, category, visitId)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="snap-x-row -mx-1 px-1">
+        <button
+          onClick={() => openCamera((files) => void handleFiles(files))}
+          disabled={busy}
+          aria-label="Take photo"
+          className="press focusable grid h-24 w-24 shrink-0 place-items-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 text-ink-mute active:bg-slate-100 disabled:opacity-50"
+        >
+          <span className="flex flex-col items-center gap-1">
+            <IconCamera />
+            <span className="text-[11px] font-semibold">
+              {busy ? 'Processing…' : 'Camera'}
+            </span>
+          </span>
+        </button>
+
+        <button
+          onClick={() => openLibrary((files) => void handleFiles(files))}
+          disabled={busy}
+          aria-label="Choose from library"
+          className="press focusable grid h-24 w-24 shrink-0 place-items-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 text-ink-mute active:bg-slate-100 disabled:opacity-50"
+        >
+          <span className="flex flex-col items-center gap-1">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="M3 16l5-4 4 3 3-2 6 5" />
+            </svg>
+            <span className="text-[11px] font-semibold">Library</span>
+          </span>
+        </button>
+
+        {photos.map((p, i) => {
+          const cat = PHOTO_CATEGORIES.find((c) => c.key === p.category)
+          return (
+            <button
+              key={p.id}
+              onClick={() => setViewing(i)}
+              className="press relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-slate-200"
+            >
+              <img
+                src={p.dataUrl}
+                alt={`${cat?.label ?? 'Photo'} of property`}
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-cover"
+              />
+              <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3 text-left text-[10px] font-bold text-white">
+                {cat?.label}
+              </span>
+              {p.pending && (
+                <span
+                  className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white"
+                  title="Waiting to upload"
+                />
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {photos.length > 0 && (
+        <p className="text-xs text-ink-mute">
+          {photos.length} photo{photos.length === 1 ? '' : 's'} ·{' '}
+          {Math.round(photos.reduce((s, p) => s + p.bytes, 0) / 1024)} KB stored on this
+          phone
+        </p>
+      )}
+
+      {/* Categorize after the shot, in one tap. */}
+      <BottomSheet
+        open={pending.length > 0}
+        onClose={() => setPending([])}
+        title={pending.length > 1 ? `Categorize ${pending.length} photos` : 'Categorize photo'}
+        detents={[0.62]}
+      >
+        <div className="space-y-3">
+          <div className="snap-x-row">
+            {pending.map((p, i) => (
+              <img
+                key={i}
+                src={p.dataUrl}
+                alt=""
+                className="h-28 w-28 shrink-0 rounded-xl object-cover"
+              />
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            {PHOTO_CATEGORIES.map((c) => (
+              <button
+                key={c.key}
+                onClick={() => void commit(c.key)}
+                className="press focusable flex min-h-[64px] items-center gap-2.5 rounded-2xl border-2 border-slate-200 px-4 font-semibold active:bg-slate-50"
+              >
+                <span className="text-xl" aria-hidden>
+                  {c.glyph}
+                </span>
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* Swipe through photos full-screen. */}
+      <PhotoViewer
+        photos={photos}
+        index={viewing}
+        onClose={() => setViewing(null)}
+        onIndex={setViewing}
+      />
+    </div>
+  )
+}
+
+function PhotoViewer({
+  photos,
+  index,
+  onClose,
+  onIndex,
+}: {
+  photos: Photo[]
+  index: number | null
+  onClose: () => void
+  onIndex: (i: number) => void
+}) {
+  if (index == null || !photos[index]) return null
+  const photo = photos[index]
+  const cat = PHOTO_CATEGORIES.find((c) => c.key === photo.category)
+
+  return (
+    <div className="anim-fade fixed inset-0 z-50 flex flex-col bg-black">
+      <div className="pad-top flex items-center justify-between px-2 py-2 text-white">
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="grid h-11 w-11 place-items-center rounded-full active:bg-white/10"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+          </svg>
+        </button>
+        <span className="nums text-sm font-semibold">
+          {index + 1} / {photos.length} · {cat?.label}
+        </span>
+        <span className="w-11" />
+      </div>
+
+      <div
+        // Callback ref rather than an effect: the viewer mounts fresh each open,
+        // so this jumps straight to the tapped photo without a visible scroll.
+        ref={(el) => {
+          if (el && !el.dataset.init) {
+            el.dataset.init = '1'
+            el.scrollLeft = index * el.clientWidth
+          }
+        }}
+        className="flex flex-1 snap-x snap-mandatory overflow-x-auto hide-scrollbar"
+        onScroll={(e) => {
+          const el = e.currentTarget
+          const i = Math.round(el.scrollLeft / el.clientWidth)
+          if (i !== index) onIndex(i)
+        }}
+      >
+        {photos.map((p) => (
+          <div key={p.id} className="flex w-full shrink-0 snap-center items-center justify-center p-3">
+            <img src={p.dataUrl} alt="" className="max-h-full max-w-full object-contain" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
