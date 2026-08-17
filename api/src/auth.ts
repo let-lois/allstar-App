@@ -11,7 +11,22 @@ import type { Env, SessionUser } from './types'
  */
 
 const SESSION_DAYS = 30
-export const PBKDF2_ITERATIONS = 210_000
+
+/**
+ * The Workers runtime rejects PBKDF2 above 100,000 iterations — this is a hard
+ * platform ceiling, not a tuning choice, and asking for more throws rather than
+ * clamping.
+ *
+ * That is below current guidance for PBKDF2-SHA256 used alone, which is why the
+ * pepper matters here rather than being belt-and-braces: it's a server-side
+ * secret mixed into every hash, so an attacker holding only a dumped database
+ * cannot mount an offline attack at any iteration count. They need the Worker's
+ * secret too.
+ *
+ * Note for anyone testing locally: `wrangler dev` runs Node's crypto, which
+ * accepts higher counts happily. This limit only appears in production.
+ */
+export const PBKDF2_ITERATIONS = 100_000
 
 const enc = new TextEncoder()
 
