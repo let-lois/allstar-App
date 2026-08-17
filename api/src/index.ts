@@ -1,4 +1,11 @@
-import { bearerToken, login, resolveSession, revokeSession } from './auth'
+import {
+  PBKDF2_ITERATIONS,
+  bearerToken,
+  hashPassword,
+  login,
+  resolveSession,
+  revokeSession,
+} from './auth'
 import {
   acceptInvite,
   canInvite,
@@ -78,15 +85,28 @@ export default {
           return setupPage({ appUrl })
         }
         if (req.method === 'POST') {
-          const form = await req.formData()
-          const result = await runSetup(env, {
-            token: String(form.get('token') ?? ''),
-            clientName: String(form.get('clientName') ?? ''),
-            name: String(form.get('name') ?? ''),
-            email: String(form.get('email') ?? ''),
-            password: String(form.get('password') ?? ''),
-          })
-          return result.ok ? setupPage({ appUrl, done: true }) : setupPage({ appUrl, error: result.error })
+          // Setup runs once, by an operator, before anything exists. A generic
+          // "something went wrong" here is useless to the one person who needs
+          // to act on it — so the real reason is shown on the page.
+          try {
+            const form = await req.formData()
+            const result = await runSetup(env, {
+              token: String(form.get('token') ?? ''),
+              clientName: String(form.get('clientName') ?? ''),
+              name: String(form.get('name') ?? ''),
+              email: String(form.get('email') ?? ''),
+              password: String(form.get('password') ?? ''),
+            })
+            return result.ok
+              ? setupPage({ appUrl, done: true })
+              : setupPage({ appUrl, error: result.error })
+          } catch (err) {
+            console.error('setup failed', err)
+            return setupPage({
+              appUrl,
+              error: `Setup failed: ${err instanceof Error ? err.message : String(err)}`,
+            })
+          }
         }
       }
 
@@ -102,6 +122,31 @@ export default {
           if (result.ok) return invitePage({ token, appUrl, done: true })
           const invite = await readInvite(env, token)
           return invitePage({ token, invite: invite ?? undefined, error: result.error, appUrl })
+        }
+      }
+
+      /* --- self test ------------------------------------------------------ */
+      //
+      // Password hashing is deliberately expensive, and a Worker has a hard CPU
+      // budget per request — so "can this deployment hash a password at all?"
+      // is a real question with a real answer, not something to infer from a
+      // 500. Reports the cost so a too-small budget is diagnosable directly.
+      if (path === '/api/selftest') {
+        const started = Date.now()
+        try {
+          await hashPassword('self-test-password', 'self-test-salt', env.SESSION_PEPPER ?? '')
+          return json({ ok: true, hashMs: Date.now() - started, iterations: PBKDF2_ITERATIONS }, 200, cors)
+        } catch (err) {
+          return json(
+            {
+              ok: false,
+              hashMs: Date.now() - started,
+              iterations: PBKDF2_ITERATIONS,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            500,
+            cors,
+          )
         }
       }
 

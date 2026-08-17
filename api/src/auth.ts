@@ -11,7 +11,7 @@ import type { Env, SessionUser } from './types'
  */
 
 const SESSION_DAYS = 30
-const PBKDF2_ITERATIONS = 210_000
+export const PBKDF2_ITERATIONS = 210_000
 
 const enc = new TextEncoder()
 
