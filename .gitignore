@@ -4,3 +4,10 @@ viewport-audit
 *.local
 .DS_Store
 .vite
+
+# Worker local state and the generated seed.
+# seed.sql is produced by scripts/make-seed.mjs and contains password hashes —
+# it is regenerated per environment with that environment's pepper, and must
+# never be a committed artifact.
+api/.wrangler
+api/seed.sql

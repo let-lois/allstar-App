@@ -1,0 +1,224 @@
+import { bearerToken, login, resolveSession, revokeSession } from './auth'
+import {
+  acceptInvite,
+  canInvite,
+  createInvite,
+  readInvite,
+  runSetup,
+} from './invites'
+import { applyMutations } from './mutations'
+import { invitePage, setupPage } from './pages'
+import { bootstrap } from './read'
+import type { Env, Mutation, Role, SessionUser } from './types'
+
+/**
+ * Allstar API.
+ *
+ * Small on purpose. The client is offline-first and owns its own state, so this
+ * is not a chatty REST surface — it's three things:
+ *
+ *   POST /api/auth/login   who you are
+ *   GET  /api/bootstrap    everything you cache
+ *   POST /api/mutations    everything you did, replayed exactly once
+ *
+ * Plus a photo upload, which is separate because a multi-megabyte body has no
+ * business inside a batched write that has to succeed atomically on bad signal.
+ */
+
+const json = (body: unknown, status = 200, headers: HeadersInit = {}) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8', ...headers },
+  })
+
+function corsHeaders(req: Request, env: Env): Record<string, string> {
+  const origin = req.headers.get('origin') ?? ''
+  const allowed = (env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim())
+  // Echo only an origin we know. A wildcard would let any site on the internet
+  // drive this API with a rep's credentials.
+  if (!origin || !allowed.includes(origin)) return {}
+  return {
+    'access-control-allow-origin': origin,
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'authorization,content-type',
+    'access-control-max-age': '86400',
+    vary: 'origin',
+  }
+}
+
+async function requireUser(req: Request, env: Env): Promise<SessionUser | null> {
+  const token = bearerToken(req)
+  if (!token) return null
+  return resolveSession(env, token)
+}
+
+export default {
+  async fetch(req: Request, env: Env): Promise<Response> {
+    const cors = corsHeaders(req, env)
+
+    if (req.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: cors })
+    }
+
+    const url = new URL(req.url)
+    const path = url.pathname.replace(/\/+$/, '') || '/'
+
+    try {
+      /* --- account bootstrap (HTML, served by the Worker itself) ---------- */
+      //
+      // These are pages rather than API routes because they're used *before*
+      // anyone can sign in: the first admin has no account, and an invited rep
+      // has no password. The React app can't help with either.
+      const appUrl = env.APP_URL ?? 'https://allstar.letlois.com'
+
+      if (path === '/setup') {
+        if (req.method === 'GET') {
+          const existing = await env.DB.prepare('SELECT 1 AS ok FROM users LIMIT 1').first()
+          if (existing) return setupPage({ appUrl, done: true })
+          return setupPage({ appUrl })
+        }
+        if (req.method === 'POST') {
+          const form = await req.formData()
+          const result = await runSetup(env, {
+            token: String(form.get('token') ?? ''),
+            clientName: String(form.get('clientName') ?? ''),
+            name: String(form.get('name') ?? ''),
+            email: String(form.get('email') ?? ''),
+            password: String(form.get('password') ?? ''),
+          })
+          return result.ok ? setupPage({ appUrl, done: true }) : setupPage({ appUrl, error: result.error })
+        }
+      }
+
+      if (path.startsWith('/invite/')) {
+        const token = path.slice('/invite/'.length)
+        if (req.method === 'GET') {
+          const invite = await readInvite(env, token)
+          return invitePage({ token, invite: invite ?? undefined, appUrl })
+        }
+        if (req.method === 'POST') {
+          const form = await req.formData()
+          const result = await acceptInvite(env, token, String(form.get('password') ?? ''))
+          if (result.ok) return invitePage({ token, appUrl, done: true })
+          const invite = await readInvite(env, token)
+          return invitePage({ token, invite: invite ?? undefined, error: result.error, appUrl })
+        }
+      }
+
+      /* --- health -------------------------------------------------------- */
+      if (path === '/api/health') {
+        return json({ ok: true, time: Date.now() }, 200, cors)
+      }
+
+      /* --- auth ---------------------------------------------------------- */
+      if (path === '/api/auth/login' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const email = typeof body.email === 'string' ? body.email : ''
+        const password = typeof body.password === 'string' ? body.password : ''
+        if (!email || !password) {
+          return json({ error: 'Email and password are required.' }, 400, cors)
+        }
+        const result = await login(env, email, password)
+        // Deliberately identical for a wrong email and a wrong password.
+        if (!result) return json({ error: 'Incorrect email or password.' }, 401, cors)
+        return json(result, 200, cors)
+      }
+
+      if (path === '/api/auth/logout' && req.method === 'POST') {
+        const token = bearerToken(req)
+        if (token) await revokeSession(env, token)
+        return json({ ok: true }, 200, cors)
+      }
+
+      /* --- everything below needs a session ------------------------------ */
+      const user = await requireUser(req, env)
+      if (!user) return json({ error: 'Not signed in.' }, 401, cors)
+
+      if (path === '/api/me') {
+        return json({ user }, 200, cors)
+      }
+
+      if (path === '/api/bootstrap' && req.method === 'GET') {
+        return json(await bootstrap(env, user), 200, cors)
+      }
+
+      /* --- invitations ---------------------------------------------------- */
+      if (path === '/api/invites' && req.method === 'POST') {
+        // Managers can see their team; only admins can create access to it.
+        if (!canInvite(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        // The invite page is served by *this* Worker, not the React app, so the
+        // link must carry the Worker's own origin. Building it from APP_URL sends
+        // every invited rep to a URL that has no route for it.
+        const created = await createInvite(env, user, url.origin, {
+          email: String(body.email ?? ''),
+          name: String(body.name ?? ''),
+          role: (String(body.role ?? 'field_rep') as Role),
+          phone: body.phone ? String(body.phone) : undefined,
+        })
+        if ('error' in created) return json({ error: created.error }, created.status, cors)
+        return json(created, 200, cors)
+      }
+
+      if (path === '/api/mutations' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as { mutations?: Mutation[] }
+        const mutations = Array.isArray(body.mutations) ? body.mutations : []
+        if (mutations.length === 0) return json({ results: [] }, 200, cors)
+        // Bounded so a rep returning from a long dead zone doesn't send a batch
+        // that exceeds the Worker's time limit and fails as a whole.
+        if (mutations.length > 200) {
+          return json({ error: 'Batch too large; send at most 200.' }, 413, cors)
+        }
+        const results = await applyMutations(env, user, mutations)
+        return json({ results, serverTime: Date.now() }, 200, cors)
+      }
+
+      /* --- photo upload --------------------------------------------------- */
+      if (path.startsWith('/api/photos/') && req.method === 'POST') {
+        const photoId = path.slice('/api/photos/'.length)
+        const row = await env.DB.prepare(
+          'SELECT r2_key FROM photos WHERE id = ?1 AND client_id = ?2',
+        )
+          .bind(photoId, user.clientId)
+          .first<{ r2_key: string }>()
+        // The metadata mutation must land first; that's what proves the photo
+        // belongs to a property in this tenant.
+        if (!row) return json({ error: 'Unknown photo.' }, 404, cors)
+
+        const body = await req.arrayBuffer()
+        if (body.byteLength > 8_000_000) {
+          return json({ error: 'Photo too large.' }, 413, cors)
+        }
+        await env.PHOTOS.put(row.r2_key, body, {
+          httpMetadata: { contentType: req.headers.get('content-type') ?? 'image/jpeg' },
+        })
+        return json({ ok: true, key: row.r2_key }, 200, cors)
+      }
+
+      if (path.startsWith('/api/photos/') && req.method === 'GET') {
+        const photoId = path.slice('/api/photos/'.length)
+        const row = await env.DB.prepare(
+          'SELECT r2_key FROM photos WHERE id = ?1 AND client_id = ?2',
+        )
+          .bind(photoId, user.clientId)
+          .first<{ r2_key: string }>()
+        if (!row) return new Response('Not found', { status: 404, headers: cors })
+        const object = await env.PHOTOS.get(row.r2_key)
+        if (!object) return new Response('Not found', { status: 404, headers: cors })
+        return new Response(object.body, {
+          headers: {
+            ...cors,
+            'content-type': object.httpMetadata?.contentType ?? 'image/jpeg',
+            'cache-control': 'private, max-age=31536000, immutable',
+          },
+        })
+      }
+
+      return json({ error: 'Not found.' }, 404, cors)
+    } catch (err) {
+      // Never leak internals to a client; the rep can't act on a stack trace.
+      console.error('unhandled', err)
+      return json({ error: 'Something went wrong.' }, 500, cors)
+    }
+  },
+} satisfies ExportedHandler<Env>
