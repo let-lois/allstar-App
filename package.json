@@ -1,0 +1,35 @@
+{
+  "name": "allstar-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Allstar \u2014 mobile-first field sales (D2D) application",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit false --pretty",
+    "lint": "tsc -b",
+    "audit:viewports": "node scripts/audit-viewports.mjs",
+    "verify:offline": "node scripts/verify-offline.mjs",
+    "verify:webview": "node scripts/verify-webview-notice.mjs"
+  },
+  "dependencies": {
+    "idb": "^8.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "playwright": "^1.49.1",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.9"
+  }
+}
