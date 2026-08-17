@@ -35,6 +35,14 @@ interface Props {
   overlay?: React.ReactNode
   className?: string
   initialCenter?: { lat: number; lng: number }
+  /** Overrides the default field zoom — used to frame a whole territory. */
+  initialZoom?: number
+  /**
+   * Clustering exists so a rep isn't shown fifty overlapping dots they can't
+   * distinguish while walking. In an office territory view the opposite is
+   * true: seeing every property *is* the point, so the console turns it off.
+   */
+  disableClustering?: boolean
   handleRef?: React.MutableRefObject<MapHandle | null>
 }
 
@@ -53,6 +61,8 @@ export function FieldMap({
   overlay,
   className = '',
   initialCenter,
+  initialZoom,
+  disableClustering,
   handleRef,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
@@ -60,7 +70,7 @@ export function FieldMap({
   const [view, setView] = useState<View>(() => ({
     lat: initialCenter?.lat ?? properties[0]?.lat ?? 30.5083,
     lng: initialCenter?.lng ?? properties[0]?.lng ?? -97.6789,
-    zoom: 16,
+    zoom: initialZoom ?? 16,
   }))
   const [followMe, setFollowMe] = useState(true)
 
@@ -260,7 +270,8 @@ export function FieldMap({
       visible.push({ id: p.id, x, y, property: p })
     }
 
-    if (view.zoom >= CLUSTER_UNTIL_ZOOM) return { pins: visible, clusters: [] }
+    if (disableClustering || view.zoom >= CLUSTER_UNTIL_ZOOM)
+      return { pins: visible, clusters: [] }
 
     // Screen-space grid clustering: cheap, stable, and good enough at the zooms
     // where individual doors aren't distinguishable anyway.
@@ -284,7 +295,7 @@ export function FieldMap({
       }
     }
     return { pins: soloPins, clusters: groups }
-  }, [properties, toScreen, size.w, size.h, view.zoom, selectedId])
+  }, [properties, toScreen, size.w, size.h, view.zoom, selectedId, disableClustering])
 
   /* --- route path -------------------------------------------------------- */
 
@@ -448,6 +459,9 @@ export function FieldMap({
             </button>
           </div>
 
+          {/* Only offered when there's a location to go to — in the console
+              there isn't, and a button that does nothing is worse than none. */}
+          {position && (
           <button
             onClick={() => {
               setFollowMe(true)
@@ -471,6 +485,7 @@ export function FieldMap({
               <path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" strokeLinecap="round" />
             </svg>
           </button>
+          )}
         </div>
       </div>
 
@@ -494,6 +509,38 @@ interface Cluster {
 
 function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v))
+}
+
+/**
+ * The zoom that frames a set of points inside a viewport of the given size.
+ *
+ * Without this an admin looking at a territory gets the rep's street-level
+ * zoom, where every property collapses into a cluster bubble and the shape of
+ * the patch — the whole reason to show a map here — is invisible.
+ */
+export function fitZoom(
+  points: { lat: number; lng: number }[],
+  width: number,
+  height: number,
+  padding = 0.15,
+): number {
+  if (points.length < 2) return 16
+  let minX = 1
+  let maxX = 0
+  let minY = 1
+  let maxY = 0
+  for (const p of points) {
+    const w = project(p.lat, p.lng)
+    minX = Math.min(minX, w.x)
+    maxX = Math.max(maxX, w.x)
+    minY = Math.min(minY, w.y)
+    maxY = Math.max(maxY, w.y)
+  }
+  const spanX = Math.max(maxX - minX, 1e-9) * (1 + padding)
+  const spanY = Math.max(maxY - minY, 1e-9) * (1 + padding)
+  const zx = Math.log2(width / (TILE * spanX))
+  const zy = Math.log2(height / (TILE * spanY))
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.min(zx, zy)))
 }
 
 function metersPerPixel(lat: number, zoom: number) {

@@ -200,7 +200,10 @@ export function More() {
             <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
             <MoreLink label="Schedule an appointment" onClick={() => nav('/schedule/new')} />
             {user?.role !== 'field_rep' && (
-              <MoreLink label="Team activity" onClick={() => nav('/team')} />
+              <>
+                <MoreLink label="Team activity" onClick={() => nav('/team')} />
+                <MoreLink label="Admin console" onClick={() => nav('/admin')} />
+              </>
             )}
           </nav>
 

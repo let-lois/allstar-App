@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAppStore } from './store/useAppStore'
 import { BottomNav, SideRail } from './components/nav/BottomNav'
@@ -19,6 +19,34 @@ import { More } from './screens/More'
 import { NewLead } from './screens/NewLead'
 import { ScheduleNew } from './screens/ScheduleNew'
 import { Team } from './screens/Team'
+
+/**
+ * The office console is lazy-loaded.
+ *
+ * It's desktop-only and a field rep never opens it, so shipping its tables,
+ * charts and reporting code in the main bundle would put ~10KB gzipped of dead
+ * weight on every phone, on cellular, every cold start. This keeps it off the
+ * field-rep critical path entirely.
+ */
+const AdminLayout = lazy(() =>
+  import('./admin/AdminLayout').then((m) => ({ default: m.AdminLayout })),
+)
+const AdminDashboard = lazy(() =>
+  import('./admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard })),
+)
+const AdminReports = lazy(() =>
+  import('./admin/AdminReports').then((m) => ({ default: m.AdminReports })),
+)
+const AdminTeam = lazy(() => import('./admin/AdminTeam').then((m) => ({ default: m.AdminTeam })))
+const AdminTerritories = lazy(() =>
+  import('./admin/AdminTerritories').then((m) => ({ default: m.AdminTerritories })),
+)
+const AdminSettings = lazy(() =>
+  import('./admin/AdminSettings').then((m) => ({ default: m.AdminSettings })),
+)
+const AdminClients = lazy(() =>
+  import('./admin/AdminClients').then((m) => ({ default: m.AdminClients })),
+)
 
 export function App() {
   const { ready, user, boot, setPosition } = useAppStore()
@@ -53,6 +81,8 @@ export function App() {
   const isRep = user.role === 'field_rep'
   // Visit Mode owns the whole viewport — it renders its own shell.
   const immersive = /^\/visit\//.test(location.pathname)
+  // The console renders its own nav and needs the full width.
+  const inConsole = /^\/admin/.test(location.pathname)
 
   if (immersive) {
     return (
@@ -67,7 +97,7 @@ export function App() {
       <InAppBrowserNotice />
       <OfflineBanner />
       <div className="flex min-h-0 flex-1">
-        <SideRail role={user.role} />
+        {!inConsole && <SideRail role={user.role} />}
         <main className="flex min-h-0 flex-1 flex-col">
           <Routes>
             <Route
@@ -83,12 +113,36 @@ export function App() {
             <Route path="/schedule/new" element={<ScheduleNew />} />
             <Route path="/team" element={<Team />} />
             <Route path="/more" element={<More />} />
+            {/* Office console — desktop-first, role-gated inside the layout. */}
+            <Route
+              path="/admin"
+              element={
+                <Suspense fallback={<ConsoleLoading />}>
+                  <AdminLayout />
+                </Suspense>
+              }
+            >
+              <Route index element={<AdminDashboard />} />
+              <Route path="reports" element={<AdminReports />} />
+              <Route path="team" element={<AdminTeam />} />
+              <Route path="territories" element={<AdminTerritories />} />
+              <Route path="settings" element={<AdminSettings />} />
+              <Route path="clients" element={<AdminClients />} />
+            </Route>
             <Route path="*" element={<Navigate to="/today" replace />} />
           </Routes>
         </main>
       </div>
-      {isRep && <QuickActions />}
-      <BottomNav role={user.role} />
+      {isRep && !inConsole && <QuickActions />}
+      {!inConsole && <BottomNav role={user.role} />}
+    </div>
+  )
+}
+
+function ConsoleLoading() {
+  return (
+    <div className="grid flex-1 place-items-center p-10 text-sm text-ink-mute">
+      Loading console…
     </div>
   )
 }

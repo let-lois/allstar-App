@@ -9,6 +9,7 @@ import type {
   Route,
   Task,
   Visit,
+  DailyStat,
 } from '../types'
 
 /**
@@ -24,6 +25,7 @@ interface AllstarDB extends DBSchema {
   appointments: { key: string; value: Appointment; indexes: { 'by-start': number } }
   tasks: { key: string; value: Task; indexes: { 'by-due': number } }
   activity: { key: string; value: ActivityEvent; indexes: { 'by-at': number } }
+  dailyStats: { key: string; value: DailyStat; indexes: { 'by-day': string } }
   outbox: { key: string; value: Mutation; indexes: { 'by-created': number } }
   meta: { key: string; value: unknown }
 }
@@ -38,42 +40,45 @@ export type StoreName =
   | 'appointments'
   | 'tasks'
   | 'activity'
+  | 'dailyStats'
   | 'outbox'
 
 let dbPromise: Promise<IDBPDatabase<AllstarDB>> | null = null
 
 export function db(): Promise<IDBPDatabase<AllstarDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<AllstarDB>('allstar-field', 1, {
+    dbPromise = openDB<AllstarDB>('allstar-field', 2, {
+      /**
+       * Idempotent by design. `upgrade` runs for a first-time install *and* for
+       * every version bump, so creating a store unconditionally throws
+       * ConstraintError for anyone who already has the previous version — which
+       * is every existing user, and it bricks their local database.
+       */
       upgrade(d) {
-        const props = d.createObjectStore('properties', { keyPath: 'id' })
-        props.createIndex('by-status', 'status')
+        const store = <N extends StoreName | 'meta'>(
+          name: N,
+          keyPath?: string,
+          indexes: [string, string][] = [],
+        ) => {
+          if (d.objectStoreNames.contains(name)) return
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const os = d.createObjectStore(name as any, keyPath ? { keyPath } : undefined)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          indexes.forEach(([idx, path]) => (os as any).createIndex(idx, path))
+        }
 
-        const visits = d.createObjectStore('visits', { keyPath: 'id' })
-        visits.createIndex('by-property', 'propertyId')
-
-        const notes = d.createObjectStore('notes', { keyPath: 'id' })
-        notes.createIndex('by-property', 'propertyId')
-
-        const photos = d.createObjectStore('photos', { keyPath: 'id' })
-        photos.createIndex('by-property', 'propertyId')
-
-        const routes = d.createObjectStore('routes', { keyPath: 'id' })
-        routes.createIndex('by-date', 'date')
-
-        const appts = d.createObjectStore('appointments', { keyPath: 'id' })
-        appts.createIndex('by-start', 'startsAt')
-
-        const tasks = d.createObjectStore('tasks', { keyPath: 'id' })
-        tasks.createIndex('by-due', 'dueAt')
-
-        const activity = d.createObjectStore('activity', { keyPath: 'id' })
-        activity.createIndex('by-at', 'at')
-
-        const outbox = d.createObjectStore('outbox', { keyPath: 'id' })
-        outbox.createIndex('by-created', 'createdAt')
-
-        d.createObjectStore('meta')
+        store('properties', 'id', [['by-status', 'status']])
+        store('visits', 'id', [['by-property', 'propertyId']])
+        store('notes', 'id', [['by-property', 'propertyId']])
+        store('photos', 'id', [['by-property', 'propertyId']])
+        store('routes', 'id', [['by-date', 'date']])
+        store('appointments', 'id', [['by-start', 'startsAt']])
+        store('tasks', 'id', [['by-due', 'dueAt']])
+        store('activity', 'id', [['by-at', 'at']])
+        store('outbox', 'id', [['by-created', 'createdAt']])
+        // v2
+        store('dailyStats', 'id', [['by-day', 'day']])
+        store('meta')
       },
     })
   }
