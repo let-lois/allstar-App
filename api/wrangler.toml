@@ -14,10 +14,16 @@ binding = "DB"
 database_name = "allstar-db"
 database_id = "3adac120-500e-404d-8a37-571ce3654bc0"
 
-# Photos are the one thing too big for a database row.
-[[r2_buckets]]
-binding = "PHOTOS"
-bucket_name = "allstar-photos"
+# Photos are the one thing too big for a database row — but R2 requires a
+# payment method to activate, which a prototype shouldn't need. The Worker
+# treats this binding as optional: without it every other endpoint works
+# normally and photos stay cached on the phone, exactly as they do today.
+#
+# To enable uploads later: create the `allstar-photos` bucket, uncomment this,
+# and redeploy. No code change.
+# [[r2_buckets]]
+# binding = "PHOTOS"
+# bucket_name = "allstar-photos"
 
 [vars]
 # Comma-separated. The console and the field app are the same origin today, but

@@ -1,6 +1,10 @@
 export interface Env {
   DB: D1Database
-  PHOTOS: R2Bucket
+  /**
+   * Optional. R2 needs a payment method to activate, so a prototype deployment
+   * runs without it: photo metadata still syncs, the image stays on the phone.
+   */
+  PHOTOS?: R2Bucket
   ALLOWED_ORIGINS: string
   SESSION_PEPPER?: string
   /** Present only while first-run setup is still needed; remove after. */
