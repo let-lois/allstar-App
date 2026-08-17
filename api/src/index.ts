@@ -106,8 +106,27 @@ export default {
       }
 
       /* --- health -------------------------------------------------------- */
+      //
+      // Reports which bindings and secrets the *running* Worker can see, so a
+      // misconfigured deployment is diagnosable from a browser instead of by
+      // guessing. Presence and counts only — never a value, not even a prefix.
       if (path === '/api/health') {
-        return json({ ok: true, time: Date.now() }, 200, cors)
+        return json(
+          {
+            ok: true,
+            time: Date.now(),
+            config: {
+              d1: !!env.DB,
+              r2: !!env.PHOTOS,
+              sessionPepper: !!env.SESSION_PEPPER,
+              setupToken: !!env.SETUP_TOKEN,
+              appUrl: env.APP_URL ?? null,
+              allowedOrigins: (env.ALLOWED_ORIGINS ?? '').split(',').filter(Boolean).length,
+            },
+          },
+          200,
+          cors,
+        )
       }
 
       /* --- auth ---------------------------------------------------------- */
