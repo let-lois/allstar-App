@@ -1,0 +1,6 @@
+# SPA fallback.
+#
+# Routing is client-side (react-router), so the server has no /today, /map or
+# /visit/:id to serve. Without this, a rep who bookmarks a screen — or reloads
+# mid-visit — gets a 404 instead of the app.
+/*  /index.html  200

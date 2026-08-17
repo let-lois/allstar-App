@@ -1,0 +1,12 @@
+# The service worker must never be served from cache. A stale sw.js pins an old
+# app shell on a rep's phone and there is no way for them to force an update
+# from the field.
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/manifest.webmanifest
+  Cache-Control: no-cache
+
+# Build assets are content-hashed, so they're safe to cache permanently.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
