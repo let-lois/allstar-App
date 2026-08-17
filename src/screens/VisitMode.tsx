@@ -12,6 +12,7 @@ import { distanceMiles, formatDistance } from '../lib/geo'
 import { duration, relative, relativeLower, time } from '../lib/format'
 import { haptic } from '../lib/haptics'
 import { IconClose } from '../components/nav/icons'
+import { useSync } from '../components/sync/SyncBadge'
 import type { NoteTag, OutcomeCode, Visit } from '../types'
 
 type Step = 'outcome' | 'capture' | 'next' | 'done'
@@ -50,6 +51,7 @@ export function VisitMode() {
   const [nextType, setNextType] = useState<Visit['nextActionType']>('none')
   const [nextAt, setNextAt] = useState<number | undefined>()
   const [elapsed, setElapsed] = useState(0)
+  const sync = useSync()
 
   const photos = useMemo(
     () => Object.values(allPhotos).filter((p) => p.visitId === visitId),
@@ -149,8 +151,22 @@ export function VisitMode() {
               {photos.length > 0 && ` · ${photos.length} photo${photos.length === 1 ? '' : 's'}`}
               {nextAt && nextType !== 'none' && ` · follow-up ${relativeLower(nextAt)}`}
             </p>
-            <p className="mt-3 text-xs text-white/60">
-              Saved on this phone. It uploads automatically.
+            {/* State the truth for the situation the rep is actually in. */}
+            <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-2 text-xs font-semibold">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  sync.state === 'offline'
+                    ? 'bg-slate-300'
+                    : sync.state === 'synced'
+                      ? 'bg-white'
+                      : 'bg-amber-300'
+                }`}
+              />
+              {sync.state === 'offline'
+                ? 'Saved on this phone — uploads when you have signal'
+                : sync.state === 'synced'
+                  ? 'Saved and uploaded'
+                  : `Saved — uploading${sync.pending ? ` (${sync.pending})` : ''}…`}
             </p>
           </div>
         </div>
@@ -164,7 +180,7 @@ export function VisitMode() {
               size="lg"
               full
               buzz
-              className="bg-white text-emerald-700 active:bg-white/90"
+              variant="inverse"
               onClick={() => nav(`/property/${nextProperty.id}?start=1`, { replace: true })}
             >
               Next: {nextProperty.address1}
@@ -173,7 +189,7 @@ export function VisitMode() {
             <Button
               size="lg"
               full
-              className="bg-white text-emerald-700 active:bg-white/90"
+              variant="inverse"
               onClick={() => nav('/map', { replace: true })}
             >
               Back to map
@@ -217,6 +233,19 @@ export function VisitMode() {
             {duration(elapsed)}
           </span>
         </div>
+
+        {/*
+          Visit Mode renders its own shell, so it doesn't inherit the app-wide
+          offline banner. Without this the rep gets no signal at all during the
+          one activity where "is my work safe?" matters most — so the state is
+          stated here, in the rep's terms, rather than as a status icon.
+        */}
+        {sync.state === 'offline' && (
+          <p className="flex items-center gap-2 bg-white/10 px-4 py-1.5 text-[11px] font-medium text-white/90">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
+            Offline — this visit is saving to your phone
+          </p>
+        )}
 
         <ol className="flex gap-1 px-3 pb-2.5" aria-label="Visit progress">
           {STEPS.map((s, i) => (

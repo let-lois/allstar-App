@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { haptic } from '../../lib/haptics'
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success'
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'inverse'
 type Size = 'sm' | 'md' | 'lg'
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -19,6 +19,11 @@ const variants: Record<Variant, string> = {
   ghost: 'bg-transparent text-ink-mute active:bg-slate-100',
   danger: 'bg-red-600 text-white active:bg-red-700',
   success: 'bg-emerald-600 text-white active:bg-emerald-700',
+  // For dark/saturated backgrounds (the visit-complete screen). This exists as a
+  // variant rather than a `className` override because competing Tailwind
+  // utilities resolve by stylesheet order, not by the order they're written —
+  // overriding here produced a white button with white text.
+  inverse: 'bg-white text-emerald-700 active:bg-slate-100 shadow-raise',
 }
 
 // `lg` is the field default — thumb-sized, reachable, readable in sunlight.
