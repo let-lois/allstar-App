@@ -11,7 +11,8 @@
     "typecheck": "tsc -b --noEmit false --pretty",
     "lint": "tsc -b",
     "audit:viewports": "node scripts/audit-viewports.mjs",
-    "verify:offline": "node scripts/verify-offline.mjs"
+    "verify:offline": "node scripts/verify-offline.mjs",
+    "verify:webview": "node scripts/verify-webview-notice.mjs"
   },
   "dependencies": {
     "idb": "^8.0.0",

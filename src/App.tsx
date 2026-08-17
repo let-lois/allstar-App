@@ -4,6 +4,7 @@ import { useAppStore } from './store/useAppStore'
 import { BottomNav, SideRail } from './components/nav/BottomNav'
 import { QuickActions } from './components/nav/QuickActions'
 import { OfflineBanner } from './components/sync/SyncBadge'
+import { InAppBrowserNotice } from './components/system/InAppBrowserNotice'
 import { watchPosition } from './lib/geo'
 import { Login } from './screens/Login'
 import { Today } from './screens/Today'
@@ -63,6 +64,7 @@ export function App() {
 
   return (
     <div className="app-shell">
+      <InAppBrowserNotice />
       <OfflineBanner />
       <div className="flex min-h-0 flex-1">
         <SideRail role={user.role} />

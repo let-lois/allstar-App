@@ -1,6 +1,7 @@
 import { useAppStore } from '../store/useAppStore'
 import { DEMO_USERS } from '../data/seed'
 import type { Role } from '../types'
+import { InAppBrowserNotice } from '../components/system/InAppBrowserNotice'
 
 const ROLE_BLURB: Record<Role, string> = {
   field_rep: 'Route, map, visits — the full field experience',
@@ -20,7 +21,11 @@ export function Login() {
 
   return (
     <div className="app-shell bg-ink text-white">
-      <div className="scroll-pane pad-top flex flex-col justify-center px-6 py-10">
+      {/* Entry point — the earliest possible place to catch a webview link. */}
+      <div className="pad-top shrink-0">
+        <InAppBrowserNotice tone="dark" />
+      </div>
+      <div className="scroll-pane flex flex-col justify-center px-6 py-10">
         <div className="mx-auto w-full max-w-sm">
           <div className="mb-8">
             <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand-500 text-2xl font-black">
