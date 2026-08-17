@@ -174,6 +174,19 @@ export default {
       }
 
       /* --- photo upload --------------------------------------------------- */
+      //
+      // Degrades honestly when R2 isn't bound: the client is told storage is
+      // unavailable rather than getting a success it can act on. Photos stay in
+      // the phone's local cache, which is where they already live — so nothing
+      // is lost, it just hasn't uploaded yet.
+      if (path.startsWith('/api/photos/') && !env.PHOTOS) {
+        return json(
+          { error: 'Photo storage is not enabled on this deployment.', code: 'no_photo_storage' },
+          503,
+          cors,
+        )
+      }
+
       if (path.startsWith('/api/photos/') && req.method === 'POST') {
         const photoId = path.slice('/api/photos/'.length)
         const row = await env.DB.prepare(
@@ -189,7 +202,7 @@ export default {
         if (body.byteLength > 8_000_000) {
           return json({ error: 'Photo too large.' }, 413, cors)
         }
-        await env.PHOTOS.put(row.r2_key, body, {
+        await env.PHOTOS!.put(row.r2_key, body, {
           httpMetadata: { contentType: req.headers.get('content-type') ?? 'image/jpeg' },
         })
         return json({ ok: true, key: row.r2_key }, 200, cors)
@@ -203,7 +216,7 @@ export default {
           .bind(photoId, user.clientId)
           .first<{ r2_key: string }>()
         if (!row) return new Response('Not found', { status: 404, headers: cors })
-        const object = await env.PHOTOS.get(row.r2_key)
+        const object = await env.PHOTOS!.get(row.r2_key)
         if (!object) return new Response('Not found', { status: 404, headers: cors })
         return new Response(object.body, {
           headers: {
