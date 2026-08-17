@@ -2,6 +2,8 @@
 
 Door-to-door field sales, built for the phone.
 
+**Live:** [allstar.letlois.com](https://allstar.letlois.com)
+
 This is **not** a desktop CRM that reflows. The primary user is a Field Rep
 standing outside a house, one-handed, in sunlight, on one bar of LTE, trying to
 finish a knock in under fifteen seconds. Every screen is designed for that
@@ -11,6 +13,9 @@ person first; tablet and desktop are progressive enhancements on top.
 npm install
 npm run dev          # http://localhost:5173
 ```
+
+Deployed on Cloudflare Pages from `main` — every merge ships. Other branches
+build to their own preview URL, so production is never the place you find out.
 
 ## The rule this codebase is built around
 
