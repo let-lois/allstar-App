@@ -89,6 +89,7 @@ export function BottomNav({ role }: { role: Role }) {
  */
 export function SideRail({ role }: { role: Role }) {
   const items = navItemsForRole(role)
+  const showConsole = role !== 'field_rep'
   return (
     <nav
       className="hidden w-[76px] shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-surface py-4 md:flex lg:w-56 lg:items-stretch lg:px-3"
@@ -116,6 +117,23 @@ export function SideRail({ role }: { role: Role }) {
           <span className="hidden lg:block">{label}</span>
         </NavLink>
       ))}
+
+      {/* The office console is a separate, desktop-first surface — it gets its
+          own entry rather than sitting in the field navigation. */}
+      {showConsole && (
+        <NavLink
+          to="/admin"
+          className={({ isActive }) =>
+            [
+              'mt-auto flex min-h-tap items-center justify-center gap-3 rounded-xl px-3 text-sm font-medium lg:justify-start',
+              isActive ? 'bg-brand-50 text-brand-600' : 'text-ink-mute hover:bg-slate-50',
+            ].join(' ')
+          }
+        >
+          <IconPipeline />
+          <span className="hidden lg:block">Console</span>
+        </NavLink>
+      )}
     </nav>
   )
 }

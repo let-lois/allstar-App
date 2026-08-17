@@ -103,6 +103,39 @@ asserts the route, appointments and activity are all still there.
 **More → Field testing → Reset demo data** restores a pristine dataset between
 pitches.
 
+## Office console
+
+`/admin` is the one deliberately **desktop-first** surface. Everywhere else
+mobile is the design and desktop is the enhancement; here the work — comparing
+reps across a month, reassigning territories, auditing configuration — is dense,
+wide, and done sitting down. On a phone it hands off to the mobile screens
+rather than rendering wide tables badly.
+
+| Section | Who | What |
+| --- | --- | --- |
+| Dashboard | Manager+ | KPIs vs the previous window, daily trend, open-pipeline funnel, rep table, live activity |
+| Reports | Manager+ | Range and per-rep filters, volume vs contact rate, full breakdown, CSV export |
+| Team | Manager+ | Roster, roles, territory, per-rep performance |
+| Territories | Manager+ | Coverage table linked to a map of the patch |
+| Settings | Admin | Outcomes, note templates, photo categories |
+| Clients | Super Admin | Platform roll-up across accounts |
+
+It is **lazy-loaded**: a field rep never opens it, so its tables and charts stay
+out of the phone bundle entirely.
+
+Charts follow the `dataviz` method — one axis, categorical hues in fixed order,
+an ordinal ramp for ordered stages, a single hue for one measure, legends and
+direct labels so identity never rests on color. The palettes in
+`admin/charts/tokens.ts` were run through the validator against this app's own
+chart surface; re-run it before changing a hex.
+
+```bash
+npm run verify:console
+```
+
+...asserts a field rep cannot reach the console even by URL, that a manager sees
+fewer sections than an admin, and that a phone gets the handoff.
+
 ## Mobile layout audit
 
 ```bash

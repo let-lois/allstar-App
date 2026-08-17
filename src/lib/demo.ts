@@ -29,6 +29,7 @@ const SEEDED_STORES: StoreName[] = [
   'appointments',
   'tasks',
   'activity',
+  'dailyStats',
 ]
 
 /**
@@ -46,6 +47,7 @@ async function writeSeed(bundle: SeedBundle) {
     db.putAll('appointments', bundle.appointments),
     db.putAll('tasks', bundle.tasks),
     db.putAll('activity', bundle.activity),
+    db.putAll('dailyStats', bundle.dailyStats),
   ])
   await db.metaSet(SEED_DAY_KEY, bundle.day)
 }

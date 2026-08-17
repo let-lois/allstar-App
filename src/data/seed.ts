@@ -8,6 +8,7 @@ import type {
   Route,
   Task,
   User,
+  DailyStat,
 } from '../types'
 import { dayKey } from '../lib/format'
 
@@ -201,7 +202,11 @@ export interface SeedBundle {
   appointments: Appointment[]
   tasks: Task[]
   activity: ActivityEvent[]
+  dailyStats: DailyStat[]
 }
+
+/** Weeks of history for the office console's trend and comparison charts. */
+const HISTORY_DAYS = 30
 
 export function buildSeed(now = Date.now()): SeedBundle {
   const rand = rng(20260815)
@@ -399,5 +404,71 @@ export function buildSeed(now = Date.now()): SeedBundle {
     })
   })
 
-  return { day: today, properties, routes, appointments, tasks, activity }
+  /* --- history for the office console ------------------------------------ */
+
+  const dailyStats = buildHistory(now, activity)
+
+  return { day: today, properties, routes, appointments, tasks, activity, dailyStats }
+}
+
+/**
+ * Rolled-up history behind the reporting screens.
+ *
+ * Today's row is computed from the real activity generated above, so the
+ * console and the rep's own screen never disagree about today. Prior days are
+ * synthesized around each rep's baseline with a weekly rhythm — Saturdays are
+ * the big knocking days in this business and Sundays are quiet, and a trend
+ * line without that shape looks obviously fake to anyone in the industry.
+ */
+function buildHistory(now: number, todayActivity: ActivityEvent[]): DailyStat[] {
+  const rand = rng(770315)
+  const rows: DailyStat[] = []
+  const GOOD_SET = new Set<OutcomeCode>(GOOD)
+
+  for (let d = HISTORY_DAYS - 1; d >= 0; d--) {
+    const ts = now - d * 86_400_000
+    const day = dayKey(ts)
+    const dow = new Date(ts).getDay()
+    // Sun 0 … Sat 6. Weekends carry the volume; Sunday is mostly off.
+    const dayFactor = [0.25, 0.85, 0.95, 1.0, 0.95, 1.1, 1.35][dow]
+
+    for (const rep of FIELD_REPS) {
+      if (d === 0) {
+        const mine = todayActivity.filter((a) => a.repId === rep.id)
+        rows.push({
+          id: `${rep.id}:${day}`,
+          repId: rep.id,
+          day,
+          knocks: mine.length,
+          conversations: mine.filter((a) => a.outcome && GOOD_SET.has(a.outcome)).length,
+          appointments: mine.filter((a) => a.outcome === 'appointment').length,
+          quotes: mine.filter((a) => a.outcome === 'quote_requested').length,
+          sold: mine.filter((a) => a.outcome === 'sold').length,
+          pipelineValue: mine.filter((a) => a.outcome === 'sold').length * 14_000,
+        })
+        continue
+      }
+
+      const base = rep.routeStops * dayFactor * (0.7 + rand() * 0.6)
+      const knocks = Math.round(base)
+      const conversations = Math.round(knocks * rep.conversionBias * (0.75 + rand() * 0.5))
+      const appointments = Math.round(conversations * (0.18 + rand() * 0.16))
+      const quotes = Math.round(conversations * (0.12 + rand() * 0.14))
+      const sold = Math.round(quotes * (0.25 + rand() * 0.3))
+
+      rows.push({
+        id: `${rep.id}:${day}`,
+        repId: rep.id,
+        day,
+        knocks,
+        conversations: Math.min(conversations, knocks),
+        appointments,
+        quotes,
+        sold,
+        pipelineValue: sold * Math.round(11_000 + rand() * 9_000),
+      })
+    }
+  }
+
+  return rows
 }

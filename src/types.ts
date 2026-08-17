@@ -198,6 +198,27 @@ export interface ActivityEvent {
   outcome?: OutcomeCode
 }
 
+/**
+ * One rep's day, rolled up.
+ *
+ * Reporting needs weeks of history; storing every individual visit for that
+ * would be thousands of rows the phone never reads. The office console works
+ * off these aggregates and drills into live records only for today.
+ */
+export interface DailyStat {
+  /** `${repId}:${day}` */
+  id: string
+  repId: string
+  /** YYYY-MM-DD */
+  day: string
+  knocks: number
+  conversations: number
+  appointments: number
+  quotes: number
+  sold: number
+  pipelineValue: number
+}
+
 /* ---------------------------------------------------------------------------
  * Offline sync
  * ------------------------------------------------------------------------- */
