@@ -1,0 +1,28 @@
+name = "allstar-api"
+main = "src/index.ts"
+# Pinned to the latest date the pinned wrangler's runtime supports. A date in
+# the future silently falls back, which hides which semantics you're actually
+# getting — better to state the real one and bump it deliberately with wrangler.
+compatibility_date = "2025-07-18"
+compatibility_flags = ["nodejs_compat"]
+
+# Primary region is Eastern North America: reps write constantly from US
+# cellular, and D1 writes go to the primary while reads are served from the
+# edge. Set at creation — it cannot be changed later.
+[[d1_databases]]
+binding = "DB"
+database_name = "allstar-db"
+database_id = "3adac120-500e-404d-8a37-571ce3654bc0"
+
+# Photos are the one thing too big for a database row.
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "allstar-photos"
+
+[vars]
+# Comma-separated. The console and the field app are the same origin today, but
+# local development is a second one.
+ALLOWED_ORIGINS = "https://allstar.letlois.com,https://allstar-app.pages.dev,http://localhost:5173,http://127.0.0.1:4173"
+
+# Secrets (set with `wrangler secret put`, never committed):
+#   SESSION_PEPPER  — mixed into password hashing

@@ -1,0 +1,20 @@
+{
+  "name": "allstar-api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Allstar field sales API — Cloudflare Workers + D1 + R2",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:schema": "wrangler d1 execute allstar-db --remote --file=./schema.sql",
+    "db:schema:local": "wrangler d1 execute allstar-db --local --file=./schema.sql",
+    "db:seed": "wrangler d1 execute allstar-db --remote --file=./seed.sql"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250109.0",
+    "typescript": "^5.6.3",
+    "wrangler": "^3.99.0"
+  }
+}
