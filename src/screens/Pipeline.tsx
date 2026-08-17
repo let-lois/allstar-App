@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Chip } from '../components/ui/Chip'
-import { useAppStore } from '../store/useAppStore'
+import { useScopedProperties } from '../store/useAppStore'
 import { PIPELINE_STAGES, STATUS_COLOR, STATUS_LABEL } from '../data/outcomes'
 import { money, moneyFull, relativeLower } from '../lib/format'
 import { IconChevron } from '../components/nav/icons'
@@ -19,13 +19,13 @@ import type { LeadStatus } from '../types'
  */
 export function Pipeline() {
   const nav = useNavigate()
-  const properties = useAppStore((s) => s.properties)
+  const properties = useScopedProperties()
   const [stage, setStage] = useState<LeadStatus>('working')
 
   const byStage = useMemo(() => {
     const map = new Map<LeadStatus, { count: number; value: number }>()
     PIPELINE_STAGES.forEach((s) => map.set(s, { count: 0, value: 0 }))
-    for (const p of Object.values(properties)) {
+    for (const p of properties) {
       const bucket = map.get(p.status)
       if (!bucket) continue
       bucket.count += 1
@@ -36,7 +36,7 @@ export function Pipeline() {
 
   const stageRows = useMemo(
     () =>
-      Object.values(properties)
+      properties
         .filter((p) => p.status === stage)
         .sort((a, b) => (b.opportunityValue ?? 0) - (a.opportunityValue ?? 0)),
     [properties, stage],

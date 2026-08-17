@@ -70,6 +70,34 @@ npm run verify:offline
 with no connection, still see their work, and have it upload by itself on
 reconnect.
 
+## Demo data
+
+The demo is a full company, not one rep: **five field reps** with their own
+territories, routes and hit rates, so a manager view shows a real spread rather
+than five identical bars. Sign-in offers one rep plus the three office roles;
+the other reps exist as teammates.
+
+Two rules govern `data/seed.ts`:
+
+- **Deterministic** — seeded RNG, so every reload and every device shows the
+  identical neighborhood. A demo that looks different on the second run is one
+  you can't rehearse.
+- **Time-relative** — every timestamp derives from "now", and the bundle is
+  regenerated when the calendar day rolls over (`lib/demo.ts`). Without this the
+  demo silently empties out overnight: today's appointments become yesterday's
+  and drop off the Today screen. That failure is discovered in front of a
+  prospect, so it has a gate:
+
+```bash
+npm run verify:demo
+```
+
+...which boots the app, jumps the device clock forward four days, reloads, and
+asserts the route, appointments and activity are all still there.
+
+**More → Field testing → Reset demo data** restores a pristine dataset between
+pitches.
+
 ## Mobile layout audit
 
 ```bash

@@ -5,7 +5,7 @@ import { Chip } from '../components/ui/Chip'
 import { PropertyRow } from '../components/property/PropertyRow'
 import { PropertyPeek } from '../components/property/PropertyPeek'
 import { VirtualList } from '../components/ui/VirtualList'
-import { useAppStore } from '../store/useAppStore'
+import { useAppStore, useScopedProperties } from '../store/useAppStore'
 import { useIsDesktop } from '../lib/useMediaQuery'
 import { distanceMiles } from '../lib/geo'
 import { IconSearch } from '../components/nav/icons'
@@ -44,6 +44,7 @@ const ROW_HEIGHT = 100
 export function Leads() {
   const nav = useNavigate()
   const properties = useAppStore((s) => s.properties)
+  const scoped = useScopedProperties()
   const position = useAppStore((s) => s.position)
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<LeadStatus | 'all'>('all')
@@ -59,7 +60,7 @@ export function Leads() {
 
   const list = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase()
-    let rows: Property[] = Object.values(properties)
+    let rows: Property[] = [...scoped]
 
     if (status !== 'all') rows = rows.filter((p) => p.status === status)
     if (q) {
@@ -86,13 +87,13 @@ export function Leads() {
       case 'recent':
         return rows.sort((a, b) => (b.lastVisitAt ?? 0) - (a.lastVisitAt ?? 0))
     }
-  }, [properties, deferredQuery, status, sort, position])
+  }, [scoped, deferredQuery, status, sort, position])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <TopBar
         title="Leads"
-        subtitle={`${list.length} of ${Object.keys(properties).length}`}
+        subtitle={`${list.length} of ${scoped.length}`}
         below={
           <div className="space-y-2">
             <label className="relative block">

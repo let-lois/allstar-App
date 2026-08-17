@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAppStore, useRouteProgress } from '../store/useAppStore'
+import {
+  useAppStore,
+  useMyActivity,
+  useMyAppointments,
+  useMyTasks,
+  useRouteProgress,
+} from '../store/useAppStore'
 import { TopBar } from '../components/nav/TopBar'
 import { SyncBadge, SyncDetail } from '../components/sync/SyncBadge'
 import { BottomSheet } from '../components/ui/BottomSheet'
@@ -25,8 +31,12 @@ import { IconCalendar, IconChevron, IconNavigate } from '../components/nav/icons
  */
 export function Today() {
   const nav = useNavigate()
-  const { user, properties, route, appointments, tasks, activity, position, refreshPosition } =
-    useAppStore()
+  const { user, properties, route, position, refreshPosition } = useAppStore()
+  // Scoped to this rep — with a full team in the data, the unscoped stores hold
+  // everyone's work and would report the team's doors as this rep's.
+  const appointments = useMyAppointments()
+  const tasks = useMyTasks()
+  const activity = useMyActivity()
   const progress = useRouteProgress()
   const [syncOpen, setSyncOpen] = useState(false)
 
@@ -41,13 +51,11 @@ export function Today() {
     const startOfDay = new Date()
     startOfDay.setHours(0, 0, 0, 0)
     const end = startOfDay.getTime() + 86_400_000
-    return Object.values(appointments)
-      .filter((a) => a.startsAt >= startOfDay.getTime() && a.startsAt < end)
-      .sort((a, b) => a.startsAt - b.startsAt)
+    return appointments.filter((a) => a.startsAt >= startOfDay.getTime() && a.startsAt < end)
   }, [appointments])
 
   const openTasks = useMemo(
-    () => Object.values(tasks).filter((t) => !t.done).sort((a, b) => a.dueAt - b.dueAt),
+    () => tasks.filter((t) => !t.done),
     [tasks],
   )
 

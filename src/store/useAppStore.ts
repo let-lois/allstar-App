@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import type {
   ActivityEvent,
@@ -16,7 +17,8 @@ import type {
 import * as db from '../lib/db'
 import { uid } from '../lib/id'
 import { enqueue, initSync } from '../lib/sync'
-import { buildSeed, DEMO_USERS } from '../data/seed'
+import { DEMO_USERS, FIELD_REPS } from '../data/seed'
+import { ensureFreshDemo, resetDemo } from '../lib/demo'
 import { OUTCOME_TO_STATUS } from '../data/outcomes'
 import { dayKey } from '../lib/format'
 import { getPosition, type Position } from '../lib/geo'
@@ -39,6 +41,8 @@ interface AppState {
 
   properties: Record<string, Property>
   route: Route | null
+  /** Every rep's route for today; `route` is the signed-in user's. */
+  routes: Route[]
   visits: Record<string, Visit>
   notes: Record<string, Note>
   photos: Record<string, Photo>
@@ -51,6 +55,8 @@ interface AppState {
 
   boot: () => Promise<void>
   signIn: (userId: string) => Promise<void>
+  /** Demo-only: hand the next pitch a pristine dataset. */
+  resetDemoData: () => Promise<void>
   signOut: () => Promise<void>
   refreshPosition: () => Promise<void>
   setPosition: (p: Position) => void
@@ -98,6 +104,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   position: null,
   properties: {},
   route: null,
+  routes: [],
   visits: {},
   notes: {},
   photos: {},
@@ -109,22 +116,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   async boot() {
     await initSync()
 
-    let properties = await db.all<Property>('properties')
+    // Installs the demo on first run, and regenerates it when the calendar day
+    // has rolled over so the pitch never opens to empty sections. Everything
+    // after this point reads from IndexedDB and is fully offline-capable.
+    await ensureFreshDemo()
 
-    // First run (or a cleared cache): hydrate the local store once, then never
-    // again — subsequent launches read straight from IndexedDB and are instant
-    // and fully offline-capable.
-    if (properties.length === 0) {
-      const seed = buildSeed()
-      await Promise.all([
-        db.putAll('properties', seed.properties),
-        db.putAll('routes', [seed.route]),
-        db.putAll('appointments', seed.appointments),
-        db.putAll('tasks', seed.tasks),
-        db.putAll('activity', seed.activity),
-      ])
-      properties = seed.properties
-    }
+    const properties = await db.all<Property>('properties')
 
     const [routes, visits, notes, photos, appointments, tasks, activity] = await Promise.all([
       db.all<Route>('routes'),
@@ -136,11 +133,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       db.all<ActivityEvent>('activity'),
     ])
 
-    const today = dayKey()
-    const route = routes.find((r) => r.date === today) ?? routes[0] ?? null
-
     const savedUserId = await db.metaGet<string>(SESSION_KEY)
     const user = savedUserId ? (DEMO_USERS.find((u) => u.id === savedUserId) ?? null) : null
+
+    // Every rep has their own route; the office roles ride along with the rep
+    // whose day the demo is built around.
+    const route = routeFor(routes, user?.id)
 
     // An in-flight visit survives an app kill — reps close the app mid-knock.
     const openVisit = visits.find((v) => !v.endedAt)
@@ -148,6 +146,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       ready: true,
       user,
+      routes,
       properties: indexById(properties),
       route,
       visits: indexById(visits),
@@ -165,7 +164,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   async signIn(userId) {
     const user = DEMO_USERS.find((u) => u.id === userId) ?? null
     await db.metaSet(SESSION_KEY, userId)
-    set({ user })
+    // Switching identity switches whose route the Today screen is driving.
+    set({ user, route: routeFor(get().routes, user?.id) })
+  },
+
+  async resetDemoData() {
+    await resetDemo()
+    // Re-read rather than patching state — a reset replaces every seeded row.
+    const current = get().user
+    await get().boot()
+    if (current) await get().signIn(current.id)
   },
 
   async signOut() {
@@ -477,6 +485,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 }))
 
+/**
+ * The route to drive the Today screen from.
+ *
+ * Field reps get their own. Managers and admins have no route of their own, so
+ * they ride along with the lead rep's — their Today screen is the Overview,
+ * and this only backs the shared map/route views.
+ */
+function routeFor(routes: Route[], userId?: string): Route | null {
+  const today = dayKey()
+  const todays = routes.filter((r) => r.date === today)
+  const pool = todays.length ? todays : routes
+  return (
+    pool.find((r) => r.repId === userId) ??
+    pool.find((r) => r.repId === FIELD_REPS[0].id) ??
+    pool[0] ??
+    null
+  )
+}
+
 /** Keeps exactly one stop `active` — the one the "Next" card points at. */
 function promoteNextStop(route: Route): Route {
   const hasActive = route.stops.some((s) => s.status === 'active')
@@ -510,4 +537,57 @@ export function useRouteProgress() {
       pct: total ? Math.round((done / total) * 100) : 0,
     }
   })
+}
+
+/* --- Role scoping ---------------------------------------------------------
+ *
+ * With a full team in the data, "my leads" and "the company's leads" are no
+ * longer the same set. A rep's screens must show their own patch — otherwise
+ * Dana's Today screen reports the whole team's doors as hers. Office roles keep
+ * seeing everything, which is the point of their views.
+ * ------------------------------------------------------------------------- */
+
+function isRep(user: User | null): boolean {
+  return user?.role === 'field_rep'
+}
+
+export function useScopedProperties(): Property[] {
+  const properties = useAppStore((s) => s.properties)
+  const user = useAppStore((s) => s.user)
+  return useMemo(() => {
+    const all = Object.values(properties)
+    if (!isRep(user)) return all
+    return all.filter((p) => p.assignedRepId === user?.id)
+  }, [properties, user])
+}
+
+export function useMyTasks(): Task[] {
+  const tasks = useAppStore((s) => s.tasks)
+  const user = useAppStore((s) => s.user)
+  return useMemo(() => {
+    const all = Object.values(tasks)
+    return (isRep(user) ? all.filter((t) => t.repId === user?.id) : all).sort(
+      (a, b) => a.dueAt - b.dueAt,
+    )
+  }, [tasks, user])
+}
+
+export function useMyAppointments(): Appointment[] {
+  const appointments = useAppStore((s) => s.appointments)
+  const user = useAppStore((s) => s.user)
+  return useMemo(() => {
+    const all = Object.values(appointments)
+    return (isRep(user) ? all.filter((a) => a.repId === user?.id) : all).sort(
+      (a, b) => a.startsAt - b.startsAt,
+    )
+  }, [appointments, user])
+}
+
+export function useMyActivity(): ActivityEvent[] {
+  const activity = useAppStore((s) => s.activity)
+  const user = useAppStore((s) => s.user)
+  return useMemo(
+    () => (isRep(user) ? activity.filter((a) => a.repId === user?.id) : activity),
+    [activity, user],
+  )
 }

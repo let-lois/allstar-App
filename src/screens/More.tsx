@@ -23,6 +23,7 @@ export function More() {
   const nav = useNavigate()
   const user = useAppStore((s) => s.user)
   const signOut = useAppStore((s) => s.signOut)
+  const resetDemoData = useAppStore((s) => s.resetDemoData)
   const properties = useAppStore((s) => s.properties)
   const photos = useAppStore((s) => s.photos)
   const snap = useSync()
@@ -30,6 +31,7 @@ export function More() {
   const [storage, setStorage] = useState<{ usedMB: number; quotaMB: number } | null>(null)
   const [outbox, setOutbox] = useState<Mutation[]>([])
   const [offlineSim, setOfflineSim] = useState(isForcedOffline())
+  const [resetting, setResetting] = useState(false)
 
   useEffect(() => {
     void estimateStorage().then(setStorage)
@@ -160,6 +162,37 @@ export function More() {
                 />
               </button>
             </label>
+
+            {/*
+              Demo hygiene: a prospect pokes at the app, records visits, marks
+              things sold. This hands the next pitch a clean, identical dataset
+              instead of yesterday's fingerprints.
+            */}
+            <div className="mt-3 border-t border-slate-100 pt-3">
+              <p className="text-sm font-medium">Reset demo data</p>
+              <p className="mt-0.5 text-xs text-ink-mute">
+                Restores the sample territory, routes and team activity. Clears any
+                visits, notes and photos recorded on this device.
+              </p>
+              <Button
+                variant="secondary"
+                full
+                className="mt-2"
+                disabled={resetting}
+                onClick={async () => {
+                  if (!window.confirm('Reset the demo? Work recorded on this device is cleared.'))
+                    return
+                  setResetting(true)
+                  try {
+                    await resetDemoData()
+                  } finally {
+                    setResetting(false)
+                  }
+                }}
+              >
+                {resetting ? 'Resetting…' : 'Reset demo data'}
+              </Button>
+            </div>
           </Collapsible>
 
           <nav className="card overflow-hidden">
