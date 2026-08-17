@@ -228,6 +228,23 @@ CREATE TABLE IF NOT EXISTS applied_mutations (
 );
 CREATE INDEX IF NOT EXISTS applied_mutations_time ON applied_mutations(applied_at);
 
+/* --- invitations --------------------------------------------------------- */
+
+-- How an account gets a password. Nobody — not an admin, not a developer —
+-- ever types or generates a hash by hand: the person who will use the account
+-- sets it themselves, so the signing pepper never leaves the Worker.
+CREATE TABLE IF NOT EXISTS invites (
+  -- SHA-256 of the token, not the token. A leaked database yields no usable
+  -- invite links.
+  token_hash  TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_by  TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at  INTEGER NOT NULL,
+  expires_at  INTEGER NOT NULL,
+  accepted_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS invites_by_user ON invites(user_id);
+
 /* --- sessions ------------------------------------------------------------ */
 
 CREATE TABLE IF NOT EXISTS sessions (

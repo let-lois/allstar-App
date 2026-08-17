@@ -3,6 +3,10 @@ export interface Env {
   PHOTOS: R2Bucket
   ALLOWED_ORIGINS: string
   SESSION_PEPPER?: string
+  /** Present only while first-run setup is still needed; remove after. */
+  SETUP_TOKEN?: string
+  /** Where the front end lives, for links on the Worker-served pages. */
+  APP_URL?: string
 }
 
 export type Role = 'super_admin' | 'client_admin' | 'manager' | 'field_rep'

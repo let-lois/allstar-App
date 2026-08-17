@@ -1,7 +1,15 @@
 import { bearerToken, login, resolveSession, revokeSession } from './auth'
+import {
+  acceptInvite,
+  canInvite,
+  createInvite,
+  readInvite,
+  runSetup,
+} from './invites'
 import { applyMutations } from './mutations'
+import { invitePage, setupPage } from './pages'
 import { bootstrap } from './read'
-import type { Env, Mutation, SessionUser } from './types'
+import type { Env, Mutation, Role, SessionUser } from './types'
 
 /**
  * Allstar API.
@@ -56,6 +64,47 @@ export default {
     const path = url.pathname.replace(/\/+$/, '') || '/'
 
     try {
+      /* --- account bootstrap (HTML, served by the Worker itself) ---------- */
+      //
+      // These are pages rather than API routes because they're used *before*
+      // anyone can sign in: the first admin has no account, and an invited rep
+      // has no password. The React app can't help with either.
+      const appUrl = env.APP_URL ?? 'https://allstar.letlois.com'
+
+      if (path === '/setup') {
+        if (req.method === 'GET') {
+          const existing = await env.DB.prepare('SELECT 1 AS ok FROM users LIMIT 1').first()
+          if (existing) return setupPage({ appUrl, done: true })
+          return setupPage({ appUrl })
+        }
+        if (req.method === 'POST') {
+          const form = await req.formData()
+          const result = await runSetup(env, {
+            token: String(form.get('token') ?? ''),
+            clientName: String(form.get('clientName') ?? ''),
+            name: String(form.get('name') ?? ''),
+            email: String(form.get('email') ?? ''),
+            password: String(form.get('password') ?? ''),
+          })
+          return result.ok ? setupPage({ appUrl, done: true }) : setupPage({ appUrl, error: result.error })
+        }
+      }
+
+      if (path.startsWith('/invite/')) {
+        const token = path.slice('/invite/'.length)
+        if (req.method === 'GET') {
+          const invite = await readInvite(env, token)
+          return invitePage({ token, invite: invite ?? undefined, appUrl })
+        }
+        if (req.method === 'POST') {
+          const form = await req.formData()
+          const result = await acceptInvite(env, token, String(form.get('password') ?? ''))
+          if (result.ok) return invitePage({ token, appUrl, done: true })
+          const invite = await readInvite(env, token)
+          return invitePage({ token, invite: invite ?? undefined, error: result.error, appUrl })
+        }
+      }
+
       /* --- health -------------------------------------------------------- */
       if (path === '/api/health') {
         return json({ ok: true, time: Date.now() }, 200, cors)
@@ -91,6 +140,24 @@ export default {
 
       if (path === '/api/bootstrap' && req.method === 'GET') {
         return json(await bootstrap(env, user), 200, cors)
+      }
+
+      /* --- invitations ---------------------------------------------------- */
+      if (path === '/api/invites' && req.method === 'POST') {
+        // Managers can see their team; only admins can create access to it.
+        if (!canInvite(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        // The invite page is served by *this* Worker, not the React app, so the
+        // link must carry the Worker's own origin. Building it from APP_URL sends
+        // every invited rep to a URL that has no route for it.
+        const created = await createInvite(env, user, url.origin, {
+          email: String(body.email ?? ''),
+          name: String(body.name ?? ''),
+          role: (String(body.role ?? 'field_rep') as Role),
+          phone: body.phone ? String(body.phone) : undefined,
+        })
+        if ('error' in created) return json({ error: created.error }, created.status, cors)
+        return json(created, 200, cors)
       }
 
       if (path === '/api/mutations' && req.method === 'POST') {
