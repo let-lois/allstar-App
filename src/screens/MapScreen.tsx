@@ -5,7 +5,7 @@ import { BottomSheet } from '../components/ui/BottomSheet'
 import { PropertyPeek } from '../components/property/PropertyPeek'
 import { Chip } from '../components/ui/Chip'
 import { SyncBadge } from '../components/sync/SyncBadge'
-import { useAppStore } from '../store/useAppStore'
+import { useAppStore, useScopedProperties } from '../store/useAppStore'
 import { distanceMiles, formatDistance } from '../lib/geo'
 import { useIsWide } from '../lib/useMediaQuery'
 import type { LeadStatus } from '../types'
@@ -33,6 +33,7 @@ const FILTERS: { key: Filter; label: string }[] = [
 export function MapScreen() {
   const nav = useNavigate()
   const { properties, route, position } = useAppStore()
+  const scoped = useScopedProperties()
   const [filter, setFilter] = useState<Filter>('route')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const mapHandle = useRef<MapHandle | null>(null)
@@ -44,7 +45,7 @@ export function MapScreen() {
   )
 
   const shown = useMemo(() => {
-    const list = Object.values(properties)
+    const list = scoped
     switch (filter) {
       case 'all':
         return list
@@ -57,7 +58,7 @@ export function MapScreen() {
       default:
         return list.filter((p) => p.status === filter)
     }
-  }, [properties, filter, routeIds])
+  }, [scoped, filter, routeIds])
 
   const selected = selectedId ? properties[selectedId] : undefined
 

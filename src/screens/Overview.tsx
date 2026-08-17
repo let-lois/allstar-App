@@ -7,7 +7,7 @@ import { useAppStore } from '../store/useAppStore'
 import { PIPELINE_STAGES, STATUS_COLOR, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
 import { money, relative } from '../lib/format'
 import { drain } from '../lib/sync'
-import { DEMO_USERS } from '../data/seed'
+import { useTeamStats, useTeamTotals } from '../store/teamStats'
 import { IconChevron } from '../components/nav/icons'
 import type { Role } from '../types'
 
@@ -23,6 +23,8 @@ import type { Role } from '../types'
 export function Overview({ role }: { role: Role }) {
   const nav = useNavigate()
   const { user, properties, activity, appointments } = useAppStore()
+  const teamStats = useTeamStats()
+  const totals = useTeamTotals()
 
   const todayStart = useMemo(() => {
     const d = new Date()
@@ -47,16 +49,7 @@ export function Overview({ role }: { role: Role }) {
         v.outcome &&
         ['interested', 'appointment', 'quote_requested', 'sold'].includes(v.outcome),
     ).length
-    return {
-      knocks: todayVisits.length,
-      conversations,
-      contactRate: todayVisits.length
-        ? Math.round((conversations / todayVisits.length) * 100)
-        : 0,
-      openValue,
-      wonValue,
-      openCount: open.length,
-    }
+    return { conversations, openValue, wonValue, openCount: open.length }
   }, [properties, todayVisits])
 
   const stageCounts = useMemo(() => {
@@ -92,11 +85,11 @@ export function Overview({ role }: { role: Role }) {
         <div className="content-col space-y-3 p-3">
           {/* --- headline numbers ----------------------------------------- */}
           <div className="grid grid-cols-2 gap-3">
-            <Stat label="Doors today" value={String(stats.knocks)} />
+            <Stat label="Doors today" value={String(totals.knocks)} />
             <Stat
               label="Conversations"
-              value={String(stats.conversations)}
-              sub={`${stats.contactRate}% contact rate`}
+              value={String(totals.conversations)}
+              sub={`${totals.contactRate}% contact rate`}
               tone="text-emerald-600"
             />
             <Stat label="Open pipeline" value={money(stats.openValue)} sub={`${stats.openCount} leads`} />
@@ -150,20 +143,24 @@ export function Overview({ role }: { role: Role }) {
               </button>
             </div>
             <ul>
-              {DEMO_USERS.filter((u) => u.role === 'field_rep').map((rep) => (
+              {teamStats.map((rep) => (
                 <li key={rep.id}>
                   <button
                     onClick={() => nav('/team')}
                     className="flex min-h-[64px] w-full items-center gap-3 border-b border-slate-100 px-4 text-left last:border-0 active:bg-slate-50"
                   >
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-600">
-                      {rep.avatarInitials}
+                      {rep.initials}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-semibold">{rep.name}</span>
                       <span className="nums block text-xs text-ink-mute">
-                        {stats.knocks} doors · {stats.conversations} conversations
+                        {rep.knocks} doors · {rep.conversations} conversations ·{' '}
+                        {rep.done}/{rep.total} stops
                       </span>
+                    </span>
+                    <span className="nums shrink-0 text-xs font-semibold text-emerald-700">
+                      {rep.contactRate}%
                     </span>
                     <span className="shrink-0 text-ink-mute">
                       <IconChevron />
