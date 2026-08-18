@@ -504,5 +504,89 @@ ok(
   )
 }
 
+/* --- client settings ------------------------------------------------------ */
+//
+// The rule these assertions exist to protect: codes are structural, labels are
+// not. A company renaming an outcome is changing a word on a button; it must not
+// be able to change what a year of reporting means.
+{
+  const settings = (body, token = admin.token) =>
+    api('/api/settings', { method: 'POST', body: JSON.stringify({ settings: body }) }, token).then(
+      async (r) => ({ status: r.status, body: await r.json() }),
+    )
+
+  const saved = await settings({
+    outcomes: [
+      { code: 'quote_requested', label: 'Estimate requested', order: 0 },
+      { code: 'sold', label: 'Closed', order: 1 },
+    ],
+    noteTemplates: ['Wants an estimate', 'Come back Saturday'],
+    photoCategories: [{ key: 'roof', label: 'Roofline' }],
+  })
+  ok(saved.status === 200, 'an admin can save settings')
+  ok(
+    saved.body.settings.outcomes.find((o) => o.code === 'sold')?.label === 'Closed',
+    'a relabelled outcome comes back relabelled',
+  )
+
+  const boot = await (await api('/api/bootstrap', {}, admin.token)).json()
+  ok(!!boot.settings, 'settings ride along with bootstrap, so an offline phone has them')
+  ok(
+    boot.settings.noteTemplates?.[0] === 'Wants an estimate',
+    'including the note templates',
+  )
+
+  /* ---- what must be refused ---- */
+  const junk = await settings({
+    outcomes: [
+      { code: 'not_a_real_code', label: 'Invented' },
+      { code: 'sold', label: 'Won' },
+      // A duplicate would render the same button twice.
+      { code: 'sold', label: 'Won again' },
+    ],
+    noteTemplates: ['ok', '', '   ', 42, null],
+    photoCategories: [{ key: 'nonsense', label: 'Nope' }],
+  })
+  ok(
+    !junk.body.settings.outcomes.some((o) => o.code === 'not_a_real_code'),
+    'an invented outcome code is dropped, not stored — codes are structural',
+  )
+  ok(
+    junk.body.settings.outcomes.filter((o) => o.code === 'sold').length === 1,
+    'a duplicated code is collapsed rather than rendering the same button twice',
+  )
+  ok(
+    junk.body.settings.noteTemplates.length === 1,
+    `empty and non-string templates are dropped (${junk.body.settings.noteTemplates.length} kept)`,
+  )
+  ok(
+    !junk.body.settings.photoCategories.some((c) => c.key === 'nonsense'),
+    'an unknown photo category is dropped',
+  )
+
+  const long = await settings({ outcomes: [{ code: 'sold', label: 'x'.repeat(500) }] })
+  ok(
+    long.body.settings.outcomes[0].label.length <= 40,
+    `an absurd label is truncated rather than stored (${long.body.settings.outcomes[0].label.length})`,
+  )
+
+  /* ---- who may write ---- */
+  const anyRep = await (await login(`selfserve-${stamp}@example.com`, 'i-changed-it-myself')).json()
+  ok(
+    (await settings({ outcomes: [] }, anyRep.token)).status === 403,
+    'a rep cannot change the company’s settings',
+  )
+  ok(
+    (await api('/api/settings', {}, anyRep.token)).status === 200,
+    'but can read them — the field app needs the labels',
+  )
+
+  const auditNow = await (await api('/api/audit?limit=200', {}, admin.token)).json()
+  ok(
+    auditNow.entries.some((e) => e.action === 'settings.changed'),
+    'a settings change is recorded in the audit log',
+  )
+}
+
 console.log(fails.length ? `\n${fails.length} FAILURES` : '\nuser management smoke passed')
 process.exit(fails.length ? 1 : 0)

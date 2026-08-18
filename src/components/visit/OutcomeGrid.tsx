@@ -1,5 +1,5 @@
 import type { OutcomeCode } from '../../types'
-import { OUTCOMES } from '../../data/outcomes'
+import { useOutcomes } from '../../lib/useSettings'
 import { haptic } from '../../lib/haptics'
 
 const TONE_BG: Record<string, string> = {
@@ -43,7 +43,7 @@ export function OutcomeGrid({
   value?: OutcomeCode
   onChange: (code: OutcomeCode) => void
 }) {
-  const [primary, ...rest] = OUTCOMES
+  const [primary, ...rest] = useOutcomes()
 
   const tile = (code: OutcomeCode, tone: string, glyph: string, label: string, full = false) => {
     const on = value === code

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { NoteTag } from '../../types'
-import { NOTE_TAGS, NOTE_TEMPLATES } from '../../data/outcomes'
+import { NOTE_TAGS } from '../../data/outcomes'
+import { useNoteTemplates } from '../../lib/useSettings'
 import { Chip } from '../ui/Chip'
 import {
   dictate,
@@ -49,6 +50,7 @@ export function NoteComposer({ body, tags, onBody, onTags, placeholder }: Props)
   const dictation = useRef<Dictation | null>(null)
   const baseText = useRef('')
   const supported = speechSupported()
+  const templates = useNoteTemplates()
 
   useEffect(() => () => dictation.current?.stop(), [])
 
@@ -97,7 +99,7 @@ export function NoteComposer({ body, tags, onBody, onTags, placeholder }: Props)
           Quick notes
         </p>
         <div className="snap-x-row -mx-1 px-1 pb-1">
-          {NOTE_TEMPLATES.map((t) => (
+          {templates.map((t) => (
             <Chip key={t} size="sm" onClick={() => appendTemplate(t)}>
               {t}
             </Chip>

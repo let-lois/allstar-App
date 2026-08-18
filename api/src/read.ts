@@ -1,3 +1,4 @@
+import { readSettings } from './settings'
 import type { Env, SessionUser } from './types'
 
 /**
@@ -131,8 +132,13 @@ export async function bootstrap(env: Env, user: SessionUser) {
 
   // Shaped into the client's camelCase domain model here rather than in the
   // client, so swapping the data source stays a one-file change over there.
+  // Bundled with everything else the phone caches: a rep who opens the app with
+  // no signal must still see the outcome labels their company chose.
+  const settings = await readSettings(env, user.clientId)
+
   return {
     user,
+    settings,
     properties: (properties.results as Record<string, unknown>[]).map((p) => ({
       id: p.id,
       address1: p.address1,

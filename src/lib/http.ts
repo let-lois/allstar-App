@@ -359,5 +359,14 @@ export interface BootstrapDTO {
   activity: unknown[]
   dailyStats: unknown[]
   territories?: unknown[]
+  settings?: Record<string, unknown>
   serverTime: number
+}
+
+export function apiSaveSettings(token: string, settings: unknown) {
+  return request<{ ok: true; settings: Record<string, unknown> }>('/api/settings', {
+    method: 'POST',
+    body: { settings },
+    token,
+  })
 }

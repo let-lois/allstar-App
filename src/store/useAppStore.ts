@@ -37,6 +37,7 @@ import {
 import { OUTCOME_TO_STATUS } from '../data/outcomes'
 import { dayKey } from '../lib/format'
 import { getPosition, type Position } from '../lib/geo'
+import type { ClientSettings } from '../lib/settings'
 import { buildRoute } from '../lib/route'
 
 /**
@@ -77,6 +78,8 @@ interface AppState {
   activity: ActivityEvent[]
   /** Names for the territory ids on properties. Empty in demo mode. */
   territories: Record<string, Territory>
+  /** How this company has customised the field app. Empty means defaults. */
+  settings: ClientSettings
   /**
    * Everyone with an account. The real roster in live mode, the seeded team in
    * demo mode — so every screen that names a rep reads from one place.
@@ -189,6 +192,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activity: [],
   territories: {},
   team: [],
+  settings: {},
   activeVisitId: null,
 
   async boot() {
@@ -256,6 +260,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         db.all<Territory>('territories'),
         db.all<TeamMember>('team'),
       ])
+    const settings = (await db.metaGet<ClientSettings>('allstar.settings')) ?? {}
 
     // An in-flight visit survives an app kill — reps close the app mid-knock.
     const openVisit = visits.find((v) => !v.endedAt)
@@ -275,6 +280,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activity: activity.sort((a, b) => b.at - a.at),
       territories: indexById(territories),
       team: team.length ? team : seedTeam(mode),
+      settings,
       activeVisitId: openVisit?.id ?? null,
     })
   },
@@ -415,6 +421,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activity: [],
       territories: {},
       team: [],
+      settings: {},
       activeVisitId: null,
     })
   },

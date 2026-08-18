@@ -59,6 +59,16 @@ const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS audit_by_client_time ON audit_log(client_id, at DESC)`,
     ],
   },
+  {
+    id: '003-client-settings',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS client_settings (
+         client_id  TEXT PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE,
+         settings   TEXT NOT NULL,
+         updated_at INTEGER NOT NULL
+       )`,
+    ],
+  },
 ]
 
 export type MigrationState = 'pending' | 'ok' | 'failed'

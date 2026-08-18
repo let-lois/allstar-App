@@ -278,12 +278,184 @@ ok(
   await page.waitForTimeout(400)
 }
 
+/* --- a rejection is surfaced, not swallowed ------------------------------- */
+await page.unroute('**/api/invites')
+await page.route('**/api/invites', json(409, { error: 'That person already has an account.' }))
+await page.getByRole('button', { name: /Invite user/ }).click()
+await page.waitForTimeout(300)
+{
+  const dialog2 = page.getByRole('dialog')
+  await dialog2.locator('input[type="text"], input:not([type])').first().fill('Marcus Vance')
+  await dialog2.locator('input[type="email"]').fill('marcus@ridgeline.test')
+}
+await page.getByRole('button', { name: /Create invite/ }).click()
+await page.waitForTimeout(700)
+ok(
+  /already has an account/i.test(await body()),
+  'the server’s reason for refusing is shown verbatim',
+)
+await page.keyboard.press('Escape')
+await page.waitForTimeout(300)
+
+/* --- settings that actually reach the phone ------------------------------- */
+//
+// A setting that saves but changes nothing on the phone is worse than one that
+// says it is disabled — it looks like it worked. So this asserts the round trip
+// all the way to the buttons a rep taps, not just that a POST was sent.
+{
+  let savedSettings = null
+  await page.route('**/api/settings', async (route) => {
+    savedSettings = JSON.parse(route.request().postData() || '{}').settings
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, settings: savedSettings }),
+    })
+  })
+
+  await page.goto(`${BASE}/admin/settings`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(900)
+  const body = () => page.locator('body').innerText().then((t) => t.replace(/\s+/g, ' '))
+
+  ok(
+    !/Saving is disabled/.test(await body()),
+    'the screen no longer says saving is disabled',
+  )
+  ok(
+    !/Summit Exteriors/.test(await body()),
+    'and does not name the demo company on a live account',
+  )
+  ok(/Ridgeline Roofing/.test(await body()), 'it names the real one')
+
+  // Rename an outcome and move it up the grid.
+  const quoteInput = page.locator('tbody tr').filter({ hasText: 'quote_requested' }).locator('input')
+  await quoteInput.fill('Estimate requested')
+  await page.locator('tbody tr').filter({ hasText: 'quote_requested' })
+    .getByRole('button', { name: /Move .* up/ }).click()
+  await page.waitForTimeout(200)
+  await page.getByRole('button', { name: /Save changes/ }).first().click()
+  await page.waitForTimeout(800)
+
+  ok(savedSettings !== null, 'saving sends the settings')
+  const sent = savedSettings.outcomes.find((o) => o.code === 'quote_requested')
+  ok(sent?.label === 'Estimate requested', 'the new label is sent against the unchanged code')
+  ok(
+    savedSettings.outcomes.every((o) => typeof o.order === 'number'),
+    'with an explicit order, because order is what a rep sees',
+  )
+  // Nothing structural may travel: a label change must not be able to rewrite
+  // what an outcome means.
+  ok(
+    Object.keys(sent).sort().join(',') === 'code,label,order',
+    `only code, label and order are sent (${Object.keys(sent).join(',')})`,
+  )
+  ok(/Saved\./.test(await body()), 'and the operator is told it saved')
+
+  await ctx.close()
+}
+
+/* --- the labels a rep actually sees --------------------------------------- */
+{
+  const ctx4 = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    permissions: ['geolocation'],
+    geolocation: { latitude: 30.5115, longitude: -97.6755 },
+  })
+  const rep = {
+    id: 'u_rep', clientId: 'c_live', clientName: 'Ridgeline Roofing',
+    email: 'rep@ridgeline.test', name: 'Marcus Vance', role: 'field_rep',
+  }
+  const page4 = await ctx4.newPage()
+  await page4.route('**/api/auth/login', json(200, { token: 'tok', user: rep }))
+  await page4.route('**/api/mutations', json(200, { results: [], serverTime: Date.now() }))
+  await page4.route('**/api/bootstrap', json(200, {
+    user: rep,
+    properties: [{
+      id: 'p1', address1: '1420 Cedar Bend Dr', city: 'Round Rock', state: 'TX', zip: '78664',
+      lat: 30.5115, lng: -97.6755, status: 'new', score: 60, assignedRepId: 'u_rep', contacts: [],
+    }],
+    routes: [], appointments: [], tasks: [], activity: [], dailyStats: [], territories: [],
+    // The company renamed one outcome and put it first.
+    settings: {
+      outcomes: [
+        { code: 'quote_requested', label: 'Estimate requested', order: 0 },
+        { code: 'no_answer', label: 'Nobody home', order: 1 },
+      ],
+      noteTemplates: ['Wants an estimate'],
+    },
+    serverTime: Date.now(),
+  }))
+
+  await page4.goto(BASE, { waitUntil: 'networkidle' })
+  await page4.locator('input[type="email"]').fill(rep.email)
+  await page4.locator('input[autocomplete="current-password"]').fill('a-real-password')
+  await page4.getByRole('button', { name: /^Sign in$/ }).click()
+  await page4.waitForTimeout(1600)
+
+  await page4.goto(`${BASE}/property/p1`, { waitUntil: 'domcontentloaded' })
+  await page4.waitForTimeout(700)
+  await page4.getByRole('button', { name: /Start visit/ }).first().click()
+  await page4.waitForTimeout(900)
+
+  const grid = (await page4.locator('body').innerText()).replace(/\s+/g, ' ')
+  ok(/Estimate requested/.test(grid), 'the rep sees the company’s label, not the default')
+  ok(!/Quote/.test(grid), 'and the default label is gone')
+  ok(/Nobody home/.test(grid), 'a second relabelled outcome comes through too')
+  // Everything the company did not touch must still be there — a partial
+  // override cannot be allowed to delete the rest of the grid.
+  ok(/Sold/.test(grid) && /Do Not Contact/.test(grid), 'untouched outcomes keep their defaults')
+
+  /*
+    Order is a real setting, not a cosmetic one: the first outcome is rendered
+    as the full-width target, separately from the grid holding the rest. So the
+    assertion is on document order across the whole outcome area, not on the
+    first child of the grid — which is the *second* outcome.
+  */
+  const outcomeButtons = await page4.evaluate(() =>
+    [...document.querySelectorAll('button')]
+      .map((b) => (b.textContent ?? '').replace(/\s+/g, ' ').trim())
+      // Every outcome the grid can render, whether relabelled or not — an
+      // override must reorder and rename, never remove.
+      .filter((t) =>
+        /Estimate requested|Nobody home|Interested|Follow Up|Appointment|Sold|Do Not Contact/.test(
+          t,
+        ),
+      ),
+  )
+  ok(
+    /Estimate requested/.test(outcomeButtons[0] ?? ''),
+    `the reordered outcome is rendered first (${outcomeButtons.slice(0, 3).join(' | ')})`,
+  )
+  ok(
+    outcomeButtons.length === 8,
+    `and all eight outcomes are still present (${outcomeButtons.length})`,
+  )
+
+  await ctx4.close()
+}
+
 /* --- the activity log ----------------------------------------------------- */
 //
 // The log exists for the conversation that starts "I never did that", so what
 // matters is that a reader can settle the argument without translating event
 // names into English.
 {
+  const ctx5 = await browser.newContext({ viewport: { width: 1440, height: 950 } })
+  const page = await ctx5.newPage()
+  await page.route('**/api/auth/login', json(200, { token: 'tok', user: ADMIN }))
+  await page.route('**/api/users', json(200, { users: roster }))
+  await page.route('**/api/bootstrap', json(200, {
+    user: ADMIN, properties: [], routes: [], appointments: [], tasks: [],
+    activity: [], dailyStats: [], territories: [], serverTime: Date.now(),
+  }))
+  await page.goto(BASE, { waitUntil: 'networkidle' })
+  await page.locator('input[type="email"]').fill(ADMIN.email)
+  await page.locator('input[autocomplete="current-password"]').fill('a-real-password')
+  await page.getByRole('button', { name: /^Sign in$/ }).click()
+  await page.waitForTimeout(1500)
+
   const ENTRIES = [
     { id: 'a1', actorName: 'Nadia Petrov', action: 'user.deleted', targetType: 'user',
       targetLabel: 'Marcus Vance', detail: { email: 'marcus@ridgeline.test', role: 'field_rep' },
@@ -337,26 +509,8 @@ ok(
     /permanently deleted/.test((await page.locator('body').innerText()).replace(/\s+/g, ' ')),
     'clearing the filter brings them back — filtering hides, it never deletes',
   )
-  await page.goto(`${BASE}/admin/team`, { waitUntil: 'domcontentloaded' })
-  await page.waitForTimeout(800)
+  await ctx5.close()
 }
-
-/* --- a rejection is surfaced, not swallowed ------------------------------ */
-await page.unroute('**/api/invites')
-await page.route('**/api/invites', json(409, { error: 'That person already has an account.' }))
-await page.getByRole('button', { name: /Invite user/ }).click()
-await page.waitForTimeout(300)
-const dialog2 = page.getByRole('dialog')
-await dialog2.locator('input[type="text"], input:not([type])').first().fill('Marcus Vance')
-await dialog2.locator('input[type="email"]').fill('marcus@ridgeline.test')
-await page.getByRole('button', { name: /Create invite/ }).click()
-await page.waitForTimeout(700)
-ok(
-  /already has an account/i.test(await body()),
-  'the server’s reason for refusing is shown verbatim',
-)
-
-await ctx.close()
 
 /* ========== a live account never shows the demo team ===================== */
 //
