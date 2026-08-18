@@ -1,7 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AdminPage } from './AdminLayout'
 import { Button } from '../components/ui/Button'
-import { OUTCOMES, NOTE_TEMPLATES, PHOTO_CATEGORIES } from '../data/outcomes'
+import { ApiError, apiSaveSettings } from '../lib/http'
+import { liveToken } from '../lib/session'
+import { useAppStore } from '../store/useAppStore'
+import {
+  effectiveNoteTemplates,
+  effectiveOutcomes,
+  effectivePhotoCategories,
+} from '../lib/settings'
 import { STATUS } from './charts/tokens'
 
 /**
@@ -20,10 +27,68 @@ import { STATUS } from './charts/tokens'
 export function AdminSettings() {
   const [tab, setTab] = useState<'outcomes' | 'notes' | 'photos'>('outcomes')
 
+  const stored = useAppStore((s) => s.settings)
+  const mode = useAppStore((s) => s.mode)
+  const user = useAppStore((s) => s.user)
+  const refreshFromServer = useAppStore((s) => s.refreshFromServer)
+
+  // Local edits, seeded from what the field app is currently using rather than
+  // from the raw overrides — an admin should be editing the labels reps see.
+  const [outcomes, setOutcomes] = useState(() => effectiveOutcomes(stored))
+  const [templates, setTemplates] = useState(() => effectiveNoteTemplates(stored))
+  const [categories, setCategories] = useState(() => effectivePhotoCategories(stored))
+  useEffect(() => {
+    setOutcomes(effectiveOutcomes(stored))
+    setTemplates(effectiveNoteTemplates(stored))
+    setCategories(effectivePhotoCategories(stored))
+  }, [stored])
+
+  const [saving, setSaving] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function save() {
+    const token = liveToken()
+    if (!token) {
+      setError('Saving needs a live account. The demo has nowhere to persist a change.')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    setNotice(null)
+    try {
+      await apiSaveSettings(token, {
+        // Only label and order travel. Everything that carries meaning — the
+        // code, the tone, whether an outcome prompts a follow-up — stays in the
+        // source, so a rename can never rewrite what a year of history means.
+        outcomes: outcomes.map((o, i) => ({ code: o.code, label: o.label, order: i })),
+        noteTemplates: templates.map((t) => t.trim()).filter(Boolean),
+        photoCategories: categories.map((c) => ({ key: c.key, label: c.label })),
+      })
+      await refreshFromServer()
+      setNotice('Saved. Reps pick this up the next time their phone syncs.')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save. Nothing was changed.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const SaveBar = ({ children }: { children?: React.ReactNode }) => (
+    <div className="flex flex-wrap items-center justify-end gap-3">
+      {children}
+      {notice && <span className="text-xs font-medium text-emerald-700">{notice}</span>}
+      {error && <span className="text-xs font-medium text-red-700">{error}</span>}
+      <Button size="sm" disabled={saving || mode !== 'live'} onClick={() => void save()}>
+        {saving ? 'Saving…' : 'Save changes'}
+      </Button>
+    </div>
+  )
+
   return (
     <AdminPage
       title="Settings"
-      description="How the field app behaves for everyone at Summit Exteriors"
+      description={`How the field app behaves for everyone at ${user?.clientName ?? 'your company'}`}
     >
       <div className="mb-4 flex gap-1 border-b border-slate-200">
         {(
@@ -69,14 +134,54 @@ export function AdminSettings() {
               </tr>
             </thead>
             <tbody>
-              {OUTCOMES.map((o, i) => (
+              {outcomes.map((o, i) => (
                 <tr key={o.code} className="border-t border-slate-100">
-                  <td className="nums px-5 py-3 text-ink-mute">{i + 1}</td>
+                  <td className="px-5 py-3">
+                    <span className="flex items-center gap-1">
+                      <span className="nums w-4 text-ink-mute">{i + 1}</span>
+                      {/* Order is the order reps see, and the first one gets the
+                          full-width target — so moving a row is a real setting,
+                          not a cosmetic one. */}
+                      <button
+                        aria-label={`Move ${o.label} up`}
+                        disabled={i === 0}
+                        onClick={() =>
+                          setOutcomes((prev) => {
+                            const next = [...prev]
+                            ;[next[i - 1], next[i]] = [next[i], next[i - 1]]
+                            return next
+                          })
+                        }
+                        className="focusable h-6 w-6 rounded text-xs text-ink-mute disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        aria-label={`Move ${o.label} down`}
+                        disabled={i === outcomes.length - 1}
+                        onClick={() =>
+                          setOutcomes((prev) => {
+                            const next = [...prev]
+                            ;[next[i + 1], next[i]] = [next[i], next[i + 1]]
+                            return next
+                          })
+                        }
+                        className="focusable h-6 w-6 rounded text-xs text-ink-mute disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
+                    </span>
+                  </td>
                   <td className="px-3 py-3">
                     <span className="flex items-center gap-2">
                       <span aria-hidden>{o.glyph}</span>
                       <input
-                        defaultValue={o.label}
+                        value={o.label}
+                        onChange={(e) =>
+                          setOutcomes((prev) =>
+                            prev.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)),
+                          )
+                        }
                         className="focusable min-h-[36px] w-40 rounded-lg border border-slate-200 px-2 text-sm"
                       />
                     </span>
@@ -111,9 +216,7 @@ export function AdminSettings() {
               The code is permanent. Reports and pipeline rules key off it, so a renamed
               outcome keeps its history.
             </p>
-            <Button size="sm" disabled>
-              Save changes
-            </Button>
+            <SaveBar />
           </div>
         </section>
       )}
@@ -126,26 +229,34 @@ export function AdminSettings() {
             Mode, in this order.
           </p>
           <ul className="space-y-2">
-            {NOTE_TEMPLATES.map((t, i) => (
-              <li key={t} className="flex items-center gap-2">
+            {templates.map((t, i) => (
+              <li key={i} className="flex items-center gap-2">
                 <span className="nums w-6 text-xs text-ink-mute">{i + 1}</span>
                 <input
-                  defaultValue={t}
+                  value={t}
+                  onChange={(e) =>
+                    setTemplates((prev) => prev.map((x, xi) => (xi === i ? e.target.value : x)))
+                  }
                   className="focusable min-h-[38px] flex-1 rounded-lg border border-slate-200 px-3 text-sm"
                 />
-                <button className="focusable min-h-[38px] rounded-lg px-3 text-xs font-semibold text-red-600 hover:bg-red-50">
+                <button
+                  onClick={() => setTemplates((prev) => prev.filter((_, xi) => xi !== i))}
+                  className="focusable min-h-[38px] rounded-lg px-3 text-xs font-semibold text-red-600 hover:bg-red-50"
+                >
                   Remove
                 </button>
               </li>
             ))}
           </ul>
           <div className="mt-4 flex items-center justify-between">
-            <Button size="sm" variant="secondary" disabled>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setTemplates((prev) => [...prev, ''])}
+            >
               Add template
             </Button>
-            <Button size="sm" disabled>
-              Save changes
-            </Button>
+            <SaveBar />
           </div>
         </section>
       )}
@@ -158,32 +269,34 @@ export function AdminSettings() {
             one-handed, outdoors.
           </p>
           <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
-            {PHOTO_CATEGORIES.map((c) => (
+            {categories.map((c, i) => (
               <div
                 key={c.key}
                 className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5"
               >
                 <span aria-hidden>{c.glyph}</span>
                 <input
-                  defaultValue={c.label}
+                  value={c.label}
+                  onChange={(e) =>
+                    setCategories((prev) =>
+                      prev.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)),
+                    )
+                  }
                   className="focusable min-h-[32px] min-w-0 flex-1 rounded-lg border border-transparent px-1 text-sm hover:border-slate-200"
                 />
               </div>
             ))}
           </div>
-          <div className="mt-4 flex justify-end">
-            <Button size="sm" disabled>
-              Save changes
-            </Button>
+          <div className="mt-4">
+            <SaveBar />
           </div>
         </section>
       )}
 
-      <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900">
-        Saving is disabled until the backend lands. These controls show the shape of the
-        configuration and read from the same source the field app uses, so what you see
-        here is genuinely what reps get — but there is nowhere to persist a change yet,
-        and a Save button that quietly does nothing is worse than one that's honestly off.
+      <p className="mt-4 rounded-xl bg-surface-sunk px-4 py-3 text-xs leading-relaxed text-ink-mute">
+        {mode === 'live'
+          ? 'These are the words reps see. Codes never change, so renaming an outcome keeps every report and every pipeline rule intact — and a rep whose phone is offline keeps the last labels it synced.'
+          : 'Demo data — there is nowhere to persist a change. Sign in with real credentials to configure a company.'}
       </p>
     </AdminPage>
   )

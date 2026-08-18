@@ -32,10 +32,11 @@ export type AuditAction =
   | 'user.role_changed'
   | 'territory.assigned'
   | 'leads.imported'
+  | 'settings.changed'
 
 export interface AuditEntry {
   action: AuditAction
-  targetType?: 'user' | 'territory' | 'import'
+  targetType?: 'user' | 'territory' | 'import' | 'settings'
   targetId?: string
   /** The name as it read at the time. Never resolved later. */
   targetLabel?: string

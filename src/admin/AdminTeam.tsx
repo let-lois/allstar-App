@@ -10,6 +10,7 @@ import { money, relative } from '../lib/format'
 import { STATUS } from './charts/tokens'
 import { InviteDialog } from './InviteDialog'
 import { ManageUser } from './ManageUser'
+import { ROLE_LABEL } from '../lib/roles'
 import type { Role } from '../types'
 
 /**
@@ -20,13 +21,6 @@ import type { Role } from '../types'
  * assignment or access. Deliberately dense — this is the screen where density
  * is the feature, not a compromise.
  */
-
-const ROLE_LABEL: Record<Role, string> = {
-  field_rep: 'Field Rep',
-  manager: 'Manager',
-  client_admin: 'Client Admin',
-  super_admin: 'Super Admin',
-}
 
 interface Member {
   id: string

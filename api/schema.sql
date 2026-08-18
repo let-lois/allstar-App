@@ -247,6 +247,20 @@ CREATE INDEX IF NOT EXISTS invites_by_user ON invites(user_id);
 
 /* --- sessions ------------------------------------------------------------ */
 
+-- What a company has customised about the field app: the labels on the outcome
+-- buttons, the quick note templates, the photo categories.
+--
+-- One JSON blob per tenant rather than a row per setting. These are read
+-- together on every bootstrap and written together from one screen, so a
+-- normalised version would be five joins to answer a question nobody asks in
+-- parts. The *codes* stay in the source; only presentation is stored here, which
+-- is what keeps a relabelled outcome from breaking a year of reporting.
+CREATE TABLE IF NOT EXISTS client_settings (
+  client_id  TEXT PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE,
+  settings   TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 -- Who did what to whom.
 --
 -- Two things about this table are load-bearing and easy to get wrong.

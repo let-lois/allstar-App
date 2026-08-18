@@ -37,6 +37,7 @@ import {
   type RequestContext,
 } from './observe'
 import { applyMutations } from './mutations'
+import { readSettings, writeSettings } from './settings'
 import { checkLoginRate, clearFailures, recordFailure } from './ratelimit'
 import { invitePage, setupPage } from './pages'
 import { bootstrap } from './read'
@@ -62,6 +63,31 @@ import type { Env, Mutation, Role, SessionUser } from './types'
  * Centralised here rather than at each return site: there are forty of those and
  * the one that gets forgotten is always the one you needed a log line for.
  */
+/**
+ * The codes a client may relabel. Structural, and therefore in the source rather
+ * than the database: reporting and a year of history key off them, so a settings
+ * write must not be able to invent or remove one.
+ */
+const OUTCOME_CODES = [
+  'no_answer',
+  'interested',
+  'follow_up',
+  'appointment',
+  'quote_requested',
+  'not_interested',
+  'sold',
+  'do_not_contact',
+]
+const PHOTO_CATEGORY_KEYS = [
+  'property',
+  'roof',
+  'damage',
+  'interior',
+  'document',
+  'before',
+  'after',
+]
+
 const reply = (ctx: RequestContext) =>
   (body: unknown, status = 200, headers: HeadersInit = {}) => {
     if (status >= 500) noteFailure()
@@ -467,6 +493,24 @@ export default {
           if ('error' in result) return json({ error: result.error }, result.status, cors)
           return json(result, 200, cors)
         }
+      }
+
+      /* --- client settings -------------------------------------------------- */
+      //
+      // Readable by anyone signed in — the field app needs the labels — but
+      // writable only by an admin.
+      if (path === '/api/settings' && req.method === 'GET') {
+        return json({ settings: await readSettings(env, user.clientId) }, 200, cors)
+      }
+
+      if (path === '/api/settings' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await writeSettings(env, user, body.settings, {
+          codes: OUTCOME_CODES,
+          categories: PHOTO_CATEGORY_KEYS,
+        })
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
       }
 
       /* --- the audit log ---------------------------------------------------- */

@@ -1,6 +1,6 @@
 import { PBKDF2_ITERATIONS, hashPassword, randomId } from './auth'
 import { record } from './audit'
-import { canInvite } from './invites'
+import { canInvite, grantableRoles } from './invites'
 import type { Env, Role, SessionUser } from './types'
 
 /**
@@ -55,6 +55,22 @@ async function guard(
   // Not found rather than forbidden: whether a user id exists in another
   // tenant is not something this account gets to learn.
   if (!target) return fail('No such person on this team.', 404)
+
+  /*
+    Nobody may act on an account more powerful than their own.
+
+    Without this a client admin could reset a super admin's password, which is
+    not an administrative action — it is a takeover. The same reasoning covers
+    deactivation and deletion: a lower role removing a higher one is how an
+    escalation looks from the inside.
+  */
+  if (
+    !actingOnSelf &&
+    target.role === 'super_admin' &&
+    actor.role !== 'super_admin'
+  ) {
+    return fail('Only a super admin can manage another super admin.', 403)
+  }
 
   if (!opts.allowSelf && target.id === actor.id) {
     return fail('You can’t do that to your own account.', 400)
@@ -235,10 +251,15 @@ export async function setRole(a: Actorable, role: Role): Promise<{ ok: true } | 
   if ('error' in g) return g
   if (g.target.role === role) return { ok: true }
 
-  // Only a super admin can mint another one — otherwise a client admin could
-  // promote themselves out of their own tenant's boundaries.
-  if (role === 'super_admin' && a.actor.role !== 'super_admin') {
-    return fail('Only a super admin can grant that role.', 403)
+  // Nobody hands out a role they don't hold. Checked through the same helper the
+  // invite path uses, so the two cannot drift apart.
+  if (!grantableRoles(a.actor).includes(role)) {
+    return fail(
+      role === 'super_admin'
+        ? 'Only a super admin can grant that role.'
+        : 'That role cannot be granted.',
+      403,
+    )
   }
 
   const losingAdmin = g.target.role === 'client_admin' || g.target.role === 'super_admin'

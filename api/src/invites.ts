@@ -85,6 +85,23 @@ export function canInvite(user: SessionUser): boolean {
   return user.role === 'client_admin' || user.role === 'super_admin'
 }
 
+const ROLES: Role[] = ['field_rep', 'manager', 'client_admin', 'super_admin']
+
+/**
+ * Which roles this person may hand out.
+ *
+ * The rule is that nobody can create an account more powerful than their own.
+ * Without it, `createInvite` stored whatever role string arrived — the only thing
+ * standing between a client admin and a super admin account was the database's
+ * CHECK constraint, which `super_admin` passes. That is a privilege escalation
+ * reachable from an ordinary form field.
+ */
+export function grantableRoles(actor: SessionUser): Role[] {
+  if (actor.role === 'super_admin') return ROLES
+  if (actor.role === 'client_admin') return ['field_rep', 'manager', 'client_admin']
+  return []
+}
+
 export async function createInvite(
   env: Env,
   actor: SessionUser,
@@ -93,6 +110,16 @@ export async function createInvite(
   input: { email: string; name: string; role: Role; phone?: string },
 ): Promise<CreatedInvite | { error: string; status: number }> {
   if (!input.email.includes('@')) return { error: 'Enter a valid email.', status: 400 }
+
+  if (!grantableRoles(actor).includes(input.role)) {
+    return {
+      error:
+        input.role === 'super_admin'
+          ? 'Only a super admin can create another super admin.'
+          : 'That role cannot be granted.',
+      status: 403,
+    }
+  }
 
   const now = Date.now()
   const userId = `u_${randomId(8)}`

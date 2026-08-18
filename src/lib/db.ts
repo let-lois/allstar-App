@@ -53,7 +53,7 @@ let dbPromise: Promise<IDBPDatabase<AllstarDB>> | null = null
 
 export function db(): Promise<IDBPDatabase<AllstarDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<AllstarDB>('allstar-field', 4, {
+    dbPromise = openDB<AllstarDB>('allstar-field', 5, {
       /**
        * Idempotent by design. `upgrade` runs for a first-time install *and* for
        * every version bump, so creating a store unconditionally throws

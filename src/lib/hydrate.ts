@@ -62,6 +62,10 @@ export async function applyBootstrap(dto: BootstrapDTO, mergeOnly = false): Prom
   // it. The caller samples the queue before the fetch; this samples it after.
   const pending = mergeOnly || (await outboxPending())
 
+  // Settings are a single blob, not a store — kept in `meta` so it survives the
+  // same wipe rules as everything else without needing a table of one row.
+  if (dto.settings) await db.metaSet('allstar.settings', dto.settings)
+
   await Promise.all([
     replace('properties', dto.properties as Property[], pending),
     replace('routes', dto.routes as Route[], pending),
@@ -104,4 +108,7 @@ async function replace<T extends { id: string }>(
  */
 export async function wipeCachedData(): Promise<void> {
   await Promise.all([...SERVER_STORES, ...LOCAL_WORK_STORES].map((s) => db.clear(s)))
+  // One company's outcome labels have no business showing up under another's
+  // account on a shared phone.
+  await db.metaSet('allstar.settings', undefined)
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Photo, PhotoCategory } from '../../types'
-import { PHOTO_CATEGORIES } from '../../data/outcomes'
+import { usePhotoCategories } from '../../lib/useSettings'
 import { compressImage, openCamera, openLibrary } from '../../lib/media'
 import { useAppStore } from '../../store/useAppStore'
 import { BottomSheet } from '../ui/BottomSheet'
@@ -23,6 +23,7 @@ export function PhotoStrip({
   visitId?: string
   photos: Photo[]
 }) {
+  const categories = usePhotoCategories()
   const addPhoto = useAppStore((s) => s.addPhoto)
   const [pending, setPending] = useState<
     { dataUrl: string; width: number; height: number; bytes: number }[]
@@ -85,7 +86,7 @@ export function PhotoStrip({
         </button>
 
         {photos.map((p, i) => {
-          const cat = PHOTO_CATEGORIES.find((c) => c.key === p.category)
+          const cat = categories.find((c) => c.key === p.category)
           return (
             <button
               key={p.id}
@@ -140,7 +141,7 @@ export function PhotoStrip({
             ))}
           </div>
           <div className="grid grid-cols-2 gap-2.5">
-            {PHOTO_CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <button
                 key={c.key}
                 onClick={() => void commit(c.key)}
@@ -178,9 +179,10 @@ function PhotoViewer({
   onClose: () => void
   onIndex: (i: number) => void
 }) {
+  const categories = usePhotoCategories()
   if (index == null || !photos[index]) return null
   const photo = photos[index]
-  const cat = PHOTO_CATEGORIES.find((c) => c.key === photo.category)
+  const cat = categories.find((c) => c.key === photo.category)
 
   return (
     <div className="anim-fade fixed inset-0 z-50 flex flex-col bg-black">

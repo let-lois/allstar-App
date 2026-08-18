@@ -11,6 +11,8 @@ import {
   type FootprintDTO,
 } from '../lib/http'
 import { liveToken } from '../lib/session'
+import { ROLE_BLURB, ROLE_LABEL, grantableRoles } from '../lib/roles'
+import { useAppStore } from '../store/useAppStore'
 import type { Role } from '../types'
 
 /**
@@ -42,12 +44,7 @@ export interface ManagedUser {
 
 const MIN_PASSWORD = 10
 
-const ROLE_WORD: Record<string, string> = {
-  field_rep: 'Field Rep',
-  manager: 'Manager',
-  client_admin: 'Client Admin',
-  super_admin: 'Super Admin',
-}
+
 
 export function ManageUser({
   user,
@@ -68,6 +65,9 @@ export function ManageUser({
   const [reveal, setReveal] = useState(false)
   const [link, setLink] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  const signedIn = useAppStore((s) => s.user)
+  const roles = grantableRoles(signedIn)
 
   const [confirming, setConfirming] = useState(false)
   const [typed, setTyped] = useState('')
@@ -224,14 +224,19 @@ export function ManageUser({
               void run('role', async (token) => {
                 const next = e.target.value as ManagedUser['role']
                 await apiSetRole(token, user.id, next)
-                setNotice(`${user.name} is now a ${ROLE_WORD[next]}.`)
+                setNotice(`${user.name} is now a ${ROLE_LABEL[next]}.`)
               })
             }
             className="focusable mt-2 h-11 w-full rounded-lg border border-slate-300 bg-surface px-3 text-sm disabled:opacity-60"
           >
-            <option value="field_rep">Field Rep — route, map and visits</option>
-            <option value="manager">Manager — team activity and reporting</option>
-            <option value="client_admin">Client Admin — everything, including the team</option>
+            {/* The role they already hold is always listed, even if this admin
+                could not grant it — otherwise the dropdown would silently show
+                the wrong current value. */}
+            {[...new Set([user.role, ...roles])].map((r) => (
+              <option key={r} value={r} disabled={!roles.includes(r)}>
+                {ROLE_LABEL[r]} — {ROLE_BLURB[r]}
+              </option>
+            ))}
           </select>
         </section>
       )}
