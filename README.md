@@ -242,6 +242,32 @@ routes, tasks, appointments, field-added leads. The refresh now merges rather
 than replaces whenever the outbox holds work, sampled both before and after the
 request so a queue that drains mid-flight can't slip through the gap.
 
+## Adding people
+
+**Console → Team → Invite user.** Name, email, role; the server creates a
+pending account and returns a one-time link. The invited person opens it and sets
+their own password — nobody else ever sees or sets it.
+
+The thing this screen is careful about: **it never says an email was sent**,
+because none is. There's no mail service connected, so the flow ends where it
+actually ends — with a link on screen, a copy button, and a plain instruction to
+send it yourself. An admin who believes a rep was notified finds out a week later
+that nobody got anything, and a product that quietly overstates what it did is
+worse than one that does less.
+
+Invited users show as **Invite pending** rather than Active or Deactivated. Those
+three states look identical behind a single boolean, and an admin chasing a rep
+who never got their link needs to tell them apart.
+
+```bash
+npm run verify:invite
+```
+
+...asserts the whole flow including the part that matters: the screen says no
+email went out, never claims one did, shows the full link, copies it, and marks
+the new person pending. Plus that the demo makes no invite request at all and
+says why.
+
 ## Office console
 
 `/admin` is the one deliberately **desktop-first** surface. Everywhere else

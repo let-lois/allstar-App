@@ -181,7 +181,14 @@ export function AdminTerritories() {
             // No follow-me here: an office user's own GPS is irrelevant to a
             // territory, and passing it would recenter the map off the patch.
             position={null}
-            disableClustering
+            /*
+              Cluster only when there's enough in the patch to overlap. Fifty
+              houses eighteen metres apart, drawn at a zoom that fits the whole
+              territory, collapse into unreadable blobs — the markers are wider
+              than the gaps between the doors. A small territory still shows
+              every pin, which is what makes a handful of leads legible.
+            */
+            disableClustering={shown.length <= 25}
             selectedId={null}
             onSelect={() => {}}
             key={selected ?? 'all'}

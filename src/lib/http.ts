@@ -162,6 +162,19 @@ export function apiUsers(token: string) {
   return request<{ users: TeamUserDTO[] }>('/api/users', { token })
 }
 
+export interface CreatedInviteDTO {
+  url: string
+  email: string
+  expiresAt: number
+}
+
+export function apiInvite(
+  token: string,
+  input: { email: string; name: string; role: Role; phone?: string },
+) {
+  return request<CreatedInviteDTO>('/api/invites', { method: 'POST', body: input, token })
+}
+
 export interface GeocodeRequestDTO {
   ref: string
   address1: string
