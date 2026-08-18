@@ -1,6 +1,7 @@
 import { PBKDF2_ITERATIONS, hashPassword, randomId } from './auth'
+import { record } from './audit'
 import { canInvite } from './invites'
-import type { Env, SessionUser } from './types'
+import type { Env, Role, SessionUser } from './types'
 
 /**
  * Account management.
@@ -122,6 +123,16 @@ export async function setPassword(
   // in a customer's hedge: the old credential has to stop working everywhere.
   await revokeAll(a.env, g.target.id)
 
+  await record(a.env, a.actor, {
+    action: 'user.password_set',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+    // Whether someone set their own or had it set for them is the first thing
+    // anyone asks of this entry.
+    detail: { self: g.target.id === a.actor.id },
+  })
+
   return { ok: true, iterations: PBKDF2_ITERATIONS }
 }
 
@@ -153,6 +164,13 @@ export async function createResetLink(
     .bind(hashed, g.target.id, a.actor.id, now, expiresAt)
     .run()
 
+  await record(a.env, a.actor, {
+    action: 'user.reset_link',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+  })
+
   return { url: `${origin}/invite/${token}`, email: g.target.email, expiresAt }
 }
 
@@ -172,6 +190,12 @@ export async function setActive(
 
   if (active) {
     await a.env.DB.prepare('UPDATE users SET active = 1 WHERE id = ?1').bind(g.target.id).run()
+    await record(a.env, a.actor, {
+      action: 'user.reactivated',
+      targetType: 'user',
+      targetId: g.target.id,
+      targetLabel: g.target.name,
+    })
     return { ok: true }
   }
 
@@ -183,6 +207,67 @@ export async function setActive(
   // Switching someone off has to end the session they're holding right now,
   // otherwise "deactivated" means "deactivated in thirty days".
   await revokeAll(a.env, g.target.id)
+
+  await record(a.env, a.actor, {
+    action: 'user.deactivated',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+  })
+
+  return { ok: true }
+}
+
+/**
+ * Change what somebody is allowed to do.
+ *
+ * Not permitted on your own account, for the same reason as everything else
+ * here: demoting yourself is a lockout, and promoting yourself is the definition
+ * of privilege escalation. Demoting the last administrator runs through the same
+ * atomic guard as removing one, because "role changed to field_rep" locks a
+ * company out exactly as thoroughly as a delete.
+ */
+export async function setRole(a: Actorable, role: Role): Promise<{ ok: true } | Failure> {
+  const VALID: Role[] = ['field_rep', 'manager', 'client_admin', 'super_admin']
+  if (!VALID.includes(role)) return fail('Unknown role.', 400)
+
+  const g = await guard(a, {})
+  if ('error' in g) return g
+  if (g.target.role === role) return { ok: true }
+
+  // Only a super admin can mint another one — otherwise a client admin could
+  // promote themselves out of their own tenant's boundaries.
+  if (role === 'super_admin' && a.actor.role !== 'super_admin') {
+    return fail('Only a super admin can grant that role.', 403)
+  }
+
+  const losingAdmin = g.target.role === 'client_admin' || g.target.role === 'super_admin'
+  const gainingAdmin = role === 'client_admin' || role === 'super_admin'
+
+  if (losingAdmin && !gainingAdmin) {
+    const done = await a.env.DB.prepare(LAST_ADMIN_GUARD('UPDATE users SET role = ?4'))
+      .bind(g.target.id, a.actor.clientId, null, role)
+      .run()
+    if (!done.meta.changes) return fail(LAST_ADMIN_MESSAGE, 400)
+  } else {
+    await a.env.DB.prepare('UPDATE users SET role = ?2 WHERE id = ?1 AND client_id = ?3')
+      .bind(g.target.id, role, a.actor.clientId)
+      .run()
+  }
+
+  // A role change alters what an existing session may do, and sessions carry no
+  // role of their own — they resolve it per request. Revoking anyway, because a
+  // demotion should take effect on the device in someone's hand, not whenever
+  // they next happen to sign out.
+  await revokeAll(a.env, g.target.id)
+
+  await record(a.env, a.actor, {
+    action: 'user.role_changed',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+    detail: { from: g.target.role, to: role },
+  })
 
   return { ok: true }
 }
@@ -243,6 +328,17 @@ export async function deleteUser(a: Actorable): Promise<{ ok: true } | Failure> 
     .bind(g.target.id, a.actor.clientId)
     .run()
   if (!done.meta.changes) return fail(LAST_ADMIN_MESSAGE, 400)
+
+  // Recorded after the fact and by name, because the row this points at no
+  // longer exists — which is exactly why the label was copied rather than
+  // joined.
+  await record(a.env, a.actor, {
+    action: 'user.deleted',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+    detail: { email: g.target.email, role: g.target.role },
+  })
 
   return { ok: true }
 }

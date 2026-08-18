@@ -42,6 +42,7 @@ const AdminTerritories = lazy(() =>
   import('./admin/AdminTerritories').then((m) => ({ default: m.AdminTerritories })),
 )
 const AdminImport = lazy(() => import('./admin/AdminImport'))
+const AdminAudit = lazy(() => import('./admin/AdminAudit'))
 const AdminSettings = lazy(() =>
   import('./admin/AdminSettings').then((m) => ({ default: m.AdminSettings })),
 )
@@ -128,6 +129,7 @@ export function App() {
               <Route path="team" element={<AdminTeam />} />
               <Route path="territories" element={<AdminTerritories />} />
               <Route path="import" element={<AdminImport />} />
+              <Route path="audit" element={<AdminAudit />} />
               <Route path="settings" element={<AdminSettings />} />
               <Route path="clients" element={<AdminClients />} />
             </Route>

@@ -1,3 +1,4 @@
+import { record } from './audit'
 import type { Env, Role, SessionUser } from './types'
 
 /**
@@ -266,12 +267,27 @@ export async function importProperties(
   await env.DB.batch(statements)
 
   const total = ids.length
-  return {
+  const result = {
     created: total - existingBefore,
     updated: existingBefore,
     rejected,
     territoryId,
   }
+
+  await record(env, user, {
+    action: 'leads.imported',
+    targetType: 'import',
+    targetId: territoryId,
+    targetLabel: input.territoryName?.trim() || 'Unassigned',
+    detail: {
+      created: result.created,
+      updated: result.updated,
+      rejected: rejected.length,
+      assignedTo: assignRepId,
+    },
+  })
+
+  return result
 }
 
 /** Chunked because SQLite caps bound parameters per statement. */

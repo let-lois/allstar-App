@@ -1,4 +1,5 @@
 import type { Env, SessionUser } from './types'
+import { record } from './audit'
 import { canImport } from './import'
 
 /**
@@ -68,5 +69,17 @@ export async function assignTerritory(
       .run()
   }
 
-  return { assigned: result.meta.changes ?? 0 }
+  const assigned = result.meta.changes ?? 0
+
+  // Who now owns which doors is the second question any commission dispute
+  // asks, right after who recorded the sale.
+  await record(env, actor, {
+    action: 'territory.assigned',
+    targetType: 'territory',
+    targetId: input.territoryId ?? undefined,
+    targetLabel: input.territoryId ? undefined : 'Unassigned leads',
+    detail: { repId: input.repId, leads: assigned },
+  })
+
+  return { assigned }
 }

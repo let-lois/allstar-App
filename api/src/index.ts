@@ -16,13 +16,16 @@ import {
 import { GEOCODE_CHUNK, geocode, type GeocodeRequest } from './geocode'
 import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
 import { assignTerritory } from './assign'
+import { readAudit } from './audit'
 import {
   createResetLink,
   deleteUser,
   footprint,
   setActive,
   setPassword,
+  setRole,
 } from './users'
+import { ensureSchema, migrationState } from './migrate'
 import { applyMutations } from './mutations'
 import { checkLoginRate, clearFailures, recordFailure } from './ratelimit'
 import { invitePage, setupPage } from './pages'
@@ -80,6 +83,11 @@ export default {
 
     const url = new URL(req.url)
     const path = url.pathname.replace(/\/+$/, '') || '/'
+
+    // Once per isolate, and a no-op after the first deploy that applied
+    // everything. Schema changes ship with the code rather than waiting for
+    // somebody to remember to paste them into a console.
+    await ensureSchema(env)
 
     try {
       /* --- account bootstrap (HTML, served by the Worker itself) ---------- */
@@ -238,6 +246,9 @@ export default {
               setupToken: !!env.SETUP_TOKEN,
               appUrl: env.APP_URL ?? null,
               allowedOrigins: (env.ALLOWED_ORIGINS ?? '').split(',').filter(Boolean).length,
+              // Surfaced because a failed migration is otherwise invisible:
+              // the deploy succeeds and one feature quietly doesn't work.
+              migrations: migrationState(),
               maxImportRows: MAX_IMPORT_ROWS,
               geocodeChunk: GEOCODE_CHUNK,
             },
@@ -398,6 +409,13 @@ export default {
           return json(result, 200, cors)
         }
 
+        if (action === 'role' && req.method === 'POST') {
+          const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+          const result = await setRole(a, String(body.role ?? '') as Role)
+          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          return json(result, 200, cors)
+        }
+
         if (action === 'active' && req.method === 'POST') {
           const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
           const result = await setActive(a, body.active === true)
@@ -410,6 +428,21 @@ export default {
           if ('error' in result) return json({ error: result.error }, result.status, cors)
           return json(result, 200, cors)
         }
+      }
+
+      /* --- the audit log ---------------------------------------------------- */
+      //
+      // Read-only by design. There is no endpoint that deletes from it, because
+      // a log the accused can edit is not evidence.
+      if (path === '/api/audit' && req.method === 'GET') {
+        if (!canInvite(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const limit = Number(url.searchParams.get('limit') ?? 100)
+        const beforeParam = url.searchParams.get('before')
+        const entries = await readAudit(env, user, {
+          limit: Number.isFinite(limit) ? limit : 100,
+          before: beforeParam ? Number(beforeParam) : undefined,
+        })
+        return json({ entries }, 200, cors)
       }
 
       /* --- lead import ----------------------------------------------------- */

@@ -7,6 +7,7 @@ import {
   apiResetLink,
   apiSetActive,
   apiSetPassword,
+  apiSetRole,
   type FootprintDTO,
 } from '../lib/http'
 import { liveToken } from '../lib/session'
@@ -40,6 +41,13 @@ export interface ManagedUser {
 }
 
 const MIN_PASSWORD = 10
+
+const ROLE_WORD: Record<string, string> = {
+  field_rep: 'Field Rep',
+  manager: 'Manager',
+  client_admin: 'Client Admin',
+  super_admin: 'Super Admin',
+}
 
 export function ManageUser({
   user,
@@ -200,6 +208,33 @@ export function ManageUser({
           )}
         </div>
       </section>
+
+      {/* --- role -------------------------------------------------------- */}
+      {!isSelf && (
+        <section className="border-t border-slate-100 pt-4">
+          <h3 className="text-sm font-bold">Role</h3>
+          <p className="mt-1 text-xs leading-relaxed text-ink-mute">
+            Changing it signs {user.name.split(' ')[0]} out, so a demotion takes effect on
+            the phone in their hand rather than whenever they next sign out.
+          </p>
+          <select
+            value={user.role}
+            disabled={busy !== null}
+            onChange={(e) =>
+              void run('role', async (token) => {
+                const next = e.target.value as ManagedUser['role']
+                await apiSetRole(token, user.id, next)
+                setNotice(`${user.name} is now a ${ROLE_WORD[next]}.`)
+              })
+            }
+            className="focusable mt-2 h-11 w-full rounded-lg border border-slate-300 bg-surface px-3 text-sm disabled:opacity-60"
+          >
+            <option value="field_rep">Field Rep — route, map and visits</option>
+            <option value="manager">Manager — team activity and reporting</option>
+            <option value="client_admin">Client Admin — everything, including the team</option>
+          </select>
+        </section>
+      )}
 
       {/* --- access ------------------------------------------------------ */}
       {!isSelf && (
