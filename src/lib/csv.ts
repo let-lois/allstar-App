@@ -217,3 +217,117 @@ export function autoMap(headers: string[]): Partial<Record<ImportField, string>>
   }
   return mapping
 }
+
+/* --- what did they actually drop? ----------------------------------------- */
+
+/**
+ * Not every file dropped on an import box is a CSV.
+ *
+ * The failure this exists to prevent is silent rather than loud: a binary file
+ * decodes to mojibake, the parser dutifully finds a "header row" in it, and the
+ * operator is shown a column mapper full of garbage and told "2 rows found".
+ * Nothing errors. They're left guessing whether the file or the app is broken.
+ *
+ * The three that actually happen:
+ *   - a Windows shortcut (.lnk), which is what you get dragging from some
+ *     download shelves — a tiny binary that only *points* at the real file
+ *   - an .xlsx, because "my spreadsheet" and "my CSV" are the same thing to
+ *     everyone who isn't a programmer
+ *   - a PDF of a report someone was sent
+ *
+ * Each gets its own message, because "that isn't a CSV" is useless next to
+ * "that's an Excel workbook — use File, Save As, CSV".
+ */
+export type FileProblem =
+  | 'ok'
+  | 'empty'
+  | 'shortcut'
+  | 'spreadsheet'
+  | 'legacy-office'
+  | 'pdf'
+  | 'binary'
+
+const MAGIC: [number[], FileProblem][] = [
+  // "L\0\0\0" — a Windows shell link. Always a pointer, never the data.
+  [[0x4c, 0x00, 0x00, 0x00], 'shortcut'],
+  // "PK\x03\x04" — a zip, which is what .xlsx, .ods and .numbers all are.
+  [[0x50, 0x4b, 0x03, 0x04], 'spreadsheet'],
+  // OLE2 compound file: .xls and .doc from before 2007.
+  [[0xd0, 0xcf, 0x11, 0xe0], 'legacy-office'],
+  [[0x25, 0x50, 0x44, 0x46], 'pdf'], // "%PDF"
+]
+
+export interface SniffResult {
+  problem: FileProblem
+  /** Decoded text, present only when the file looks like text. */
+  text?: string
+}
+
+/**
+ * Decide whether the bytes are text, and decode them if so.
+ *
+ * UTF-16 is handled rather than rejected: Excel's "Unicode Text" export is
+ * UTF-16LE, and it's full of NUL bytes, so the obvious "any NUL means binary"
+ * check would throw out a perfectly good file.
+ */
+export function sniffFile(bytes: Uint8Array): SniffResult {
+  if (bytes.length === 0) return { problem: 'empty' }
+
+  for (const [sig, problem] of MAGIC) {
+    if (sig.every((b, i) => bytes[i] === b)) return { problem }
+  }
+
+  let encoding = 'utf-8'
+  let start = 0
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+    encoding = 'utf-16le'
+    start = 2
+  } else if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    encoding = 'utf-16be'
+    start = 2
+  }
+
+  let text: string
+  try {
+    text = new TextDecoder(encoding, { fatal: false }).decode(bytes.subarray(start))
+  } catch {
+    return { problem: 'binary' }
+  }
+
+  if (!text.trim()) return { problem: 'empty' }
+
+  // Sample the front rather than the whole file — a 5MB list doesn't need
+  // scanning to answer "is this text", and the answer is always in the first
+  // few hundred characters.
+  const sample = text.slice(0, 2000)
+  let suspect = 0
+  for (const ch of sample) {
+    const c = ch.charCodeAt(0)
+    // NUL, or the replacement character a failed decode leaves behind. Tabs,
+    // newlines and carriage returns are of course fine.
+    if (c === 0 || c === 0xfffd) suspect += 1
+    else if (c < 32 && c !== 9 && c !== 10 && c !== 13) suspect += 1
+  }
+  // A threshold rather than "any", because one stray control character in an
+  // otherwise fine export shouldn't cost someone their import.
+  if (suspect > sample.length * 0.02) return { problem: 'binary' }
+
+  return { problem: 'ok', text }
+}
+
+/** What to tell the operator, in terms of what they should do next. */
+export const FILE_PROBLEM_MESSAGE: Record<Exclude<FileProblem, 'ok'>, string> = {
+  empty: 'That file is empty.',
+  shortcut:
+    'That’s a Windows shortcut, not the file itself — it only points at the real one. ' +
+    'Open your Downloads folder and drag the actual .csv file, or paste the rows instead.',
+  spreadsheet:
+    'That’s an Excel workbook. Open it and use File → Save As → CSV, then drag the CSV in. ' +
+    'You can also copy the rows straight out of the sheet and paste them here.',
+  'legacy-office':
+    'That’s an older Excel or Word file. Open it and use File → Save As → CSV, then drag the CSV in.',
+  pdf: 'That’s a PDF. An import needs a CSV or a spreadsheet export — a PDF has no columns to read.',
+  binary:
+    'That doesn’t look like a text file. An import needs a CSV, a tab-separated export, ' +
+    'or rows pasted straight from a spreadsheet.',
+}

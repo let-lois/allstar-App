@@ -1,7 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
 import { AdminPage } from './AdminLayout'
 import { Button } from '../components/ui/Button'
-import { IMPORT_FIELDS, autoMap, parseCsv, type ImportField, type Row } from '../lib/csv'
+import {
+  FILE_PROBLEM_MESSAGE,
+  IMPORT_FIELDS,
+  autoMap,
+  parseCsv,
+  sniffFile,
+  type ImportField,
+  type Row,
+} from '../lib/csv'
 import {
   ApiError,
   apiGeocode,
@@ -87,7 +95,18 @@ export default function AdminImport() {
   }
 
   async function onFile(file: File) {
-    load(await file.text())
+    // Read the bytes, not `file.text()`. A shortcut, a workbook or a PDF all
+    // decode to *something*, and the parser will happily find a header row in
+    // the mojibake — the operator then gets a column mapper full of garbage and
+    // no idea whether the fault is theirs or the app's.
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const { problem, text } = sniffFile(bytes)
+    if (problem !== 'ok' || text == null) {
+      setError(`${file.name}: ${FILE_PROBLEM_MESSAGE[problem as Exclude<typeof problem, 'ok'>]}`)
+      setStage('pick')
+      return
+    }
+    load(text)
   }
 
   /* --- stage 2 → 3: apply the mapping --------------------------------- */

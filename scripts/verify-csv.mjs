@@ -23,7 +23,7 @@ await build({
   outfile: out,
   logLevel: 'silent',
 })
-const { parseCsv, autoMap } = await import(out)
+const { parseCsv, autoMap, sniffFile, FILE_PROBLEM_MESSAGE } = await import(out)
 
 const fails = []
 const ok = (cond, msg) => {
@@ -125,6 +125,92 @@ const eq = (a, b, msg) =>
 {
   const m = autoMap(['some_id', 'random_column'])
   ok(m.address1 === undefined, 'an unrecognisable header is left unmapped rather than guessed')
+}
+
+/* --- is this even a CSV? -------------------------------------------------- */
+//
+// Every case here was reported as "2 rows found" before the sniff existed: the
+// bytes decoded to mojibake, the parser found a header row in it, and the
+// operator was shown a column mapper full of binary garbage with no error.
+
+const bytes = (...n) => new Uint8Array(n)
+const ascii = (str) => new TextEncoder().encode(str)
+const concat = (...parts) => {
+  const total = parts.reduce((n, p) => n + p.length, 0)
+  const out = new Uint8Array(total)
+  let i = 0
+  for (const p of parts) {
+    out.set(p, i)
+    i += p.length
+  }
+  return out
+}
+
+{
+  // A real Windows shell link: "L\0\0\0" then the link GUID, and further in
+  // the path of the file it points at. This is what dragging from a download
+  // shelf can hand you, and it is what actually happened.
+  const lnk = concat(
+    bytes(0x4c, 0x00, 0x00, 0x00, 0x01, 0x14, 0x02, 0x00),
+    bytes(0, 0, 0, 0, 0xc0, 0, 0, 0, 0, 0, 0, 0x46),
+    ascii('C:\\Users\\me\\DOWNLO~1\\TEST-L~1.CSV'),
+  )
+  const r = sniffFile(lnk)
+  ok(r.problem === 'shortcut', `a Windows shortcut is recognised as one (${r.problem})`)
+  ok(r.text === undefined, 'a shortcut is never handed to the parser')
+  ok(
+    /shortcut/i.test(FILE_PROBLEM_MESSAGE.shortcut) && /\.csv/i.test(FILE_PROBLEM_MESSAGE.shortcut),
+    'the message names the problem and what to drag instead',
+  )
+}
+{
+  const xlsx = concat(bytes(0x50, 0x4b, 0x03, 0x04), ascii('\x14\x00\x06\x00xl/workbook.xml'))
+  ok(sniffFile(xlsx).problem === 'spreadsheet', 'an .xlsx is recognised as a workbook')
+  ok(
+    /save as/i.test(FILE_PROBLEM_MESSAGE.spreadsheet),
+    'the workbook message says how to turn it into a CSV',
+  )
+}
+{
+  ok(sniffFile(concat(bytes(0xd0, 0xcf, 0x11, 0xe0), ascii('old xls'))).problem === 'legacy-office',
+    'a pre-2007 Excel or Word file is recognised')
+  ok(sniffFile(ascii('%PDF-1.7\n...')).problem === 'pdf', 'a PDF is recognised')
+}
+{
+  // Random bytes with no known signature still must not reach the parser.
+  const junk = new Uint8Array(600)
+  for (let i = 0; i < junk.length; i++) junk[i] = (i * 37) % 256
+  ok(sniffFile(junk).problem === 'binary', 'unrecognised binary is refused')
+}
+{
+  ok(sniffFile(new Uint8Array(0)).problem === 'empty', 'an empty file is reported as empty')
+  ok(sniffFile(ascii('   \n\n  ')).problem === 'empty', 'a whitespace-only file is reported as empty')
+}
+
+/* --- and the files that ARE fine ------------------------------------------ */
+{
+  const r = sniffFile(ascii('address,city\n1 A St,Austin\n'))
+  ok(r.problem === 'ok', 'a plain CSV passes')
+  ok(r.text?.startsWith('address,city'), 'the decoded text is handed back for parsing')
+}
+{
+  // Excel's "Unicode Text" export is UTF-16LE — full of NUL bytes. A naive
+  // "any NUL means binary" check would throw out a perfectly good file.
+  const utf16 = concat(
+    bytes(0xff, 0xfe),
+    new Uint8Array(
+      [...'address,city\n1 A St,Austin\n'].flatMap((c) => [c.charCodeAt(0) & 0xff, c.charCodeAt(0) >> 8]),
+    ),
+  )
+  const r = sniffFile(utf16)
+  ok(r.problem === 'ok', `a UTF-16 export is accepted, not mistaken for binary (${r.problem})`)
+  ok(parseCsv(r.text ?? '').rows.length === 1, 'and it parses once decoded')
+}
+{
+  // A UTF-8 file with accented names must survive.
+  const r = sniffFile(ascii('address,owner\n1 A St,"Núñez, José"\n'))
+  ok(r.problem === 'ok', 'accented characters do not read as binary')
+  ok(parseCsv(r.text ?? '').rows[0].owner === 'Núñez, José', 'and they round-trip intact')
 }
 
 console.log(fails.length ? `\n${fails.length} csv check(s) failed` : '\ncsv parsing is correct')
