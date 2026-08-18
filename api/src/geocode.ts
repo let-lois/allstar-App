@@ -16,13 +16,26 @@
  * response parsing below is separated from the HTTP call.
  */
 
+import { googleGeocode } from './geocode-google'
+
 const CENSUS_BATCH_URL = 'https://geocoding.geo.census.gov/geocoder/locations/addressbatch'
 
 /**
  * The service's own documented ceiling is 10,000; we chunk far below it so a
  * single slow request can't hold a whole import hostage.
  */
-export const GEOCODE_CHUNK = 100
+/**
+ * Addresses per request.
+ *
+ * Sized for the worst case rather than the best: Census takes a thousand in one
+ * upload, but Google has no batch endpoint at all — one HTTP request per
+ * address — and a Worker has a hard cap on outbound subrequests. Forty fits
+ * comfortably under it with room for the fallback pass.
+ *
+ * The client chunks to match (see `GEOCODE_CHUNK` in src/admin/AdminImport.tsx);
+ * if these two ever disagree the larger one gets a 413.
+ */
+export const GEOCODE_CHUNK = 40
 
 export interface GeocodeRequest {
   ref: string
@@ -37,7 +50,22 @@ export interface GeocodeMatch {
   lat?: number
   lng?: number
   matchedAddress?: string
-  status: 'match' | 'no_match' | 'tie'
+  /**
+   * `error` is deliberately distinct from `no_match`. A quota problem, a bad key
+   * or an outage is not the address's fault, and reporting it as "not found"
+   * sends an operator hunting for a typo that isn't there.
+   */
+  status: 'match' | 'no_match' | 'tie' | 'error'
+  error?: string
+  /**
+   * How sure the provider is. `rooftop` is the actual building; `interpolated`
+   * is a house number estimated along a block; `approximate` is the middle of
+   * something bigger than a house.
+   */
+  precision?: 'rooftop' | 'interpolated' | 'approximate'
+  /** The provider answered a misspelled or incomplete address by guessing. */
+  partial?: boolean
+  provider?: 'google' | 'census'
 }
 
 /** CSV field splitter for the response — quoted, comma-separated, one row. */
@@ -108,7 +136,17 @@ export function parseCensusResponse(body: string): GeocodeMatch[] {
       continue
     }
 
-    matches.push({ ref, status: 'match', lat, lng, matchedAddress: f[4] || undefined })
+    matches.push({
+      ref,
+      status: 'match',
+      lat,
+      lng,
+      matchedAddress: f[4] || undefined,
+      // Census matches road centrelines and interpolates the house number
+      // along the block. Never a rooftop, and it should not claim to be.
+      precision: 'interpolated',
+      provider: 'census',
+    })
   }
 
   return matches
@@ -150,7 +188,49 @@ async function batch(rows: GeocodeRequest[]): Promise<GeocodeMatch[]> {
  * of date is the wrong trade: the rep can see the address is real, and being
  * told "not found" makes the app look broken rather than careful.
  */
-export async function geocode(rows: GeocodeRequest[]): Promise<GeocodeMatch[]> {
+/**
+ * Geocode a batch, using the best provider available.
+ *
+ * Google when a key is configured, Census otherwise — and Census again for
+ * anything Google could not place or errored on. That ordering is the whole
+ * design:
+ *
+ *   - **Precision by default.** Google returns rooftops; Census returns the
+ *     right point on the block. Paying for the first and then not using it
+ *     would be strange.
+ *   - **An outage degrades, it doesn't fail.** If the key expires, the quota
+ *     runs out, or Google is down, the import still completes on the free
+ *     geocoder rather than returning a page of red rows.
+ *   - **No key changes nothing.** The whole feature is absent rather than
+ *     broken, which is what makes it safe to ship before anyone has a key.
+ */
+export async function geocode(
+  rows: GeocodeRequest[],
+  googleKey?: string,
+): Promise<GeocodeMatch[]> {
+  if (rows.length === 0) return []
+
+  if (googleKey) {
+    const primary = await googleGeocode(rows, googleKey)
+    const byRef = new Map(primary.map((m) => [m.ref, m]))
+
+    const unresolved = rows.filter((r) => byRef.get(r.ref)?.status !== 'match')
+    if (unresolved.length === 0) return primary
+
+    // Second opinion from the free one. Only ever upgrades a failure into a
+    // match — a Census no-match must not overwrite Google's more specific
+    // reason for refusing.
+    const fallback = await censusGeocode(unresolved)
+    for (const m of fallback) {
+      if (m.status === 'match') byRef.set(m.ref, m)
+    }
+    return rows.map((r) => byRef.get(r.ref) ?? { ref: r.ref, status: 'no_match' as const })
+  }
+
+  return censusGeocode(rows)
+}
+
+async function censusGeocode(rows: GeocodeRequest[]): Promise<GeocodeMatch[]> {
   if (rows.length === 0) return []
 
   const first = await batch(rows)

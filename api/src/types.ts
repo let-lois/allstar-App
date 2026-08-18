@@ -11,6 +11,12 @@ export interface Env {
   SETUP_TOKEN?: string
   /** Where the front end lives, for links on the Worker-served pages. */
   APP_URL?: string
+  /**
+   * Optional. Present means addresses are geocoded to the rooftop via Google;
+   * absent means the free Census geocoder, which places a house on the right
+   * block. Everything works either way — the difference is precision.
+   */
+  GOOGLE_MAPS_API_KEY?: string
 }
 
 export type Role = 'super_admin' | 'client_admin' | 'manager' | 'field_rep'

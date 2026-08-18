@@ -23,6 +23,7 @@ const load = async (entry, name) => {
   return import(out)
 }
 const { parseCensusResponse, toCensusCsv } = await load('src/geocode.ts', 'geocode')
+const { parseGoogleResponse } = await load('src/geocode-google.ts', 'google')
 const { addressKey, propertyIdFor } = await load('src/import.ts', 'import')
 
 const fails = []
@@ -120,6 +121,104 @@ const ok = (cond, msg) => {
   ok(one === two, 're-importing the same row produces the same id — imports are idempotent')
   ok(one !== other, 'the same address in two tenants is two different properties')
   ok(/^p_[0-9a-f]{24}$/.test(one), `the id is a well-formed property id (${one})`)
+}
+
+/* --- Google's geocoder ----------------------------------------------------- */
+//
+// Parsed from recorded responses rather than a live call: this API is billed per
+// request, and a test that costs money every run is a test that stops being run.
+
+{
+  const m = parseGoogleResponse('r1', {
+    status: 'OK',
+    results: [{
+      formatted_address: '1600 Amphitheatre Pkwy, Mountain View, CA 94043, USA',
+      geometry: { location: { lat: 37.4224764, lng: -122.0842499 }, location_type: 'ROOFTOP' },
+    }],
+  })
+  ok(m.status === 'match', 'a rooftop result is a match')
+  ok(m.lat === 37.4224764 && m.lng === -122.0842499, 'with the coordinates the right way round')
+  ok(m.precision === 'rooftop', 'and marked as a rooftop — the thing being paid for')
+  ok(m.provider === 'google', 'attributed to the provider that answered')
+  ok(m.partial !== true, 'and not flagged as a guess')
+}
+{
+  const m = parseGoogleResponse('r2', {
+    status: 'OK',
+    results: [{
+      formatted_address: '742 Evergreen Terrace, Springfield, IL, USA',
+      partial_match: true,
+      geometry: { location: { lat: 39.8, lng: -89.6 }, location_type: 'RANGE_INTERPOLATED' },
+    }],
+  })
+  ok(
+    m.partial === true,
+    'a partial match is flagged — Google answers a misspelled address rather than refusing, and a rep would knock on the wrong door',
+  )
+  ok(m.precision === 'interpolated', 'an interpolated result does not claim to be a rooftop')
+}
+{
+  const m = parseGoogleResponse('r3', {
+    status: 'OK',
+    results: [{
+      formatted_address: 'Round Rock, TX, USA',
+      geometry: { location: { lat: 30.5, lng: -97.6 }, location_type: 'APPROXIMATE' },
+    }],
+  })
+  ok(m.precision === 'approximate', 'a whole-town centroid is reported as approximate, not as a house')
+}
+{
+  ok(parseGoogleResponse('r4', { status: 'ZERO_RESULTS' }).status === 'no_match', 'no results is a no-match')
+}
+{
+  // The distinction that matters operationally: a quota or key problem is not
+  // the address's fault, and calling it "not found" sends someone hunting for a
+  // typo that isn't there.
+  const over = parseGoogleResponse('r5', {
+    status: 'OVER_QUERY_LIMIT',
+    error_message: 'You have exceeded your daily request quota',
+  })
+  ok(over.status === 'error', 'a quota failure is an error, not a no-match')
+  ok(/quota/i.test(over.error ?? ''), 'and carries the reason')
+
+  const denied = parseGoogleResponse('r6', { status: 'REQUEST_DENIED', error_message: 'The provided API key is invalid.' })
+  ok(denied.status === 'error', 'a bad key is an error too')
+  ok(/api key/i.test(denied.error ?? ''), 'with the reason preserved')
+}
+{
+  ok(
+    parseGoogleResponse('r7', { status: 'OK', results: [{ geometry: {} }] }).status === 'no_match',
+    'a result with no coordinates is refused rather than stored as zero',
+  )
+  ok(
+    parseGoogleResponse('r8', {
+      status: 'OK',
+      results: [{ geometry: { location: { lat: 999, lng: 0 } } }],
+    }).status === 'no_match',
+    'an impossible latitude is refused',
+  )
+}
+
+/* --- the two providers agree on shape -------------------------------------- */
+//
+// They have to be interchangeable: the fallback swaps one for the other
+// mid-batch, and a caller must not be able to tell which answered except by
+// looking at `provider` and `precision`.
+{
+  const census = parseCensusResponse(
+    '"9","a","Match","Exact","A ST, TX, 78664","-97.6,30.5","x","L"',
+  )[0]
+  const google = parseGoogleResponse('9', {
+    status: 'OK',
+    results: [{ formatted_address: 'A ST', geometry: { location: { lat: 30.5, lng: -97.6 }, location_type: 'ROOFTOP' } }],
+  })
+  const shape = (m) => ['ref', 'status', 'lat', 'lng'].every((k) => k in m)
+  ok(shape(census) && shape(google), 'both providers return the same fields')
+  ok(census.provider === 'census', 'census attributes itself')
+  ok(
+    census.precision === 'interpolated',
+    'and does not claim rooftop precision it cannot deliver',
+  )
 }
 
 console.log(fails.length ? `\n${fails.length} check(s) failed` : '\ngeocode parsing and dedupe are correct')

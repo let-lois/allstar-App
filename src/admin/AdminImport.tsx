@@ -45,8 +45,12 @@ interface PreparedRow {
   lat?: number
   lng?: number
   /** Set when the geocoder was asked and couldn't place it. */
-  geocodeStatus?: 'match' | 'no_match' | 'tie'
+  geocodeStatus?: 'match' | 'no_match' | 'tie' | 'error'
   matchedAddress?: string
+  /** How precisely it was placed — the thing rooftop geocoding is paid for. */
+  precision?: 'rooftop' | 'interpolated' | 'approximate'
+  /** The geocoder answered a misspelled address by guessing at it. */
+  partial?: boolean
 }
 
 const SAMPLE = `address,city,state,zip,owner,phone
@@ -163,7 +167,10 @@ export default function AdminImport() {
     setProgress({ done: 0, total: needsGeocode.length })
 
     const byRef = new Map(prepared.map((r) => [r.ref, r]))
-    const CHUNK = 100
+    // Matches GEOCODE_CHUNK on the server; the larger of the two gets a 413.
+    // Sized for Google, which has no batch endpoint — one request per address
+    // against a Worker's subrequest budget.
+    const CHUNK = 40
     try {
       for (let i = 0; i < needsGeocode.length; i += CHUNK) {
         const chunk = needsGeocode.slice(i, i + CHUNK)
@@ -185,6 +192,8 @@ export default function AdminImport() {
             row.lat = m.lat
             row.lng = m.lng
             row.matchedAddress = m.matchedAddress
+            row.precision = m.precision
+            row.partial = m.partial
           }
         }
         setProgress({ done: Math.min(i + CHUNK, needsGeocode.length), total: needsGeocode.length })
@@ -453,9 +462,9 @@ export default function AdminImport() {
               <h2 className="font-bold">These rows have no coordinates</h2>
               <p className="mt-1 text-sm leading-relaxed text-ink-mute">
                 A property without a latitude and longitude can’t appear on a map or in
-                a route, so it won’t be imported until it’s placed. Looking the addresses
-                up uses the US Census Bureau’s free geocoder — US addresses only, and it
-                places a house on the right block rather than on the exact rooftop.
+                a route, so it won’t be imported until it’s placed. Each one comes back
+                marked with how precisely it was found — on the house, on the block, or
+                only nearby — so you can see what you’re importing before you import it.
               </p>
               <div className="mt-3 flex items-center gap-3">
                 <Button onClick={() => void runGeocode()} disabled={busy !== null || mode === 'demo'}>
@@ -672,7 +681,7 @@ function PreviewTable({ rows }: { rows: PreparedRow[] }) {
               <th className="px-3 py-2 font-semibold">Address</th>
               <th className="px-3 py-2 font-semibold">City</th>
               <th className="px-3 py-2 font-semibold">Owner</th>
-              <th className="px-3 py-2 font-semibold">Coordinates</th>
+              <th className="px-3 py-2 font-semibold">Placed</th>
             </tr>
           </thead>
           <tbody>
@@ -700,11 +709,30 @@ function PreviewTable({ rows }: { rows: PreparedRow[] }) {
                     {r.matchedAddress && (
                       <span className="block text-xs text-ink-mute">↳ {r.matchedAddress}</span>
                     )}
+                    {/*
+                      A guessed match is the one worth looking at: the geocoder
+                      answered a misspelled address rather than refusing, so the
+                      pin is somewhere plausible and possibly wrong.
+                    */}
+                    {r.partial && (
+                      <span className="block text-xs font-medium text-amber-700">
+                        ↳ close match — check this one
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2">{r.values.city || '—'}</td>
                   <td className="px-3 py-2">{r.values.ownerName || '—'}</td>
-                  <td className="nums px-3 py-2 text-xs">
-                    {placed ? `${r.lat!.toFixed(5)}, ${r.lng!.toFixed(5)}` : '—'}
+                  <td className="px-3 py-2 text-xs">
+                    {placed ? (
+                      <>
+                        <span className="font-medium">{PRECISION_LABEL[r.precision ?? 'unknown']}</span>
+                        <span className="nums block text-ink-mute">
+                          {r.lat!.toFixed(5)}, {r.lng!.toFixed(5)}
+                        </span>
+                      </>
+                    ) : (
+                      '—'
+                    )}
                   </td>
                 </tr>
               )
@@ -728,6 +756,18 @@ function Badge({ tone, children }: { tone: 'good' | 'warn' | 'bad'; children: Re
       {children}
     </span>
   )
+}
+
+/**
+ * Said in the operator's terms, not the provider's. "Rooftop" and "on the block"
+ * are the difference a rep notices standing in a front garden; ROOFTOP and
+ * RANGE_INTERPOLATED are not.
+ */
+const PRECISION_LABEL: Record<string, string> = {
+  rooftop: 'On the house',
+  interpolated: 'On the block',
+  approximate: 'Nearby only',
+  unknown: 'Placed',
 }
 
 const num = (v?: string): number | undefined => {
