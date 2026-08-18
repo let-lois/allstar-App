@@ -175,6 +175,25 @@ export function apiInvite(
   return request<CreatedInviteDTO>('/api/invites', { method: 'POST', body: input, token })
 }
 
+/**
+ * Assign every lead in a territory to a rep.
+ *
+ * `territoryId: null` addresses the leads that aren't in a territory yet — after
+ * a plain import that's all of them, so without it a first import would be
+ * unassignable. `repId: null` un-assigns.
+ */
+export function apiAssignTerritory(
+  token: string,
+  input: { territoryId: string | null; repId: string | null },
+) {
+  return request<{ assigned: number }>('/api/territories/assign', {
+    method: 'POST',
+    body: input,
+    token,
+    timeoutMs: 30_000,
+  })
+}
+
 export interface GeocodeRequestDTO {
   ref: string
   address1: string

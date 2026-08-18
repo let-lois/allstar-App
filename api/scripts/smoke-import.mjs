@@ -230,6 +230,64 @@ ok(
   'a route referencing another tenant’s property is rejected',
 )
 
+/* --- territory assignment ------------------------------------------------- */
+const assign = (body, token = admin.token) =>
+  api('/api/territories/assign', { method: 'POST', body: JSON.stringify(body) }, token).then(
+    async (r) => ({ status: r.status, body: await r.json() }),
+  )
+
+const repId = roster.users.find((u) => u.email === REP.email).id
+
+// Unassign the whole territory, then give it back — the round trip is what
+// proves assignment is a real edit and not a one-way door.
+const cleared = await assign({ territoryId: first.territoryId, repId: null })
+ok(cleared.body.assigned === 3, `a territory can be unassigned (${cleared.body.assigned})`)
+const afterClear = await (await api('/api/bootstrap', {}, rep.token)).json()
+ok(
+  afterClear.properties.filter((p) => p.address1.includes(street)).length === 0,
+  'an unassigned rep stops seeing the leads — scoping is enforced on the server',
+)
+
+const given = await assign({ territoryId: first.territoryId, repId })
+ok(given.body.assigned === 3, `a territory can be assigned to a rep (${given.body.assigned})`)
+const afterGive = await (await api('/api/bootstrap', {}, rep.token)).json()
+ok(
+  afterGive.properties.filter((p) => p.address1.includes(street)).length === 3,
+  'the rep sees the leads again once assigned',
+)
+
+// The unassigned bucket has to be addressable, or a plain import is
+// unassignable except by re-importing.
+const loose = `p_loose_${stamp}`
+await send([
+  {
+    id: `mut_loose_${stamp}`,
+    kind: 'property.status',
+    createdAt: Date.now(),
+    payload: { id: loose, created: true, address1: `9 Loose End ${stamp}`, lat: 30.5, lng: -97.6 },
+  },
+], admin.token)
+await assign({ territoryId: null, repId: null })
+const bucket = await assign({ territoryId: null, repId })
+ok(
+  bucket.body.assigned >= 1,
+  `leads with no territory can be assigned as a bucket (${bucket.body.assigned})`,
+)
+
+/* --- and the boundaries it must not cross -------------------------------- */
+ok(
+  (await assign({ territoryId: first.territoryId, repId: 'u_from_another_company' })).status === 400,
+  'assigning to somebody outside the tenant is refused',
+)
+ok(
+  (await assign({ territoryId: 'terr_belongs_to_someone_else', repId })).status === 404,
+  'assigning another tenant’s territory is refused',
+)
+ok(
+  (await assign({ territoryId: first.territoryId, repId }, rep.token)).status === 403,
+  'a field rep cannot reassign territory to themselves',
+)
+
 /* --- authorization -------------------------------------------------------- */
 ok(
   (

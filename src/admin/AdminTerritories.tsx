@@ -4,7 +4,7 @@ import { FieldMap, fitZoom } from '../components/map/FieldMap'
 import { useAppStore } from '../store/useAppStore'
 import { UNASSIGNED_TERRITORY, inTerritory, useTerritories } from './useAdminData'
 import { FIELD_REPS } from '../data/seed'
-import { apiUsers, type TeamUserDTO } from '../lib/http'
+import { ApiError, apiAssignTerritory, apiUsers, type TeamUserDTO } from '../lib/http'
 import { liveToken } from '../lib/session'
 import { moneyFull } from '../lib/format'
 import { INK, SINGLE } from './charts/tokens'
@@ -24,7 +24,30 @@ export function AdminTerritories() {
   const territories = useAppStore((s) => s.territories)
   const mode = useAppStore((s) => s.mode)
   const list = useMemo(() => Object.values(properties), [properties])
-  const rows = useTerritories(list)
+  const unsorted = useTerritories(list)
+
+  /** A territory's name if we have one; otherwise something readable. */
+  const label = (id: string) =>
+    id === UNASSIGNED_TERRITORY ? 'Unassigned' : (territories[id]?.name ?? id)
+
+  /*
+    Sorted by the name on screen, not by the internal id. Ids are hashes, so
+    sorting on them puts the rows in an order with no relationship to what the
+    operator is reading. Unassigned sits last wherever it falls alphabetically —
+    it's a catch-all rather than a territory, and it belongs at the bottom of the
+    list the same way it belongs at the bottom of the priorities.
+  */
+  const rows = useMemo(
+    () =>
+      [...unsorted].sort((a, b) => {
+        if (a.id === UNASSIGNED_TERRITORY) return 1
+        if (b.id === UNASSIGNED_TERRITORY) return -1
+        return label(a.id).localeCompare(label(b.id))
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [unsorted, territories],
+  )
+
   const [selected, setSelected] = useState<string | null>(rows[0]?.id ?? null)
 
   // The first render has no properties yet — they arrive from IndexedDB a beat
@@ -64,9 +87,45 @@ export function AdminTerritories() {
     [mode, reps],
   )
 
-  /** A territory's name if we have one; otherwise something readable. */
-  const label = (id: string) =>
-    id === UNASSIGNED_TERRITORY ? 'Unassigned' : (territories[id]?.name ?? id)
+  /* --- assignment ---------------------------------------------------- */
+  const refreshFromServer = useAppStore((s) => s.refreshFromServer)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [assignError, setAssignError] = useState<string | null>(null)
+  const [assigned, setAssigned] = useState<string | null>(null)
+
+  async function assign(territoryId: string, repId: string) {
+    const token = liveToken()
+    if (!token) {
+      setAssignError('Assigning leads needs a live account. The demo has no real team.')
+      return
+    }
+    setSaving(territoryId)
+    setAssignError(null)
+    setAssigned(null)
+    try {
+      const res = await apiAssignTerritory(token, {
+        // The unassigned bucket is a sentinel on this side and a null on the
+        // wire — the server has no row for "no territory".
+        territoryId: territoryId === UNASSIGNED_TERRITORY ? null : territoryId,
+        repId: repId || null,
+      })
+      // Re-read rather than patching state: this changes which properties a rep
+      // can see, and guessing at the result is how a console drifts from the
+      // database it is supposed to be showing.
+      await refreshFromServer()
+      setAssigned(
+        repId
+          ? `${res.assigned} lead${res.assigned === 1 ? '' : 's'} assigned.`
+          : `${res.assigned} lead${res.assigned === 1 ? '' : 's'} unassigned.`,
+      )
+    } catch (err) {
+      setAssignError(
+        err instanceof ApiError ? err.message : 'Could not save that. Nothing was changed.',
+      )
+    } finally {
+      setSaving(null)
+    }
+  }
 
   // Frame the selected territory rather than inheriting the rep's street-level
   // zoom, where the whole patch collapses into cluster bubbles.
@@ -120,11 +179,13 @@ export function AdminTerritories() {
                   <td className="px-4 py-3 font-medium">{label(t.id)}</td>
                   <td className="px-3 py-3">
                     <select
-                      defaultValue={t.repId ?? ''}
+                      value={t.repId ?? ''}
+                      disabled={mode !== 'live' || saving !== null}
                       onClick={(e) => e.stopPropagation()}
-                      className="focusable min-h-[36px] rounded-lg border border-slate-200 bg-surface px-2 text-xs"
+                      onChange={(e) => void assign(t.id, e.target.value)}
+                      className="focusable min-h-[36px] rounded-lg border border-slate-200 bg-surface px-2 text-xs disabled:opacity-60"
                     >
-                      <option value="">Unassigned</option>
+                      <option value="">{t.mixed ? 'Mixed — pick one' : 'Unassigned'}</option>
                       {repOptions.map((r) => (
                         <option key={r.id} value={r.id}>
                           {r.name}
@@ -156,10 +217,23 @@ export function AdminTerritories() {
               ))}
             </tbody>
           </table>
-          <p className="border-t border-slate-100 px-4 py-3 text-xs text-ink-mute">
-            Reassignment is read-only until the backend lands. Coverage is knocked
-            properties over total, not route completion.
-          </p>
+          <div className="border-t border-slate-100 px-4 py-3 text-xs">
+            {assignError ? (
+              <p role="alert" className="font-medium text-red-700">
+                {assignError}
+              </p>
+            ) : assigned ? (
+              <p role="status" className="font-medium text-emerald-700">
+                {assigned} They’ll see them next time their phone syncs.
+              </p>
+            ) : (
+              <p className="text-ink-mute">
+                {mode === 'live'
+                  ? 'Changing the rep moves every lead in that territory to them. Coverage is knocked properties over total, not route completion.'
+                  : 'Demo data — assignment needs a live account. Coverage is knocked properties over total, not route completion.'}
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
