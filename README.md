@@ -268,6 +268,59 @@ email went out, never claims one did, shows the full link, copies it, and marks
 the new person pending. Plus that the demo makes no invite request at all and
 says why.
 
+## Handing out the work
+
+**Console → Territories → Assigned rep.** Changing it moves every lead in that
+patch to that person, and it works on the **Unassigned** bucket too — after a
+plain import that's all of them, so without it a first import would be
+unassignable except by re-importing, which is a workaround dressed as a feature.
+
+Bulk by territory rather than per property, because that's the unit the work is
+organised in: a manager hands someone a patch, not four hundred individual doors,
+and reassigning a rep who quits has to be one action. A territory only claims an
+owner when every lead in it agrees; split patches read **Mixed**.
+
+Scoping is enforced server-side, not just filtered in the client: unassign a rep
+and their next bootstrap stops returning those properties.
+
+## Managing an account
+
+**Console → Team → Manage.** Reset a password, remove someone, or delete the
+account. Three operations, and the distinction between them is the whole design:
+
+| | What happens | When |
+|---|---|---|
+| **Set a password** | They sign in with it; **every session they hold dies** | A phone went missing |
+| **Reset link** | They choose their own; the admin never sees it | Normal password trouble |
+| **Remove from team** | Can't sign in; sessions end now; **work stays** | Someone left |
+| **Delete permanently** | Row gone, and everything keyed on it cascades | Almost never |
+
+Deleting a user is genuinely destructive: `visits`, `notes`, `activity`, `tasks`,
+`routes` and `daily_stats` all cascade. That isn't a login, it's the company's
+reporting history with a hole in it — a rep who worked eight months takes eight
+months of doors-per-day with them. So the panel counts the records first and
+requires the person's name to be typed. The numbers are the informed half of
+informed consent; "are you sure?" isn't. Leads are `ON DELETE SET NULL`, so they
+survive and fall back to Unassigned.
+
+Two rules keep a company from locking itself out: **an admin cannot act on their
+own account** (they can still change their own password), and **the last
+administrator cannot be removed**. The second is expressed as a condition inside
+the write rather than a check before it — two admins deactivating each other at
+the same moment would both pass a separate check, since each still sees the other
+as active.
+
+Setting a password revokes every session for that user, including the admin's own
+if they changed their own. That's the point of a reset after a phone goes missing:
+the old credential has to stop working everywhere, not eventually.
+
+```bash
+cd api && npm run smoke:users   # 28 assertions, mostly about what is refused
+npm run verify:invite           # the panel, including the delete confirmation
+```
+
+Role changes are still read-only.
+
 ## Office console
 
 `/admin` is the one deliberately **desktop-first** surface. Everywhere else

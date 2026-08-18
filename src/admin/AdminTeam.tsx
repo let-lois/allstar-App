@@ -10,6 +10,7 @@ import { FIELD_REPS, DEMO_USERS } from '../data/seed'
 import { money, relative } from '../lib/format'
 import { STATUS } from './charts/tokens'
 import { InviteDialog } from './InviteDialog'
+import { ManageUser } from './ManageUser'
 import { apiUsers, type TeamUserDTO } from '../lib/http'
 import { liveToken } from '../lib/session'
 import type { Role } from '../types'
@@ -60,6 +61,7 @@ export function AdminTeam() {
   const properties = useAppStore((s) => s.properties)
   const territories = useAppStore((s) => s.territories)
   const mode = useAppStore((s) => s.mode)
+  const signedInUser = useAppStore((s) => s.user)
   const today = useTeamStats()
   const rangeRows = useRepRangeRows(range)
 
@@ -109,7 +111,11 @@ export function AdminTeam() {
         email: u.email,
         phone: u.phone,
         territory: territoryOf(u.id),
-        active: u.active && !u.pending,
+        // The raw flag, not `active && !pending`. Collapsing them loses the
+        // difference between "switched off" and "never accepted their invite",
+        // and the manage panel then offers to restore access to somebody whose
+        // access was never taken away.
+        active: u.active,
         pending: u.pending,
       }))
     }
@@ -266,8 +272,8 @@ export function AdminTeam() {
 
       <p className="mt-3 text-xs text-ink-mute">
         {mode === 'live'
-          ? 'Inviting works. Role changes, territory reassignment and deactivation are still read-only.'
-          : 'Demo roster. Inviting needs a live account.'}
+          ? 'Manage a person to reset their password, remove them, or delete the account. Role changes are still read-only.'
+          : 'Demo roster. Managing people needs a live account.'}
       </p>
 
       {inviting && (
@@ -280,13 +286,36 @@ export function AdminTeam() {
         title={editing?.name}
         detents={[0.7]}
       >
-        {editing && <MemberDetail member={editing} />}
+        {editing && (
+          <MemberDetail
+            member={editing}
+            mode={mode}
+            signedInId={signedInUser?.id}
+            onChanged={() => {
+              loadRoster()
+              setEditing(null)
+            }}
+            onClose={() => setEditing(null)}
+          />
+        )}
       </BottomSheet>
     </AdminPage>
   )
 }
 
-function MemberDetail({ member }: { member: Member }) {
+function MemberDetail({
+  member,
+  mode,
+  signedInId,
+  onChanged,
+  onClose,
+}: {
+  member: Member
+  mode: 'demo' | 'live'
+  signedInId?: string
+  onChanged: () => void
+  onClose: () => void
+}) {
   const today = useTeamStats().find((r) => r.id === member.id)
   return (
     <div className="space-y-4 pt-1">
@@ -326,38 +355,30 @@ function MemberDetail({ member }: { member: Member }) {
         </dl>
       )}
 
-      <div className="space-y-2">
-        <label className="block">
-          <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
-            Role
-          </span>
-          <select
-            defaultValue={member.role}
-            className="focusable mt-1 min-h-[40px] w-full rounded-xl border border-slate-200 px-3 text-sm"
-          >
-            {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABEL[r]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
-            Territory
-          </span>
-          <input
-            defaultValue={member.territory ?? ''}
-            placeholder="e.g. t_0, t_1"
-            className="focusable mt-1 min-h-[40px] w-full rounded-xl border border-slate-200 px-3 text-sm"
-          />
-        </label>
-      </div>
+      {mode === 'live' ? (
+        <ManageUser
+          user={{
+            id: member.id,
+            name: member.name,
+            email: member.email,
+            role: member.role,
+            active: member.active,
+            pending: member.pending,
+          }}
+          isSelf={member.id === signedInId}
+          onChanged={onChanged}
+          onClose={onClose}
+        />
+      ) : (
+        <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-900">
+          This is the demo roster — nobody here has a real account, so there's nothing to
+          reset or remove. Sign in with real credentials to manage people.
+        </p>
+      )}
 
-      <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-900">
-        Editing is read-only until the backend lands — there's nowhere to persist a role
-        change yet, and a control that silently discards input is worse than one that
-        says so.
+      <p className="text-xs text-ink-mute">
+        Role changes are still read-only. A control that silently discards input is worse
+        than one that says so.
       </p>
     </div>
   )
