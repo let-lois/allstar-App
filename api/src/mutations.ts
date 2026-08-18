@@ -184,6 +184,31 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
         )
         .run()
 
+      // The feed is what a manager reads to see the day happening. The client
+      // writes this event locally the moment the visit closes; without the
+      // mirror here it vanishes the first time the phone re-bootstraps.
+      // Keyed off the visit id so a replay overwrites rather than duplicates.
+      const address = await env.DB.prepare(
+        'SELECT address1 FROM properties WHERE id = ?1 AND client_id = ?2',
+      )
+        .bind(propertyId, user.clientId)
+        .first<{ address1: string }>()
+      await env.DB.prepare(
+        `INSERT OR REPLACE INTO activity
+           (id, client_id, property_id, rep_id, type, summary, outcome, at)
+         VALUES (?1,?2,?3,?4,'visit',?5,?6,?7)`,
+      )
+        .bind(
+          `ev_${id}`,
+          user.clientId,
+          propertyId,
+          user.id,
+          address?.address1 ?? 'Visit',
+          outcome,
+          endedAt,
+        )
+        .run()
+
       await bumpDailyStats(env, user, endedAt, outcome, propertyId)
       return
     }

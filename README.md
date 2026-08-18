@@ -101,7 +101,8 @@ npm run verify:demo
 asserts the route, appointments and activity are all still there.
 
 **More → Field testing → Reset demo data** restores a pristine dataset between
-pitches.
+pitches. It is hidden on a live account, where there is no seed to restore and
+the button would only offer to delete a rep's real work.
 
 ## Office console
 
@@ -161,13 +162,62 @@ Office roles (Manager, Client Admin, Super Admin) get a read-and-react overview
 on mobile — "is today going the way it should?" — with the full console
 (user management, territories, imports, reporting) reserved for desktop.
 
+## Sign-in: two modes
+
+The login screen has two doors, and the split is deliberate rather than a flag.
+
+| | Demo | Live |
+|---|---|---|
+| Account | none | email + password against the API |
+| Data | seeded (`data/seed.ts`) | the account's own tenant, via `/api/bootstrap` |
+| Outbox drains to | a latency simulator | `/api/mutations` |
+| Reset demo data | offered | hidden — it would only delete real work |
+
+The demo stays first-class because it's what gets shown to a prospect on hotel
+wifi: a pitch that breaks when the backend does isn't a pitch. The mode is stored
+next to the data it describes (`lib/session.ts`), so a reload can't land in a
+state where the app reads demo properties while pushing them to a real tenant.
+
+**Signing in wipes whatever the last account cached** — field phones get shared,
+and a rep's leads are their company's data. The outbox is the one thing that
+survives: it holds work that hasn't reached the server yet, and deleting it
+because someone signed out would destroy a morning's knocks.
+
+That's also what happens when a token expires mid-shift. The discovery almost
+always lands inside a background drain with no screen attached, so `lib/session.ts`
+raises it as an event, the store drops to the login screen, and the queued rows
+keep their place and their retry budget — they go up when the rep signs back in.
+
+```bash
+npm run verify:login
+```
+
+...mocks the API at the network layer and asserts all of it: a bad password shows
+the server's reason, an unreachable server is reported as a *connection* problem
+rather than a bad password, the demo works with every API call aborted, a live
+account sees only its own tenant's addresses, an expired session preserves the
+outbox, and signing out leaves nothing on the device.
+
 ## Data layer
 
-`lib/api.ts` is a stand-in for the backend that models real cellular latency and
-can fail. Everything above it — the queue, optimistic UI, sync indicator — is
-written against a real async boundary, so swapping in HTTP is a one-file change.
-Seed data (`data/seed.ts`) is deterministic; nothing outside that file knows it's
-synthetic.
+`lib/http.ts` is the API client — thin on purpose, because the app reads from
+IndexedDB and only touches the network at three moments: signing in, refreshing
+the cache, and draining the outbox. `lib/api.ts` sits above it and dispatches to
+either real HTTP or the demo's latency simulator, so both modes exercise the same
+failure paths.
+
+The outbox sends **batches** (`BATCH_SIZE`, capped at 200 server-side). The shape
+of the problem is bursty: a rep works a street with no signal and queues thirty
+writes the moment a bar appears. One request beats thirty round trips where any
+single drop restarts the tail. The server's per-mutation verdict is authoritative,
+and `duplicate` counts as success — it means a previous attempt landed and what
+we lost was the response.
+
+Seed data (`data/seed.ts`) is deterministic; nothing outside that file and
+`lib/demo.ts` knows it's synthetic.
+
+`VITE_API_URL` overrides the API origin at build time (see `.env.example`);
+unset, the client uses the deployed Worker.
 
 Toggle **More → Field testing → Simulate no signal** to exercise the offline
 path without leaving coverage.

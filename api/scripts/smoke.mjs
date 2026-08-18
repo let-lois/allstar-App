@@ -154,6 +154,15 @@ ok(
   'the outcome moved the lead exactly once',
 )
 
+// The feed is what a manager reads to see the day happening, and it has to
+// survive the phone re-bootstrapping — the client's local copy of this event is
+// wiped by every refresh, so the server has to hold its own.
+const visitEvents = after.activity.filter(
+  (a) => a.propertyId === propId && a.type === 'visit',
+)
+ok(visitEvents.length === 1, `the visit appears once in the activity feed (${visitEvents.length})`)
+ok(visitEvents[0]?.outcome === 'sold', 'the feed entry carries the outcome')
+
 const stat = after.dailyStats.find((s) => s.repId === user.id)
 ok(!!stat && stat.knocks === 1, `reporting counted one knock, not two (knocks=${stat?.knocks})`)
 ok(stat?.sold === 1, `a replayed sale counts once (sold=${stat?.sold})`)

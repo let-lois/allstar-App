@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Allstar \u2014 mobile-first field sales (D2D) application",
+  "description": "Allstar — mobile-first field sales (D2D) application",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -14,7 +14,8 @@
     "verify:offline": "node scripts/verify-offline.mjs",
     "verify:webview": "node scripts/verify-webview-notice.mjs",
     "verify:demo": "node scripts/verify-demo-freshness.mjs",
-    "verify:console": "node scripts/verify-console-access.mjs"
+    "verify:console": "node scripts/verify-console-access.mjs",
+    "verify:login": "node scripts/verify-login.mjs"
   },
   "dependencies": {
     "idb": "^8.0.0",

@@ -1,5 +1,12 @@
 import type { Mutation, MutationKind, SyncState } from '../types'
-import { OfflineError, online, pushMutation } from './api'
+import {
+  AuthExpiredError,
+  BATCH_SIZE,
+  OfflineError,
+  online,
+  pushMutations,
+  type PushResult,
+} from './api'
 import * as store from './db'
 import { uid } from './id'
 
@@ -99,37 +106,85 @@ export async function drain(): Promise<void> {
       const rows = (await store.all<Mutation>('outbox'))
         .filter((r) => r.status !== 'failed')
         .sort((a, b) => a.createdAt - b.createdAt)
-      const next = rows[0]
-      if (!next) break
-
+        .slice(0, BATCH_SIZE)
+      if (rows.length === 0) break
       if (!online()) break
 
+      let results: PushResult[]
       try {
-        await pushMutation(next)
-        await store.del('outbox', next.id)
-        lastSyncedAt = Date.now()
+        results = await pushMutations(rows)
       } catch (err) {
         if (err instanceof OfflineError) {
-          // Not a failure — we simply lost the link. Keep the row untouched.
+          // Not a failure — we simply lost the link. Keep the rows untouched.
           break
         }
-        next.attempts += 1
-        next.lastError = err instanceof Error ? err.message : String(err)
-        if (next.attempts >= MAX_ATTEMPTS) {
-          next.status = 'failed'
-          await store.put('outbox', next)
-        } else {
-          await store.put('outbox', next)
-          scheduleRetry(backoffMs(next.attempts))
+        if (err instanceof AuthExpiredError) {
+          // Nothing to retry until someone signs in again, and the work is
+          // still good. Stop the drain; don't burn attempts on it.
           break
         }
+        // The whole request failed, so every row in it is still unsent. Charge
+        // each one an attempt and back off — this is the path a 500 takes.
+        await chargeBatch(rows, err)
+        break
       }
+
+      // The server's verdict is authoritative, and `duplicate` means a previous
+      // attempt landed and we only lost the response. Both are done.
+      const verdict = new Map(results.map((r) => [r.id, r]))
+      let settled = 0
+      let worst = 0
+      for (const row of rows) {
+        const r = verdict.get(row.id)
+        // A row the server didn't mention at all is an inconsistency we can't
+        // resolve from here. Leave it alone and let the next pass carry it.
+        if (!r) continue
+        settled += 1
+        if (r.status === 'applied' || r.status === 'duplicate') {
+          await store.del('outbox', row.id)
+          lastSyncedAt = Date.now()
+          continue
+        }
+        row.attempts += 1
+        row.lastError = r.error ?? 'Rejected by the server'
+        if (row.attempts >= MAX_ATTEMPTS) row.status = 'failed'
+        worst = Math.max(worst, row.attempts)
+        await store.put('outbox', row)
+      }
+
       await recount()
+      // Nothing in the batch moved. Re-reading would produce the same rows and
+      // the same answer, so stop rather than spin the radio in a tight loop.
+      if (settled === 0) {
+        scheduleRetry(backoffMs(1))
+        break
+      }
+      if (worst > 0) {
+        // Back off before the next pass rather than hammering a row the server
+        // keeps refusing.
+        scheduleRetry(backoffMs(worst))
+        break
+      }
     }
   } finally {
     draining = false
     await recount()
   }
+}
+
+/** A request that failed as a whole: every row in it is still unsent. */
+async function chargeBatch(rows: Mutation[], err: unknown): Promise<void> {
+  const message = err instanceof Error ? err.message : String(err)
+  let worst = 0
+  for (const row of rows) {
+    row.attempts += 1
+    row.lastError = message
+    if (row.attempts >= MAX_ATTEMPTS) row.status = 'failed'
+    worst = Math.max(worst, row.attempts)
+    await store.put('outbox', row)
+  }
+  await recount()
+  scheduleRetry(backoffMs(worst))
 }
 
 function scheduleRetry(ms: number) {
