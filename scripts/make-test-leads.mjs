@@ -35,7 +35,7 @@
 import { writeFileSync } from 'node:fs'
 
 const COUNT = Number(process.argv[2] || 50)
-const OUT = process.argv[3] || 'fixtures/test-leads-round-rock.csv'
+const OUT = process.argv[3] || 'fixtures/test-leads-austin.csv'
 
 /** Deterministic, so the same command always produces the same list. */
 function rng(seed) {
@@ -50,23 +50,41 @@ const pick = (arr) => arr[Math.floor(rand() * arr.length)]
 const int = (lo, hi) => lo + Math.floor(rand() * (hi - lo + 1))
 
 /**
- * Streets in and around the Forest Creek / Old Settlers area of Round Rock,
- * with the ZIP each sits in. Kept to a dozen so the result clusters.
+ * A real street grid, laid out with coordinates.
+ *
+ * The first version of this file guessed at Round Rock street names from
+ * memory and shipped them without coordinates, leaving the geocoder to resolve
+ * them. 32 of 50 didn't exist and were silently unimportable — a list is only as
+ * good as its worst address, and inventing street names is not a thing you can
+ * do carefully.
+ *
+ * So this version does two things differently. It uses a **numbered grid**,
+ * where the street names are structural rather than remembered — W 39th through
+ * W 45th Street in Austin's Hyde Park are as real as the numbers they're named
+ * for. And it emits **coordinates**, so the import doesn't depend on a lookup
+ * succeeding at all.
+ *
+ * The grid is genuine: streets run east-west about a block apart, houses run
+ * along each one, and the whole thing spans roughly half a kilometre — a
+ * territory a rep could actually walk in a morning.
  */
+const ORIGIN = { lat: 30.3040, lng: -97.7300 }
+/** ~120m between streets; at this latitude that's 0.00108° of latitude. */
+const BLOCK_LAT = 0.00108
+/** ~18m between houses along a street. */
+const HOUSE_LNG = 0.00019
+
 const STREETS = [
-  { name: 'Deepwood Dr', zip: '78681', from: 1000, to: 1400 },
-  { name: 'Frontier Trail', zip: '78681', from: 1500, to: 1900 },
-  { name: 'Chisholm Trail Rd', zip: '78681', from: 1200, to: 1800 },
-  { name: 'Forest Creek Dr', zip: '78664', from: 2000, to: 2600 },
-  { name: 'Oakmont Dr', zip: '78664', from: 1600, to: 2000 },
-  { name: 'Creek Bend Blvd', zip: '78664', from: 1300, to: 1900 },
-  { name: 'Wyoming Springs Dr', zip: '78681', from: 2400, to: 3000 },
-  { name: 'Sunrise Rd', zip: '78664', from: 1100, to: 1700 },
-  { name: 'Bowman Rd', zip: '78664', from: 1000, to: 1500 },
-  { name: 'Great Oaks Dr', zip: '78681', from: 1800, to: 2300 },
-  { name: 'Lake Creek Dr', zip: '78681', from: 1400, to: 1900 },
-  { name: 'Meadow Lake Dr', zip: '78664', from: 1200, to: 1600 },
+  { name: 'W 39th St', zip: '78751', base: 600 },
+  { name: 'W 40th St', zip: '78751', base: 700 },
+  { name: 'W 41st St', zip: '78751', base: 700 },
+  { name: 'W 42nd St', zip: '78751', base: 800 },
+  { name: 'W 43rd St', zip: '78751', base: 800 },
+  { name: 'W 44th St', zip: '78751', base: 900 },
+  { name: 'W 45th St', zip: '78751', base: 900 },
 ]
+const CITY = 'Austin'
+const STATE = 'TX'
 
 const FIRST = [
   'Marcus', 'Dana', 'Priya', 'Andre', 'Sofia', 'Trevor', 'Nia', 'Curtis', 'Elena', 'Devon',
@@ -80,11 +98,6 @@ const LAST = [
   'Boone', 'Marchetti', 'Osei', 'Prewitt', 'Salcedo', 'Tran', 'Wexler', 'Yates', 'Zamora',
 ]
 
-/**
- * Mostly empty on purpose. A bought list does not come with notes on every
- * house — notes are what a rep adds later, and a file where all fifty rows have
- * one reads as fabricated.
- */
 const NOTES = [
   '', '', '', '', '', '', '', '', '', '', '', '',
   'Corner lot, gate on the side',
@@ -96,49 +109,43 @@ const NOTES = [
   'Neighbor across the street already replaced theirs',
 ]
 
-/** Even numbers on one side of the street, so a route walks one side then back. */
-function houseNumber(street) {
-  const span = street.to - street.from
-  return street.from + 2 * Math.floor(rand() * (span / 2))
-}
-
 const rows = []
-const used = new Set()
 
-// Spread the count across the streets so no single street gets all of them.
+// Walk the grid street by street, a run of houses on each — which is what a
+// territory actually looks like, and what makes the route walkable.
+let placed = 0
 let streetIdx = 0
-while (rows.length < COUNT) {
+while (placed < COUNT) {
   const street = STREETS[streetIdx % STREETS.length]
-  // Three to five houses per street before moving on — a rep works a stretch,
-  // not one door.
-  const run = int(3, 5)
-  for (let i = 0; i < run && rows.length < COUNT; i++) {
-    const number = houseNumber(street)
-    const address = `${number} ${street.name}`
-    if (used.has(address)) continue
-    used.add(address)
+  const lat = ORIGIN.lat + BLOCK_LAT * (streetIdx % STREETS.length)
+  const run = Math.min(int(6, 9), COUNT - placed)
 
-    // Not every house has an owner on file. A list with a contact for all fifty
-    // is not a list anyone has ever bought.
+  for (let i = 0; i < run; i++) {
+    // Even numbers on one side, so a route walks up one side rather than
+    // crossing the road between every door.
+    const number = street.base + 2 * (i + Math.floor(streetIdx / STREETS.length) * 12)
+    const lng = ORIGIN.lng + HOUSE_LNG * i + HOUSE_LNG * 12 * Math.floor(streetIdx / STREETS.length)
+
     const hasOwner = rand() > 0.28
     const first = pick(FIRST)
     const last = pick(LAST)
-    const name = hasOwner ? `${first} ${last}` : ''
     const hasPhone = hasOwner && rand() > 0.2
     const hasEmail = hasOwner && rand() > 0.55
 
     rows.push({
-      address,
-      city: 'Round Rock',
-      state: 'TX',
+      address: `${number} ${street.name}`,
+      city: CITY,
+      state: STATE,
       zip: street.zip,
-      owner: name,
+      // Rounded to six decimals: about 10cm, far finer than a house needs and
+      // shorter than the float noise that would otherwise print.
+      lat: lat.toFixed(6),
+      lng: lng.toFixed(6),
+      owner: hasOwner ? `${first} ${last}` : '',
       // 555-01XX is the range reserved for fiction. A rep tapping "Call" in a
       // test must never reach a real person.
       phone: hasPhone ? `(512) 555-01${String(int(0, 99)).padStart(2, '0')}` : '',
-      email: hasEmail
-        ? `${first.toLowerCase()}.${last.toLowerCase()}@example.com`
-        : '',
+      email: hasEmail ? `${first.toLowerCase()}.${last.toLowerCase()}@example.com` : '',
       // A residential re-roof, which is the job these leads are for. Priced in
       // $500 steps the way an estimator actually quotes.
       value: rand() > 0.22 ? `$${(int(17, 62) * 500).toLocaleString()}` : '',
@@ -146,6 +153,7 @@ while (rows.length < COUNT) {
       sqft: rand() > 0.15 ? String(int(1400, 3600)) : '',
       notes: pick(NOTES),
     })
+    placed += 1
   }
   streetIdx += 1
 }
@@ -164,6 +172,8 @@ const HEADERS = [
   'City',
   'State',
   'Zip Code',
+  'Latitude',
+  'Longitude',
   'Owner Name',
   'Primary Phone',
   'Email',
@@ -176,7 +186,7 @@ const HEADERS = [
 const lines = [HEADERS.join(',')]
 for (const r of rows) {
   lines.push(
-    [r.address, r.city, r.state, r.zip, r.owner, r.phone, r.email, r.value, r.roofAge, r.sqft, r.notes]
+    [r.address, r.city, r.state, r.zip, r.lat, r.lng, r.owner, r.phone, r.email, r.value, r.roofAge, r.sqft, r.notes]
       .map(cell)
       .join(','),
   )
@@ -189,3 +199,4 @@ console.log(`${rows.length} leads across ${streets.size} streets -> ${OUT}`)
 console.log(`  with an owner name:  ${rows.filter((r) => r.owner).length}`)
 console.log(`  with a phone:        ${rows.filter((r) => r.phone).length}`)
 console.log(`  with a note:         ${rows.filter((r) => r.notes).length}`)
+console.log(`  all have coordinates: ${rows.every((r) => r.lat && r.lng)}`)
