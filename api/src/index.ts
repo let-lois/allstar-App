@@ -13,6 +13,8 @@ import {
   readInvite,
   runSetup,
 } from './invites'
+import { GEOCODE_CHUNK, geocode, type GeocodeRequest } from './geocode'
+import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
 import { applyMutations } from './mutations'
 import { invitePage, setupPage } from './pages'
 import { bootstrap } from './read'
@@ -150,6 +152,49 @@ export default {
         }
       }
 
+      /* --- geocoder probe -------------------------------------------------- */
+      //
+      // The geocoder is a third-party service reached only from the deployed
+      // Worker — it cannot be exercised from a development sandbox, so its
+      // behaviour has to be confirmable from a browser against the real thing.
+      // Returns the parsed result for one known address so a wrong assumption
+      // about the response format shows up here rather than as a territory of
+      // leads at latitude zero.
+      if (path === '/api/selftest/geocode') {
+        try {
+          const matches = await geocode([
+            {
+              ref: 'probe',
+              address1: '1600 Pennsylvania Ave NW',
+              city: 'Washington',
+              state: 'DC',
+              zip: '20500',
+            },
+          ])
+          const m = matches[0]
+          return json(
+            {
+              ok: m?.status === 'match',
+              parsed: m ?? null,
+              // Sanity-checked against a location we know: if these read false,
+              // the response format changed or lat/lng arrived swapped.
+              looksRight:
+                m?.status === 'match' &&
+                Math.abs((m.lat ?? 0) - 38.9) < 1 &&
+                Math.abs((m.lng ?? 0) + 77.0) < 1,
+            },
+            200,
+            cors,
+          )
+        } catch (err) {
+          return json(
+            { ok: false, error: err instanceof Error ? err.message : String(err) },
+            502,
+            cors,
+          )
+        }
+      }
+
       /* --- health -------------------------------------------------------- */
       //
       // Reports which bindings and secrets the *running* Worker can see, so a
@@ -167,6 +212,8 @@ export default {
               setupToken: !!env.SETUP_TOKEN,
               appUrl: env.APP_URL ?? null,
               allowedOrigins: (env.ALLOWED_ORIGINS ?? '').split(',').filter(Boolean).length,
+              maxImportRows: MAX_IMPORT_ROWS,
+              geocodeChunk: GEOCODE_CHUNK,
             },
           },
           200,
@@ -235,6 +282,73 @@ export default {
         }
         const results = await applyMutations(env, user, mutations)
         return json({ results, serverTime: Date.now() }, 200, cors)
+      }
+
+      /* --- the team roster ------------------------------------------------ */
+      //
+      // Not part of bootstrap: a rep has no business holding a list of their
+      // colleagues' accounts, and the console is the only thing that needs it.
+      if (path === '/api/users' && req.method === 'GET') {
+        if (!canImport(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const rows = await env.DB.prepare(
+          `SELECT id, name, email, role, phone, active,
+                  CASE WHEN password_hash IS NULL THEN 1 ELSE 0 END AS pending
+             FROM users WHERE client_id = ?1 ORDER BY name`,
+        )
+          .bind(user.clientId)
+          .all()
+        return json(
+          {
+            users: (rows.results as Record<string, unknown>[]).map((u) => ({
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              role: u.role,
+              phone: u.phone ?? undefined,
+              active: !!u.active,
+              // An invited user who hasn't set a password yet. The console shows
+              // this so an admin can tell "hasn't accepted" from "isn't working".
+              pending: !!u.pending,
+            })),
+          },
+          200,
+          cors,
+        )
+      }
+
+      /* --- lead import ----------------------------------------------------- */
+      if (path === '/api/import/geocode' && req.method === 'POST') {
+        if (!canImport(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const body = (await req.json().catch(() => ({}))) as { rows?: GeocodeRequest[] }
+        const rows = Array.isArray(body.rows) ? body.rows : []
+        if (rows.length === 0) return json({ matches: [] }, 200, cors)
+        if (rows.length > GEOCODE_CHUNK) {
+          return json({ error: `Send at most ${GEOCODE_CHUNK} addresses.` }, 413, cors)
+        }
+        try {
+          return json({ matches: await geocode(rows) }, 200, cors)
+        } catch (err) {
+          // A geocoder outage must not read as "these addresses are bad". The
+          // console needs to distinguish "couldn't look them up" from "looked
+          // them up and found nothing", because the first one is worth retrying.
+          console.error('geocode failed', err)
+          return json(
+            {
+              error: 'The address lookup service is unavailable. Try again shortly.',
+              code: 'geocoder_unavailable',
+            },
+            502,
+            cors,
+          )
+        }
+      }
+
+      if (path === '/api/import/properties' && req.method === 'POST') {
+        if (!canImport(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const body = (await req.json().catch(() => ({}))) as ImportInput
+        const result = await importProperties(env, user, body)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
       }
 
       /* --- photo upload --------------------------------------------------- */

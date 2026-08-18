@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Allstar field sales API \u2014 Cloudflare Workers + D1 + R2",
+  "description": "Allstar field sales API — Cloudflare Workers + D1 + R2",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -12,7 +12,9 @@
     "db:schema:local": "wrangler d1 execute allstar-db --local --file=./schema.sql",
     "smoke": "node scripts/smoke.mjs",
     "smoke:onboarding": "node scripts/smoke-onboarding.mjs",
-    "db:schema:flatten": "node -e \"const fs=require('fs');let s=fs.readFileSync('schema.sql','utf8');s=s.replace(/\\\\/\\\\*[\\\\s\\\\S]*?\\\\*\\\\//g,' ').replace(/--[^\\\\n]*/g,' ').replace(/PRAGMA[^;]*;/gi,'');s=s.replace(/\\\\s+/g,' ').trim();fs.writeFileSync('schema.min.sql',s.split(';').map(x=>x.trim()).filter(Boolean).join('; ')+';\\\\n')\""
+    "db:schema:flatten": "node -e \"const fs=require('fs');let s=fs.readFileSync('schema.sql','utf8');s=s.replace(/\\\\/\\\\*[\\\\s\\\\S]*?\\\\*\\\\//g,' ').replace(/--[^\\\\n]*/g,' ').replace(/PRAGMA[^;]*;/gi,'');s=s.replace(/\\\\s+/g,' ').trim();fs.writeFileSync('schema.min.sql',s.split(';').map(x=>x.trim()).filter(Boolean).join('; ')+';\\\\n')\"",
+    "smoke:import": "node scripts/smoke-import.mjs",
+    "verify:geocode": "node scripts/verify-geocode.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",
