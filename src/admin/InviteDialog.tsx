@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '../components/ui/Button'
 import { ApiError, apiInvite, type CreatedInviteDTO } from '../lib/http'
 import { liveToken } from '../lib/session'
+import { ROLE_BLURB, ROLE_LABEL, grantableRoles } from '../lib/roles'
+import { useAppStore } from '../store/useAppStore'
 import type { Role } from '../types'
 
 /**
@@ -17,11 +19,7 @@ import type { Role } from '../types'
  * "invitation sent", and a truthful one.
  */
 
-const ROLES: { value: Role; label: string; blurb: string }[] = [
-  { value: 'field_rep', label: 'Field Rep', blurb: 'Route, map and visits on their phone' },
-  { value: 'manager', label: 'Manager', blurb: 'Team activity and reporting, plus the field app' },
-  { value: 'client_admin', label: 'Client Admin', blurb: 'Everything, including team and settings' },
-]
+
 
 export function InviteDialog({
   onClose,
@@ -34,6 +32,23 @@ export function InviteDialog({
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [role, setRole] = useState<Role>('field_rep')
+
+  // Only the roles this person actually holds. Offering an option the server
+  // will refuse is worse than not offering it — the admin learns their own
+  // permissions from a rejection.
+  const signedIn = useAppStore((s) => s.user)
+  const roles = grantableRoles(signedIn)
+
+  // Escape closes it. A modal that traps you until you find the right button is
+  // a modal people learn to avoid, and every other dialog on the platform does
+  // this — the surprise is what makes it feel broken.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<CreatedInviteDTO | null>(null)
@@ -194,23 +209,23 @@ export function InviteDialog({
                 Role
               </legend>
               <div className="mt-2 space-y-2">
-                {ROLES.map((r) => (
+                {roles.map((r) => (
                   <label
-                    key={r.value}
+                    key={r}
                     className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${
-                      role === r.value ? 'border-brand-500 bg-brand-50' : 'border-slate-200'
+                      role === r ? 'border-brand-500 bg-brand-50' : 'border-slate-200'
                     }`}
                   >
                     <input
                       type="radio"
                       name="role"
                       className="mt-0.5"
-                      checked={role === r.value}
-                      onChange={() => setRole(r.value)}
+                      checked={role === r}
+                      onChange={() => setRole(r)}
                     />
                     <span>
-                      <span className="block text-sm font-semibold">{r.label}</span>
-                      <span className="block text-xs text-ink-mute">{r.blurb}</span>
+                      <span className="block text-sm font-semibold">{ROLE_LABEL[r]}</span>
+                      <span className="block text-xs text-ink-mute">{ROLE_BLURB[r]}</span>
                     </span>
                   </label>
                 ))}

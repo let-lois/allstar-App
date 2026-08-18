@@ -588,5 +588,145 @@ ok(
   )
 }
 
+/* --- super admins ---------------------------------------------------------- */
+//
+// The rule: nobody creates or manages an account more powerful than their own.
+// Before this, createInvite stored whatever role string arrived — the only thing
+// between a client admin and a super admin account was the database's CHECK
+// constraint, which `super_admin` passes.
+{
+  const invite = (body, token) =>
+    api('/api/invites', { method: 'POST', body: JSON.stringify(body) }, token).then(
+      async (r) => ({ status: r.status, body: await r.json() }),
+    )
+
+  // The owner from setup is a super admin, so this is the escalation path.
+  const CA = { email: `ca-${stamp}@example.com`, name: 'Client Admin', password: 'client-admin-pw1' }
+  const caInv = await invite(
+    { email: CA.email, name: CA.name, role: 'client_admin' },
+    admin.token,
+  )
+  await fetch(caInv.body.url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ password: CA.password }),
+  })
+  const ca = await (await login(CA.email, CA.password)).json()
+  ok(ca.user.role === 'client_admin', 'a client admin exists to test against')
+
+  const escalation = await invite(
+    { email: `sneaky-${stamp}@example.com`, name: 'Sneaky', role: 'super_admin' },
+    ca.token,
+  )
+  ok(
+    escalation.status === 403,
+    `a client admin cannot invite a super admin (${escalation.status})`,
+  )
+  ok(
+    /super admin/i.test(escalation.body.error ?? ''),
+    'and is told why rather than getting a generic refusal',
+  )
+
+  // The thing that was asked for.
+  const SA = { email: `sa-${stamp}@example.com`, name: 'Second Super', password: 'super-admin-pw-1' }
+  const saInv = await invite(
+    { email: SA.email, name: SA.name, role: 'super_admin' },
+    admin.token,
+  )
+  ok(saInv.status === 200, 'a super admin can invite another super admin')
+  await fetch(saInv.body.url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ password: SA.password }),
+  })
+  const sa = await (await login(SA.email, SA.password)).json()
+  ok(sa.user.role === 'super_admin', 'the invited account really is a super admin')
+
+  /* ---- and cannot be managed from below ---- */
+  const saId = sa.user.id
+  ok(
+    (await call(`/api/users/${saId}/password`, {
+      method: 'POST',
+      body: JSON.stringify({ password: 'taking-this-account-over' }),
+    }, ca.token)).status === 403,
+    'a client admin cannot reset a super admin’s password — that is a takeover, not administration',
+  )
+  ok(
+    (await call(`/api/users/${saId}/active`, {
+      method: 'POST',
+      body: JSON.stringify({ active: false }),
+    }, ca.token)).status === 403,
+    'nor deactivate one',
+  )
+  ok(
+    (await call(`/api/users/${saId}`, { method: 'DELETE' }, ca.token)).status === 403,
+    'nor delete one',
+  )
+  ok(
+    (await call(`/api/users/${saId}/reset-link`, { method: 'POST' }, ca.token)).status === 403,
+    'nor create a reset link for one',
+  )
+
+  /* ---- promotion follows the same rule ---- */
+  //
+  // A third party, deliberately: promoting *yourself* is refused by the
+  // no-acting-on-your-own-account rule, which would mask whether the role check
+  // works at all.
+  const PLAIN = { email: `plain-${stamp}@example.com`, name: 'Plain Rep', password: 'plain-rep-pw-1' }
+  const plainInv = await invite(
+    { email: PLAIN.email, name: PLAIN.name, role: 'field_rep' },
+    admin.token,
+  )
+  await fetch(plainInv.body.url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ password: PLAIN.password }),
+  })
+  const roster = await (await api('/api/users', {}, admin.token)).json()
+  const plainId = roster.users.find((u) => u.email === PLAIN.email).id
+
+  ok(
+    (await call(`/api/users/${plainId}/role`, {
+      method: 'POST',
+      body: JSON.stringify({ role: 'super_admin' }),
+    }, ca.token)).status === 403,
+    'a client admin cannot promote anybody to super admin',
+  )
+  ok(
+    (await call(`/api/users/${plainId}/role`, {
+      method: 'POST',
+      body: JSON.stringify({ role: 'manager' }),
+    }, ca.token)).status === 200,
+    'but can still grant a role they hold themselves',
+  )
+  ok(
+    (await call(`/api/users/${plainId}/role`, {
+      method: 'POST',
+      body: JSON.stringify({ role: 'super_admin' }),
+    }, admin.token)).status === 200,
+    'and a super admin can',
+  )
+
+  // And a super admin still cannot act on their own account, which is what
+  // stops the whole scheme from ending in a locked-out company.
+  ok(
+    (await call(`/api/users/${sa.user.id}/role`, {
+      method: 'POST',
+      body: JSON.stringify({ role: 'field_rep' }),
+    }, sa.token)).status === 400,
+    'a super admin cannot demote themselves',
+  )
+
+  // A super admin may still manage another super admin — otherwise the role
+  // would be unmanageable the moment there were two of them.
+  ok(
+    (await call(`/api/users/${saId}/active`, {
+      method: 'POST',
+      body: JSON.stringify({ active: false }),
+    }, admin.token)).status === 200,
+    'one super admin can deactivate another',
+  )
+}
+
 console.log(fails.length ? `\n${fails.length} FAILURES` : '\nuser management smoke passed')
 process.exit(fails.length ? 1 : 0)

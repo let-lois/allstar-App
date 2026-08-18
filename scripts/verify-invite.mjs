@@ -278,6 +278,81 @@ ok(
   await page.waitForTimeout(400)
 }
 
+/* --- who may create a super admin ---------------------------------------- */
+//
+// The server refuses regardless; this is about not offering an option that will
+// be rejected the moment it's used, which teaches an admin their own permissions
+// through a failure.
+{
+  const roleOptions = async (p) => {
+    await p.getByRole('button', { name: /Invite user/ }).click()
+    await p.waitForTimeout(400)
+    const labels = await p.getByRole('dialog').locator('label').allInnerTexts()
+    await p.keyboard.press('Escape')
+    await p.waitForTimeout(300)
+    return labels.join(' | ')
+  }
+
+  // This context is signed in as a client_admin (ADMIN above).
+  const asClientAdmin = await roleOptions(page)
+  ok(/Field Rep/.test(asClientAdmin), 'a client admin can invite a rep')
+  ok(/Client Admin/.test(asClientAdmin), 'and another client admin')
+  ok(
+    !/Super Admin/.test(asClientAdmin),
+    'but is not offered Super Admin — nobody creates an account more powerful than their own',
+  )
+
+  // A super admin sees the extra option.
+  const ctxSuper = await browser.newContext({ viewport: { width: 1440, height: 950 } })
+  const superPage = await ctxSuper.newPage()
+  const SUPER = { ...ADMIN, id: 'u_super', name: 'Curtis Lane', role: 'super_admin' }
+  await superPage.route('**/api/auth/login', json(200, { token: 'tok', user: SUPER }))
+  await superPage.route('**/api/users', json(200, { users: [
+    { id: 'u_super', name: SUPER.name, email: SUPER.email, role: 'super_admin', active: true, pending: false },
+  ] }))
+  await superPage.route('**/api/bootstrap', json(200, {
+    user: SUPER, properties: [], routes: [], appointments: [], tasks: [],
+    activity: [], dailyStats: [], territories: [], serverTime: Date.now(),
+  }))
+  let invitedRole = null
+  await superPage.route('**/api/invites', async (route) => {
+    invitedRole = JSON.parse(route.request().postData() || '{}').role
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ url: 'https://api.example.test/invite/tok', email: 'x@y.test',
+        expiresAt: Date.now() + 86_400_000 }) })
+  })
+
+  await superPage.goto(BASE, { waitUntil: 'networkidle' })
+  await superPage.locator('input[type="email"]').fill(SUPER.email)
+  await superPage.locator('input[autocomplete="current-password"]').fill('a-real-password')
+  await superPage.getByRole('button', { name: /^Sign in$/ }).click()
+  await superPage.waitForTimeout(1500)
+  await superPage.goto(`${BASE}/admin/team`, { waitUntil: 'domcontentloaded' })
+  await superPage.waitForTimeout(900)
+
+  const asSuper = await roleOptions(superPage)
+  ok(/Super Admin/.test(asSuper), 'a super admin is offered Super Admin')
+  ok(
+    /other super admins/i.test(asSuper),
+    'and the option says what it grants rather than just naming the role',
+  )
+
+  // And it actually sends that role.
+  await superPage.getByRole('button', { name: /Invite user/ }).click()
+  await superPage.waitForTimeout(400)
+  {
+    const d = superPage.getByRole('dialog')
+    await d.locator('input[type="text"], input:not([type])').first().fill('Second Super')
+    await d.locator('input[type="email"]').fill('second@ridgeline.test')
+    await d.getByText('Super Admin', { exact: true }).click()
+  }
+  await superPage.getByRole('button', { name: /Create invite/ }).click()
+  await superPage.waitForTimeout(700)
+  ok(invitedRole === 'super_admin', `the super admin role is what gets sent (${invitedRole})`)
+
+  await ctxSuper.close()
+}
+
 /* --- a rejection is surfaced, not swallowed ------------------------------- */
 await page.unroute('**/api/invites')
 await page.route('**/api/invites', json(409, { error: 'That person already has an account.' }))
