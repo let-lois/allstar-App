@@ -24,6 +24,7 @@ import {
   setPassword,
 } from './users'
 import { applyMutations } from './mutations'
+import { checkLoginRate, clearFailures, recordFailure } from './ratelimit'
 import { invitePage, setupPage } from './pages'
 import { bootstrap } from './read'
 import type { Env, Mutation, Role, SessionUser } from './types'
@@ -254,9 +255,31 @@ export default {
         if (!email || !password) {
           return json({ error: 'Email and password are required.' }, 400, cors)
         }
+
+        // Checked before hashing, not after: the whole point is to stop paying
+        // the CPU cost of a guess we've already decided not to answer.
+        const ip = req.headers.get('cf-connecting-ip')
+        const limit = await checkLoginRate(env, email, ip)
+        if (!limit.allowed) {
+          return json(
+            {
+              error: 'Too many sign-in attempts. Wait a few minutes and try again.',
+              code: 'rate_limited',
+            },
+            429,
+            { ...cors, 'retry-after': String(limit.retryAfter ?? 900) },
+          )
+        }
+
         const result = await login(env, email, password)
-        // Deliberately identical for a wrong email and a wrong password.
-        if (!result) return json({ error: 'Incorrect email or password.' }, 401, cors)
+        if (!result) {
+          await recordFailure(env, email, ip)
+          // Deliberately identical for a wrong email and a wrong password.
+          return json({ error: 'Incorrect email or password.' }, 401, cors)
+        }
+        // A correct password means this was never an attack; don't leave the
+        // bucket primed to lock out the person who just proved who they are.
+        await clearFailures(env, email, ip)
         return json(result, 200, cors)
       }
 

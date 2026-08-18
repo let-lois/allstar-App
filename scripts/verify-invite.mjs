@@ -295,6 +295,67 @@ ok(
 
 await ctx.close()
 
+/* ========== a live account never shows the demo team ===================== */
+//
+// Found while auditing for production readiness: Reports, the Dashboard and the
+// team leaderboard resolved rep names straight from `data/seed`, so a real
+// company's reports listed five people who do not work there and none of the
+// ones who do. Team and Territories had been fixed; these had not, because each
+// screen fetched or derived the roster on its own.
+{
+  const ctx3 = await browser.newContext({ viewport: { width: 1440, height: 950 } })
+  const page3 = await ctx3.newPage()
+  const REAL = [
+    { id: 'u_admin', name: 'Nadia Petrov', email: ADMIN.email, role: 'client_admin', active: true, pending: false },
+    { id: 'u_rep_real', name: 'Marcus Vance', email: 'marcus@ridgeline.test', role: 'field_rep', active: true, pending: false },
+  ]
+  await page3.route('**/api/auth/login', json(200, { token: 'tok', user: ADMIN }))
+  await page3.route('**/api/users', json(200, { users: REAL }))
+  await page3.route('**/api/bootstrap', json(200, {
+    user: ADMIN,
+    properties: [],
+    routes: [],
+    appointments: [],
+    tasks: [],
+    activity: [],
+    territories: [],
+    dailyStats: [
+      { id: 'd1', repId: 'u_rep_real', day: new Date().toISOString().slice(0, 10),
+        knocks: 42, conversations: 11, appointments: 3, quotes: 2, sold: 1, pipelineValue: 21000 },
+    ],
+    serverTime: Date.now(),
+  }))
+
+  await page3.goto(BASE, { waitUntil: 'networkidle' })
+  await page3.locator('input[type="email"]').fill(ADMIN.email)
+  await page3.locator('input[autocomplete="current-password"]').fill('a-real-password')
+  await page3.getByRole('button', { name: /^Sign in$/ }).click()
+  await page3.waitForTimeout(1600)
+
+  const DEMO_NAMES = /Dana Whitfield|Ray Okafor|Luis Ortega|Simone|Priya Raman/
+
+  for (const [label, path] of [
+    ['Dashboard', '/admin'],
+    ['Reports', '/admin/reports'],
+    ['Team', '/admin/team'],
+    ['Territories', '/admin/territories'],
+  ]) {
+    await page3.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' })
+    await page3.waitForTimeout(1100)
+    const text = (await page3.locator('body').innerText()).replace(/\s+/g, ' ')
+    ok(!DEMO_NAMES.test(text), `${label}: no seeded demo rep appears on a live account`)
+  }
+
+  // And the real rep is actually named, not shown as a raw id.
+  await page3.goto(`${BASE}/admin/reports`, { waitUntil: 'domcontentloaded' })
+  await page3.waitForTimeout(1100)
+  const reports = (await page3.locator('body').innerText()).replace(/\s+/g, ' ')
+  ok(/Marcus Vance/.test(reports), 'Reports names the real rep')
+  ok(!/u_rep_real/.test(reports), 'and not their internal id')
+
+  await ctx3.close()
+}
+
 /* ========== the demo has no real team to invite anyone to ================ */
 {
   const ctx2 = await browser.newContext({ viewport: { width: 1440, height: 950 } })

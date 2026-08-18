@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { AdminPage, FilterBar } from './AdminLayout'
 import { Button } from '../components/ui/Button'
 import { Chip } from '../components/ui/Chip'
@@ -6,13 +6,10 @@ import { BottomSheet } from '../components/ui/BottomSheet'
 import { useAppStore } from '../store/useAppStore'
 import { useTeamStats } from '../store/teamStats'
 import { useRepRangeRows, RANGES, type RangeKey } from './useAdminData'
-import { FIELD_REPS, DEMO_USERS } from '../data/seed'
 import { money, relative } from '../lib/format'
 import { STATUS } from './charts/tokens'
 import { InviteDialog } from './InviteDialog'
 import { ManageUser } from './ManageUser'
-import { apiUsers, type TeamUserDTO } from '../lib/http'
-import { liveToken } from '../lib/session'
 import type { Role } from '../types'
 
 /**
@@ -44,13 +41,6 @@ interface Member {
   pending?: boolean
 }
 
-const initialsOf = (name: string) => {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
-
 export function AdminTeam() {
   const [range, setRange] = useState<RangeKey>('14d')
   const [query, setQuery] = useState('')
@@ -66,20 +56,13 @@ export function AdminTeam() {
   const rangeRows = useRepRangeRows(range)
 
   /*
-    On a live account the roster is the real one. The seeded version below is
-    kept for the demo, where there is no server to ask and the pitch depends on
-    a full team being visible.
+    One roster, held in the store: real on a live account, seeded in the demo.
+    This screen used to fetch it itself and Territories fetched it again, so the
+    two could disagree and neither cached anything.
   */
-  const [live, setLive] = useState<TeamUserDTO[] | null>(null)
-  const loadRoster = useCallback(() => {
-    if (mode !== 'live') return
-    const token = liveToken()
-    if (!token) return
-    void apiUsers(token)
-      .then(({ users }) => setLive(users))
-      .catch(() => setLive([]))
-  }, [mode])
-  useEffect(loadRoster, [loadRoster])
+  const team = useAppStore((s) => s.team)
+  const loadTeam = useAppStore((s) => s.loadTeam)
+  const loadRoster = useCallback(() => void loadTeam(), [loadTeam])
 
   /**
    * The roster.
@@ -102,44 +85,26 @@ export function AdminTeam() {
       return named.join(', ')
     }
 
-    if (mode === 'live') {
-      return (live ?? []).map((u) => ({
-        id: u.id,
-        name: u.name,
-        initials: initialsOf(u.name),
-        role: u.role,
-        email: u.email,
-        phone: u.phone,
-        territory: territoryOf(u.id),
-        // The raw flag, not `active && !pending`. Collapsing them loses the
-        // difference between "switched off" and "never accepted their invite",
-        // and the manage panel then offers to restore access to somebody whose
-        // access was never taken away.
-        active: u.active,
-        pending: u.pending,
-      }))
-    }
-
-    const repRows: Member[] = FIELD_REPS.map((r) => ({
-      id: r.id,
-      name: r.name,
-      initials: r.initials,
-      role: 'field_rep' as const,
-      phone: r.phone,
-      email: `${r.name.split(' ')[0].toLowerCase()}@summitexteriors.com`,
-      territory: territoryOf(r.id),
-      active: true,
-    }))
-    const office: Member[] = DEMO_USERS.filter((u) => u.role !== 'field_rep').map((u) => ({
+    return team.map((u) => ({
       id: u.id,
       name: u.name,
-      initials: u.avatarInitials,
+      initials: u.initials,
       role: u.role,
       email: u.email,
-      active: true,
+      phone: u.phone,
+      territory: territoryOf(u.id),
+      active: u.active,
+      pending: u.pending,
     }))
-    return [...repRows, ...office]
-  }, [properties, territories, mode, live])
+  }, [properties, territories, team])
+
+  const admins = useMemo(
+    () =>
+      members.filter(
+        (m) => (m.role === 'client_admin' || m.role === 'super_admin') && m.active && !m.pending,
+      ),
+    [members],
+  )
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -165,6 +130,25 @@ export function AdminTeam() {
         </Button>
       }
     >
+      {/*
+        There is no email recovery, so a company with one administrator has one
+        password standing between it and losing its own account. Stated where
+        the fix is one click away rather than buried in documentation.
+      */}
+      {mode === 'live' && admins.length === 1 && (
+        <div className="mb-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200">
+          <p className="font-semibold">You’re the only administrator.</p>
+          <p className="mt-1 leading-relaxed">
+            There’s no password recovery by email yet, so if you lose this password
+            nobody can let you back in — not even us. Invite a second Client Admin and
+            the two of you can reset each other.
+          </p>
+          <Button size="sm" className="mt-3" onClick={() => setInviting(true)}>
+            Invite a second admin
+          </Button>
+        </div>
+      )}
+
       <FilterBar>
         <input
           value={query}

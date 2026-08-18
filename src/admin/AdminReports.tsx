@@ -5,7 +5,6 @@ import { Bars } from './charts/Bars'
 import { StatTile } from './charts/StatTile'
 import { Chip } from '../components/ui/Chip'
 import { Button } from '../components/ui/Button'
-import { FIELD_REPS } from '../data/seed'
 import {
   RANGES,
   useDailyStats,
@@ -15,6 +14,7 @@ import {
   type RangeKey,
 } from './useAdminData'
 import { money, moneyFull } from '../lib/format'
+import { useAppStore } from '../store/useAppStore'
 
 /**
  * Reports.
@@ -27,6 +27,12 @@ import { money, moneyFull } from '../lib/format'
 export function AdminReports() {
   const [range, setRange] = useState<RangeKey>('30d')
   const [repId, setRepId] = useState<string | 'all'>('all')
+
+  // The real roster on a live account, the seeded one in the demo. This screen
+  // used to resolve names straight from the seed, so a live company's reports
+  // named five people who don't work there.
+  const team = useAppStore((s) => s.team)
+  const reps = useMemo(() => team.filter((m) => m.role === 'field_rep'), [team])
 
   const scopedRep = repId === 'all' ? undefined : repId
   const totals = useRangeTotals(range, scopedRep)
@@ -62,7 +68,7 @@ export function AdminReports() {
     const lines = stats
       .filter((s) => !scopedRep || s.repId === scopedRep)
       .map((s) => {
-        const name = FIELD_REPS.find((r) => r.id === s.repId)?.name ?? s.repId
+        const name = team.find((r) => r.id === s.repId)?.name ?? s.repId
         return [
           `"${name}"`,
           s.day,
@@ -107,7 +113,7 @@ export function AdminReports() {
         <Chip size="sm" selected={repId === 'all'} onClick={() => setRepId('all')}>
           Whole team
         </Chip>
-        {FIELD_REPS.map((r) => (
+        {reps.map((r) => (
           <Chip key={r.id} size="sm" selected={repId === r.id} onClick={() => setRepId(r.id)}>
             {r.name.split(' ')[0]}
           </Chip>
@@ -141,7 +147,7 @@ export function AdminReports() {
 
       <section className="mt-4 rounded-2xl border border-slate-200 bg-surface p-5">
         <h2 className="text-sm font-bold">
-          Daily volume{repId !== 'all' && ` — ${FIELD_REPS.find((r) => r.id === repId)?.name}`}
+          Daily volume{repId !== 'all' && ` — ${team.find((r) => r.id === repId)?.name ?? repId}`}
         </h2>
         <p className="mb-3 text-xs text-ink-mute">
           Weekends carry the volume in this business; the dip is Sunday.

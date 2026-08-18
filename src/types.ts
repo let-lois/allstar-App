@@ -165,6 +165,25 @@ export interface Route {
   startedAt?: number
 }
 
+/**
+ * Somebody with an account, as the console sees them.
+ *
+ * Distinct from `User`, which is the signed-in identity. This is a roster entry:
+ * it carries whether they've accepted their invite, which `User` never needs to
+ * know about itself.
+ */
+export interface TeamMember {
+  id: string
+  name: string
+  email?: string
+  role: Role
+  phone?: string
+  active: boolean
+  /** Invited but hasn't set a password yet. */
+  pending?: boolean
+  initials: string
+}
+
 export interface Territory {
   id: string
   name: string

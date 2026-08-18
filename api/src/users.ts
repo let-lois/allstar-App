@@ -37,9 +37,13 @@ const fail = (error: string, status: number): Failure => ({ error, status })
  */
 async function guard(
   { env, actor, userId }: Actorable,
-  opts: { allowSelf?: boolean },
+  opts: { allowSelf?: boolean; selfServe?: boolean },
 ): Promise<{ target: { id: string; role: string; name: string; email: string } } | Failure> {
-  if (!canInvite(actor)) return fail('Not permitted.', 403)
+  // `selfServe` lets anyone act on their own account — a rep changing their own
+  // password should not have to ask an admin, and routing every reset through
+  // the office is a support burden that scales with headcount.
+  const actingOnSelf = opts.selfServe === true && userId === actor.id
+  if (!actingOnSelf && !canInvite(actor)) return fail('Not permitted.', 403)
 
   const target = await env.DB.prepare(
     'SELECT id, role, name, email, active FROM users WHERE id = ?1 AND client_id = ?2',
@@ -100,7 +104,7 @@ export async function setPassword(
   // Self-service is allowed: possession of a valid session already proves
   // control of the account, so requiring the old password would only lock out
   // the one person who can't be reset by anybody else.
-  const g = await guard(a, { allowSelf: true })
+  const g = await guard(a, { allowSelf: true, selfServe: true })
   if ('error' in g) return g
 
   if (password.length < MIN_PASSWORD) {

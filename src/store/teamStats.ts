@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { useAppStore } from './useAppStore'
-import { FIELD_REPS } from '../data/seed'
-import type { ActivityEvent, Property, Route } from '../types'
+import type { ActivityEvent, Property, Route, TeamMember } from '../types'
 
 /**
  * Per-rep performance for the manager and admin views.
@@ -10,6 +9,11 @@ import type { ActivityEvent, Property, Route } from '../types'
  * every teammate's name, so a five-person team showed five identical bars — the
  * kind of detail a prospect notices. Everything here is derived from that rep's
  * own route and activity.
+ *
+ * Names come from the store's roster, which is the real team on a live account
+ * and the seeded one in the demo. Reading the seed directly — as this did — meant
+ * a live company's reports listed five people who don't work there and none of
+ * the ones who do.
  */
 
 export interface RepStats {
@@ -35,13 +39,13 @@ export interface RepStats {
 const GOOD = new Set(['interested', 'appointment', 'quote_requested', 'sold'])
 
 function statsFor(
-  repId: string,
+  meta: TeamMember,
   routes: Route[],
   activity: ActivityEvent[],
   properties: Record<string, Property>,
   since: number,
 ): RepStats {
-  const meta = FIELD_REPS.find((r) => r.id === repId)
+  const repId = meta.id
   const route = routes.find((r) => r.repId === repId)
   const stops = route?.stops ?? []
   const done = stops.filter((s) => s.status === 'done').length
@@ -58,10 +62,10 @@ function statsFor(
 
   return {
     id: repId,
-    name: meta?.name ?? repId,
-    initials: meta?.initials ?? '??',
-    phone: meta?.phone ?? '',
-    routeName: route?.name ?? meta?.routeName ?? '—',
+    name: meta.name,
+    initials: meta.initials,
+    phone: meta.phone ?? '',
+    routeName: route?.name ?? '—',
     done,
     total,
     remaining: Math.max(0, total - done - skipped),
@@ -79,14 +83,19 @@ export function useTeamStats(): RepStats[] {
   const routes = useAppStore((s) => s.routes)
   const activity = useAppStore((s) => s.activity)
   const properties = useAppStore((s) => s.properties)
+  const team = useAppStore((s) => s.team)
 
   return useMemo(() => {
     const since = new Date()
     since.setHours(0, 0, 0, 0)
-    return FIELD_REPS.map((r) =>
-      statsFor(r.id, routes, activity, properties, since.getTime()),
-    ).sort((a, b) => b.conversations - a.conversations || b.done - a.done)
-  }, [routes, activity, properties])
+    // Only people who actually knock. An office account has no route and no
+    // door count, and padding the leaderboard with zero-rows for admins makes
+    // the team look half-idle.
+    return team
+      .filter((m) => m.role === 'field_rep' && m.active)
+      .map((m) => statsFor(m, routes, activity, properties, since.getTime()))
+      .sort((a, b) => b.conversations - a.conversations || b.done - a.done)
+  }, [team, routes, activity, properties])
 }
 
 /** Company roll-up, derived from the same per-rep numbers. */

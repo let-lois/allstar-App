@@ -9,6 +9,8 @@ import { estimateStorage } from '../lib/db'
 import { isForcedOffline, setForcedOffline } from '../lib/api'
 import { drain, listOutbox, retryFailed } from '../lib/sync'
 import { relative } from '../lib/format'
+import { ApiError, apiSetPassword } from '../lib/http'
+import { liveToken } from '../lib/session'
 import type { Mutation } from '../types'
 import { IconChevron } from '../components/nav/icons'
 
@@ -33,6 +35,10 @@ export function More() {
   const [outbox, setOutbox] = useState<Mutation[]>([])
   const [offlineSim, setOfflineSim] = useState(isForcedOffline())
   const [resetting, setResetting] = useState(false)
+  const [pw, setPw] = useState('')
+  const [pwBusy, setPwBusy] = useState(false)
+  const [pwMsg, setPwMsg] = useState<string | null>(null)
+  const [pwErr, setPwErr] = useState<string | null>(null)
 
   useEffect(() => {
     void estimateStorage().then(setStorage)
@@ -221,6 +227,63 @@ export function More() {
               </>
             )}
           </nav>
+
+          {/*
+            Self-service, because routing every forgotten password through an
+            admin is a support call for something the rep can do in ten seconds
+            — usually while standing on a doorstep.
+          */}
+          {mode === 'live' && (
+            <Collapsible title="Change my password">
+              <p className="text-xs leading-relaxed text-ink-mute">
+                Changing it signs you out on every device, including this one. Anything
+                you’ve recorded is saved here and uploads once you sign back in.
+              </p>
+              <input
+                type="password"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
+                autoComplete="new-password"
+                placeholder="At least 10 characters"
+                className="focusable mt-3 h-12 w-full rounded-xl border border-slate-300 px-3 text-base"
+              />
+              {pwErr && (
+                <p role="alert" className="mt-2 text-sm font-medium text-red-700">
+                  {pwErr}
+                </p>
+              )}
+              {pwMsg && (
+                <p role="status" className="mt-2 text-sm font-medium text-emerald-700">
+                  {pwMsg}
+                </p>
+              )}
+              <Button
+                full
+                className="mt-3"
+                disabled={pwBusy || pw.length < 10}
+                onClick={async () => {
+                  const token = liveToken()
+                  if (!token || !user) return
+                  setPwBusy(true)
+                  setPwErr(null)
+                  setPwMsg(null)
+                  try {
+                    await apiSetPassword(token, user.id, pw)
+                    setPw('')
+                    setPwMsg('Changed. Sign in again with the new one.')
+                  } catch (err) {
+                    setPwErr(
+                      err instanceof ApiError ? err.message : 'Could not change it. Try again.',
+                    )
+                  } finally {
+                    setPwBusy(false)
+                  }
+                }}
+              >
+                {pwBusy ? 'Changing…' : 'Change password'}
+              </Button>
+            </Collapsible>
+          )}
 
           <Button
             variant="secondary"
