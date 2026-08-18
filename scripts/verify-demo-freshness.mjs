@@ -34,6 +34,7 @@ const ok = (cond, msg) => {
 
 const page = await ctx.newPage()
 await page.goto(BASE, { waitUntil: 'networkidle' })
+await page.getByRole('button', { name: /Try the demo/ }).click()
 await page.getByRole('button', { name: /Dana Whitfield/ }).click()
 await page.waitForTimeout(1200)
 

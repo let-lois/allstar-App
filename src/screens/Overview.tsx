@@ -22,7 +22,7 @@ import type { Role } from '../types'
  */
 export function Overview({ role }: { role: Role }) {
   const nav = useNavigate()
-  const { user, properties, activity, appointments } = useAppStore()
+  const { user, properties, activity, appointments, refreshFromServer } = useAppStore()
   const teamStats = useTeamStats()
   const totals = useTeamTotals()
 
@@ -81,7 +81,12 @@ export function Overview({ role }: { role: Role }) {
         right={<SyncBadge />}
       />
 
-      <PullToRefresh onRefresh={() => drain()} className="pad-nav bg-surface-sunk">
+      <PullToRefresh
+        onRefresh={async () => {
+          await Promise.all([drain(), refreshFromServer()])
+        }}
+        className="pad-nav bg-surface-sunk"
+      >
         <div className="content-col space-y-3 p-3">
           {/* --- headline numbers ----------------------------------------- */}
           <div className="grid grid-cols-2 gap-3">

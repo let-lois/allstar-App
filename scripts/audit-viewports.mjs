@@ -46,6 +46,8 @@ for (const vp of VIEWPORTS) {
   await page.goto(BASE, { waitUntil: 'networkidle' })
 
   // sign in as the field rep
+  // The demo roster now sits behind the real login screen.
+  await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.getByRole('button', { name: /Dana Whitfield/ }).click()
   await page.waitForTimeout(900)
 

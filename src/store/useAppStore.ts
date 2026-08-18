@@ -16,9 +16,20 @@ import type {
 } from '../types'
 import * as db from '../lib/db'
 import { uid } from '../lib/id'
-import { enqueue, initSync } from '../lib/sync'
+import { enqueue, drain, initSync } from '../lib/sync'
 import { DEMO_USERS, FIELD_REPS } from '../data/seed'
 import { ensureFreshDemo, resetDemo } from '../lib/demo'
+import { fetchBootstrap } from '../lib/api'
+import { apiLogin, apiLogout } from '../lib/http'
+import { applyBootstrap, wipeCachedData } from '../lib/hydrate'
+import {
+  clearSession,
+  currentSession,
+  loadSession,
+  onAuthExpired,
+  saveSession,
+  userFromDTO,
+} from '../lib/session'
 import { OUTCOME_TO_STATUS } from '../data/outcomes'
 import { dayKey } from '../lib/format'
 import { getPosition, type Position } from '../lib/geo'
@@ -38,6 +49,16 @@ interface AppState {
   ready: boolean
   user: User | null
   position: Position | null
+  /**
+   * Which world the app is in. `demo` is the seeded pitch dataset with no
+   * server; `live` is a real account on the API. Screens that offer to reset the
+   * data, or that would be lying if they showed seeded numbers, branch on this.
+   */
+  mode: 'demo' | 'live'
+  /** Set when a live session expired mid-session, so the login screen can say so. */
+  sessionExpired: boolean
+  /** True while a bootstrap refresh is in flight, for pull-to-refresh. */
+  refreshing: boolean
 
   properties: Record<string, Property>
   route: Route | null
@@ -54,7 +75,16 @@ interface AppState {
   activeVisitId: string | null
 
   boot: () => Promise<void>
-  signIn: (userId: string) => Promise<void>
+  /** Read the local cache into state. Shared by boot and both sign-in paths. */
+  loadLocal: (user: User | null, mode: 'demo' | 'live') => Promise<void>
+  /** Called when the API rejects our token — drops to login, keeps the outbox. */
+  handleAuthExpired: () => Promise<void>
+  /** Real credentials against the API. Throws so the form can show why. */
+  signInLive: (email: string, password: string) => Promise<void>
+  /** The seeded pitch dataset — no account, no network. */
+  signInDemo: (userId: string) => Promise<void>
+  /** Pull the server's view of the world down again. Live mode only. */
+  refreshFromServer: () => Promise<void>
   /** Demo-only: hand the next pitch a pristine dataset. */
   resetDemoData: () => Promise<void>
   signOut: () => Promise<void>
@@ -96,12 +126,13 @@ function indexById<T extends { id: string }>(rows: T[]): Record<string, T> {
   return Object.fromEntries(rows.map((r) => [r.id, r]))
 }
 
-const SESSION_KEY = 'allstar.session'
-
 export const useAppStore = create<AppState>((set, get) => ({
   ready: false,
   user: null,
   position: null,
+  mode: 'demo',
+  sessionExpired: false,
+  refreshing: false,
   properties: {},
   route: null,
   routes: [],
@@ -116,29 +147,50 @@ export const useAppStore = create<AppState>((set, get) => ({
   async boot() {
     await initSync()
 
-    // Installs the demo on first run, and regenerates it when the calendar day
-    // has rolled over so the pitch never opens to empty sections. Everything
-    // after this point reads from IndexedDB and is fully offline-capable.
-    await ensureFreshDemo()
+    const session = await loadSession()
 
-    const properties = await db.all<Property>('properties')
+    // A live session can die while the phone is in a pocket. Discovering that
+    // happens inside a background drain, where there's no screen to raise it on
+    // — so the store listens and moves the app to the login screen itself.
+    onAuthExpired(() => {
+      void get().handleAuthExpired()
+    })
 
-    const [routes, visits, notes, photos, appointments, tasks, activity] = await Promise.all([
-      db.all<Route>('routes'),
-      db.all<Visit>('visits'),
-      db.all<Note>('notes'),
-      db.all<Photo>('photos'),
-      db.all<Appointment>('appointments'),
-      db.all<Task>('tasks'),
-      db.all<ActivityEvent>('activity'),
-    ])
+    if (session?.mode === 'live') {
+      // The cache is already on disk from the last session; read it and paint.
+      // The refresh runs behind the first render so a rep with one bar sees
+      // yesterday's route immediately instead of a spinner.
+      await get().loadLocal(session.user, 'live')
+      void get().refreshFromServer()
+    } else if (session?.mode === 'demo') {
+      // Installs the demo on first run, and regenerates it when the calendar day
+      // has rolled over so the pitch never opens to empty sections.
+      await ensureFreshDemo()
+      await get().loadLocal(DEMO_USERS.find((u) => u.id === session.userId) ?? null, 'demo')
+    } else {
+      // Signed out. Nothing is seeded yet — a rep signing in with real
+      // credentials should never have 160 fictional addresses written to their
+      // phone first, and the demo seeds itself the moment it's chosen.
+      set({ ready: true, user: null, mode: 'demo' })
+      return
+    }
 
-    const savedUserId = await db.metaGet<string>(SESSION_KEY)
-    const user = savedUserId ? (DEMO_USERS.find((u) => u.id === savedUserId) ?? null) : null
+    void get().refreshPosition()
+  },
 
-    // Every rep has their own route; the office roles ride along with the rep
-    // whose day the demo is built around.
-    const route = routeFor(routes, user?.id)
+  /** Read whatever is cached locally into state. Shared by every entry path. */
+  async loadLocal(user, mode) {
+    const [properties, routes, visits, notes, photos, appointments, tasks, activity] =
+      await Promise.all([
+        db.all<Property>('properties'),
+        db.all<Route>('routes'),
+        db.all<Visit>('visits'),
+        db.all<Note>('notes'),
+        db.all<Photo>('photos'),
+        db.all<Appointment>('appointments'),
+        db.all<Task>('tasks'),
+        db.all<ActivityEvent>('activity'),
+      ])
 
     // An in-flight visit survives an app kill — reps close the app mid-knock.
     const openVisit = visits.find((v) => !v.endedAt)
@@ -146,9 +198,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       ready: true,
       user,
+      mode,
       routes,
       properties: indexById(properties),
-      route,
+      route: routeFor(routes, user?.id),
       visits: indexById(visits),
       notes: indexById(notes),
       photos: indexById(photos),
@@ -157,28 +210,104 @@ export const useAppStore = create<AppState>((set, get) => ({
       activity: activity.sort((a, b) => b.at - a.at),
       activeVisitId: openVisit?.id ?? null,
     })
+  },
 
+  async signInLive(email, password) {
+    // Deliberately awaited and allowed to throw: this is the one place in the
+    // app where the rep is standing still, looking at a form, and a failure has
+    // to be shown rather than queued.
+    const { token, user: dto } = await apiLogin(email.trim(), password)
+    const user = userFromDTO(dto)
+
+    // Whoever was here before — a demo, or another rep on a shared phone — their
+    // cached rows go before this account's arrive. Queued work is left alone.
+    await wipeCachedData()
+    await saveSession({ mode: 'live', token, user })
+
+    try {
+      const dtoBundle = await fetchBootstrap()
+      if (dtoBundle) await applyBootstrap(dtoBundle)
+    } catch {
+      // Signed in, but the data didn't arrive. That's a legitimate state for
+      // this app: the session is real, the cache is empty, and the next refresh
+      // fills it. Better than refusing a login that actually succeeded.
+    }
+
+    await get().loadLocal(user, 'live')
+    set({ sessionExpired: false })
+    void get().refreshPosition()
+    // Anything queued before the session lapsed can go up now.
+    void drain()
+  },
+
+  async signInDemo(userId) {
+    await wipeCachedData()
+    await saveSession({ mode: 'demo', userId })
+    await ensureFreshDemo()
+    await get().loadLocal(DEMO_USERS.find((u) => u.id === userId) ?? null, 'demo')
+    set({ sessionExpired: false })
     void get().refreshPosition()
   },
 
-  async signIn(userId) {
-    const user = DEMO_USERS.find((u) => u.id === userId) ?? null
-    await db.metaSet(SESSION_KEY, userId)
-    // Switching identity switches whose route the Today screen is driving.
-    set({ user, route: routeFor(get().routes, user?.id) })
+  async refreshFromServer() {
+    if (get().mode !== 'live' || get().refreshing) return
+    set({ refreshing: true })
+    try {
+      const dto = await fetchBootstrap()
+      if (dto) {
+        await applyBootstrap(dto)
+        await get().loadLocal(userFromDTO(dto.user), 'live')
+      }
+    } catch {
+      // Offline, or the server is unhappy. The cache is still valid and the sync
+      // chip already tells the rep where they stand — no error to raise here.
+    } finally {
+      set({ refreshing: false })
+    }
+  },
+
+  /**
+   * The session died while the app was open. Drop back to the login screen
+   * without touching the outbox: those rows are the rep's work, and they drain
+   * as soon as someone signs in again.
+   */
+  async handleAuthExpired() {
+    if (get().mode !== 'live') return
+    await clearSession()
+    set({ user: null, sessionExpired: true })
   },
 
   async resetDemoData() {
+    if (get().mode !== 'demo') return
     await resetDemo()
-    // Re-read rather than patching state — a reset replaces every seeded row.
     const current = get().user
-    await get().boot()
-    if (current) await get().signIn(current.id)
+    await get().loadLocal(current, 'demo')
   },
 
   async signOut() {
-    await db.metaSet(SESSION_KEY, undefined)
-    set({ user: null })
+    const session = currentSession()
+    if (session?.mode === 'live') {
+      // Best-effort revoke. A token we can't reach the server to kill still
+      // expires on its own, and the rep is signed out locally either way.
+      void apiLogout(session.token).catch(() => {})
+    }
+    await clearSession()
+    await wipeCachedData()
+    set({
+      user: null,
+      mode: 'demo',
+      sessionExpired: false,
+      properties: {},
+      routes: [],
+      route: null,
+      visits: {},
+      notes: {},
+      photos: {},
+      appointments: {},
+      tasks: {},
+      activity: [],
+      activeVisitId: null,
+    })
   },
 
   async refreshPosition() {
@@ -394,7 +523,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeVisitId: s.activeVisitId === visitId ? null : s.activeVisitId,
     }))
 
-    await enqueue('visit.complete', finished)
+    // `nextActionLabel` is derived on the property, not stored on the visit —
+    // send it explicitly or the server writes a null over the label the rep
+    // just created, and the next bootstrap drops "Send quote" off the card.
+    await enqueue('visit.complete', {
+      ...finished,
+      nextActionLabel: updatedProp?.nextActionLabel,
+    })
     await get().advanceRoute(visit.propertyId)
   },
 

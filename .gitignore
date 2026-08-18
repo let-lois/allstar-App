@@ -1,7 +1,14 @@
 node_modules
 dist
+# TypeScript's incremental build cache — a local artifact, not source.
+tsconfig.tsbuildinfo
 viewport-audit
 *.local
+# Local API URL overrides and any other real env values. .env.example is the
+# committed template.
+.env
+.env.*
+!.env.example
 .DS_Store
 .vite
 

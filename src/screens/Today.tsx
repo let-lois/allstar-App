@@ -31,7 +31,8 @@ import { IconCalendar, IconChevron, IconNavigate } from '../components/nav/icons
  */
 export function Today() {
   const nav = useNavigate()
-  const { user, properties, route, position, refreshPosition } = useAppStore()
+  const { user, properties, route, position, refreshPosition, refreshFromServer } =
+    useAppStore()
   // Scoped to this rep — with a full team in the data, the unscoped stores hold
   // everyone's work and would report the team's doors as this rep's.
   const appointments = useMyAppointments()
@@ -97,7 +98,9 @@ export function Today() {
 
       <PullToRefresh
         onRefresh={async () => {
-          await Promise.all([drain(), refreshPosition()])
+          // Push what's queued, pull what changed, re-fix the GPS. In demo mode
+          // the server pull is a no-op, so the gesture behaves identically.
+          await Promise.all([drain(), refreshFromServer(), refreshPosition()])
         }}
         className="pad-nav bg-surface-sunk"
       >

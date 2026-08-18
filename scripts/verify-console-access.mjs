@@ -27,6 +27,7 @@ const ok = (cond, msg) => {
 const signIn = async (ctx, name, url = BASE) => {
   const page = await ctx.newPage()
   await page.goto(BASE, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.getByRole('button', { name }).click()
   await page.waitForTimeout(1200)
   if (url !== BASE) {

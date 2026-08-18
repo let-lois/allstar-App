@@ -24,6 +24,7 @@ export function More() {
   const user = useAppStore((s) => s.user)
   const signOut = useAppStore((s) => s.signOut)
   const resetDemoData = useAppStore((s) => s.resetDemoData)
+  const mode = useAppStore((s) => s.mode)
   const properties = useAppStore((s) => s.properties)
   const photos = useAppStore((s) => s.photos)
   const snap = useSync()
@@ -55,6 +56,15 @@ export function More() {
               <p className="truncate font-bold">{user?.name}</p>
               <p className="truncate text-xs text-ink-mute">
                 {ROLE_LABEL[user?.role ?? '']} · {user?.clientName}
+              </p>
+              {/*
+                Stated rather than implied. A rep who can't tell whether their
+                knocks are going to the company's database or to a sample
+                dataset has no way to trust the app, and an admin demoing to a
+                prospect needs to know that nothing they tap is real.
+              */}
+              <p className="mt-1 truncate text-[11px] font-semibold uppercase tracking-wide text-ink-mute">
+                {mode === 'live' ? 'Signed in · syncing to server' : 'Demo — sample data'}
               </p>
             </div>
           </section>
@@ -167,32 +177,37 @@ export function More() {
               Demo hygiene: a prospect pokes at the app, records visits, marks
               things sold. This hands the next pitch a clean, identical dataset
               instead of yesterday's fingerprints.
+
+              Hidden on a live account, where there is no seed to restore and the
+              button would only offer to delete a rep's real work.
             */}
-            <div className="mt-3 border-t border-slate-100 pt-3">
-              <p className="text-sm font-medium">Reset demo data</p>
-              <p className="mt-0.5 text-xs text-ink-mute">
-                Restores the sample territory, routes and team activity. Clears any
-                visits, notes and photos recorded on this device.
-              </p>
-              <Button
-                variant="secondary"
-                full
-                className="mt-2"
-                disabled={resetting}
-                onClick={async () => {
-                  if (!window.confirm('Reset the demo? Work recorded on this device is cleared.'))
-                    return
-                  setResetting(true)
-                  try {
-                    await resetDemoData()
-                  } finally {
-                    setResetting(false)
-                  }
-                }}
-              >
-                {resetting ? 'Resetting…' : 'Reset demo data'}
-              </Button>
-            </div>
+            {mode === 'demo' && (
+              <div className="mt-3 border-t border-slate-100 pt-3">
+                <p className="text-sm font-medium">Reset demo data</p>
+                <p className="mt-0.5 text-xs text-ink-mute">
+                  Restores the sample territory, routes and team activity. Clears any
+                  visits, notes and photos recorded on this device.
+                </p>
+                <Button
+                  variant="secondary"
+                  full
+                  className="mt-2"
+                  disabled={resetting}
+                  onClick={async () => {
+                    if (!window.confirm('Reset the demo? Work recorded on this device is cleared.'))
+                      return
+                    setResetting(true)
+                    try {
+                      await resetDemoData()
+                    } finally {
+                      setResetting(false)
+                    }
+                  }}
+                >
+                  {resetting ? 'Resetting…' : 'Reset demo data'}
+                </Button>
+              </div>
+            )}
           </Collapsible>
 
           <nav className="card overflow-hidden">
