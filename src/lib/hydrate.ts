@@ -5,6 +5,7 @@ import type {
   Property,
   Route,
   Task,
+  Territory,
 } from '../types'
 import * as db from './db'
 import type { BootstrapDTO } from './http'
@@ -27,6 +28,7 @@ const SERVER_STORES: StoreName[] = [
   'tasks',
   'activity',
   'dailyStats',
+  'territories',
 ]
 
 /**
@@ -67,6 +69,7 @@ export async function applyBootstrap(dto: BootstrapDTO, mergeOnly = false): Prom
     replace('tasks', dto.tasks as Task[], pending),
     replace('activity', dto.activity as ActivityEvent[], pending),
     replace('dailyStats', dto.dailyStats as DailyStat[], pending),
+    replace('territories', (dto.territories ?? []) as Territory[], pending),
   ])
 }
 

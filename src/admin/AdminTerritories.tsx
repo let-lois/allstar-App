@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AdminPage } from './AdminLayout'
 import { FieldMap, fitZoom } from '../components/map/FieldMap'
 import { useAppStore } from '../store/useAppStore'
-import { useTerritories } from './useAdminData'
+import { UNASSIGNED_TERRITORY, inTerritory, useTerritories } from './useAdminData'
 import { FIELD_REPS } from '../data/seed'
+import { apiUsers, type TeamUserDTO } from '../lib/http'
+import { liveToken } from '../lib/session'
 import { moneyFull } from '../lib/format'
 import { INK, SINGLE } from './charts/tokens'
 
@@ -19,14 +21,52 @@ import { INK, SINGLE } from './charts/tokens'
  */
 export function AdminTerritories() {
   const properties = useAppStore((s) => s.properties)
+  const territories = useAppStore((s) => s.territories)
+  const mode = useAppStore((s) => s.mode)
   const list = useMemo(() => Object.values(properties), [properties])
   const rows = useTerritories(list)
   const [selected, setSelected] = useState<string | null>(rows[0]?.id ?? null)
 
-  const shown = useMemo(
-    () => (selected ? list.filter((p) => p.territoryId === selected) : list),
-    [list, selected],
+  // The first render has no properties yet — they arrive from IndexedDB a beat
+  // later — so the initial selection is null and would otherwise stay null.
+  useEffect(() => {
+    if (selected === null && rows.length > 0) setSelected(rows[0].id)
+  }, [rows, selected])
+
+  /*
+    Goes through `inTerritory` rather than comparing ids directly. Unassigned
+    leads have no `territoryId` at all, so `territoryId === selected` never
+    matched the unassigned bucket and the map showed nothing for it — which is
+    every lead from an import where no territory name was given, i.e. the default.
+  */
+  const shown = useMemo(() => list.filter((p) => inTerritory(p, selected)), [list, selected])
+
+  /*
+    The real team, not the seeded one. On a live account the demo roster is a
+    list of people who don't work here, and offering to assign a territory to
+    one of them is worse than offering nothing.
+  */
+  const [reps, setReps] = useState<TeamUserDTO[]>([])
+  useEffect(() => {
+    if (mode !== 'live') return
+    const token = liveToken()
+    if (!token) return
+    void apiUsers(token)
+      .then(({ users }) => setReps(users.filter((u) => u.active)))
+      .catch(() => {})
+  }, [mode])
+
+  const repOptions = useMemo(
+    () =>
+      mode === 'live'
+        ? reps.map((r) => ({ id: r.id, name: r.name }))
+        : FIELD_REPS.map((r) => ({ id: r.id, name: r.name })),
+    [mode, reps],
   )
+
+  /** A territory's name if we have one; otherwise something readable. */
+  const label = (id: string) =>
+    id === UNASSIGNED_TERRITORY ? 'Unassigned' : (territories[id]?.name ?? id)
 
   // Frame the selected territory rather than inheriting the rep's street-level
   // zoom, where the whole patch collapses into cluster bubbles.
@@ -77,7 +117,7 @@ export function AdminTerritories() {
                     selected === t.id ? 'bg-brand-50' : 'hover:bg-slate-50'
                   }`}
                 >
-                  <td className="px-4 py-3 font-medium">{t.id}</td>
+                  <td className="px-4 py-3 font-medium">{label(t.id)}</td>
                   <td className="px-3 py-3">
                     <select
                       defaultValue={t.repId ?? ''}
@@ -85,7 +125,7 @@ export function AdminTerritories() {
                       className="focusable min-h-[36px] rounded-lg border border-slate-200 bg-surface px-2 text-xs"
                     >
                       <option value="">Unassigned</option>
-                      {FIELD_REPS.map((r) => (
+                      {repOptions.map((r) => (
                         <option key={r.id} value={r.id}>
                           {r.name}
                         </option>
@@ -124,9 +164,17 @@ export function AdminTerritories() {
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
           <div className="flex items-baseline justify-between border-b border-slate-100 px-4 py-3">
-            <h2 className="text-sm font-bold">{selected ?? 'All territories'}</h2>
+            <h2 className="text-sm font-bold">
+              {selected ? label(selected) : 'All territories'}
+            </h2>
             <span className="nums text-xs text-ink-mute">{shown.length} properties</span>
           </div>
+          {shown.length === 0 && (
+            <p className="px-4 py-6 text-sm text-ink-mute">
+              No properties in this territory have coordinates yet, so there is
+              nothing to place on a map.
+            </p>
+          )}
           <FieldMap
             className="h-[520px]"
             properties={shown}

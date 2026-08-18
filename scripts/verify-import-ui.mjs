@@ -202,6 +202,93 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await ctx.close()
 }
 
+/* ========== unassigned leads must appear on the territory map ============ */
+//
+// Reported from the field: an import with no territory name produced a
+// Territories page reading "14 properties" in the table and "0 properties" on
+// the map beside it. The table bucketed leads with no territory under a
+// synthetic id; the map filtered on `territoryId === selected`, which is
+// undefined for exactly those rows. The bucket could be selected and never
+// matched anything — so every lead from a default import was invisible.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 } })
+  const page = await ctx.newPage()
+  const placed = (n, territoryId) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `${territoryId ?? 'u'}${i}`,
+      address1: `${100 + i * 2} Cedar Bend Dr`,
+      city: 'Round Rock',
+      state: 'TX',
+      zip: '78664',
+      lat: 30.5115 + i * 0.0006,
+      lng: -97.6755 - i * 0.0006,
+      status: 'new',
+      score: 60,
+      opportunityValue: 21000,
+      territoryId,
+      contacts: [],
+    }))
+
+  await page.route('**/api/auth/login', json(200, { token: 'tok_admin', user: ADMIN }))
+  await page.route('**/api/users', json(200, { users: [
+    { id: 'u_rep_1', name: 'Marcus Vance', email: 'm@x.test', role: 'field_rep', active: true, pending: false },
+  ] }))
+  await page.route('**/api/bootstrap', json(200, {
+    ...EMPTY_BOOTSTRAP,
+    // Fourteen with no territory at all, plus a named one to prove both work.
+    properties: [...placed(14, undefined), ...placed(3, 'terr_abc')],
+    territories: [{ id: 'terr_abc', name: 'Cedar Bend — August' }],
+  }))
+
+  await page.goto(BASE, { waitUntil: 'networkidle' })
+  await page.locator('input[type="email"]').fill(ADMIN.email)
+  await page.locator('input[autocomplete="current-password"]').fill('a-real-password')
+  await page.getByRole('button', { name: /^Sign in$/ }).click()
+  await page.waitForTimeout(1500)
+  await page.goto(`${BASE}/admin/territories`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1200)
+
+  const text = () => page.locator('body').innerText().then((t) => t.replace(/\s+/g, ' '))
+
+  ok(/Unassigned/.test(await text()), 'the unassigned bucket is labelled readably, not "unassigned" as an id')
+  ok(
+    !/__unassigned__/.test(await text()),
+    'the internal sentinel never reaches the screen',
+  )
+  ok(
+    /Cedar Bend — August/.test(await text()),
+    'a named territory shows its name rather than its id hash',
+  )
+
+  // The panel header count is the thing that read 0.
+  const panelCount = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('span')].find((s) => /\d+ properties$/.test(s.textContent || ''))
+    return el?.textContent?.trim() ?? null
+  })
+  ok(panelCount === '14 properties', `the map panel agrees with the table (${panelCount})`)
+
+  // And selecting the named territory switches the map to its three.
+  await page.getByText('Cedar Bend — August').first().click()
+  await page.waitForTimeout(700)
+  const after = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('span')].find((s) => /\d+ properties$/.test(s.textContent || ''))
+    return el?.textContent?.trim() ?? null
+  })
+  ok(after === '3 properties', `selecting a territory filters the map to it (${after})`)
+
+  // The rep dropdown must offer the real team, not the demo roster.
+  const options = await page.evaluate(() =>
+    [...document.querySelectorAll('select')].flatMap((s) => [...s.options].map((o) => o.text)),
+  )
+  ok(options.includes('Marcus Vance'), 'the assignment dropdown lists the real team')
+  ok(
+    !options.includes('Dana Whitfield'),
+    'demo reps are not offered on a live account — they do not work here',
+  )
+
+  await ctx.close()
+}
+
 /* ========== a file that isn't a CSV ====================================== */
 //
 // Reported from the field: a Windows shortcut (.lnk) was dragged in instead of
