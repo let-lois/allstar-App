@@ -104,6 +104,57 @@ asserts the route, appointments and activity are all still there.
 pitches. It is hidden on a live account, where there is no seed to restore and
 the button would only offer to delete a rep's real work.
 
+## Lead import
+
+A tenant starts empty, and a route, a map and a planned day mean nothing without
+addresses. **Console → Import leads** takes the file a company already has — a
+vendor list, a county export, a manager's spreadsheet — and turns it into
+properties a rep can knock.
+
+Three decisions worth knowing:
+
+**Ids are derived from the address**, not minted. A property's id is a hash of
+`(tenant, normalised address)`, which makes a re-import idempotent by
+construction rather than by a ledger someone has to remember to consult. Imports
+*do* get re-run — a connection drops, a vendor sends a refreshed file, a manager
+isn't sure the first upload worked — so "just do it again" has to be the correct
+answer. The normalisation folds case, punctuation and street-type spelling, so
+`1420 Cedar Bend Dr.`, `1420 CEDAR BEND DRIVE` and `1420 Cedar Bend Dr` are one
+house rather than three doors on three reps' maps.
+
+**A re-import refreshes the list's facts and never the field's work.** Status,
+last outcome, visit history and next action belong to the rep; city, ZIP,
+valuation and square footage belong to the spreadsheet. A refreshed vendor file
+resetting a lead that was sold last week is silent, expensive, and ends with a
+customer being knocked twice — so it has a gate (`smoke:import`) that sells a
+lead, re-imports the identical file, and asserts the sale survived.
+
+**Nothing is written until the operator has seen what will be written.** The
+column mapping is auto-guessed and then *shown*; the preview is real; geocoding
+runs before the write. An import is the one action in the console that's tedious
+to undo, and a silently mis-mapped latitude column drops a Texas territory into
+the Indian Ocean.
+
+Geocoding uses the **US Census Bureau's geocoder** — free, no API key, no billing
+account. It's US-only and matches road centrelines rather than rooftops, which is
+right for walking a street and wrong for a rural parcel; swapping in Google or
+Mapbox later is `api/src/geocode.ts` alone. Rows that can't be placed are held
+back rather than imported at 0,0, because a property with no coordinates is
+invisible on the screen the whole product is built around.
+
+```bash
+npm run verify:csv        # the parser: quoted commas, embedded newlines, BOM, CRLF
+npm run verify:import     # the wizard: messy headers, held-back rows, demo can't write
+cd api && npm run verify:geocode    # response parsing and the dedupe key
+cd api && npm run smoke:import      # end to end against D1
+```
+
+The geocoder itself is the one thing no local test covers — it's a third-party
+service reachable only from the deployed Worker. `GET /api/selftest/geocode` on
+the deployment geocodes a known address and asserts the coordinates land where
+that address actually is, so a changed response format or a swapped coordinate
+pair shows up there rather than as a territory at latitude zero.
+
 ## Office console
 
 `/admin` is the one deliberately **desktop-first** surface. Everywhere else

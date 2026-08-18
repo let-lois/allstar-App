@@ -27,6 +27,7 @@ const NAV: Item[] = [
   { to: '/admin/reports', label: 'Reports', roles: ['manager', 'client_admin', 'super_admin'] },
   { to: '/admin/team', label: 'Team', roles: ['manager', 'client_admin', 'super_admin'] },
   { to: '/admin/territories', label: 'Territories', roles: ['manager', 'client_admin', 'super_admin'] },
+  { to: '/admin/import', label: 'Import leads', roles: ['manager', 'client_admin', 'super_admin'] },
   { to: '/admin/settings', label: 'Settings', roles: ['client_admin', 'super_admin'] },
   { to: '/admin/clients', label: 'Clients', roles: ['super_admin'] },
 ]

@@ -147,6 +147,82 @@ export function apiUploadPhoto(token: string, photoId: string, blob: Blob) {
   })
 }
 
+export interface TeamUserDTO {
+  id: string
+  name: string
+  email: string
+  role: Role
+  phone?: string
+  active: boolean
+  /** Invited but hasn't set a password yet. */
+  pending: boolean
+}
+
+export function apiUsers(token: string) {
+  return request<{ users: TeamUserDTO[] }>('/api/users', { token })
+}
+
+export interface GeocodeRequestDTO {
+  ref: string
+  address1: string
+  city?: string
+  state?: string
+  zip?: string
+}
+
+export interface GeocodeMatchDTO {
+  ref: string
+  lat?: number
+  lng?: number
+  matchedAddress?: string
+  status: 'match' | 'no_match' | 'tie'
+}
+
+export function apiGeocode(token: string, rows: GeocodeRequestDTO[]) {
+  return request<{ matches: GeocodeMatchDTO[] }>('/api/import/geocode', {
+    method: 'POST',
+    body: { rows },
+    token,
+    // A batch of a hundred addresses through a government service is not fast.
+    timeoutMs: 60_000,
+  })
+}
+
+export interface ImportRowDTO {
+  ref: string
+  address1: string
+  city?: string
+  state?: string
+  zip?: string
+  lat?: number
+  lng?: number
+  ownerName?: string
+  phone?: string
+  email?: string
+  opportunityValue?: number
+  roofAgeYears?: number
+  squareFeet?: number
+}
+
+export interface ImportResultDTO {
+  created: number
+  updated: number
+  rejected: { ref: string; reason: string }[]
+  territoryId?: string
+}
+
+export function apiImport(
+  token: string,
+  input: { rows: ImportRowDTO[]; assignRepId?: string; territoryName?: string },
+) {
+  return request<ImportResultDTO>('/api/import/properties', {
+    method: 'POST',
+    body: input,
+    token,
+    timeoutMs: 60_000,
+  })
+}
+
 /** Shape returned by /api/bootstrap — already in the client's domain casing. */
 export interface BootstrapDTO {
   user: SessionUserDTO
