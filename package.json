@@ -17,7 +17,9 @@
     "verify:console": "node scripts/verify-console-access.mjs",
     "verify:login": "node scripts/verify-login.mjs",
     "verify:csv": "node scripts/verify-csv.mjs",
-    "verify:import": "node scripts/verify-import-ui.mjs"
+    "verify:import": "node scripts/verify-import-ui.mjs",
+    "verify:route": "node scripts/verify-route.mjs",
+    "verify:firstday": "node scripts/verify-first-day.mjs"
   },
   "dependencies": {
     "idb": "^8.0.0",

@@ -155,6 +155,62 @@ the deployment geocodes a known address and asserts the coordinates land where
 that address actually is, so a changed response format or a swapped coordinate
 pair shows up there rather than as a territory at latitude zero.
 
+## Planning a day
+
+Imported leads are a list, not a plan. **Today → Plan N doors** turns a rep's
+assigned leads into a walking order, and it runs entirely on the phone — route
+building happens in a truck at 6am, often with no signal, and must never wait on
+a server.
+
+The ordering is nearest-neighbour from wherever the rep is standing. That's a
+deliberate choice, not a shortcut: the optimal tour is the travelling-salesman
+problem, and nearest-neighbour lands within roughly a quarter of optimal while
+producing a route a human recognises as sensible — finish this street, then the
+next one. A mathematically shorter route that criss-crosses a neighbourhood gets
+abandoned by lunchtime, so the better tour on paper is the worse tour in the
+field.
+
+Doors already knocked today are excluded (knocking twice annoys the prospect and
+inflates the rep's own numbers), as are closed leads and anything without
+coordinates. The route id is derived from rep + day, so tapping "plan" twice
+replaces today's route rather than leaving two of them fighting over the screen.
+
+```bash
+npm run verify:route      # ordering, exclusions, size caps, naming
+npm run verify:firstday   # the whole first morning, in a browser
+```
+
+### Three bugs this found
+
+`verify:firstday` exists because a live account behaves nothing like the demo,
+where a route is always seeded. All three of these were invisible in the demo and
+none of them threw:
+
+1. **Today congratulated a rep who had done nothing.** With leads assigned and no
+   route, it fell through to "Route complete — 0 doors knocked today. Nice work."
+   and offered no way to start.
+
+2. **The map showed "0 properties" while Leads showed five.** The default filter
+   is "My route", which matches nothing when there is no route.
+
+3. **A cold start deleted queued work.** This is the serious one. `initSync()`
+   drains the outbox on start-up, and it ran *before* the session was read — so
+   `isDemo()` answered "yes", the demo simulator marked every queued mutation
+   applied, and the queue deleted it. On a live account: a rep queues a morning of
+   visits with no signal, closes the app, reopens it, and the work is gone.
+   Never sent, no error, no trace. The offline suite couldn't catch it because
+   that suite runs in demo mode, where answering "demo" is correct.
+
+   Fixed twice over — the session is now read before the outbox starts, and
+   `pushMutations` refuses to send at all while the session is unknown, so a
+   future reordering can't bring it back.
+
+A related hole closed at the same time: a bootstrap refresh replaced local rows
+wholesale, which deleted anything created on the phone but not yet synced —
+routes, tasks, appointments, field-added leads. The refresh now merges rather
+than replaces whenever the outbox holds work, sampled both before and after the
+request so a queue that drains mid-flight can't slip through the gap.
+
 ## Office console
 
 `/admin` is the one deliberately **desktop-first** surface. Everywhere else

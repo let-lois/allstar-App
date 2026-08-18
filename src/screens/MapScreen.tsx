@@ -34,7 +34,14 @@ export function MapScreen() {
   const nav = useNavigate()
   const { properties, route, position } = useAppStore()
   const scoped = useScopedProperties()
-  const [filter, setFilter] = useState<Filter>('route')
+  /*
+    "My route" is the right default *when there is a route*. Without one it
+    filters everything out, and a rep with leads assigned but no day planned
+    opens the map to "0 properties" — the app telling them they have no work when
+    the Leads tab, one tap away, says otherwise.
+  */
+  const hasRoute = (useAppStore((s) => s.route)?.stops.length ?? 0) > 0
+  const [filter, setFilter] = useState<Filter>(hasRoute ? 'route' : 'open')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const mapHandle = useRef<MapHandle | null>(null)
   const isWide = useIsWide()
@@ -157,7 +164,7 @@ export function MapScreen() {
             <div className="pad-top pointer-events-none absolute inset-x-0 top-0">
               <div className="pointer-events-auto flex items-center gap-2 px-3 pb-2 pt-2">
                 <div className="snap-x-row flex-1 pr-1">
-                  {FILTERS.map((f) => (
+                  {FILTERS.filter((f) => f.key !== 'route' || hasRoute).map((f) => (
                     <Chip
                       key={f.key}
                       size="sm"

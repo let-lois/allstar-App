@@ -39,16 +39,56 @@ const SERVER_STORES: StoreName[] = [
  */
 const LOCAL_WORK_STORES: StoreName[] = ['visits', 'notes', 'photos']
 
-export async function applyBootstrap(dto: BootstrapDTO): Promise<void> {
-  await Promise.all(SERVER_STORES.map((s) => db.clear(s)))
+export async function outboxPending(): Promise<boolean> {
+  return (await db.all<{ id: string }>('outbox')).length > 0
+}
+
+export async function applyBootstrap(dto: BootstrapDTO, mergeOnly = false): Promise<void> {
+  // The server's view is only authoritative once we've told it everything we
+  // know. While the outbox still holds unsent work, a row the server didn't
+  // mention isn't necessarily gone — it may simply be something this phone
+  // created a minute ago that hasn't reached the server yet.
+  //
+  // Getting this wrong is silent data loss: a rep plans a route on one bar of
+  // signal, pulls to refresh, and watches their day disappear. Same for a task,
+  // an appointment, or a lead they added standing in front of the house. The
+  // work is still in the outbox and would come back on a later refresh — but
+  // "come back later" is not what a rep looking at an empty screen believes.
+  // `mergeOnly` is passed in as well as checked here, because the dangerous
+  // window is the request itself: if the outbox drained *while* the bootstrap
+  // was in flight, the response predates that write and a replace would delete
+  // it. The caller samples the queue before the fetch; this samples it after.
+  const pending = mergeOnly || (await outboxPending())
+
   await Promise.all([
-    db.putAll('properties', dto.properties as Property[]),
-    db.putAll('routes', dto.routes as Route[]),
-    db.putAll('appointments', dto.appointments as Appointment[]),
-    db.putAll('tasks', dto.tasks as Task[]),
-    db.putAll('activity', dto.activity as ActivityEvent[]),
-    db.putAll('dailyStats', dto.dailyStats as DailyStat[]),
+    replace('properties', dto.properties as Property[], pending),
+    replace('routes', dto.routes as Route[], pending),
+    replace('appointments', dto.appointments as Appointment[], pending),
+    replace('tasks', dto.tasks as Task[], pending),
+    replace('activity', dto.activity as ActivityEvent[], pending),
+    replace('dailyStats', dto.dailyStats as DailyStat[], pending),
   ])
+}
+
+/**
+ * Write the server's rows over the local ones.
+ *
+ * With nothing pending this is a true replace, which is what prunes rows that
+ * were deleted or reassigned away server-side. With work still queued it becomes
+ * a merge that adds and updates but never deletes — stale rows linger for the
+ * few seconds until the outbox drains, which is by far the cheaper mistake.
+ */
+async function replace<T extends { id: string }>(
+  store: StoreName,
+  rows: T[],
+  keepUnknownLocalRows: boolean,
+): Promise<void> {
+  // Not a clear-then-write: `put` overwrites by key, so writing the server's
+  // rows on top already refreshes everything it knows about. The only thing the
+  // clear adds is deletion of rows the server *didn't* send — which is exactly
+  // what must not happen while our own work is still queued.
+  if (!keepUnknownLocalRows) await db.clear(store)
+  await db.putAll(store, rows)
 }
 
 /**

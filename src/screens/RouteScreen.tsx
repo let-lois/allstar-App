@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
@@ -8,6 +8,7 @@ import { useAppStore, useRouteProgress } from '../store/useAppStore'
 import { distanceMiles, formatDistance, navigationUrl } from '../lib/geo'
 import { time } from '../lib/format'
 import { IconNavigate } from '../components/nav/icons'
+import { DEFAULT_ROUTE_SIZE, routableLeads } from '../lib/route'
 
 /**
  * Today's route as an ordered stop list.
@@ -18,8 +19,21 @@ import { IconNavigate } from '../components/nav/icons'
  */
 export function RouteScreen() {
   const nav = useNavigate()
-  const { route, properties, position, skipStop } = useAppStore()
+  const { route, properties, position, skipStop, user } = useAppStore()
+  const buildTodayRoute = useAppStore((s) => s.buildTodayRoute)
   const progress = useRouteProgress()
+  const [building, setBuilding] = useState(false)
+
+  // What a route *could* be built from, for the empty state below.
+  const routable = useMemo(
+    () =>
+      routableLeads(
+        Object.values(properties).filter(
+          (p) => user?.role !== 'field_rep' || p.assignedRepId === user?.id,
+        ),
+      ),
+    [properties, user],
+  )
 
   const stops = useMemo(
     () => [...(route?.stops ?? [])].sort((a, b) => a.order - b.order),
@@ -30,8 +44,33 @@ export function RouteScreen() {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <TopBar title="Route" back="/today" />
-        <div className="grid flex-1 place-items-center p-8 text-center text-ink-mute">
-          No route assigned for today.
+        <div className="grid flex-1 place-items-center p-8 text-center">
+          <div className="max-w-xs">
+            <p className="font-semibold">No route planned yet</p>
+            <p className="mt-1 text-sm leading-relaxed text-ink-mute">
+              {routable.length > 0
+                ? `${routable.length.toLocaleString()} lead${routable.length === 1 ? '' : 's'} are waiting. Put the closest ones in walking order and get going.`
+                : 'Nothing is assigned to you for today.'}
+            </p>
+            {routable.length > 0 && (
+              <Button
+                size="lg"
+                full
+                className="mt-4"
+                disabled={building}
+                onClick={async () => {
+                  setBuilding(true)
+                  try {
+                    await buildTodayRoute()
+                  } finally {
+                    setBuilding(false)
+                  }
+                }}
+              >
+                {building ? 'Planning…' : `Plan ${Math.min(DEFAULT_ROUTE_SIZE, routable.length)} doors`}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     )
