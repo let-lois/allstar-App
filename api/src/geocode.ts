@@ -126,9 +126,7 @@ export function toCensusCsv(rows: GeocodeRequest[]): string {
     .join('\n')
 }
 
-export async function geocode(rows: GeocodeRequest[]): Promise<GeocodeMatch[]> {
-  if (rows.length === 0) return []
-
+async function batch(rows: GeocodeRequest[]): Promise<GeocodeMatch[]> {
   const form = new FormData()
   form.append('benchmark', 'Public_AR_Current')
   form.append('addressFile', new Blob([toCensusCsv(rows)], { type: 'text/csv' }), 'addresses.csv')
@@ -136,4 +134,37 @@ export async function geocode(rows: GeocodeRequest[]): Promise<GeocodeMatch[]> {
   const res = await fetch(CENSUS_BATCH_URL, { method: 'POST', body: form })
   if (!res.ok) throw new Error(`Geocoder returned ${res.status}`)
   return parseCensusResponse(await res.text())
+}
+
+/**
+ * Geocode a batch, then have a second go at whatever didn't place.
+ *
+ * The retry drops the ZIP. This is not a nicety — a wrong ZIP is the single most
+ * common reason a real address fails to match, because ZIP boundaries don't
+ * follow city boundaries, they get re-cut, and every list that has been sitting
+ * in a spreadsheet for a year has some that are stale. The street, city and
+ * state are usually right even when the ZIP isn't, and the geocoder can place an
+ * address from those alone.
+ *
+ * Refusing to import a house that exists because five digits next to it are out
+ * of date is the wrong trade: the rep can see the address is real, and being
+ * told "not found" makes the app look broken rather than careful.
+ */
+export async function geocode(rows: GeocodeRequest[]): Promise<GeocodeMatch[]> {
+  if (rows.length === 0) return []
+
+  const first = await batch(rows)
+  const byRef = new Map(first.map((m) => [m.ref, m]))
+
+  const retry = rows.filter((r) => byRef.get(r.ref)?.status !== 'match' && r.zip)
+  if (retry.length === 0) return first
+
+  const second = await batch(retry.map((r) => ({ ...r, zip: undefined })))
+  for (const m of second) {
+    // Only ever upgrade a failure into a match. A second no-match must not
+    // overwrite the first attempt's more specific reason.
+    if (m.status === 'match') byRef.set(m.ref, m)
+  }
+
+  return rows.map((r) => byRef.get(r.ref) ?? { ref: r.ref, status: 'no_match' as const })
 }

@@ -11,6 +11,7 @@ import type {
   Property,
   Route,
   Task,
+  Territory,
   User,
   Visit,
 } from '../types'
@@ -71,6 +72,8 @@ interface AppState {
   appointments: Record<string, Appointment>
   tasks: Record<string, Task>
   activity: ActivityEvent[]
+  /** Names for the territory ids on properties. Empty in demo mode. */
+  territories: Record<string, Territory>
 
   /** The visit currently open in Visit Mode, if any. */
   activeVisitId: string | null
@@ -145,6 +148,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   appointments: {},
   tasks: {},
   activity: [],
+  territories: {},
   activeVisitId: null,
 
   async boot() {
@@ -187,7 +191,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   /** Read whatever is cached locally into state. Shared by every entry path. */
   async loadLocal(user, mode) {
-    const [properties, routes, visits, notes, photos, appointments, tasks, activity] =
+    const [properties, routes, visits, notes, photos, appointments, tasks, activity, territories] =
       await Promise.all([
         db.all<Property>('properties'),
         db.all<Route>('routes'),
@@ -197,6 +201,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         db.all<Appointment>('appointments'),
         db.all<Task>('tasks'),
         db.all<ActivityEvent>('activity'),
+        db.all<Territory>('territories'),
       ])
 
     // An in-flight visit survives an app kill — reps close the app mid-knock.
@@ -215,6 +220,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       appointments: indexById(appointments),
       tasks: indexById(tasks),
       activity: activity.sort((a, b) => b.at - a.at),
+      territories: indexById(territories),
       activeVisitId: openVisit?.id ?? null,
     })
   },
@@ -319,6 +325,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       appointments: {},
       tasks: {},
       activity: [],
+      territories: {},
       activeVisitId: null,
     })
   },

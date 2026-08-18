@@ -232,5 +232,6 @@ export interface BootstrapDTO {
   tasks: unknown[]
   activity: unknown[]
   dailyStats: unknown[]
+  territories?: unknown[]
   serverTime: number
 }

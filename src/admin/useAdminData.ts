@@ -247,11 +247,29 @@ export interface TerritoryRow {
   wonValue: number
 }
 
+/**
+ * The bucket for leads that belong to no territory.
+ *
+ * A sentinel rather than a real id, and exported so the table and the map agree
+ * on it. They didn't: the table grouped on this string while the map filtered on
+ * `territoryId === selected`, which is `undefined` for exactly these rows — so
+ * the bucket could be selected and never matched anything, and every lead
+ * imported without a territory name (the default) was invisible on the map.
+ */
+export const UNASSIGNED_TERRITORY = '__unassigned__'
+
+/** Does this property belong to the territory the operator picked? */
+export function inTerritory(p: Property, territoryId: string | null): boolean {
+  if (territoryId === null) return true
+  if (territoryId === UNASSIGNED_TERRITORY) return !p.territoryId
+  return p.territoryId === territoryId
+}
+
 export function useTerritories(properties: Property[]): TerritoryRow[] {
   return useMemo(() => {
     const map = new Map<string, Property[]>()
     for (const p of properties) {
-      const t = p.territoryId ?? 'unassigned'
+      const t = p.territoryId ?? UNASSIGNED_TERRITORY
       const arr = map.get(t)
       if (arr) arr.push(p)
       else map.set(t, [p])

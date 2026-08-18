@@ -165,6 +165,12 @@ export interface Route {
   startedAt?: number
 }
 
+export interface Territory {
+  id: string
+  name: string
+  repId?: string
+}
+
 export interface Appointment {
   id: string
   propertyId: string

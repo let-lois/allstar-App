@@ -29,7 +29,7 @@ export async function bootstrap(env: Env, user: SessionUser) {
   const scope = isRep(user) ? 'AND assigned_rep_id = ?2' : ''
   const bind = (base: unknown[]) => (isRep(user) ? [...base, user.id] : base)
 
-  const [properties, contacts, routes, stops, appointments, tasks, activity, stats] =
+  const [properties, contacts, routes, stops, appointments, tasks, activity, stats, territories] =
     await Promise.all([
       env.DB.prepare(
         `SELECT * FROM properties WHERE client_id = ?1 ${scope} ORDER BY address1`,
@@ -89,6 +89,13 @@ export async function bootstrap(env: Env, user: SessionUser) {
         `SELECT * FROM daily_stats WHERE client_id = ?1 AND day >= ?2 ORDER BY day`,
       )
         .bind(user.clientId, historyFrom)
+        .all(),
+
+      // Names, so the console can label a territory instead of printing its id.
+      // Not scoped to the rep: a territory is a label on properties they already
+      // have, and hiding the name would only show them a hash.
+      env.DB.prepare(`SELECT * FROM territories WHERE client_id = ?1 ORDER BY name`)
+        .bind(user.clientId)
         .all(),
     ])
 
@@ -184,6 +191,11 @@ export async function bootstrap(env: Env, user: SessionUser) {
       summary: a.summary,
       outcome: a.outcome ?? undefined,
       at: a.at,
+    })),
+    territories: (territories.results as Record<string, unknown>[]).map((t) => ({
+      id: t.id,
+      name: t.name,
+      repId: t.rep_id ?? undefined,
     })),
     dailyStats: (stats.results as Record<string, unknown>[]).map((s) => ({
       id: s.id,
