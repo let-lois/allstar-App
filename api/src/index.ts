@@ -26,6 +26,16 @@ import {
   setRole,
 } from './users'
 import { ensureSchema, migrationState } from './migrate'
+import {
+  logResponse,
+  logUnhandled,
+  newRequestId,
+  noteFailure,
+  recentFailures,
+  routeOf,
+  traceHeaders,
+  type RequestContext,
+} from './observe'
 import { applyMutations } from './mutations'
 import { checkLoginRate, clearFailures, recordFailure } from './ratelimit'
 import { invitePage, setupPage } from './pages'
@@ -46,11 +56,25 @@ import type { Env, Mutation, Role, SessionUser } from './types'
  * business inside a batched write that has to succeed atomically on bad signal.
  */
 
-const json = (body: unknown, status = 200, headers: HeadersInit = {}) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', ...headers },
-  })
+/**
+ * Every JSON reply, tagged with the request id and counted if it failed.
+ *
+ * Centralised here rather than at each return site: there are forty of those and
+ * the one that gets forgotten is always the one you needed a log line for.
+ */
+const reply = (ctx: RequestContext) =>
+  (body: unknown, status = 200, headers: HeadersInit = {}) => {
+    if (status >= 500) noteFailure()
+    logResponse(ctx, status)
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        ...traceHeaders(ctx),
+        ...headers,
+      },
+    })
+  }
 
 function corsHeaders(req: Request, env: Env): Record<string, string> {
   const origin = req.headers.get('origin') ?? ''
@@ -63,6 +87,10 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
     'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS',
     'access-control-allow-headers': 'authorization,content-type',
     'access-control-max-age': '86400',
+    // So the browser can read the id off a failed request and show it to the
+    // person looking at the screen. Without this the header exists but is
+    // invisible to the app, which defeats the point of returning it.
+    'access-control-expose-headers': 'x-request-id',
     vary: 'origin',
   }
 }
@@ -83,6 +111,14 @@ export default {
 
     const url = new URL(req.url)
     const path = url.pathname.replace(/\/+$/, '') || '/'
+
+    const ctx: RequestContext = {
+      id: newRequestId(),
+      method: req.method,
+      route: routeOf(path),
+      started: Date.now(),
+    }
+    const json = reply(ctx)
 
     // Once per isolate, and a no-op after the first deploy that applied
     // everything. Schema changes ship with the code rather than waiting for
@@ -249,6 +285,9 @@ export default {
               // Surfaced because a failed migration is otherwise invisible:
               // the deploy succeeds and one feature quietly doesn't work.
               migrations: migrationState(),
+              // Approximate and per-isolate — a smoke alarm, not an accounting
+              // record. Non-zero is worth a look; zero proves nothing.
+              recentFailures: recentFailures(),
               maxImportRows: MAX_IMPORT_ROWS,
               geocodeChunk: GEOCODE_CHUNK,
             },
@@ -549,8 +588,20 @@ export default {
       return json({ error: 'Not found.' }, 404, cors)
     } catch (err) {
       // Never leak internals to a client; the rep can't act on a stack trace.
-      console.error('unhandled', err)
-      return json({ error: 'Something went wrong.' }, 500, cors)
+      // They can act on a reference — it turns "it broke" into a log query.
+      logUnhandled(ctx, err)
+      noteFailure()
+      return new Response(
+        JSON.stringify({ error: 'Something went wrong.', reference: ctx.id }),
+        {
+          status: 500,
+          headers: {
+            'content-type': 'application/json; charset=utf-8',
+            ...traceHeaders(ctx),
+            ...cors,
+          },
+        },
+      )
     }
   },
 } satisfies ExportedHandler<Env>

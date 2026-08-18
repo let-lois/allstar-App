@@ -220,6 +220,10 @@ function messageFor(err: unknown): string {
       ? "Couldn't reach the server. Try again in a moment."
       : "You're offline. Sign in needs a connection — the demo works without one."
   }
-  if (err instanceof ApiError) return err.message
+  if (err instanceof ApiError) {
+    // A reference only appears on a real server fault, so quoting it here can't
+    // make an ordinary wrong password look like a broken system.
+    return err.reference ? `${err.message} (reference ${err.reference})` : err.message
+  }
   return 'Something went wrong. Try again.'
 }
