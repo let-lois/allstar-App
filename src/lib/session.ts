@@ -48,12 +48,34 @@ const KEY = 'allstar.session.v2'
  */
 let current: Session | null = null
 
+/**
+ * Whether the session has been read off disk yet.
+ *
+ * Tracked separately from `current` because "no session" and "we haven't looked
+ * yet" are different answers, and conflating them cost a rep their whole day:
+ * the outbox drains on start-up, and if that happens before the session is
+ * known, `isDemo()` says yes, the demo simulator marks every queued mutation
+ * applied, and the queue deletes work that never left the phone.
+ *
+ * Nothing throws. The rep just finds their morning gone.
+ */
+let loaded = false
+
 export function currentSession(): Session | null {
   return current
 }
 
+export function sessionKnown(): boolean {
+  return loaded
+}
+
+/**
+ * True only when we know we're in demo mode. Before the session is read this is
+ * false, so callers fall through to the "can't act yet" path rather than
+ * defaulting into the simulator.
+ */
 export function isDemo(): boolean {
-  return current?.mode !== 'live'
+  return loaded && current?.mode !== 'live'
 }
 
 export function liveToken(): string | null {
@@ -62,6 +84,7 @@ export function liveToken(): string | null {
 
 export async function loadSession(): Promise<Session | null> {
   const saved = await db.metaGet<Session>(KEY)
+  loaded = true
   // Defensive: a half-written record is worse than no session, because it would
   // put the app in live mode without a token and 401 every write.
   if (saved?.mode === 'live' && typeof saved.token === 'string' && saved.user) current = saved
@@ -72,11 +95,13 @@ export async function loadSession(): Promise<Session | null> {
 
 export async function saveSession(s: Session): Promise<void> {
   current = s
+  loaded = true
   await db.metaSet(KEY, s)
 }
 
 export async function clearSession(): Promise<void> {
   current = null
+  loaded = true
   await db.metaSet(KEY, undefined)
 }
 

@@ -17,6 +17,7 @@ import { distanceMiles, formatDistance, navigationUrl, walkMinutes } from '../li
 import { money, relative, relativeLower, time } from '../lib/format'
 import { drain } from '../lib/sync'
 import { outcomeByCode } from '../data/outcomes'
+import { DEFAULT_ROUTE_SIZE, routableLeads } from '../lib/route'
 import { IconCalendar, IconChevron, IconNavigate } from '../components/nav/icons'
 
 /**
@@ -33,6 +34,7 @@ export function Today() {
   const nav = useNavigate()
   const { user, properties, route, position, refreshPosition, refreshFromServer } =
     useAppStore()
+  const buildTodayRoute = useAppStore((s) => s.buildTodayRoute)
   // Scoped to this rep — with a full team in the data, the unscoped stores hold
   // everyone's work and would report the team's doors as this rep's.
   const appointments = useMyAppointments()
@@ -198,15 +200,29 @@ export function Today() {
                 </Button>
               </div>
             </section>
+          ) : progress.total === 0 ? (
+            /*
+              No route at all — a rep's first morning, or a day nobody planned.
+              This used to fall through to "Route complete · 0 doors knocked
+              today. Nice work.", which congratulates someone for work they
+              haven't done and offers no way to start. If there are leads to
+              walk, the only thing this card should do is turn them into a day.
+            */
+            <PlanDayCard />
           ) : (
             <section className="card p-5 text-center">
               <p className="text-base font-semibold">Route complete</p>
               <p className="mt-1 text-sm text-ink-mute">
-                {progress.total} doors knocked today. Nice work.
+                {progress.done} of {progress.total} doors knocked today. Nice work.
               </p>
-              <Button variant="secondary" className="mt-3" full onClick={() => nav('/map')}>
-                Find more properties
-              </Button>
+              <div className="mt-3 space-y-2">
+                <Button full onClick={() => void buildTodayRoute()}>
+                  Plan more doors
+                </Button>
+                <Button variant="secondary" full onClick={() => nav('/map')}>
+                  Find more properties
+                </Button>
+              </div>
             </section>
           )}
 
@@ -372,4 +388,78 @@ function getGreeting() {
   if (h < 12) return 'Good morning'
   if (h < 17) return 'Good afternoon'
   return 'Good evening'
+}
+
+/**
+ * The first thing a rep sees on a morning nobody planned.
+ *
+ * Deliberately a single decision: how many doors. Everything else — which
+ * streets, what order, how far — is the app's job, and asking a rep standing in
+ * a truck to make those choices is how a product ends up unused. If there is
+ * nothing to walk, this says so plainly rather than offering a button that
+ * silently does nothing.
+ */
+function PlanDayCard() {
+  const nav = useNavigate()
+  const properties = useAppStore((s) => s.properties)
+  const user = useAppStore((s) => s.user)
+  const position = useAppStore((s) => s.position)
+  const buildTodayRoute = useAppStore((s) => s.buildTodayRoute)
+  const [building, setBuilding] = useState(false)
+
+  const available = useMemo(() => {
+    const mine = Object.values(properties).filter(
+      (p) => user?.role !== 'field_rep' || p.assignedRepId === user?.id,
+    )
+    return routableLeads(mine)
+  }, [properties, user])
+
+  if (available.length === 0) {
+    return (
+      <section className="card p-5 text-center">
+        <p className="text-base font-semibold">No doors to walk yet</p>
+        <p className="mt-1 text-sm leading-relaxed text-ink-mute">
+          Nothing is assigned to you for today. Your manager can import a lead list
+          and assign it — or you can add a house yourself while you’re standing in
+          front of it.
+        </p>
+        <Button variant="secondary" className="mt-3" full onClick={() => nav('/lead/new')}>
+          Add a lead
+        </Button>
+      </section>
+    )
+  }
+
+  const target = Math.min(DEFAULT_ROUTE_SIZE, available.length)
+
+  return (
+    <section className="card p-5 text-center">
+      <p className="text-base font-semibold">Ready to plan your day</p>
+      <p className="mt-1 text-sm leading-relaxed text-ink-mute">
+        {available.length.toLocaleString()} lead{available.length === 1 ? '' : 's'} waiting.
+        We’ll put the closest {target} in walking order
+        {position ? ' from where you are now' : ''}.
+      </p>
+      <Button
+        size="lg"
+        full
+        buzz
+        className="mt-4"
+        disabled={building}
+        onClick={async () => {
+          setBuilding(true)
+          try {
+            await buildTodayRoute()
+          } finally {
+            setBuilding(false)
+          }
+        }}
+      >
+        {building ? 'Planning…' : `Plan ${target} doors`}
+      </Button>
+      <Button variant="secondary" full className="mt-2" onClick={() => nav('/map')}>
+        Pick them on the map
+      </Button>
+    </section>
+  )
 }

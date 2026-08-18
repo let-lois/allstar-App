@@ -178,6 +178,58 @@ ok(
 /* --- the same territory name is reused, not duplicated -------------------- */
 ok(second.territoryId === first.territoryId, 'importing into an existing territory reuses it')
 
+/* --- a rep plans a route over their imported leads ------------------------ */
+const routeId = `route_smoke_${stamp}`
+const routeMut = (mutId, stops) => ({
+  id: mutId,
+  kind: 'route.create',
+  createdAt: Date.now(),
+  payload: { id: routeId, date: new Date().toISOString().slice(0, 10), name: 'Import Test Way', stops },
+})
+const send = (mutations, token) =>
+  api('/api/mutations', { method: 'POST', body: JSON.stringify({ mutations }) }, token).then((r) =>
+    r.json(),
+  )
+
+const allStops = mine.map((p, i) => ({ propertyId: p.id, order: i, status: i === 0 ? 'active' : 'pending' }))
+ok(
+  (await send([routeMut(`mut_route_${stamp}`, allStops)], rep.token)).results[0].status === 'applied',
+  'a rep can plan a route over their leads',
+)
+
+const withRoute = await (await api('/api/bootstrap', {}, rep.token)).json()
+const saved = withRoute.routes.find((r) => r.id === routeId)
+ok(!!saved, 'the route comes back in the rep’s bootstrap')
+ok(saved?.stops?.length === 3, `every stop was stored (${saved?.stops?.length})`)
+ok(
+  saved?.stops?.every((s, i) => s.order === i),
+  'stop order survives the round trip — a shuffled route is a route nobody follows',
+)
+ok(saved?.stops?.filter((s) => s.status === 'active').length === 1, 'exactly one stop comes back active')
+
+// Re-planning the day must replace the route, not accumulate stops beside it.
+ok(
+  (await send([routeMut(`mut_route2_${stamp}`, allStops.slice(0, 2))], rep.token)).results[0].status ===
+    'applied',
+  're-planning the same day is accepted',
+)
+const replanned = await (await api('/api/bootstrap', {}, rep.token)).json()
+const after = replanned.routes.find((r) => r.id === routeId)
+ok(
+  after?.stops?.length === 2,
+  `re-planning replaces the stops rather than appending to them (${after?.stops?.length})`,
+)
+
+// A route is a list of this company's doors.
+const foreignRoute = await send(
+  [routeMut(`mut_route_bad_${stamp}`, [{ propertyId: 'p_another_tenant', order: 0, status: 'pending' }])],
+  rep.token,
+)
+ok(
+  foreignRoute.results[0].status === 'rejected',
+  'a route referencing another tenant’s property is rejected',
+)
+
 /* --- authorization -------------------------------------------------------- */
 ok(
   (

@@ -6,7 +6,7 @@ import {
   apiPushMutations,
   type BootstrapDTO,
 } from './http'
-import { isDemo, liveToken, signalAuthExpired } from './session'
+import { isDemo, liveToken, sessionKnown, signalAuthExpired } from './session'
 
 /**
  * The boundary between the app and the server.
@@ -89,6 +89,10 @@ export const BATCH_SIZE = 40
  */
 export async function pushMutations(rows: Mutation[]): Promise<PushResult[]> {
   if (rows.length === 0) return []
+  // Until we know who is signed in, there is no correct destination for a write.
+  // Treated as "no link" rather than an error, so the rows keep their place and
+  // their retry budget — the drain simply comes back when boot has finished.
+  if (!sessionKnown()) throw new OfflineError()
   if (!online()) throw new OfflineError()
 
   if (isDemo()) {
@@ -119,7 +123,7 @@ export async function pushMutations(rows: Mutation[]): Promise<PushResult[]> {
 }
 
 export async function fetchBootstrap(): Promise<BootstrapDTO | null> {
-  if (isDemo()) return null
+  if (!sessionKnown() || isDemo()) return null
   if (!online()) throw new OfflineError()
   const token = liveToken()
   if (!token) throw new AuthExpiredError()

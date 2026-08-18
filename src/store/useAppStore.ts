@@ -21,7 +21,7 @@ import { DEMO_USERS, FIELD_REPS } from '../data/seed'
 import { ensureFreshDemo, resetDemo } from '../lib/demo'
 import { fetchBootstrap } from '../lib/api'
 import { apiLogin, apiLogout } from '../lib/http'
-import { applyBootstrap, wipeCachedData } from '../lib/hydrate'
+import { applyBootstrap, outboxPending, wipeCachedData } from '../lib/hydrate'
 import {
   clearSession,
   currentSession,
@@ -33,6 +33,7 @@ import {
 import { OUTCOME_TO_STATUS } from '../data/outcomes'
 import { dayKey } from '../lib/format'
 import { getPosition, type Position } from '../lib/geo'
+import { buildRoute } from '../lib/route'
 
 /**
  * Single app store.
@@ -120,6 +121,8 @@ interface AppState {
 
   skipStop: (propertyId: string) => Promise<void>
   advanceRoute: (propertyId: string) => Promise<void>
+  /** Plan today's walking order from the rep's own unworked leads. */
+  buildTodayRoute: (size?: number) => Promise<Route | null>
 }
 
 function indexById<T extends { id: string }>(rows: T[]): Record<string, T> {
@@ -145,9 +148,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeVisitId: null,
 
   async boot() {
-    await initSync()
-
+    // The session is read *before* the outbox is started. `initSync` drains on
+    // start-up, and a drain that runs without knowing who is signed in has no
+    // correct destination for the writes. `pushMutations` refuses to send in
+    // that state as a backstop; this ordering is what makes it never arise.
     const session = await loadSession()
+
+    await initSync()
 
     // A live session can die while the phone is in a pocket. Discovering that
     // happens inside a background drain, where there's no screen to raise it on
@@ -226,6 +233,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     try {
       const dtoBundle = await fetchBootstrap()
+      // A fresh sign-in has no local rows worth preserving — the cache was
+      // wiped above — so this is a clean replace.
       if (dtoBundle) await applyBootstrap(dtoBundle)
     } catch {
       // Signed in, but the data didn't arrive. That's a legitimate state for
@@ -253,9 +262,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (get().mode !== 'live' || get().refreshing) return
     set({ refreshing: true })
     try {
+      // Sampled before the request: work that drains while the bootstrap is in
+      // flight is work the response cannot know about, and treating that
+      // response as complete would delete it.
+      const hadPendingWork = await outboxPending()
       const dto = await fetchBootstrap()
       if (dto) {
-        await applyBootstrap(dto)
+        await applyBootstrap(dto, hadPendingWork)
         await get().loadLocal(userFromDTO(dto.user), 'live')
       }
     } catch {
@@ -603,6 +616,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     await db.put('routes', next)
     set({ route: next })
     await enqueue('route.stop', { routeId: route.id, propertyId, status: 'skipped' })
+  },
+
+  async buildTodayRoute(size) {
+    const state = get()
+    const user = state.user
+    if (!user) return null
+
+    // A rep's own patch. Office roles building a route would be planning
+    // somebody else's day, which is what the console is for.
+    const mine = Object.values(state.properties).filter(
+      (p) => user.role !== 'field_rep' || p.assignedRepId === user.id,
+    )
+
+    const route = buildRoute(mine, {
+      repId: user.id,
+      from: state.position ?? undefined,
+      size,
+    })
+    if (!route) return null
+
+    await db.put('routes', route)
+    set((s) => ({
+      route,
+      routes: [...s.routes.filter((r) => r.id !== route.id), route],
+    }))
+    await enqueue('route.create', route)
+    return route
   },
 
   async advanceRoute(propertyId) {

@@ -327,6 +327,49 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
       return
     }
 
+    case 'route.create': {
+      const id = str(p.id)
+      const date = str(p.date)
+      if (!id || !date) throw new Error('route.create: missing fields')
+      const stops = Array.isArray(p.stops) ? p.stops : []
+
+      await env.DB.prepare(
+        `INSERT INTO routes (id, client_id, rep_id, date, name, started_at)
+         VALUES (?1,?2,?3,?4,?5,?6)
+         ON CONFLICT(id) DO UPDATE SET name = excluded.name, date = excluded.date`,
+      )
+        .bind(id, user.clientId, user.id, date, str(p.name) ?? 'Route', num(p.startedAt))
+        .run()
+
+      // Rebuilding a day's route replaces it. The stops that are already done
+      // keep their status through the upsert below, but a stop dropped from the
+      // new plan has to actually disappear — otherwise yesterday's abandoned
+      // half-route quietly accumulates on the rep's screen.
+      await env.DB.prepare('DELETE FROM route_stops WHERE route_id = ?1').bind(id).run()
+
+      for (const raw of stops.slice(0, 200)) {
+        const stop = obj(raw)
+        const propertyId = str(stop.propertyId)
+        if (!propertyId) continue
+        // Tenant isolation still applies to a route: a route is a list of this
+        // company's doors, and an id from anywhere else has no business in it.
+        await assertPropertyInTenant(env, user, propertyId)
+        await env.DB.prepare(
+          `INSERT OR REPLACE INTO route_stops (route_id, property_id, ord, status, completed_at)
+           VALUES (?1,?2,?3,?4,?5)`,
+        )
+          .bind(
+            id,
+            propertyId,
+            num(stop.order) ?? 0,
+            str(stop.status) ?? 'pending',
+            num(stop.completedAt),
+          )
+          .run()
+      }
+      return
+    }
+
     case 'route.stop': {
       const routeId = str(p.routeId)
       const propertyId = str(p.propertyId)

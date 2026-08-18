@@ -232,6 +232,7 @@ export type MutationKind =
   | 'task.create'
   | 'task.complete'
   | 'appointment.create'
+  | 'route.create'
   | 'route.stop'
   | 'comm.log'
 
