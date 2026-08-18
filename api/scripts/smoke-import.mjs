@@ -288,6 +288,56 @@ ok(
   'a field rep cannot reassign territory to themselves',
 )
 
+/* --- moving individual leads --------------------------------------------- */
+//
+// Territory assignment covers handing over a patch. What comes up daily is
+// smaller: a rep is off sick, one street belongs with the next patch over.
+const pick = mine.slice(0, 2).map((p) => p.id)
+const assignSome = (body, token = admin.token) =>
+  api('/api/properties/assign', { method: 'POST', body: JSON.stringify(body) }, token).then(
+    async (r) => ({ status: r.status, body: await r.json() }),
+  )
+
+const moved = await assignSome({ propertyIds: pick, repId: null })
+ok(moved.body.assigned === 2, `named leads can be unassigned (${moved.body.assigned})`)
+const afterMove = await (await api('/api/bootstrap', {}, rep.token)).json()
+ok(
+  afterMove.properties.filter((p) => p.address1.includes(street)).length === 1,
+  'the rep keeps only the lead that was left with them',
+)
+
+ok((await assignSome({ propertyIds: pick, repId })).body.assigned === 2, 'and can be handed back')
+
+/* --- and the boundaries ---------------------------------------------------- */
+ok(
+  (await assignSome({ propertyIds: [], repId })).status === 400,
+  'an empty selection is refused rather than reported as a no-op success',
+)
+ok(
+  (await assignSome({ propertyIds: pick, repId: 'u_from_another_company' })).status === 400,
+  'assigning selected leads to somebody outside the tenant is refused',
+)
+ok(
+  (await assignSome({ propertyIds: pick, repId }, rep.token)).status === 403,
+  'a field rep cannot move leads to themselves',
+)
+{
+  // An id from another tenant must match nothing rather than be trusted — the
+  // client_id predicate is what enforces that, not a lookup.
+  const res = await assignSome({ propertyIds: ['p_belongs_to_someone_else'], repId })
+  ok(
+    res.status === 200 && res.body.assigned === 0,
+    `another tenant's property id changes nothing (${res.body.assigned})`,
+  )
+}
+ok(
+  (await assignSome({
+    propertyIds: Array.from({ length: 501 }, (_, i) => `p_${i}`),
+    repId,
+  })).status === 413,
+  'an oversized selection is refused, not truncated',
+)
+
 /* --- authorization -------------------------------------------------------- */
 ok(
   (

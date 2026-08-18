@@ -275,6 +275,19 @@ export function apiAssignTerritory(
   })
 }
 
+/** Move specific leads to a rep, rather than a whole territory. */
+export function apiAssignProperties(
+  token: string,
+  input: { propertyIds: string[]; repId: string | null },
+) {
+  return request<{ assigned: number }>('/api/properties/assign', {
+    method: 'POST',
+    body: input,
+    token,
+    timeoutMs: 30_000,
+  })
+}
+
 export interface GeocodeRequestDTO {
   ref: string
   address1: string
