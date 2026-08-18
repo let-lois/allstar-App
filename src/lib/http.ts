@@ -36,6 +36,12 @@ export class ApiError extends Error {
     readonly status: number,
     message: string,
     readonly code?: string,
+    /**
+     * The server's id for the request that failed. Shown to the person looking
+     * at the screen so a support message carries something searchable —
+     * "it broke" is unactionable, "it broke, reference 7f3a91" is a log query.
+     */
+    readonly reference?: string,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -92,14 +98,19 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   if (!res.ok) {
     let message = `Request failed (${res.status})`
     let code: string | undefined
+    let reference = res.headers.get('x-request-id') ?? undefined
     try {
-      const body = (await res.json()) as { error?: string; code?: string }
+      const body = (await res.json()) as { error?: string; code?: string; reference?: string }
       if (body?.error) message = body.error
       code = body?.code
+      reference = body?.reference ?? reference
     } catch {
       /* not JSON — keep the status message */
     }
-    throw new ApiError(res.status, message, code)
+    // Only worth showing when something actually broke. A wrong password does
+    // not need a reference number, and offering one makes the ordinary case
+    // look like a fault.
+    throw new ApiError(res.status, message, code, res.status >= 500 ? reference : undefined)
   }
 
   if (res.status === 204) return undefined as T

@@ -16,7 +16,8 @@
     "smoke:import": "node scripts/smoke-import.mjs",
     "verify:geocode": "node scripts/verify-geocode.mjs",
     "smoke:users": "node scripts/smoke-users.mjs",
-    "smoke:migrate": "node scripts/smoke-migrate.mjs"
+    "smoke:migrate": "node scripts/smoke-migrate.mjs",
+    "smoke:observe": "node scripts/smoke-observe.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",
