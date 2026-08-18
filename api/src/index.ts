@@ -15,7 +15,7 @@ import {
 } from './invites'
 import { GEOCODE_CHUNK, geocode, type GeocodeRequest } from './geocode'
 import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
-import { assignTerritory } from './assign'
+import { assignProperties, assignTerritory } from './assign'
 import { readAudit } from './audit'
 import {
   createResetLink,
@@ -509,6 +509,16 @@ export default {
             cors,
           )
         }
+      }
+
+      if (path === '/api/properties/assign' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await assignProperties(env, user, {
+          propertyIds: Array.isArray(body.propertyIds) ? (body.propertyIds as string[]) : [],
+          repId: typeof body.repId === 'string' && body.repId ? body.repId : null,
+        })
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
       }
 
       if (path === '/api/territories/assign' && req.method === 'POST') {

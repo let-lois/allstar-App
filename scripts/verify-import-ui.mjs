@@ -352,6 +352,114 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await ctx.close()
 }
 
+/* ========== the office can find and move a single lead =================== */
+//
+// Before this page existed, the console could count leads and draw them on a
+// map but not answer "what happened at 1420 Cedar Bend" — and moving one house
+// to a different rep had no path at all short of re-importing.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 } })
+  const page = await ctx.newPage()
+  const leads = [
+    { id: 'p1', address1: '1420 Cedar Bend Dr', city: 'Round Rock', state: 'TX', zip: '78664',
+      lat: 30.51, lng: -97.67, status: 'new', score: 60, opportunityValue: 21000,
+      assignedRepId: 'u_rep_1', contacts: [{ id: 'c1', name: 'Ada Reyes', phone: '512-555-0101', isPrimary: true }] },
+    { id: 'p2', address1: '99 Oak Ridge Ln', city: 'Austin', state: 'TX', zip: '78701',
+      lat: 30.27, lng: -97.74, status: 'won', score: 80, opportunityValue: 30000,
+      assignedRepId: 'u_rep_2', contacts: [] },
+    { id: 'p3', address1: '5 Elm Ct', city: 'Round Rock', state: 'TX', zip: '78664',
+      lat: 30.52, lng: -97.66, status: 'new', score: 40, contacts: [] },
+  ]
+  await page.route('**/api/auth/login', json(200, { token: 'tok_admin', user: ADMIN }))
+  await page.route('**/api/users', json(200, { users: [
+    { id: 'u_rep_1', name: 'Marcus Vance', email: 'm@x.test', role: 'field_rep', active: true, pending: false },
+    { id: 'u_rep_2', name: 'Priya Raman', email: 'p@x.test', role: 'field_rep', active: true, pending: false },
+  ] }))
+  await page.route('**/api/bootstrap', json(200, { ...EMPTY_BOOTSTRAP, properties: leads, territories: [] }))
+  let movePosted = null
+  await page.route('**/api/properties/assign', async (route) => {
+    movePosted = JSON.parse(route.request().postData() || '{}')
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ assigned: movePosted.propertyIds.length }) })
+  })
+
+  await page.goto(BASE, { waitUntil: 'networkidle' })
+  await page.locator('input[type="email"]').fill(ADMIN.email)
+  await page.locator('input[autocomplete="current-password"]').fill('a-real-password')
+  await page.getByRole('button', { name: /^Sign in$/ }).click()
+  await page.waitForTimeout(1500)
+  await page.goto(`${BASE}/admin/leads`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1000)
+
+  const body = () => page.locator('body').innerText().then((t) => t.replace(/\s+/g, ' '))
+  const rowCount = () => page.locator('tbody tr').count()
+
+  ok((await rowCount()) === 3, 'every lead is listed')
+  ok(/Marcus Vance/.test(await body()), 'each lead names the rep holding it')
+  ok(/Nobody/.test(await body()), 'and an unassigned lead says so rather than showing a blank')
+  ok(/Ada Reyes/.test(await body()), 'the owner is shown, so a lead can be found by who lives there')
+
+  // Search — the thing the console could not do at all before.
+  await page.locator('input[type="search"]').fill('Cedar Bend')
+  await page.waitForTimeout(400)
+  ok((await rowCount()) === 1, 'searching an address narrows to it')
+  await page.locator('input[type="search"]').fill('78701')
+  await page.waitForTimeout(400)
+  ok((await rowCount()) === 1, 'searching a ZIP works too')
+  await page.locator('input[type="search"]').fill('')
+  await page.waitForTimeout(400)
+
+  // Filtering by rep is how an office answers "what does Priya have".
+  await page.selectOption('select', 'u_rep_2')
+  await page.waitForTimeout(400)
+  ok((await rowCount()) === 1, 'filtering by rep shows only their leads')
+  await page.selectOption('select', 'unassigned')
+  await page.waitForTimeout(400)
+  ok(
+    (await rowCount()) === 1 && /5 Elm Ct/.test(await body()),
+    'and unassigned leads can be found as a group — the ones nobody is working',
+  )
+  await page.selectOption('select', 'all')
+  await page.waitForTimeout(400)
+
+  /* ---- moving one house ---- */
+  ok(
+    (await page.getByRole('button', { name: /^Apply$/ }).count()) === 0,
+    'no bulk action is offered until something is selected',
+  )
+  await page.locator('tbody tr').filter({ hasText: '5 Elm Ct' }).locator('input[type="checkbox"]').check()
+  await page.waitForTimeout(300)
+  ok(/1 selected/.test(await body()), 'selecting a lead shows what will be acted on')
+
+  await page.locator('select').last().selectOption('u_rep_1')
+  await page.getByRole('button', { name: /^Apply$/ }).click()
+  await page.waitForTimeout(900)
+
+  ok(movePosted?.propertyIds?.length === 1, 'only the selected lead was sent')
+  ok(movePosted?.propertyIds?.[0] === 'p3', 'and it was the right one')
+  ok(movePosted?.repId === 'u_rep_1', 'to the chosen rep')
+  ok(
+    /1 lead moved to Marcus Vance/.test(await body()),
+    'the operator is told what happened, by name',
+  )
+  ok(
+    /next time their phone syncs/i.test(await body()),
+    'and that it reaches the rep on their next sync rather than instantly',
+  )
+
+  // "Select all" must not reach past what is on screen.
+  await page.locator('input[type="search"]').fill('Cedar Bend')
+  await page.waitForTimeout(400)
+  await page.locator('thead input[type="checkbox"]').check()
+  await page.waitForTimeout(300)
+  ok(
+    /1 selected/.test(await body()),
+    'select-all covers the filtered rows only, never the ones hidden by a filter',
+  )
+
+  await ctx.close()
+}
+
 /* ========== a file that isn't a CSV ====================================== */
 //
 // Reported from the field: a Windows shortcut (.lnk) was dragged in instead of
