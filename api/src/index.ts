@@ -161,27 +161,44 @@ export default {
       // about the response format shows up here rather than as a territory of
       // leads at latitude zero.
       if (path === '/api/selftest/geocode') {
+        // Accepts an address so a list can be spot-checked before importing it:
+        //   /api/selftest/geocode?address=1302+Deepwood+Dr&city=Round+Rock&state=TX&zip=78681
+        // Cheaper than discovering a whole territory won't place after uploading
+        // it. With no query it falls back to a known address and self-checks the
+        // coordinates, which is what catches a changed response format.
+        const q = url.searchParams
+        const custom = q.get('address')
         try {
           const matches = await geocode([
-            {
-              ref: 'probe',
-              address1: '1600 Pennsylvania Ave NW',
-              city: 'Washington',
-              state: 'DC',
-              zip: '20500',
-            },
+            custom
+              ? {
+                  ref: 'probe',
+                  address1: custom,
+                  city: q.get('city') ?? undefined,
+                  state: q.get('state') ?? undefined,
+                  zip: q.get('zip') ?? undefined,
+                }
+              : {
+                  ref: 'probe',
+                  address1: '1600 Pennsylvania Ave NW',
+                  city: 'Washington',
+                  state: 'DC',
+                  zip: '20500',
+                },
           ])
           const m = matches[0]
           return json(
             {
               ok: m?.status === 'match',
               parsed: m ?? null,
-              // Sanity-checked against a location we know: if these read false,
-              // the response format changed or lat/lng arrived swapped.
-              looksRight:
-                m?.status === 'match' &&
-                Math.abs((m.lat ?? 0) - 38.9) < 1 &&
-                Math.abs((m.lng ?? 0) + 77.0) < 1,
+              // Sanity-checked against a location we know: if this reads false
+              // for the default address, the response format changed or lat/lng
+              // arrived swapped. Only meaningful without a custom address.
+              looksRight: custom
+                ? undefined
+                : m?.status === 'match' &&
+                  Math.abs((m.lat ?? 0) - 38.9) < 1 &&
+                  Math.abs((m.lng ?? 0) + 77.0) < 1,
             },
             200,
             cors,

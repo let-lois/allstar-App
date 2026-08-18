@@ -19,7 +19,8 @@
     "verify:csv": "node scripts/verify-csv.mjs",
     "verify:import": "node scripts/verify-import-ui.mjs",
     "verify:route": "node scripts/verify-route.mjs",
-    "verify:firstday": "node scripts/verify-first-day.mjs"
+    "verify:firstday": "node scripts/verify-first-day.mjs",
+    "leads:sample": "node scripts/make-test-leads.mjs"
   },
   "dependencies": {
     "idb": "^8.0.0",
