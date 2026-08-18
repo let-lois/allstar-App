@@ -260,20 +260,32 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
     'a named territory shows its name rather than its id hash',
   )
 
-  // The panel header count is the thing that read 0.
-  const panelCount = await page.evaluate(() => {
-    const el = [...document.querySelectorAll('span')].find((s) => /\d+ properties$/.test(s.textContent || ''))
-    return el?.textContent?.trim() ?? null
-  })
-  ok(panelCount === '14 properties', `the map panel agrees with the table (${panelCount})`)
+  const panelCount = () =>
+    page.evaluate(() => {
+      const el = [...document.querySelectorAll('span')].find((s) =>
+        /^\d+ properties$/.test((s.textContent || '').trim()),
+      )
+      return el?.textContent?.trim() ?? null
+    })
+
+  /*
+    Rows are matched on their first cell, not on their text: every row's rep
+    dropdown contains an option reading "Unassigned", so a whole-row text filter
+    matches all of them.
+  */
+  const rowNamed = (name) =>
+    page.locator('tbody tr').filter({ has: page.locator(`td:first-child:text-is("${name}")`) })
+
+  // The count beside the map is the thing that read 0 while the table read 14.
+  await rowNamed('Unassigned').click()
+  await page.waitForTimeout(700)
+  const unassignedCount = await panelCount()
+  ok(unassignedCount === '14 properties', `the map panel agrees with the table (${unassignedCount})`)
 
   // And selecting the named territory switches the map to its three.
-  await page.getByText('Cedar Bend — August').first().click()
+  await rowNamed('Cedar Bend — August').click()
   await page.waitForTimeout(700)
-  const after = await page.evaluate(() => {
-    const el = [...document.querySelectorAll('span')].find((s) => /\d+ properties$/.test(s.textContent || ''))
-    return el?.textContent?.trim() ?? null
-  })
+  const after = await panelCount()
   ok(after === '3 properties', `selecting a territory filters the map to it (${after})`)
 
   // The rep dropdown must offer the real team, not the demo roster.
@@ -284,6 +296,57 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   ok(
     !options.includes('Dana Whitfield'),
     'demo reps are not offered on a live account — they do not work here',
+  )
+
+  /* ---- and assigning actually assigns --------------------------------- */
+  //
+  // This dropdown existed for several builds as decoration, under a footnote
+  // saying reassignment was read-only. A control that looks live and does
+  // nothing is worse than no control: an admin sets it, believes a rep has
+  // been given the patch, and the rep opens an empty app.
+  let assignPosted = null
+  await page.route('**/api/territories/assign', async (route) => {
+    assignPosted = JSON.parse(route.request().postData() || '{}')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ assigned: 14 }),
+    })
+  })
+
+  // Target the row by the name the operator reads, not by position.
+  const unassignedRow = rowNamed('Unassigned')
+  await unassignedRow.locator('select').selectOption('u_rep_1')
+  await page.waitForTimeout(900)
+
+  ok(assignPosted !== null, 'changing the rep sends an assignment')
+  ok(
+    assignPosted?.territoryId === null,
+    `the unassigned bucket goes over the wire as null, not as the internal sentinel (${assignPosted?.territoryId})`,
+  )
+  ok(assignPosted?.repId === 'u_rep_1', 'the chosen rep is sent')
+  const order = await page.evaluate(() =>
+    [...document.querySelectorAll('tbody tr td:first-child')].map((c) => c.textContent?.trim()),
+  )
+  ok(
+    order[order.length - 1] === 'Unassigned',
+    `the catch-all bucket sorts last rather than by its internal id (${order.join(' | ')})`,
+  )
+  const confirm = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+  ok(/14 leads assigned/.test(confirm), 'the operator is told how many leads moved')
+  ok(
+    /next time their phone syncs/i.test(confirm),
+    'and that it reaches the rep on their next sync rather than instantly',
+  )
+
+  // A refusal must not look like success.
+  await page.unroute('**/api/territories/assign')
+  await page.route('**/api/territories/assign', json(400, { error: 'That person is not on this team.' }))
+  await unassignedRow.locator('select').selectOption('')
+  await page.waitForTimeout(800)
+  ok(
+    /not on this team/.test((await page.locator('body').innerText()).replace(/\s+/g, ' ')),
+    'a refused assignment shows the server’s reason instead of appearing to work',
   )
 
   await ctx.close()

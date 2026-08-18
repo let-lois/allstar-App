@@ -15,6 +15,7 @@ import {
 } from './invites'
 import { GEOCODE_CHUNK, geocode, type GeocodeRequest } from './geocode'
 import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
+import { assignTerritory } from './assign'
 import { applyMutations } from './mutations'
 import { invitePage, setupPage } from './pages'
 import { bootstrap } from './read'
@@ -358,6 +359,18 @@ export default {
             cors,
           )
         }
+      }
+
+      if (path === '/api/territories/assign' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        // `null` is meaningful on both fields — it addresses the unassigned
+        // bucket, and it un-assigns a rep. Neither can be treated as "missing".
+        const result = await assignTerritory(env, user, {
+          territoryId: typeof body.territoryId === 'string' ? body.territoryId : null,
+          repId: typeof body.repId === 'string' && body.repId ? body.repId : null,
+        })
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
       }
 
       if (path === '/api/import/properties' && req.method === 'POST') {

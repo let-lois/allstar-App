@@ -239,6 +239,8 @@ export function useOutcomeMix(): { code: OutcomeCode; n: number }[] {
 export interface TerritoryRow {
   id: string
   repId?: string
+  /** Leads in this patch are split across more than one rep. */
+  mixed: boolean
   repName: string
   properties: number
   knocked: number
@@ -277,11 +279,18 @@ export function useTerritories(properties: Property[]): TerritoryRow[] {
 
     return [...map.entries()]
       .map(([id, rows]) => {
-        const repId = rows[0]?.assignedRepId
+        // Only claim an owner when every lead in the patch has the same one.
+        // Reporting the first row's rep as the territory's would show a settled
+        // answer for a split territory, and the dropdown would then silently
+        // reassign the whole thing on the next change.
+        const owners = new Set(rows.map((p) => p.assignedRepId ?? ''))
+        const repId = owners.size === 1 ? (rows[0]?.assignedRepId ?? undefined) : undefined
+        const mixed = owners.size > 1
         const knocked = rows.filter((p) => p.lastVisitAt).length
         return {
           id,
           repId,
+          mixed,
           repName: FIELD_REPS.find((r) => r.id === repId)?.name ?? 'Unassigned',
           properties: rows.length,
           knocked,
