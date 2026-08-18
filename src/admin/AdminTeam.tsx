@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AdminPage, FilterBar } from './AdminLayout'
 import { Button } from '../components/ui/Button'
 import { Chip } from '../components/ui/Chip'
@@ -9,6 +9,9 @@ import { useRepRangeRows, RANGES, type RangeKey } from './useAdminData'
 import { FIELD_REPS, DEMO_USERS } from '../data/seed'
 import { money, relative } from '../lib/format'
 import { STATUS } from './charts/tokens'
+import { InviteDialog } from './InviteDialog'
+import { apiUsers, type TeamUserDTO } from '../lib/http'
+import { liveToken } from '../lib/session'
 import type { Role } from '../types'
 
 /**
@@ -36,6 +39,15 @@ interface Member {
   phone?: string
   territory?: string
   active: boolean
+  /** Invited but hasn't set a password yet — distinct from deactivated. */
+  pending?: boolean
+}
+
+const initialsOf = (name: string) => {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 export function AdminTeam() {
@@ -43,31 +55,75 @@ export function AdminTeam() {
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all')
   const [editing, setEditing] = useState<Member | null>(null)
+  const [inviting, setInviting] = useState(false)
 
   const properties = useAppStore((s) => s.properties)
+  const territories = useAppStore((s) => s.territories)
+  const mode = useAppStore((s) => s.mode)
   const today = useTeamStats()
   const rangeRows = useRepRangeRows(range)
 
+  /*
+    On a live account the roster is the real one. The seeded version below is
+    kept for the demo, where there is no server to ask and the pitch depends on
+    a full team being visible.
+  */
+  const [live, setLive] = useState<TeamUserDTO[] | null>(null)
+  const loadRoster = useCallback(() => {
+    if (mode !== 'live') return
+    const token = liveToken()
+    if (!token) return
+    void apiUsers(token)
+      .then(({ users }) => setLive(users))
+      .catch(() => setLive([]))
+  }, [mode])
+  useEffect(loadRoster, [loadRoster])
+
   /**
-   * The roster is assembled from the reps who own territory plus the office
-   * users. A real backend would return this directly; the shape is what
-   * matters for the UI.
+   * The roster.
+   *
+   * Live: whoever actually has an account, straight from the server, including
+   * people who were invited and haven't accepted yet — "hasn't set a password"
+   * and "was switched off" look identical in a list that only has an active
+   * flag, and an admin chasing a rep who never got their link needs to tell
+   * those apart.
+   *
+   * Demo: assembled from the seed, because the pitch needs a full team and there
+   * is no server to ask.
    */
   const members = useMemo<Member[]>(() => {
-    const repRows: Member[] = FIELD_REPS.map((r) => {
-      const owned = Object.values(properties).filter((p) => p.assignedRepId === r.id)
-      const territories = [...new Set(owned.map((p) => p.territoryId).filter(Boolean))]
-      return {
-        id: r.id,
-        name: r.name,
-        initials: r.initials,
-        role: 'field_rep',
-        phone: r.phone,
-        email: `${r.name.split(' ')[0].toLowerCase()}@summitexteriors.com`,
-        territory: territories.join(', ') || undefined,
-        active: true,
-      }
-    })
+    const territoryOf = (userId: string) => {
+      const owned = Object.values(properties).filter((p) => p.assignedRepId === userId)
+      const ids = [...new Set(owned.map((p) => p.territoryId).filter(Boolean))] as string[]
+      const named = ids.map((id) => territories[id]?.name ?? id)
+      if (named.length === 0) return owned.length ? `${owned.length} unassigned leads` : undefined
+      return named.join(', ')
+    }
+
+    if (mode === 'live') {
+      return (live ?? []).map((u) => ({
+        id: u.id,
+        name: u.name,
+        initials: initialsOf(u.name),
+        role: u.role,
+        email: u.email,
+        phone: u.phone,
+        territory: territoryOf(u.id),
+        active: u.active && !u.pending,
+        pending: u.pending,
+      }))
+    }
+
+    const repRows: Member[] = FIELD_REPS.map((r) => ({
+      id: r.id,
+      name: r.name,
+      initials: r.initials,
+      role: 'field_rep' as const,
+      phone: r.phone,
+      email: `${r.name.split(' ')[0].toLowerCase()}@summitexteriors.com`,
+      territory: territoryOf(r.id),
+      active: true,
+    }))
     const office: Member[] = DEMO_USERS.filter((u) => u.role !== 'field_rep').map((u) => ({
       id: u.id,
       name: u.name,
@@ -77,7 +133,7 @@ export function AdminTeam() {
       active: true,
     }))
     return [...repRows, ...office]
-  }, [properties])
+  }, [properties, territories, mode, live])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -94,8 +150,14 @@ export function AdminTeam() {
   return (
     <AdminPage
       title="Team"
-      description={`${members.length} people · ${FIELD_REPS.length} in the field`}
-      actions={<Button size="sm">Invite user</Button>}
+      description={`${members.length} ${members.length === 1 ? 'person' : 'people'} · ${
+        members.filter((m) => m.role === 'field_rep').length
+      } in the field`}
+      actions={
+        <Button size="sm" onClick={() => setInviting(true)}>
+          Invite user
+        </Button>
+      }
     >
       <FilterBar>
         <input
@@ -170,10 +232,14 @@ export function AdminTeam() {
                         aria-hidden
                         className="h-2 w-2 rounded-full"
                         style={{
-                          backgroundColor: m.active ? STATUS.good : STATUS.warning,
+                          backgroundColor: m.pending
+                            ? STATUS.warning
+                            : m.active
+                              ? STATUS.good
+                              : STATUS.serious,
                         }}
                       />
-                      {m.active ? 'Active' : 'Invited'}
+                      {m.pending ? 'Invite pending' : m.active ? 'Active' : 'Deactivated'}
                     </span>
                   </td>
                   <td className="px-5 py-3 text-right">
@@ -190,14 +256,23 @@ export function AdminTeam() {
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <p className="p-8 text-center text-sm text-ink-mute">No one matches those filters.</p>
+          <p className="p-8 text-center text-sm text-ink-mute">
+            {members.length === 0
+              ? 'Nobody on the team yet. Invite your first rep to get started.'
+              : 'No one matches those filters.'}
+          </p>
         )}
       </div>
 
       <p className="mt-3 text-xs text-ink-mute">
-        Role changes, territory reassignment and deactivation are recorded against the
-        acting admin once the backend lands.
+        {mode === 'live'
+          ? 'Inviting works. Role changes, territory reassignment and deactivation are still read-only.'
+          : 'Demo roster. Inviting needs a live account.'}
       </p>
+
+      {inviting && (
+        <InviteDialog onClose={() => setInviting(false)} onInvited={loadRoster} />
+      )}
 
       <BottomSheet
         open={!!editing}
