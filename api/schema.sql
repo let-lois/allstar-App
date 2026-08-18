@@ -247,6 +247,33 @@ CREATE INDEX IF NOT EXISTS invites_by_user ON invites(user_id);
 
 /* --- sessions ------------------------------------------------------------ */
 
+-- Who did what to whom.
+--
+-- Two things about this table are load-bearing and easy to get wrong.
+--
+-- **The names are denormalised on purpose.** `actor_name` and `target_label`
+-- are copies taken at the time of the action, not joins. An audit record has to
+-- outlive the rows it describes — the most important entry in the log is the one
+-- that says who deleted the account you can no longer look up, and a join would
+-- render exactly that entry as two nulls.
+--
+-- **Nothing deletes from here.** There is no API path that removes a row, and
+-- `actor_id` is SET NULL rather than CASCADE so removing a user cannot take
+-- their history with them. A log that the accused can edit is not evidence.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id            TEXT PRIMARY KEY,
+  client_id     TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  actor_id      TEXT REFERENCES users(id) ON DELETE SET NULL,
+  actor_name    TEXT NOT NULL,
+  action        TEXT NOT NULL,
+  target_type   TEXT,
+  target_id     TEXT,
+  target_label  TEXT,
+  detail        TEXT,               -- JSON, action-specific
+  at            INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS audit_by_client_time ON audit_log(client_id, at DESC);
+
 -- Failed sign-in attempts, bucketed by email and by source address.
 --
 -- Password hashing is deliberately slow, which raises the cost of guessing but

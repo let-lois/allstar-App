@@ -278,6 +278,69 @@ ok(
   await page.waitForTimeout(400)
 }
 
+/* --- the activity log ----------------------------------------------------- */
+//
+// The log exists for the conversation that starts "I never did that", so what
+// matters is that a reader can settle the argument without translating event
+// names into English.
+{
+  const ENTRIES = [
+    { id: 'a1', actorName: 'Nadia Petrov', action: 'user.deleted', targetType: 'user',
+      targetLabel: 'Marcus Vance', detail: { email: 'marcus@ridgeline.test', role: 'field_rep' },
+      at: Date.now() - 60_000 },
+    { id: 'a2', actorName: 'Nadia Petrov', action: 'user.role_changed', targetType: 'user',
+      targetLabel: 'Priya Raman', detail: { from: 'field_rep', to: 'manager' }, at: Date.now() - 120_000 },
+    { id: 'a3', actorName: 'Priya Raman', action: 'user.password_set', targetType: 'user',
+      targetLabel: 'Priya Raman', detail: { self: true }, at: Date.now() - 180_000 },
+    { id: 'a4', actorName: 'Nadia Petrov', action: 'user.password_set', targetType: 'user',
+      targetLabel: 'Owen Boone', detail: { self: false }, at: Date.now() - 240_000 },
+    { id: 'a5', actorName: 'Nadia Petrov', action: 'leads.imported', targetType: 'import',
+      targetLabel: 'Cedar Bend — August', detail: { created: 50, updated: 0, rejected: 2 },
+      at: Date.now() - 300_000 },
+  ]
+  await page.route('**/api/audit*', json(200, { entries: ENTRIES }))
+  await page.goto(`${BASE}/admin/audit`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1000)
+  const log = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+
+  ok(
+    /Nadia Petrov permanently deleted Marcus Vance/.test(log),
+    'a deletion reads as a sentence, naming both people',
+  )
+  ok(
+    /changed Priya Raman from Field Rep to Manager/.test(log),
+    'a role change says what it changed from and to, in words',
+  )
+  ok(
+    /Priya Raman changed their own password/.test(log),
+    'a self-service password change is phrased as one',
+  )
+  ok(
+    /Nadia Petrov set a new password for Owen Boone/.test(log),
+    'and an admin setting someone else’s is phrased differently — the distinction is the point',
+  )
+  ok(!/user\.role_changed|user\.deleted/.test(log), 'no raw event names reach the screen')
+  ok(
+    /read-only|cannot be edited or removed/i.test(log),
+    'the page states that the log cannot be edited',
+  )
+
+  // Filters narrow the view; none of them can remove an entry from the record.
+  await page.getByRole('button', { name: /^Leads$/ }).click()
+  await page.waitForTimeout(400)
+  const leadsOnly = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+  ok(/imported leads/.test(leadsOnly), 'filtering to leads keeps the import')
+  ok(!/permanently deleted/.test(leadsOnly), 'and hides the unrelated entries')
+  await page.getByRole('button', { name: /^Everything$/ }).click()
+  await page.waitForTimeout(400)
+  ok(
+    /permanently deleted/.test((await page.locator('body').innerText()).replace(/\s+/g, ' ')),
+    'clearing the filter brings them back — filtering hides, it never deletes',
+  )
+  await page.goto(`${BASE}/admin/team`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(800)
+}
+
 /* --- a rejection is surfaced, not swallowed ------------------------------ */
 await page.unroute('**/api/invites')
 await page.route('**/api/invites', json(409, { error: 'That person already has an account.' }))

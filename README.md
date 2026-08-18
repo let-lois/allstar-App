@@ -321,6 +321,34 @@ npm run verify:invite           # the panel, including the delete confirmation
 
 Role changes are still read-only.
 
+## Schema changes apply themselves
+
+The Worker runs its own migrations on the first request after a deploy
+(`api/src/migrate.ts`). There is no console step, and no SQL to paste.
+
+That's a correctness decision more than a convenience one. The manual version is
+easy to forget, easy to run against the wrong database, and impossible for anyone
+who isn't the account owner — and its failure mode is silent: the deploy
+succeeds, the API answers, and one feature quietly doesn't work because a table
+isn't there.
+
+Three rules keep it safe. **Additive only** — nothing drops a column or a table,
+because a migration that destroys data on deploy destroys data on rollback.
+**Claimed before applied** — the ledger insert is the lock, so two isolates
+starting at once can't both run the same migration. **Never a total outage** — a
+failed migration is reported through `/api/health` rather than taking the API
+down, and the claim is released so the next deploy retries instead of skipping it.
+
+```bash
+cd api && npm run smoke:migrate
+```
+
+...runs against a database carrying the *old* schema and asserts the Worker
+brings it up to date by itself — checked through behaviour (does rate limiting
+bite, is the audit log readable) rather than by inspecting the schema, because a
+table that exists but isn't reachable from the code is no better than a missing
+one.
+
 ## Office console
 
 `/admin` is the one deliberately **desktop-first** surface. Everywhere else

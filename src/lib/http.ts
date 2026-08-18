@@ -202,6 +202,32 @@ export function apiSetActive(token: string, userId: string, active: boolean) {
   })
 }
 
+export function apiSetRole(token: string, userId: string, role: Role) {
+  return request<{ ok: true }>(`/api/users/${userId}/role`, {
+    method: 'POST',
+    body: { role },
+    token,
+  })
+}
+
+export interface AuditRowDTO {
+  id: string
+  actorName: string
+  action: string
+  targetType?: string
+  targetLabel?: string
+  detail?: Record<string, unknown>
+  at: number
+}
+
+export function apiAudit(token: string, opts: { limit?: number; before?: number } = {}) {
+  const q = new URLSearchParams()
+  if (opts.limit) q.set('limit', String(opts.limit))
+  if (opts.before) q.set('before', String(opts.before))
+  const suffix = q.toString() ? `?${q}` : ''
+  return request<{ entries: AuditRowDTO[] }>(`/api/audit${suffix}`, { token })
+}
+
 export function apiDeleteUser(token: string, userId: string) {
   return request<{ ok: true }>(`/api/users/${userId}`, { method: 'DELETE', token })
 }

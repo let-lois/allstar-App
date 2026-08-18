@@ -388,5 +388,121 @@ ok(
   )
 }
 
+/* --- role changes --------------------------------------------------------- */
+{
+  const R = { email: `roles-${stamp}@example.com`, name: 'Role Target', password: 'role-target-pass' }
+  const inv = await (
+    await api('/api/invites', {
+      method: 'POST',
+      body: JSON.stringify({ email: R.email, name: R.name, role: 'field_rep' }),
+    }, admin.token)
+  ).json()
+  await fetch(inv.url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ password: R.password }),
+  })
+  const theirs = await (await login(R.email, R.password)).json()
+  const list = await (await api('/api/users', {}, admin.token)).json()
+  const rid = list.users.find((u) => u.email === R.email).id
+
+  ok(
+    (await call(`/api/users/${rid}/role`, { method: 'POST', body: JSON.stringify({ role: 'manager' }) }))
+      .status === 200,
+    'an admin can promote a rep to manager',
+  )
+  const promoted = await (await api('/api/users', {}, admin.token)).json()
+  ok(
+    promoted.users.find((u) => u.id === rid).role === 'manager',
+    'and the change sticks',
+  )
+  ok(
+    (await api('/api/bootstrap', {}, theirs.token)).status === 401,
+    'their session is revoked — a demotion takes effect on the phone in their hand',
+  )
+
+  ok(
+    (await call(`/api/users/${rid}/role`, { method: 'POST', body: JSON.stringify({ role: 'wizard' }) }))
+      .status === 400,
+    'an unknown role is refused',
+  )
+  ok(
+    (await call(`/api/users/${admin.user.id}/role`, {
+      method: 'POST',
+      body: JSON.stringify({ role: 'field_rep' }),
+    })).status === 400,
+    'an admin cannot change their own role — that is a lockout or an escalation',
+  )
+
+  const back = await (await login(R.email, R.password)).json()
+  ok(
+    (await call(`/api/users/${admin.user.id}/role`, {
+      method: 'POST',
+      body: JSON.stringify({ role: 'field_rep' }),
+    }, back.token)).status === 403,
+    'a manager cannot change anybody’s role',
+  )
+}
+
+/* --- the audit log -------------------------------------------------------- */
+//
+// The point of this table is the conversation that starts "I never did that",
+// so the assertions are about whether the record survives and whether it says
+// enough to settle the argument.
+{
+  const audit = await (await api('/api/audit?limit=200', {}, admin.token)).json()
+  const actions = audit.entries.map((e) => e.action)
+
+  ok(actions.includes('user.invited'), 'invites are recorded')
+  ok(actions.includes('user.password_set'), 'password changes are recorded')
+  ok(actions.includes('user.deactivated'), 'removals are recorded')
+  ok(actions.includes('user.deleted'), 'deletions are recorded')
+  ok(actions.includes('user.role_changed'), 'role changes are recorded')
+  ok(actions.includes('territory.assigned'), 'lead assignment is recorded')
+
+  const del = audit.entries.find((e) => e.action === 'user.deleted')
+  ok(!!del?.actorName, 'a deletion names who did it')
+  ok(
+    del?.targetLabel === 'Managed Rep',
+    `and names who it was done to, after that account no longer exists (${del?.targetLabel})`,
+  )
+  ok(!!del?.detail?.email, 'with enough detail to identify them later')
+
+  const selfChange = audit.entries.find((e) => e.action === 'user.password_set' && e.detail?.self)
+  const adminChange = audit.entries.find(
+    (e) => e.action === 'user.password_set' && e.detail?.self === false,
+  )
+  ok(!!selfChange, 'a self-service change is marked as one')
+  ok(
+    !!adminChange,
+    'and an admin setting someone else’s password is distinguishable from it',
+  )
+
+  ok(
+    audit.entries.every((e, i) => i === 0 || audit.entries[i - 1].at >= e.at),
+    'entries come back newest first',
+  )
+
+  /* ---- who may read it ---- */
+  const anyRep = await (await login(`selfserve-${stamp}@example.com`, 'i-changed-it-myself')).json()
+  ok(
+    (await api('/api/audit', {}, anyRep.token)).status === 403,
+    'a rep cannot read the audit log',
+  )
+  ok((await api('/api/audit')).status === 401, 'and neither can an anonymous caller')
+
+  // There is no way to remove an entry. A log the accused can edit is not
+  // evidence, and the person most likely to want a row gone is its subject.
+  ok(
+    (await api('/api/audit', { method: 'DELETE' }, admin.token)).status === 404,
+    'there is no endpoint that deletes from the log',
+  )
+  const stillThere = await (await api('/api/audit?limit=200', {}, admin.token)).json()
+  ok(
+    stillThere.entries.length >= audit.entries.length,
+    'and the log only grows',
+  )
+}
+
 console.log(fails.length ? `\n${fails.length} FAILURES` : '\nuser management smoke passed')
 process.exit(fails.length ? 1 : 0)

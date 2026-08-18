@@ -1,4 +1,5 @@
 import { hashPassword, randomId } from './auth'
+import { record } from './audit'
 import type { Env, Role, SessionUser } from './types'
 
 /**
@@ -129,6 +130,14 @@ export async function createInvite(
   )
     .bind(await sha256(token), id, actor.id, now, now + INVITE_DAYS * 86_400_000)
     .run()
+
+  await record(env, actor, {
+    action: 'user.invited',
+    targetType: 'user',
+    targetId: id,
+    targetLabel: input.name,
+    detail: { email: input.email, role: input.role },
+  })
 
   return {
     url: `${origin}/invite/${token}`,
