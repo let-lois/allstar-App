@@ -202,6 +202,69 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await ctx.close()
 }
 
+/* ========== a file that isn't a CSV ====================================== */
+//
+// Reported from the field: a Windows shortcut (.lnk) was dragged in instead of
+// the file it points at. The app decoded the pointer, found a "header row" in
+// the mojibake, and showed a column mapper full of binary garbage under the
+// heading "2 rows found". No error, no way for the operator to tell whether the
+// fault was theirs or the app's.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 } })
+  const page = await signedInConsole(ctx)
+
+  const drop = async (name, bytes) => {
+    await page.locator('input[type="file"]').setInputFiles({
+      name,
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(bytes),
+    })
+    await page.waitForTimeout(500)
+    return (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+  }
+
+  // A real shell link: "L\0\0\0", the link GUID, then the path it points at.
+  const lnk = [
+    0x4c, 0x00, 0x00, 0x00, 0x01, 0x14, 0x02, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46,
+    ...Buffer.from('C:\\Users\\me\\DOWNLO~1\\TEST-L~1.CSV'),
+  ]
+  let text = await drop('test-leads.csv.lnk', lnk)
+  ok(/shortcut/i.test(text), 'a dropped shortcut is named as a shortcut')
+  ok(!/rows found/i.test(text), 'a shortcut never reports a row count')
+  ok(
+    (await page.locator('select').count()) === 0,
+    'no column mapper is shown for a file that could not be read',
+  )
+  ok(
+    (await page.locator('textarea').count()) > 0,
+    'the operator is left on the file-choosing step, able to try again',
+  )
+
+  // An .xlsx is the mistake this will hit most often — "my spreadsheet" and "my
+  // CSV" are the same thing to everyone who isn't a programmer.
+  text = await drop('leads.xlsx', [0x50, 0x4b, 0x03, 0x04, ...Buffer.from('xl/workbook.xml')])
+  ok(/excel|workbook/i.test(text), 'an Excel workbook is named as one')
+  ok(/save as/i.test(text), 'and the operator is told how to convert it')
+
+  text = await drop('report.pdf', Buffer.from('%PDF-1.7\n1 0 obj'))
+  ok(/pdf/i.test(text), 'a PDF is named as a PDF')
+
+  // And a good file still works immediately afterwards — the error state must
+  // not wedge the wizard.
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'leads.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(MESSY_CSV),
+  })
+  await page.waitForTimeout(600)
+  text = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+  ok(/4 rows found/.test(text), 'a real CSV loads straight after a rejected one')
+  ok(!/shortcut|excel|pdf/i.test(text), 'the previous error is cleared')
+
+  await ctx.close()
+}
+
 /* ========== the demo must not be able to write to a real database ======== */
 {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 } })
