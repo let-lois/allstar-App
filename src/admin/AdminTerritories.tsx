@@ -3,8 +3,7 @@ import { AdminPage } from './AdminLayout'
 import { FieldMap, fitZoom } from '../components/map/FieldMap'
 import { useAppStore } from '../store/useAppStore'
 import { UNASSIGNED_TERRITORY, inTerritory, useTerritories } from './useAdminData'
-import { FIELD_REPS } from '../data/seed'
-import { ApiError, apiAssignTerritory, apiUsers, type TeamUserDTO } from '../lib/http'
+import { ApiError, apiAssignTerritory } from '../lib/http'
 import { liveToken } from '../lib/session'
 import { moneyFull } from '../lib/format'
 import { INK, SINGLE } from './charts/tokens'
@@ -65,26 +64,14 @@ export function AdminTerritories() {
   const shown = useMemo(() => list.filter((p) => inTerritory(p, selected)), [list, selected])
 
   /*
-    The real team, not the seeded one. On a live account the demo roster is a
-    list of people who don't work here, and offering to assign a territory to
-    one of them is worse than offering nothing.
+    One roster, from the store: real on a live account, seeded in the demo.
+    Offering to assign a territory to somebody who doesn't work here is worse
+    than offering nothing.
   */
-  const [reps, setReps] = useState<TeamUserDTO[]>([])
-  useEffect(() => {
-    if (mode !== 'live') return
-    const token = liveToken()
-    if (!token) return
-    void apiUsers(token)
-      .then(({ users }) => setReps(users.filter((u) => u.active)))
-      .catch(() => {})
-  }, [mode])
-
+  const team = useAppStore((s) => s.team)
   const repOptions = useMemo(
-    () =>
-      mode === 'live'
-        ? reps.map((r) => ({ id: r.id, name: r.name }))
-        : FIELD_REPS.map((r) => ({ id: r.id, name: r.name })),
-    [mode, reps],
+    () => team.filter((m) => m.active && m.role !== 'super_admin'),
+    [team],
   )
 
   /* --- assignment ---------------------------------------------------- */

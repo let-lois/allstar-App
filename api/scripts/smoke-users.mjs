@@ -257,5 +257,136 @@ ok(
   'and fall back to unassigned rather than pointing at a person who no longer exists',
 )
 
+/* --- a rep manages their own password, without an admin ------------------ */
+//
+// Routing every forgotten password through the office is a support call for
+// something the rep can do on a doorstep in ten seconds.
+{
+  const SELF = { email: `selfserve-${stamp}@example.com`, name: 'Self Serve', password: 'first-password-here' }
+  const inv = await (
+    await api(
+      '/api/invites',
+      { method: 'POST', body: JSON.stringify({ email: SELF.email, name: SELF.name, role: 'field_rep' }) },
+      admin.token,
+    )
+  ).json()
+  await fetch(inv.url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ password: SELF.password }),
+  })
+  const me = await (await login(SELF.email, SELF.password)).json()
+
+  const CHANGED = 'i-changed-it-myself'
+  ok(
+    (await call(`/api/users/${me.user.id}/password`, {
+      method: 'POST',
+      body: JSON.stringify({ password: CHANGED }),
+    }, me.token)).status === 200,
+    'a rep can change their own password',
+  )
+  const after = await login(SELF.email, CHANGED)
+  ok(after.ok, 'and the new one works')
+
+  // A fresh session, because changing a password revokes every session that
+  // user holds — including the one that made the change. Reusing the old token
+  // here would test the revocation, not the permission.
+  const me2 = await after.json()
+  ok(
+    (await api('/api/bootstrap', {}, me.token)).status === 401,
+    'the session that changed the password is itself revoked',
+  )
+
+  // Self-service must not become a way around the permission model.
+  const other = await (await api('/api/users', {}, admin.token)).json()
+  const someoneElse = other.users.find((u) => u.email === ADMIN.email).id
+  ok(
+    (await call(`/api/users/${someoneElse}/password`, {
+      method: 'POST',
+      body: JSON.stringify({ password: 'trying-to-take-over' }),
+    }, me2.token)).status === 403,
+    'but not anyone else’s — self-service is not a permission escalation',
+  )
+  ok(
+    (await call(`/api/users/${someoneElse}`, { method: 'DELETE' }, me2.token)).status === 403,
+    'and still cannot delete anybody',
+  )
+}
+
+/* --- sign-in is rate limited --------------------------------------------- */
+//
+// Hashing is slow, which raises the cost of a guess but does not bound the
+// total. An attacker gets unlimited attempts and this Worker pays CPU for every
+// one of them.
+{
+  const TARGET = { email: `ratelimit-${stamp}@example.com`, name: 'Rate Limited', password: 'the-real-password' }
+  const inv = await (
+    await api(
+      '/api/invites',
+      { method: 'POST', body: JSON.stringify({ email: TARGET.email, name: TARGET.name, role: 'field_rep' }) },
+      admin.token,
+    )
+  ).json()
+  await fetch(inv.url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ password: TARGET.password }),
+  })
+
+  let blockedAt = null
+  for (let i = 1; i <= 12; i++) {
+    const res = await login(TARGET.email, `wrong-guess-${i}`)
+    if (res.status === 429) {
+      blockedAt = i
+      ok(!!res.headers.get('retry-after'), 'a blocked attempt says when to try again')
+      const body = await res.json()
+      ok(body.code === 'rate_limited', 'and is distinguishable from a wrong password')
+      break
+    }
+  }
+  ok(blockedAt !== null, `repeated wrong passwords are eventually refused (blocked at attempt ${blockedAt})`)
+  ok(blockedAt <= 10, `the limit bites before it costs much (attempt ${blockedAt})`)
+
+  // The correct password is refused too while blocked — otherwise the limit is
+  // trivially bypassed by the very thing it's protecting.
+  ok(
+    (await login(TARGET.email, TARGET.password)).status === 429,
+    'the block holds even for the correct password',
+  )
+
+  // But it must be per-account, not global: one rep locking themselves out
+  // cannot take the rest of the company down with them.
+  ok(
+    (await login(ADMIN.email, ADMIN.password)).ok,
+    'another account signs in normally — the limit is per account, not global',
+  )
+}
+
+/* --- a successful sign-in clears the count ------------------------------- */
+{
+  const CLEAN = { email: `clears-${stamp}@example.com`, name: 'Clears', password: 'clean-password-here' }
+  const inv = await (
+    await api(
+      '/api/invites',
+      { method: 'POST', body: JSON.stringify({ email: CLEAN.email, name: CLEAN.name, role: 'field_rep' }) },
+      admin.token,
+    )
+  ).json()
+  await fetch(inv.url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ password: CLEAN.password }),
+  })
+
+  for (let i = 0; i < 5; i++) await login(CLEAN.email, 'nope')
+  ok((await login(CLEAN.email, CLEAN.password)).ok, 'a correct password still works below the limit')
+  // Having proved who they are, the count must not still be primed against them.
+  for (let i = 0; i < 5; i++) await login(CLEAN.email, 'nope')
+  ok(
+    (await login(CLEAN.email, CLEAN.password)).ok,
+    'a successful sign-in resets the count rather than leaving it primed',
+  )
+}
+
 console.log(fails.length ? `\n${fails.length} FAILURES` : '\nuser management smoke passed')
 process.exit(fails.length ? 1 : 0)

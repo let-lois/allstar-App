@@ -11,6 +11,7 @@ import type {
   Visit,
   DailyStat,
   Territory,
+  TeamMember,
 } from '../types'
 
 /**
@@ -28,6 +29,7 @@ interface AllstarDB extends DBSchema {
   activity: { key: string; value: ActivityEvent; indexes: { 'by-at': number } }
   dailyStats: { key: string; value: DailyStat; indexes: { 'by-day': string } }
   territories: { key: string; value: Territory }
+  team: { key: string; value: TeamMember }
   outbox: { key: string; value: Mutation; indexes: { 'by-created': number } }
   meta: { key: string; value: unknown }
 }
@@ -44,13 +46,14 @@ export type StoreName =
   | 'activity'
   | 'dailyStats'
   | 'territories'
+  | 'team'
   | 'outbox'
 
 let dbPromise: Promise<IDBPDatabase<AllstarDB>> | null = null
 
 export function db(): Promise<IDBPDatabase<AllstarDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<AllstarDB>('allstar-field', 3, {
+    dbPromise = openDB<AllstarDB>('allstar-field', 4, {
       /**
        * Idempotent by design. `upgrade` runs for a first-time install *and* for
        * every version bump, so creating a store unconditionally throws
@@ -84,6 +87,9 @@ export function db(): Promise<IDBPDatabase<AllstarDB>> {
         // v3 — territory names, so the console labels a patch instead of
         // printing the hash its id is derived from.
         store('territories', 'id')
+        // v4 — the roster, so every console screen names the same people from
+        // one place instead of each fetching it and none of them caching it.
+        store('team', 'id')
         store('meta')
       },
     })

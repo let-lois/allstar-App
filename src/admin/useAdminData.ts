@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as db from '../lib/db'
 import { dayKey } from '../lib/format'
-import { FIELD_REPS } from '../data/seed'
 import { useAppStore } from '../store/useAppStore'
 import type { DailyStat, LeadStatus, OutcomeCode, Property } from '../types'
 
@@ -166,12 +165,17 @@ export interface RepRangeRow {
 /** Per-rep leaderboard over the selected range. */
 export function useRepRangeRows(range: RangeKey): RepRangeRow[] {
   const stats = useDailyStats()
+  const team = useAppStore((s) => s.team)
+  const reps = useMemo(() => team.filter((m) => m.role === 'field_rep'), [team])
   return useMemo(() => {
     const days = RANGES.find((r) => r.key === range)?.days ?? 30
     const start = dayKey(Date.now() - (days - 1) * 86_400_000)
     const inRange = stats.filter((s) => s.day >= start)
 
-    return FIELD_REPS.map((rep) => {
+    // The store's roster — real on a live account, seeded in the demo. Reading
+    // the seed here meant a live company's leaderboard listed five people who
+    // don't work there and none of the ones who do.
+    return reps.map((rep) => {
       const mine = inRange.filter((s) => s.repId === rep.id)
       const knocks = mine.reduce((a, r) => a + r.knocks, 0)
       const conversations = mine.reduce((a, r) => a + r.conversations, 0)
@@ -188,7 +192,7 @@ export function useRepRangeRows(range: RangeKey): RepRangeRow[] {
         pipelineValue: mine.reduce((a, r) => a + r.pipelineValue, 0),
       }
     }).sort((a, b) => b.sold - a.sold || b.conversations - a.conversations)
-  }, [stats, range])
+  }, [stats, range, reps])
 }
 
 /* --- property-derived views ----------------------------------------------- */
@@ -241,7 +245,6 @@ export interface TerritoryRow {
   repId?: string
   /** Leads in this patch are split across more than one rep. */
   mixed: boolean
-  repName: string
   properties: number
   knocked: number
   coverage: number
@@ -291,7 +294,6 @@ export function useTerritories(properties: Property[]): TerritoryRow[] {
           id,
           repId,
           mixed,
-          repName: FIELD_REPS.find((r) => r.id === repId)?.name ?? 'Unassigned',
           properties: rows.length,
           knocked,
           coverage: rows.length ? Math.round((knocked / rows.length) * 100) : 0,

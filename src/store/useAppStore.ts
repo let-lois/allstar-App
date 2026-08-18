@@ -11,6 +11,7 @@ import type {
   Property,
   Route,
   Task,
+  TeamMember,
   Territory,
   User,
   Visit,
@@ -21,13 +22,15 @@ import { enqueue, drain, initSync } from '../lib/sync'
 import { DEMO_USERS, FIELD_REPS } from '../data/seed'
 import { ensureFreshDemo, resetDemo } from '../lib/demo'
 import { fetchBootstrap } from '../lib/api'
-import { apiLogin, apiLogout } from '../lib/http'
+import { apiLogin, apiLogout, apiUsers } from '../lib/http'
 import { applyBootstrap, outboxPending, wipeCachedData } from '../lib/hydrate'
 import {
   clearSession,
   currentSession,
+  liveToken,
   loadSession,
   onAuthExpired,
+  initialsOf,
   saveSession,
   userFromDTO,
 } from '../lib/session'
@@ -74,6 +77,11 @@ interface AppState {
   activity: ActivityEvent[]
   /** Names for the territory ids on properties. Empty in demo mode. */
   territories: Record<string, Territory>
+  /**
+   * Everyone with an account. The real roster in live mode, the seeded team in
+   * demo mode — so every screen that names a rep reads from one place.
+   */
+  team: TeamMember[]
 
   /** The visit currently open in Visit Mode, if any. */
   activeVisitId: string | null
@@ -89,6 +97,8 @@ interface AppState {
   signInDemo: (userId: string) => Promise<void>
   /** Pull the server's view of the world down again. Live mode only. */
   refreshFromServer: () => Promise<void>
+  /** Re-read the team roster. Office roles only — a rep has no business with it. */
+  loadTeam: () => Promise<void>
   /** Demo-only: hand the next pitch a pristine dataset. */
   resetDemoData: () => Promise<void>
   signOut: () => Promise<void>
@@ -132,6 +142,35 @@ function indexById<T extends { id: string }>(rows: T[]): Record<string, T> {
   return Object.fromEntries(rows.map((r) => [r.id, r]))
 }
 
+/**
+ * The demo's roster, in the same shape the server returns.
+ *
+ * Keeping the two behind one type is what lets every screen stop asking which
+ * world it's in — the pitch shows a full team, a live account shows the real one,
+ * and neither screen needs to know.
+ */
+function seedTeam(mode: 'demo' | 'live'): TeamMember[] {
+  if (mode === 'live') return []
+  return [
+    ...FIELD_REPS.map((r) => ({
+      id: r.id,
+      name: r.name,
+      role: 'field_rep' as const,
+      phone: r.phone,
+      active: true,
+      initials: r.initials,
+    })),
+    ...DEMO_USERS.filter((u) => u.role !== 'field_rep').map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      active: true,
+      initials: u.avatarInitials,
+    })),
+  ]
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   ready: false,
   user: null,
@@ -149,6 +188,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   tasks: {},
   activity: [],
   territories: {},
+  team: [],
   activeVisitId: null,
 
   async boot() {
@@ -173,6 +213,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // yesterday's route immediately instead of a spinner.
       await get().loadLocal(session.user, 'live')
       void get().refreshFromServer()
+      void get().loadTeam()
     } else if (session?.mode === 'demo') {
       // Installs the demo on first run, and regenerates it when the calendar day
       // has rolled over so the pitch never opens to empty sections.
@@ -191,7 +232,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   /** Read whatever is cached locally into state. Shared by every entry path. */
   async loadLocal(user, mode) {
-    const [properties, routes, visits, notes, photos, appointments, tasks, activity, territories] =
+    const [
+      properties,
+      routes,
+      visits,
+      notes,
+      photos,
+      appointments,
+      tasks,
+      activity,
+      territories,
+      team,
+    ] =
       await Promise.all([
         db.all<Property>('properties'),
         db.all<Route>('routes'),
@@ -202,6 +254,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         db.all<Task>('tasks'),
         db.all<ActivityEvent>('activity'),
         db.all<Territory>('territories'),
+        db.all<TeamMember>('team'),
       ])
 
     // An in-flight visit survives an app kill — reps close the app mid-knock.
@@ -221,6 +274,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       tasks: indexById(tasks),
       activity: activity.sort((a, b) => b.at - a.at),
       territories: indexById(territories),
+      team: team.length ? team : seedTeam(mode),
       activeVisitId: openVisit?.id ?? null,
     })
   },
@@ -249,6 +303,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     await get().loadLocal(user, 'live')
+    void get().loadTeam()
     set({ sessionExpired: false })
     void get().refreshPosition()
     // Anything queued before the session lapsed can go up now.
@@ -264,6 +319,38 @@ export const useAppStore = create<AppState>((set, get) => ({
     void get().refreshPosition()
   },
 
+  async loadTeam() {
+    const state = get()
+    if (state.mode !== 'live') {
+      set({ team: seedTeam('demo') })
+      return
+    }
+    // Reps get a 403 and don't need one — asking would be a guaranteed error in
+    // the console on every boot of a field account.
+    if (state.user?.role === 'field_rep') return
+    const token = liveToken()
+    if (!token) return
+    try {
+      const { users } = await apiUsers(token)
+      const team: TeamMember[] = users.map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        phone: u.phone,
+        active: u.active,
+        pending: u.pending,
+        initials: initialsOf(u.name),
+      }))
+      await db.clear('team')
+      await db.putAll('team', team)
+      set({ team })
+    } catch {
+      // The cached roster is still on screen; a failed refresh shouldn't blank
+      // every name in the console.
+    }
+  },
+
   async refreshFromServer() {
     if (get().mode !== 'live' || get().refreshing) return
     set({ refreshing: true })
@@ -276,6 +363,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (dto) {
         await applyBootstrap(dto, hadPendingWork)
         await get().loadLocal(userFromDTO(dto.user), 'live')
+        await get().loadTeam()
       }
     } catch {
       // Offline, or the server is unhappy. The cache is still valid and the sync
@@ -326,6 +414,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       tasks: {},
       activity: [],
       territories: {},
+      team: [],
       activeVisitId: null,
     })
   },

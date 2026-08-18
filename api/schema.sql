@@ -247,6 +247,21 @@ CREATE INDEX IF NOT EXISTS invites_by_user ON invites(user_id);
 
 /* --- sessions ------------------------------------------------------------ */
 
+-- Failed sign-in attempts, bucketed by email and by source address.
+--
+-- Password hashing is deliberately slow, which raises the cost of guessing but
+-- does not bound it — a patient attacker still gets unlimited attempts, and the
+-- Worker pays the CPU for every one of them. This bounds both.
+--
+-- Buckets are rows rather than a log: one row per key, reset when its window
+-- rolls over. Nothing here needs to be kept, and a table that grows per attempt
+-- is a table that gets huge precisely when you're under attack.
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id            TEXT PRIMARY KEY,   -- 'email:<lowercased>' or 'ip:<address>'
+  window_start  INTEGER NOT NULL,
+  attempts      INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id          TEXT PRIMARY KEY,
   user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
