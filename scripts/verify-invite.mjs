@@ -165,6 +165,119 @@ ok(
   'pending is not confused with deactivated — an admin chasing a missing link needs to tell them apart',
 )
 
+/* --- managing an existing person ----------------------------------------- */
+{
+  await page.route('**/api/users/*/footprint', json(200, {
+    visits: 214, notes: 88, photos: 31, tasks: 12, appointments: 6, activity: 240,
+    assignedProperties: 50,
+  }))
+  let passwordPosted = null
+  await page.route('**/api/users/*/password', async (route) => {
+    passwordPosted = JSON.parse(route.request().postData() || '{}')
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' })
+  })
+  let activePosted = null
+  await page.route('**/api/users/*/active', async (route) => {
+    activePosted = JSON.parse(route.request().postData() || '{}')
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' })
+  })
+  let deleted = false
+  await page.route(/\/api\/users\/[^/]+$/, async (route) => {
+    if (route.request().method() !== 'DELETE') return route.fallback()
+    deleted = true
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' })
+  })
+
+  const manageRow = (name) =>
+    page.locator('tbody tr').filter({ hasText: name }).getByRole('button', { name: /Manage/ })
+
+  await manageRow('Marcus Vance').click()
+  await page.waitForTimeout(600)
+  const sheet = async () => (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+
+  /* ---- password ---- */
+  ok(/signs .* out of every device/i.test(await sheet()), 'a reset is described as ending every session')
+  const pwInput = page.locator('input[autocomplete="new-password"]')
+  await pwInput.fill('short')
+  ok(
+    await page.getByRole('button', { name: /^Set$/ }).isDisabled(),
+    'a too-short password cannot be submitted',
+  )
+  await pwInput.fill('a-proper-long-password')
+  await page.getByRole('button', { name: /^Set$/ }).click()
+  await page.waitForTimeout(700)
+  ok(passwordPosted?.password === 'a-proper-long-password', 'the new password reaches the server')
+
+  /* ---- the safer alternative is offered ---- */
+  await manageRow('Marcus Vance').click()
+  await page.waitForTimeout(600)
+  ok(
+    /never see it/i.test(await sheet()),
+    'the reset-link option says the admin never learns the password',
+  )
+
+  /* ---- deactivate is the prominent action, delete is not ---- */
+  ok(/Remove from team/.test(await sheet()), 'removing someone is offered as the ordinary action')
+  ok(
+    /work stays|visits, notes and numbers stay/i.test(await sheet()),
+    'and is described as keeping their work',
+  )
+  await page.getByRole('button', { name: /Remove from team/ }).click()
+  await page.waitForTimeout(700)
+  ok(activePosted?.active === false, 'removing someone deactivates rather than deletes')
+
+  /* ---- THE assertion: delete states what it destroys, before it happens ---- */
+  await manageRow('Marcus Vance').click()
+  await page.waitForTimeout(600)
+  await page.getByRole('button', { name: /^Delete Marcus Vance…$/ }).click()
+  await page.waitForTimeout(700)
+  const warn = await sheet()
+  ok(/591 records/.test(warn), `the real record count is shown before deleting (${warn.match(/[\d,]+ records?/)?.[0]})`)
+  ok(/214/.test(warn) && /240/.test(warn), 'broken down by kind rather than as one number')
+  ok(
+    /50 assigned leads will survive/i.test(warn),
+    'and what survives is stated too — the leads outlive the person',
+  )
+  ok(deleted === false, 'nothing was deleted merely by opening the confirmation')
+
+  const confirmBtn = page.getByRole('button', { name: /^Delete permanently$/ })
+  ok(await confirmBtn.isDisabled(), 'the confirm button is dead until the name is typed')
+  await page.locator('input').filter({ hasNot: page.locator('[type=email]') }).last().fill('Marcus')
+  await page.waitForTimeout(200)
+  ok(await confirmBtn.isDisabled(), 'a partial name is not enough')
+  await page.locator('input').filter({ hasNot: page.locator('[type=email]') }).last().fill('Marcus Vance')
+  await page.waitForTimeout(200)
+  ok(!(await confirmBtn.isDisabled()), 'the exact name enables it')
+  await confirmBtn.click()
+  await page.waitForTimeout(700)
+  ok(deleted === true, 'and then it deletes')
+}
+
+/* --- you cannot lock yourself out ---------------------------------------- */
+{
+  await page.locator('tbody tr').filter({ hasText: ADMIN.name }).getByRole('button', { name: /Manage/ }).click()
+  await page.waitForTimeout(600)
+  const own = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+  ok(
+    /can’t remove or delete your own account|cannot remove or delete your own account/i.test(own),
+    'your own account offers no remove or delete',
+  )
+  ok(
+    (await page.getByRole('button', { name: /Remove from team/ }).count()) === 0,
+    'the remove button is absent on your own row, not merely disabled',
+  )
+  ok(
+    (await page.getByRole('button', { name: /^Delete .*…$/ }).count()) === 0,
+    'and so is delete',
+  )
+  ok(
+    (await page.locator('input[autocomplete="new-password"]').count()) === 1,
+    'but you can still change your own password',
+  )
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
+}
+
 /* --- a rejection is surfaced, not swallowed ------------------------------ */
 await page.unroute('**/api/invites')
 await page.route('**/api/invites', json(409, { error: 'That person already has an account.' }))

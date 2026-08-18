@@ -16,6 +16,13 @@ import {
 import { GEOCODE_CHUNK, geocode, type GeocodeRequest } from './geocode'
 import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
 import { assignTerritory } from './assign'
+import {
+  createResetLink,
+  deleteUser,
+  footprint,
+  setActive,
+  setPassword,
+} from './users'
 import { applyMutations } from './mutations'
 import { invitePage, setupPage } from './pages'
 import { bootstrap } from './read'
@@ -49,7 +56,7 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
   if (!origin || !allowed.includes(origin)) return {}
   return {
     'access-control-allow-origin': origin,
-    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS',
     'access-control-allow-headers': 'authorization,content-type',
     'access-control-max-age': '86400',
     vary: 'origin',
@@ -332,6 +339,54 @@ export default {
           200,
           cors,
         )
+      }
+
+      /* --- account management ---------------------------------------------- */
+      //
+      // /api/users/:id/<action>. Every one of these is guarded inside the module
+      // rather than here, so the tenant and last-admin checks can't be forgotten
+      // by a future route.
+      if (path.startsWith('/api/users/')) {
+        const rest = path.slice('/api/users/'.length)
+        const [targetId, action] = rest.split('/')
+        const a = { env, actor: user, userId: targetId }
+
+        if (action === 'footprint' && req.method === 'GET') {
+          const result = await footprint(a)
+          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          return json(result, 200, cors)
+        }
+
+        if (action === 'password' && req.method === 'POST') {
+          const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+          const result = await setPassword(
+            a,
+            typeof body.password === 'string' ? body.password : '',
+          )
+          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          return json(result, 200, cors)
+        }
+
+        if (action === 'reset-link' && req.method === 'POST') {
+          // The Worker serves the page the link points at, so it carries the
+          // Worker's origin — not the app's.
+          const result = await createResetLink(a, url.origin)
+          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          return json(result, 200, cors)
+        }
+
+        if (action === 'active' && req.method === 'POST') {
+          const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+          const result = await setActive(a, body.active === true)
+          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          return json(result, 200, cors)
+        }
+
+        if (!action && req.method === 'DELETE') {
+          const result = await deleteUser(a)
+          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          return json(result, 200, cors)
+        }
       }
 
       /* --- lead import ----------------------------------------------------- */

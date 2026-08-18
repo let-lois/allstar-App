@@ -162,6 +162,50 @@ export function apiUsers(token: string) {
   return request<{ users: TeamUserDTO[] }>('/api/users', { token })
 }
 
+export interface FootprintDTO {
+  visits: number
+  notes: number
+  photos: number
+  tasks: number
+  appointments: number
+  activity: number
+  assignedProperties: number
+}
+
+/** What a permanent delete would destroy, counted before it happens. */
+export function apiFootprint(token: string, userId: string) {
+  return request<FootprintDTO>(`/api/users/${userId}/footprint`, { token })
+}
+
+export function apiSetPassword(token: string, userId: string, password: string) {
+  return request<{ ok: true }>(`/api/users/${userId}/password`, {
+    method: 'POST',
+    body: { password },
+    token,
+    // Hashing is deliberately expensive; give the Worker room.
+    timeoutMs: 30_000,
+  })
+}
+
+export function apiResetLink(token: string, userId: string) {
+  return request<{ url: string; email: string; expiresAt: number }>(
+    `/api/users/${userId}/reset-link`,
+    { method: 'POST', token },
+  )
+}
+
+export function apiSetActive(token: string, userId: string, active: boolean) {
+  return request<{ ok: true }>(`/api/users/${userId}/active`, {
+    method: 'POST',
+    body: { active },
+    token,
+  })
+}
+
+export function apiDeleteUser(token: string, userId: string) {
+  return request<{ ok: true }>(`/api/users/${userId}`, { method: 'DELETE', token })
+}
+
 export interface CreatedInviteDTO {
   url: string
   email: string
