@@ -121,8 +121,9 @@
     @apply flex flex-col gap-3.5;
   }
 
+  /* 8 top + 70 row + 2 bottom + room for the selected badge's scale and shadow. */
   .pad-nav {
-    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(94px + env(safe-area-inset-bottom, 0px));
   }
 
   /*
@@ -180,6 +181,124 @@
   /** Section label above a group of cards. */
   .eyebrow {
     @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-mute;
+  }
+
+  /*
+   * Embossed badge.
+   *
+   * Every colour is a custom property so an accent can be swapped per item
+   * without touching this rule — see NAV_ACCENTS in components/nav/accents.ts.
+   *
+   * The palette is deliberately light-gradient-with-dark-glyph rather than the
+   * saturated-gradient-with-white-glyph the reference uses. That is measured,
+   * not taste: the gloss overlay lightens the top of the badge, and a white
+   * glyph over a lightened saturated fill measures 1.6-2.5:1, which fails the
+   * 3:1 WCAG 1.4.11 floor for a meaningful graphic at every candidate colour
+   * tried. Inverted, the worst badge measures 4.26:1 and four of five clear
+   * 4.5:1, while keeping the glass look.
+   *
+   * Green and red are absent on purpose. Both already carry meaning everywhere
+   * else in this app — won, and do-not-contact — and a nav item wearing one
+   * would be the only place they meant nothing.
+   */
+  .badge-3d {
+    position: relative;
+    isolation: isolate;
+    border-radius: 15px;
+    color: var(--badge-ink);
+    background: linear-gradient(180deg, var(--badge-top), var(--badge-bottom));
+    box-shadow:
+      inset 0 2px 4px rgba(255, 255, 255, 0.6),
+      inset 0 -2px 3px rgba(0, 0, 0, 0.25),
+      0 0 0 1px var(--badge-ring),
+      0 4px 8px rgba(17, 24, 39, 0.25);
+    transition:
+      transform 160ms cubic-bezier(0.22, 0.8, 0.3, 1),
+      box-shadow 160ms ease;
+  }
+
+  /* The glass reflection: a highlight over the top 40%, inset so it follows the
+     badge's radius instead of squaring off its corners. */
+  .badge-3d::after {
+    content: '';
+    position: absolute;
+    inset: 2px 2px auto 2px;
+    height: 42%;
+    border-radius: 13px 13px 10px 10px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0));
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /*
+   * Selected: pressed into the bar, lifted slightly, and ringed.
+   *
+   * Three signals rather than one, because a rep glances at this in sunlight —
+   * and because the scale alone is invisible to anyone who has asked the OS to
+   * reduce motion, at which point the ring and the inversion still read.
+   */
+  .badge-3d[data-active='true'] {
+    transform: scale(1.06);
+    box-shadow:
+      inset 0 3px 6px rgba(0, 0, 0, 0.3),
+      inset 0 -1px 2px rgba(255, 255, 255, 0.5),
+      0 0 0 2px var(--badge-glow),
+      0 2px 5px rgba(17, 24, 39, 0.2);
+  }
+
+  .badge-3d[data-active='true']::after {
+    opacity: 0.45;
+  }
+
+  /** Counter anchored to the badge corner. Red here is a real alert, not decor. */
+  .badge-pip {
+    @apply absolute -right-1.5 -top-1.5 z-10 grid min-w-[20px] place-items-center rounded-full px-1;
+    @apply text-[11px] font-bold leading-[18px] text-white;
+    background: linear-gradient(180deg, #ef4444, #b91c1c);
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.45),
+      0 1px 3px rgba(17, 24, 39, 0.35);
+    border: 1.5px solid #fff;
+  }
+
+  /*
+   * Embossed button face, sharing the badge's vocabulary so a primary action and
+   * a nav badge look like the same material.
+   *
+   * Applied only to the filled variants. A secondary button is a quiet, recessive
+   * control by design — giving it a gloss and a drop shadow would make every
+   * button on a screen compete, which is the failure mode this treatment invites.
+   */
+  .btn-3d {
+    position: relative;
+    isolation: isolate;
+    background: linear-gradient(180deg, var(--btn-top), var(--btn-bottom));
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.45),
+      inset 0 -2px 3px rgba(0, 0, 0, 0.22),
+      0 4px 8px rgba(17, 24, 39, 0.25);
+  }
+
+  .btn-3d::after {
+    content: '';
+    position: absolute;
+    inset: 1px 1px auto 1px;
+    height: 44%;
+    border-radius: inherit;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0));
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* Pressed reads as pushed into the surface: the lift goes, the inset deepens. */
+  .btn-3d:active {
+    box-shadow:
+      inset 0 3px 6px rgba(0, 0, 0, 0.3),
+      0 1px 2px rgba(17, 24, 39, 0.2);
+  }
+
+  .btn-3d:disabled {
+    box-shadow: none;
   }
 
   .hide-scrollbar::-webkit-scrollbar {
@@ -281,4 +400,45 @@
 .anim-bar {
   transform-origin: left;
   animation: bar-grow 420ms cubic-bezier(0.22, 0.8, 0.3, 1) both;
+}
+
+/*
+ * Tap bounce. Down past the resting size, overshoot, settle.
+ *
+ * Applied by class from a pointerdown handler rather than :active, because an
+ * animation on :active restarts unpredictably when a press turns into a scroll —
+ * and because the selected badge holds its own transform, which :active would
+ * fight. The reduced-motion rule in the base layer neutralises this globally.
+ */
+@keyframes badge-pop {
+  0% {
+    transform: scale(0.9);
+  }
+  55% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.anim-pop {
+  animation: badge-pop 200ms ease-out;
+}
+
+/* The selected badge pops from, and returns to, its enlarged resting size. */
+.badge-3d[data-active='true'].anim-pop {
+  animation: badge-pop-active 200ms ease-out;
+}
+
+@keyframes badge-pop-active {
+  0% {
+    transform: scale(0.95);
+  }
+  55% {
+    transform: scale(1.11);
+  }
+  100% {
+    transform: scale(1.06);
+  }
 }

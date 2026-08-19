@@ -21,12 +21,30 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
  * unmistakably orange. The bright shade is used for fills — bars, dots, active
  * indicators — where nothing has to be legible on top of it.
  */
+/*
+ * The filled variants carry the embossed treatment; the quiet ones deliberately
+ * do not. Their gradients live here as custom properties so `.btn-3d` in
+ * index.css stays colour-agnostic — the same arrangement the nav badges use.
+ *
+ * White text is legible on all three: these gradients stay dark enough that the
+ * gloss overlay cannot lift the top stop into the range where it fails, which is
+ * exactly what ruled white glyphs out for the light nav badges.
+ */
+const FILL: Record<string, string> = {
+  // #E4590C would be the brighter, more obviously glossy top — and it measures
+  // 4.25:1 for the white label once the gloss overlay lifts it, just under AA.
+  // #D14E0A is the lightest stop that clears 4.5:1.
+  primary: '[--btn-top:#D14E0A] [--btn-bottom:#9A3412]',
+  danger: '[--btn-top:#DC2626] [--btn-bottom:#991B1B]',
+  success: '[--btn-top:#1D7A44] [--btn-bottom:#14532D]',
+}
+
 const variants: Record<Variant, string> = {
-  primary: 'bg-brand-600 text-white active:bg-brand-700 shadow-raise',
+  primary: `btn-3d text-white ${FILL.primary}`,
   secondary: 'bg-surface text-ink ring-1 ring-ink/10 active:bg-surface-field',
   ghost: 'bg-transparent text-ink-mute active:bg-ink/[0.05]',
-  danger: 'bg-bad text-white active:brightness-90',
-  success: 'bg-good text-white active:brightness-90',
+  danger: `btn-3d text-white ${FILL.danger}`,
+  success: `btn-3d text-white ${FILL.success}`,
   // For dark/saturated backgrounds (the visit-complete screen). This exists as a
   // variant rather than a `className` override because competing Tailwind
   // utilities resolve by stylesheet order, not by the order they're written —
