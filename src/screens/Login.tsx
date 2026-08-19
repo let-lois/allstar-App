@@ -163,13 +163,13 @@ export function Login() {
             {/*
               Light gradient, near-black label — the same inversion the nav
               badges use, and for the same reason: the gloss overlay lifts the
-              top of the face, and white on a lifted orange fails. #111827 over
-              this ramp measures 7.64:1 across the band the label occupies.
+              top of the face, and white on a lifted teal fails. #111827 over
+              this ramp measures 8.38:1 across the band the label occupies.
             */}
             <button
               type="submit"
               disabled={busy}
-              className="btn-3d press focusable mt-5 grid h-14 w-full place-items-center rounded-field text-[17px] font-bold text-ink [--btn-bottom:#F97316] [--btn-top:#FFC08F] disabled:opacity-60"
+              className="btn-3d press focusable mt-5 grid h-14 w-full place-items-center rounded-field text-[17px] font-bold text-ink [--btn-bottom:#07B3CA] [--btn-top:#7FE0EF] disabled:opacity-60"
             >
               {busy ? 'Signing in…' : 'Sign in'}
             </button>
@@ -207,7 +207,7 @@ export function Login() {
                       <span
                         className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-bold text-ink"
                         style={{
-                          background: 'linear-gradient(180deg, #FFD9BC, #FF9A52)',
+                          background: 'linear-gradient(180deg, #BCEFF7, #4CD3E6)',
                           boxShadow:
                             'inset 0 2px 3px rgba(255,255,255,0.65), inset 0 -2px 3px rgba(0,0,0,0.25), 0 2px 5px rgba(0,0,0,0.35)',
                         }}

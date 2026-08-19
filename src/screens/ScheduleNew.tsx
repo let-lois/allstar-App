@@ -71,7 +71,7 @@ export function ScheduleNew() {
         <Card>
           <SectionHeader title="Property" className="mb-3" />
           {selected ? (
-            <div className="flex items-center gap-3 rounded-field bg-surface-warm py-2 pl-3.5 pr-1.5">
+            <div className="flex items-center gap-3 rounded-field bg-surface-tint py-2 pl-3.5 pr-1.5">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[15px] font-semibold">{selected.address1}</p>
                 <p className="truncate text-[13px] text-ink-mute">

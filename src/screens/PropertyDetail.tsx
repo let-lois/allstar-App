@@ -131,7 +131,7 @@ export function PropertyDetail() {
           </div>
 
           {contact && (
-            <div className="mt-4 rounded-field bg-surface-warm px-3.5 py-3">
+            <div className="mt-4 rounded-field bg-surface-tint px-3.5 py-3">
               <p className="text-[15px] font-semibold">{contact.name}</p>
               <p className="mt-0.5 text-[13px] text-ink-mute">
                 {contact.relationship ?? 'Contact'}
@@ -210,7 +210,7 @@ export function PropertyDetail() {
                   return (
                     <li key={v.id} className="flex items-center gap-3">
                       <span
-                        className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-warm text-[13px]"
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[13px]"
                         aria-hidden
                       >
                         {def?.glyph ?? '·'}

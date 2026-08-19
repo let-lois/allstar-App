@@ -11,8 +11,8 @@ import {
   type LayerId,
 } from '../../lib/tiles'
 
-/** brand-500 — the one place on the map that is allowed to be orange by default. */
-const SELECTED_PIN = '#F26419'
+/** brand-500 — the one place on the map that is allowed to be teal by default. */
+const SELECTED_PIN = '#0A8296'
 
 /**
  * Touch-first map renderer.
@@ -362,7 +362,7 @@ export function FieldMap({
     : 0
 
   return (
-    <div ref={boxRef} className={`relative touch-none overflow-hidden bg-[#EFEAE4] ${className}`}>
+    <div ref={boxRef} className={`relative touch-none overflow-hidden bg-[#EDF1F3] ${className}`}>
       <svg
         width={size.w}
         height={size.h}
@@ -374,13 +374,13 @@ export function FieldMap({
         onWheel={onWheel}
       >
         {/* basemap */}
-        {/* Warm ground, white roads — the same off-white family as the app
+        {/* Cool ground, white roads — the same off-white family as the app
             background, so the map reads as part of the product rather than an
             embedded widget from somewhere else. */}
-        <rect width={size.w} height={size.h} fill="#EFEAE4" />
+        <rect width={size.w} height={size.h} fill="#EDF1F3" />
         <path d={grid.minor.join(' ')} stroke="#ffffff" strokeWidth={7} fill="none" />
         <path d={grid.major.join(' ')} stroke="#ffffff" strokeWidth={13} fill="none" />
-        <path d={grid.major.join(' ')} stroke="#E4DCD3" strokeWidth={1} fill="none" />
+        <path d={grid.major.join(' ')} stroke="#DCE3E7" strokeWidth={1} fill="none" />
 
         {/*
           Imagery, over the drawn grid rather than instead of it.
@@ -407,7 +407,7 @@ export function FieldMap({
           <>
             <path
               d={routePaths.todo}
-              stroke="#F26419"
+              stroke="#0A8296"
               strokeWidth={5}
               strokeLinecap="round"
               strokeDasharray="2 10"
@@ -416,7 +416,7 @@ export function FieldMap({
             />
             <path
               d={routePaths.done}
-              stroke={layer === 'satellite' && hasTiles ? '#F1F5F9' : '#B9AEA3'}
+              stroke={layer === 'satellite' && hasTiles ? '#F1F5F9' : '#AEB8BE'}
               strokeWidth={4}
               strokeLinecap="round"
               fill="none"

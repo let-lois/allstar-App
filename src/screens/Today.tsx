@@ -148,13 +148,13 @@ export function Today() {
             /*
               The hero card.
 
-              A cream band rather than a saturated one. There is no shade of this
-              orange that is both bright and safe to put white text on — the ramp
-              from #FF8A3D to #C2410C never clears 4.5:1 with white until it is
-              already a deep rust — and a brick-coloured bar across the top of the
+              A tinted band rather than a saturated one. There is no shade of
+              this teal that is both bright and safe to put white text on — the
+              ramp from #07B3CA to #0A6B7D never clears 4.5:1 with white until it
+              is already a deep petrol — and a saturated bar across the top of the
               first card makes the whole screen read heavy. So the band carries
-              orange *text* on a tint, and the single saturated orange on the
-              screen is the button that starts work. That is what "use the accent
+              teal *text* on a tint, and the single saturated teal on the screen
+              is the button that starts work. That is what "use the accent
               selectively" means in practice.
             */
             <Card padded={false} className="overflow-hidden" aria-label="Next property">
@@ -303,7 +303,7 @@ export function Today() {
                         className="flex min-h-[56px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-surface-field"
                       >
                         <span
-                          className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-warm text-[13px]"
+                          className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[13px]"
                           aria-hidden
                         >
                           {def?.glyph ?? '·'}

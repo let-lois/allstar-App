@@ -8,8 +8,13 @@ import type { CSSProperties } from 'react'
  * `--badge-top`, `--badge-bottom`, `--badge-ink`, `--badge-ring` and `--badge-glow`
  * and knows nothing about which route it is drawing.
  *
+ * The family is teal through blue to graphite, so the bar belongs to the app's
+ * teal accent rather than being a rainbow beside it. Each destination still gets
+ * its own hue, because a permanent colour per item is what makes the bar
+ * scannable without reading — but they are now variations on one idea.
+ *
  * Every pair is measured. A dark glyph over the band it actually occupies
- * (25%-75% of the badge height) reads between 4.26:1 and 6.62:1 against its
+ * (25%-75% of the badge height) reads between 5.01:1 and 6.62:1 against its
  * gradient, clearing the 3:1 WCAG 1.4.11 floor for a meaningful graphic with
  * room to spare; the ring sits near 3:1 against the white bar so the badge has a
  * defined edge rather than bleeding into it.
@@ -28,41 +33,39 @@ export interface Accent {
 
 export const NAV_ACCENTS: Record<string, Accent> = {
   '/today': {
-    top: '#FFD9BC',
-    bottom: '#FF9A52',
-    ink: '#7C2D12',
-    ring: '#E8A877',
-    glow: 'rgba(194, 65, 12, 0.45)',
-  },
-  '/map': {
     top: '#BCEFF7',
     bottom: '#4CD3E6',
-    ink: '#075E6B',
+    ink: '#07545F',
     ring: '#77BFCB',
-    glow: 'rgba(7, 114, 138, 0.45)',
+    glow: 'rgba(10, 107, 125, 0.45)',
   },
-  '/leads': {
-    top: '#D8D2FE',
-    bottom: '#9B8BFA',
-    // Darkened from #3F2E9E, which measured 4.26:1 — the weakest of the five.
-    // This clears 4.5:1, so the glyph passes as text rather than only as graphic.
-    ink: '#362683',
-    ring: '#A79CE0',
-    glow: 'rgba(76, 53, 194, 0.45)',
-  },
-  '/team': {
-    top: '#D8D2FE',
-    bottom: '#9B8BFA',
-    ink: '#362683',
-    ring: '#A79CE0',
-    glow: 'rgba(76, 53, 194, 0.45)',
-  },
-  '/pipeline': {
+  '/map': {
     top: '#C9E4FC',
     bottom: '#74B6F7',
     ink: '#12457F',
     ring: '#8CB4DA',
     glow: 'rgba(21, 82, 173, 0.45)',
+  },
+  '/leads': {
+    top: '#CBE6EA',
+    bottom: '#7FBCC7',
+    ink: '#0D3F49',
+    ring: '#8FB4BC',
+    glow: 'rgba(13, 63, 73, 0.45)',
+  },
+  '/team': {
+    top: '#CBE6EA',
+    bottom: '#7FBCC7',
+    ink: '#0D3F49',
+    ring: '#8FB4BC',
+    glow: 'rgba(13, 63, 73, 0.45)',
+  },
+  '/pipeline': {
+    top: '#CFD8F8',
+    bottom: '#8C9BEE',
+    ink: '#28347F',
+    ring: '#9AA3D8',
+    glow: 'rgba(40, 52, 127, 0.45)',
   },
   '/more': {
     top: '#DFE3EA',
