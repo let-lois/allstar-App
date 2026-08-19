@@ -64,13 +64,20 @@ export function Bars({ data, variant = 'single', format = String, showConversion
                 <span className="nums text-sm font-semibold text-ink">{format(d.value)}</span>
               </span>
             </div>
+            {/*
+              Depth only — the channel and the top light. The bar colours stay
+              exactly as the dataviz tokens define them, because those were
+              chosen and validated as a palette; restyling them for consistency
+              with the nav would be trading a considered decision for a
+              decorative one.
+            */}
             <div
-              className="mt-1 h-3 w-full overflow-hidden rounded-md"
+              className="sunk mt-1 h-3 w-full overflow-hidden rounded-md"
               style={{ backgroundColor: INK.grid }}
             >
               <div
                 // 4px rounded data-end, anchored to the baseline at the left.
-                className="h-full rounded-md transition-[width]"
+                className="fill-gloss h-full rounded-md transition-[width]"
                 style={{
                   width: `${Math.max(pct, d.value > 0 ? 1.5 : 0)}%`,
                   backgroundColor: color,

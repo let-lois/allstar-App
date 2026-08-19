@@ -44,7 +44,7 @@ export function StatusBadge({
 }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${tones[tone]} ${className}`}
+      className={`emboss inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${tones[tone]} ${className}`}
     >
       {dot && <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${dots[tone]}`} />}
       {children}

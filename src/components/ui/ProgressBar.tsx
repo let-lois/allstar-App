@@ -5,6 +5,9 @@
  * looks like a rendering fault. Below that it holds a minimum width so "some"
  * never renders as "none", which matters on a pipeline where one lead in a stage
  * is meaningfully different from zero.
+ *
+ * The track is recessed and the fill lit from the top, so the bar reads as
+ * something sitting in a channel rather than two flat rectangles.
  */
 export function ProgressBar({
   value,
@@ -29,7 +32,7 @@ export function ProgressBar({
 
   return (
     <div
-      className={`h-2.5 overflow-hidden rounded-full bg-ink/[0.07] ${className}`}
+      className={`sunk h-2.5 overflow-hidden rounded-full bg-ink/[0.07] ${className}`}
       role="progressbar"
       aria-valuenow={value}
       aria-valuemin={0}
@@ -37,7 +40,7 @@ export function ProgressBar({
       aria-label={label}
     >
       <div
-        className={`h-full rounded-full ${fill} ${animate ? 'anim-bar' : ''}`}
+        className={`fill-gloss h-full rounded-full ${fill} ${animate ? 'anim-bar' : ''}`}
         style={{ width: `${width}%` }}
       />
     </div>
