@@ -187,7 +187,7 @@ export function Login() {
                         </span>
                       </span>
                       {u.role === 'field_rep' && (
-                        <span className="shrink-0 rounded-full bg-brand-400/20 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-200">
+                        <span className="shrink-0 rounded-full bg-brand-400/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.06em] text-brand-200">
                           Field
                         </span>
                       )}

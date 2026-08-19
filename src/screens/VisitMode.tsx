@@ -5,6 +5,7 @@ import { OutcomeGrid } from '../components/visit/OutcomeGrid'
 import { NoteComposer } from '../components/visit/NoteComposer'
 import { PhotoStrip } from '../components/visit/PhotoStrip'
 import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
 import { OutcomePill } from '../components/ui/StatusPill'
 import { CommActions } from '../components/property/CommActions'
 import { outcomeByCode } from '../data/outcomes'
@@ -253,9 +254,15 @@ export function VisitMode() {
               <div
                 className={`h-1 rounded-full ${i <= stepIndex ? 'bg-brand-400' : 'bg-white/20'}`}
               />
+              {/*
+                11px and white/60 rather than 10px and white/40. The old pair
+                measured 3.79:1 on this header, which fails AA for text at any
+                size under 18px — and this is the one label a rep reads with the
+                sun behind them while someone waits at the door.
+              */}
               <span
-                className={`mt-1 block text-[10px] font-semibold ${
-                  i <= stepIndex ? 'text-white' : 'text-white/40'
+                className={`mt-1 block text-[11px] font-semibold ${
+                  i <= stepIndex ? 'text-white' : 'text-white/60'
                 }`}
               >
                 {s.label}
@@ -269,7 +276,7 @@ export function VisitMode() {
         {step === 'outcome' && (
           <>
             {property.lastVisitAt && (
-              <div className="card mb-3.5 flex items-center gap-3 p-4">
+              <Card className="mb-3.5 flex items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="eyebrow">Last time</p>
                   <p className="mt-1.5 flex items-center gap-2 text-[14px]">
@@ -277,7 +284,7 @@ export function VisitMode() {
                     <span className="text-ink-mute">{relative(property.lastVisitAt)}</span>
                   </p>
                 </div>
-              </div>
+              </Card>
             )}
             <h2 className="mb-3.5 text-[21px] font-bold">What happened?</h2>
             <OutcomeGrid value={visit.outcome} onChange={(c) => void chooseOutcome(c)} />
@@ -286,7 +293,7 @@ export function VisitMode() {
 
         {step === 'capture' && (
           <div className="space-y-4">
-            <div className="card px-4 py-3.5">
+            <Card className="px-4 py-3.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="eyebrow">Outcome</span>
                 <button
@@ -299,18 +306,18 @@ export function VisitMode() {
               <p className="mt-1 text-[19px] font-bold">
                 {outcomeDef?.glyph} {outcomeDef?.label}
               </p>
-            </div>
+            </Card>
 
             {contact && (
-              <div className="card p-4">
+              <Card>
                 <p className="mb-3 text-[15px] font-semibold">
                   Reach {contact.name.split(' ')[0]}
                 </p>
                 <CommActions property={property} contact={contact} compact />
-              </div>
+              </Card>
             )}
 
-            <section className="card p-4">
+            <Card as="section">
               <h2 className="mb-3 text-[15px] font-semibold">Notes</h2>
               <NoteComposer
                 body={noteBody}
@@ -318,12 +325,12 @@ export function VisitMode() {
                 onBody={setNoteBody}
                 onTags={setNoteTags}
               />
-            </section>
+            </Card>
 
-            <section className="card p-4">
+            <Card as="section">
               <h2 className="mb-3 text-[15px] font-semibold">Photos</h2>
               <PhotoStrip propertyId={property.id} visitId={visit.id} photos={photos} />
-            </section>
+            </Card>
           </div>
         )}
 
@@ -368,7 +375,7 @@ export function VisitMode() {
             </div>
 
             {nextType !== 'none' && (
-              <div className="card space-y-3.5 p-4">
+              <Card className="space-y-3.5">
                 <p className="text-[15px] font-semibold">When?</p>
                 <div className="grid grid-cols-2 gap-2.5">
                   {quickWhen().map((w) => (
@@ -410,7 +417,7 @@ export function VisitMode() {
                     at {time(nextAt)}
                   </p>
                 )}
-              </div>
+              </Card>
             )}
           </div>
         )}
