@@ -18,3 +18,9 @@ viewport-audit
 # never be a committed artifact.
 api/.wrangler
 api/seed.sql
+
+# Windows shortcut files. These are 2 KB pointers to a path on one person's
+# machine, not the file they appear to be — dragging from Explorer produces them
+# silently, and a .lnk committed in place of an asset fails in a way that is very
+# hard to read (it looks like the file is there and is simply corrupt).
+*.lnk

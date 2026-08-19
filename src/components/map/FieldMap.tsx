@@ -2,6 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Property, Route } from '../../types'
 import { project, unproject, type Position } from '../../lib/geo'
 import { STATUS_COLOR } from '../../data/outcomes'
+import {
+  LAYERS,
+  loadLayer,
+  saveLayer,
+  tilesAvailable,
+  visibleTiles,
+  type LayerId,
+} from '../../lib/tiles'
 
 /** brand-500 — the one place on the map that is allowed to be orange by default. */
 const SELECTED_PIN = '#F26419'
@@ -9,10 +17,16 @@ const SELECTED_PIN = '#F26419'
 /**
  * Touch-first map renderer.
  *
- * Deliberately self-contained: it projects and draws its own basemap instead of
- * pulling raster tiles. Two reasons, both about the field —
- *   1. it renders identically with no connection, which a tile map cannot, and
- *   2. it costs no bandwidth on a metered, one-bar connection.
+ * Draws real imagery when a tile key is configured, and its own basemap when not
+ * — in that order, layered. The drawn grid is painted first and tiles go over
+ * the top, so a tile that has not arrived (no signal, not yet cached, provider
+ * down) leaves a usable map underneath instead of a grey square. That is what
+ * keeps imagery an enhancement rather than a dependency, on a screen a rep uses
+ * at zero bars.
+ *
+ * Projection, pan/zoom and hit-testing are all local rather than delegated to a
+ * mapping library: the arithmetic is forty lines, and MapLibre would cost ~200 kB
+ * gzipped against a 47 kB bundle aimed at cheap phones.
  *
  * Controls are sized and positioned for a thumb, not a mouse pointer.
  */
@@ -76,6 +90,8 @@ export function FieldMap({
     zoom: initialZoom ?? 16,
   }))
   const [followMe, setFollowMe] = useState(true)
+  const [layer, setLayer] = useState<LayerId>(() => loadLayer())
+  const hasTiles = tilesAvailable()
 
   /* --- viewport ---------------------------------------------------------- */
 
@@ -100,6 +116,20 @@ export function FieldMap({
 
   const scale = TILE * 2 ** view.zoom
   const centerWorld = useMemo(() => project(view.lat, view.lng), [view.lat, view.lng])
+
+  const tiles = useMemo(
+    () =>
+      visibleTiles({
+        layer,
+        zoom: view.zoom,
+        centerLat: view.lat,
+        centerLng: view.lng,
+        width: size.w,
+        height: size.h,
+        scale,
+      }),
+    [layer, view.zoom, view.lat, view.lng, size.w, size.h, scale],
+  )
 
   const toScreen = useCallback(
     (lat: number, lng: number) => {
@@ -352,6 +382,26 @@ export function FieldMap({
         <path d={grid.major.join(' ')} stroke="#ffffff" strokeWidth={13} fill="none" />
         <path d={grid.major.join(' ')} stroke="#E4DCD3" strokeWidth={1} fill="none" />
 
+        {/*
+          Imagery, over the drawn grid rather than instead of it.
+
+          `preserveAspectRatio="none"` because the tile is placed at exactly its
+          projected size — letting the renderer letterbox it would introduce
+          seams. A tile that fails to load renders nothing at all, which is the
+          whole point of the ordering here: the grid shows through.
+        */}
+        {tiles.map((t) => (
+          <image
+            key={t.key}
+            href={t.url}
+            x={t.x}
+            y={t.y}
+            width={t.size + 0.5}
+            height={t.size + 0.5}
+            preserveAspectRatio="none"
+          />
+        ))}
+
         {/* route */}
         {routePaths && (
           <>
@@ -366,7 +416,7 @@ export function FieldMap({
             />
             <path
               d={routePaths.done}
-              stroke="#B9AEA3"
+              stroke={layer === 'satellite' && hasTiles ? '#F1F5F9' : '#B9AEA3'}
               strokeWidth={4}
               strokeLinecap="round"
               fill="none"
@@ -471,6 +521,25 @@ export function FieldMap({
             </button>
           </div>
 
+          {/*
+            Basemap toggle. Only rendered when imagery is actually configured —
+            a control that switches between the drawn grid and the drawn grid is
+            just a puzzle.
+          */}
+          {hasTiles && (
+            <button
+              onClick={() => {
+                const next: LayerId = layer === 'streets' ? 'satellite' : 'streets'
+                setLayer(next)
+                saveLayer(next)
+              }}
+              aria-label={`Switch to ${layer === 'streets' ? 'satellite' : 'streets'} view`}
+              className="press focusable grid h-12 w-12 place-items-center rounded-card bg-surface text-[10px] font-bold uppercase tracking-wide text-ink-soft shadow-float ring-1 ring-ink/[0.06]"
+            >
+              {layer === 'streets' ? 'SAT' : 'MAP'}
+            </button>
+          )}
+
           {/* Only offered when there's a location to go to — in the console
               there isn't, and a button that does nothing is worse than none. */}
           {position && (
@@ -502,6 +571,17 @@ export function FieldMap({
           )}
         </div>
       </div>
+
+      {/*
+        Attribution is a condition of the tile licence and of ODbL for the
+        OSM-derived data — so it lives on the map, at the bottom edge clear of the
+        thumb controls, not hidden behind a settings screen.
+      */}
+      {hasTiles && (
+        <p className="pointer-events-none absolute bottom-0 left-0 max-w-full truncate bg-white/70 px-1.5 py-0.5 text-[10px] leading-tight text-ink-soft">
+          {LAYERS[layer].attribution}
+        </p>
+      )}
 
       {overlay}
     </div>

@@ -62,6 +62,18 @@ export default {
           600: '#C2410C',
           700: '#9A3412',
         },
+        /*
+         * The company's logo teal, sampled from the artwork (#07B3CA), not
+         * eyeballed.
+         *
+         * Recorded as a token but deliberately not used as the UI accent. The
+         * interface accent stays warm orange, which is what the design brief
+         * asked for and what every shade here was measured against. A brand mark
+         * and an interface palette are allowed to differ — the mark identifies
+         * the company, the accent directs attention — and swapping one for the
+         * other would mean re-measuring contrast across the whole app.
+         */
+        logo: { DEFAULT: '#07B3CA', ink: '#06879A' },
         // Semantic, and deliberately not orange: a warning that shares the brand
         // hue stops reading as a warning.
         good: { DEFAULT: '#166534', bg: '#E8F5EC' },

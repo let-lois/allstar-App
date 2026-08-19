@@ -26,12 +26,17 @@
 /assets/*
   Cache-Control: public, max-age=300
 
-# Applied to every page. The app loads nothing from another origin — no CDN, no
-# analytics, no embedded fonts — so the policy can be strict rather than
-# aspirational. `connect-src` names the API explicitly; anything else the app
-# tried to talk to would be a bug or a compromise, and either way should fail.
+# Applied to every page. The app loads nothing from another origin except
+# basemap tiles — no CDN, no analytics, no embedded fonts — so the policy can be
+# strict rather than aspirational. `connect-src` and `img-src` name the API and
+# the tile host explicitly; anything else the app tried to talk to would be a bug
+# or a compromise, and either way should fail.
+#
+# api.maptiler.com appears in both: `img-src` for the tiles themselves, and
+# `connect-src` because the service worker fetches them to cache for offline use,
+# which is a fetch rather than an image load.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://allstar-api.josh-af6.workers.dev; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.maptiler.com; font-src 'self'; connect-src 'self' https://allstar-api.josh-af6.workers.dev https://api.maptiler.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(self), camera=(self), microphone=(self), payment=(), usb=()
