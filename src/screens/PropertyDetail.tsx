@@ -162,7 +162,7 @@ export function PropertyDetail() {
             {notes.length === 0 ? (
               <p className="text-[14px] text-ink-mute">No notes yet.</p>
             ) : (
-              <ul className="space-y-3">
+              <ul className="space-y-3.5">
                 {notes.map((n) => (
                   <li key={n.id} className="border-b border-ink/[0.06] pb-3 last:border-0 last:pb-0">
                     <p className="text-[14.5px] leading-relaxed">{n.body || '(tags only)'}</p>
@@ -204,7 +204,7 @@ export function PropertyDetail() {
             {visits.length === 0 ? (
               <p className="text-[14px] text-ink-mute">No completed visits recorded.</p>
             ) : (
-              <ul className="space-y-3">
+              <ul className="space-y-3.5">
                 {visits.map((v) => {
                   const def = outcomeByCode(v.outcome)
                   return (
@@ -239,7 +239,7 @@ export function PropertyDetail() {
             {timeline.length === 0 ? (
               <p className="text-[14px] text-ink-mute">Nothing recorded yet.</p>
             ) : (
-              <ul className="space-y-3">
+              <ul className="space-y-3.5">
                 {timeline.map((ev) => (
                   <li key={ev.id} className="flex items-start gap-3">
                     <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-ink/15" />
@@ -335,7 +335,7 @@ export function PropertyDetail() {
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs text-ink-mute">{label}</dt>
+      <dt className="text-[13px] text-ink-mute">{label}</dt>
       <dd className="font-medium">{value}</dd>
     </div>
   )

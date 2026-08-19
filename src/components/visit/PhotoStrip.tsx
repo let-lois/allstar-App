@@ -100,7 +100,7 @@ export function PhotoStrip({
                 decoding="async"
                 className="h-full w-full object-cover"
               />
-              <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3 text-left text-[10px] font-bold text-white">
+              <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-4 text-left text-[11px] font-bold text-white">
                 {cat?.label}
               </span>
               {p.pending && (
