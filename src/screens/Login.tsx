@@ -116,7 +116,7 @@ export function Login() {
                 /* 16px minimum: anything smaller makes iOS Safari zoom the page
                    on focus, and the rep then has to pinch back out to find the
                    password field. */
-                className="mt-1.5 h-14 w-full rounded-field bg-white/5 px-4 text-base text-white outline-none ring-1 ring-white/15 transition-shadow placeholder:text-ink-faint focus:ring-2 focus:ring-brand-400"
+                className="field-sunk mt-1.5 h-14 w-full rounded-field px-4 text-base text-white placeholder:text-ink-faint"
                 placeholder="you@company.com"
               />
             </label>
@@ -132,14 +132,14 @@ export function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
                   enterKeyHint="go"
-                  className="h-14 w-full rounded-field bg-white/5 pl-4 pr-[76px] text-base text-white outline-none ring-1 ring-white/15 transition-shadow placeholder:text-ink-faint focus:ring-2 focus:ring-brand-400"
+                  className="field-sunk h-14 w-full rounded-field pl-4 pr-[76px] text-base text-white placeholder:text-ink-faint"
                   placeholder="••••••••••"
                 />
                 <button
                   type="button"
                   onClick={() => setReveal((v) => !v)}
                   aria-pressed={reveal}
-                  className="focusable absolute right-1 top-1 grid h-12 w-[68px] place-items-center rounded-lg text-xs font-bold uppercase tracking-wide text-ink-faint active:bg-white/10"
+                  className="glass-dark focusable absolute right-1.5 top-1.5 grid h-11 w-[64px] place-items-center rounded-field text-xs font-bold uppercase tracking-wide text-white/80"
                 >
                   {reveal ? 'Hide' : 'Show'}
                 </button>
@@ -152,10 +152,16 @@ export function Login() {
               </p>
             )}
 
+            {/*
+              Light gradient, near-black label — the same inversion the nav
+              badges use, and for the same reason: the gloss overlay lifts the
+              top of the face, and white on a lifted orange fails. #111827 over
+              this ramp measures 7.64:1 across the band the label occupies.
+            */}
             <button
               type="submit"
               disabled={busy}
-              className="press focusable mt-5 grid h-14 w-full place-items-center rounded-field bg-brand-400 text-[17px] font-bold text-ink shadow-raise active:bg-brand-500 disabled:opacity-60"
+              className="btn-3d press focusable mt-5 grid h-14 w-full place-items-center rounded-field text-[17px] font-bold text-ink [--btn-bottom:#F97316] [--btn-top:#FFC08F] disabled:opacity-60"
             >
               {busy ? 'Signing in…' : 'Sign in'}
             </button>
@@ -174,7 +180,7 @@ export function Login() {
             <button
               type="button"
               onClick={() => setShowDemo(true)}
-              className="press focusable mt-4 grid h-14 w-full place-items-center rounded-field bg-white/5 text-[16px] font-semibold text-white ring-1 ring-white/15 active:bg-white/10"
+              className="glass-dark press focusable mt-4 grid h-14 w-full place-items-center rounded-field text-[16px] font-semibold text-white"
             >
               Try the demo
             </button>
@@ -188,9 +194,16 @@ export function Login() {
                   <li key={u.id}>
                     <button
                       onClick={() => void signInDemo(u.id)}
-                      className="press focusable flex min-h-[68px] w-full items-center gap-3 rounded-card bg-white/5 px-4 text-left ring-1 ring-white/10 active:bg-white/10"
+                      className="glass-dark press focusable flex min-h-[68px] w-full items-center gap-3 rounded-card px-4 text-left"
                     >
-                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-400 text-sm font-bold text-ink">
+                      <span
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-bold text-ink"
+                        style={{
+                          background: 'linear-gradient(180deg, #FFD9BC, #FF9A52)',
+                          boxShadow:
+                            'inset 0 2px 3px rgba(255,255,255,0.65), inset 0 -2px 3px rgba(0,0,0,0.25), 0 2px 5px rgba(0,0,0,0.35)',
+                        }}
+                      >
                         {u.avatarInitials}
                       </span>
                       <span className="min-w-0 flex-1">

@@ -301,6 +301,67 @@
     box-shadow: none;
   }
 
+  /*
+   * Glass on a dark surface — the login's counterpart to .btn-3d.
+   *
+   * The bevel has to invert: on a near-black ground a white top highlight reads
+   * as light catching a raised edge, but the *lift* has to come from a darker
+   * bottom inset rather than a drop shadow, because a drop shadow on near-black
+   * is invisible. The hairline is folded into the same box-shadow rather than
+   * left to a ring utility, which would otherwise overwrite these insets — ring
+   * and shadow share one box-shadow property in Tailwind.
+   */
+  .glass-dark {
+    position: relative;
+    isolation: isolate;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.24),
+      inset 0 -2px 4px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.1),
+      0 4px 10px rgba(0, 0, 0, 0.35);
+    transition: box-shadow 150ms ease;
+  }
+
+  .glass-dark::after {
+    content: '';
+    position: absolute;
+    inset: 1px 1px auto 1px;
+    height: 45%;
+    border-radius: inherit;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0));
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .glass-dark:active {
+    box-shadow:
+      inset 0 3px 7px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+
+  /*
+   * A field is the one control that should look pushed *into* the surface —
+   * which is what makes the raised buttons beside it read as raised. Without
+   * this the login's inputs and its buttons sit on the same visual plane and
+   * the emboss stops meaning anything.
+   */
+  .field-sunk {
+    background: rgba(0, 0, 0, 0.28);
+    box-shadow:
+      inset 0 2px 5px rgba(0, 0, 0, 0.45),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.07),
+      0 0 0 1px rgba(255, 255, 255, 0.12);
+    transition: box-shadow 150ms ease;
+  }
+
+  .field-sunk:focus {
+    outline: none;
+    box-shadow:
+      inset 0 2px 5px rgba(0, 0, 0, 0.45),
+      0 0 0 2px var(--brand-focus, #ff8a3d);
+  }
+
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
   }
