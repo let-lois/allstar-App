@@ -7,6 +7,7 @@ import { Card, SectionHeader } from '../components/ui/Card'
 import { Field } from '../components/ui/Input'
 import { Avatar } from '../components/ui/Avatar'
 import { Collapsible } from '../components/ui/Collapsible'
+import { OfflineMaps } from '../components/map/OfflineMaps'
 import { useAppStore } from '../store/useAppStore'
 import { estimateStorage } from '../lib/db'
 import { isForcedOffline, setForcedOffline } from '../lib/api'
@@ -113,6 +114,9 @@ export function More() {
               locally and uploaded when you reconnect.
             </p>
           </Collapsible>
+
+          {/* --- offline maps ---------------------------------------------- */}
+          <OfflineMaps />
 
           {/* --- outbox --------------------------------------------------- */}
           <Collapsible title="Upload queue" count={outbox.length}>

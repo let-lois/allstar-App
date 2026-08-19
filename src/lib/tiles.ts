@@ -144,3 +144,197 @@ export function saveLayer(id: LayerId) {
     /* private mode — the default is fine */
   }
 }
+
+/* --- offline prefetch ------------------------------------------------------
+ *
+ * Opportunistic caching only covers streets a rep has already looked at. What
+ * they need is the streets they are about to walk, cached before they lose
+ * signal — so this walks the tile pyramid over a bounding box and pulls it down
+ * in one deliberate action.
+ */
+
+/**
+ * Must match TILE_CACHE in public/sw.js.
+ *
+ * The worker cannot import from here, so this is the one duplicated constant in
+ * the codebase. It is duplicated rather than passed at runtime because the
+ * worker needs it during `activate`, before any page has spoken to it.
+ */
+export const TILE_CACHE = 'allstar-tiles-v1'
+
+/**
+ * Zooms worth storing.
+ *
+ * 14 frames a whole territory, 18 is close enough to tell one driveway from the
+ * next. Each level is four times the tiles of the one above it, so this range is
+ * about 85% of the total — going to 19 would roughly quadruple the download for
+ * detail a rep on a pavement does not use.
+ */
+export const PREFETCH_ZOOMS = [14, 15, 16, 17, 18]
+
+/** Rough bytes per tile, measured by layer. Satellite imagery is the heavy one. */
+const BYTES_PER_TILE: Record<LayerId, number> = { streets: 9_000, satellite: 26_000 }
+
+export interface Bounds {
+  minLat: number
+  maxLat: number
+  minLng: number
+  maxLng: number
+}
+
+/**
+ * Bounding box around a set of points, with a margin.
+ *
+ * The margin matters: a rep parks and walks, and a box drawn tight to the
+ * assigned pins has no imagery at its edges — exactly where they start.
+ */
+export function boundsOf(
+  points: { lat: number; lng: number }[],
+  marginDeg = 0.004,
+): Bounds | null {
+  if (points.length === 0) return null
+  let minLat = 90
+  let maxLat = -90
+  let minLng = 180
+  let maxLng = -180
+  for (const p of points) {
+    if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue
+    minLat = Math.min(minLat, p.lat)
+    maxLat = Math.max(maxLat, p.lat)
+    minLng = Math.min(minLng, p.lng)
+    maxLng = Math.max(maxLng, p.lng)
+  }
+  if (minLat > maxLat) return null
+  return {
+    minLat: minLat - marginDeg,
+    maxLat: maxLat + marginDeg,
+    minLng: minLng - marginDeg,
+    maxLng: maxLng + marginDeg,
+  }
+}
+
+/** Every tile URL covering `bounds` across `zooms`, for one layer. */
+export function tilesForBounds(
+  bounds: Bounds,
+  layer: LayerId,
+  zooms: number[] = PREFETCH_ZOOMS,
+): string[] {
+  if (!tilesAvailable()) return []
+  const def = LAYERS[layer]
+  const urls: string[] = []
+  const seen = new Set<string>()
+
+  for (const rawZ of zooms) {
+    const z = Math.min(rawZ, def.maxZoom)
+    const n = 2 ** z
+    const nw = project(bounds.maxLat, bounds.minLng)
+    const se = project(bounds.minLat, bounds.maxLng)
+    const x0 = Math.floor(nw.x * n)
+    const x1 = Math.floor(se.x * n)
+    // project() grows y southward, so maxLat is the smaller value.
+    const y0 = Math.max(0, Math.floor(nw.y * n))
+    const y1 = Math.min(n - 1, Math.floor(se.y * n))
+
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const wrapped = ((x % n) + n) % n
+        const key = `${z}/${wrapped}/${y}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        urls.push(def.url(z, wrapped, y))
+      }
+    }
+  }
+  return urls
+}
+
+export function estimateBytes(tileCount: number, layer: LayerId): number {
+  return tileCount * BYTES_PER_TILE[layer]
+}
+
+export interface PrefetchProgress {
+  done: number
+  total: number
+  failed: number
+}
+
+/**
+ * Download tiles into the cache the service worker reads from.
+ *
+ * Writes to Cache Storage directly rather than relying on the worker to catch
+ * the fetches, so a download still works on a first visit before any worker has
+ * taken control.
+ *
+ * Requests are made in CORS mode deliberately. An image fetch would be opaque —
+ * status unreadable — and a rep would be told their territory downloaded fine
+ * while a few hundred quota-exceeded error bodies filled the cache.
+ */
+export async function prefetchTiles(
+  urls: string[],
+  opts: {
+    onProgress?: (p: PrefetchProgress) => void
+    signal?: AbortSignal
+    concurrency?: number
+  } = {},
+): Promise<PrefetchProgress> {
+  const { onProgress, signal, concurrency = 6 } = opts
+  const cache = await caches.open(TILE_CACHE)
+  // Snapshot what is already stored once, for the same reason as cachedCount:
+  // a match() per tile inside the loop is a thousand serialised lookups.
+  const stored = new Set((await cache.keys()).map((r) => r.url))
+  const progress: PrefetchProgress = { done: 0, total: urls.length, failed: 0 }
+
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < urls.length) {
+      if (signal?.aborted) return
+      const url = urls[cursor++]
+      try {
+        // Skip anything already stored — re-downloading a territory should cost
+        // only what changed, which on a second run is nothing.
+        if (!stored.has(url)) {
+          const res = await fetch(url, { mode: 'cors', signal })
+          if (!res.ok) throw new Error(String(res.status))
+          await cache.put(url, res.clone())
+        }
+        progress.done += 1
+      } catch {
+        if (signal?.aborted) return
+        progress.failed += 1
+      }
+      onProgress?.({ ...progress })
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, worker))
+  return progress
+}
+
+/**
+ * How much of a territory is already on the device.
+ *
+ * One `keys()` call and a set intersection, rather than a `match()` per tile.
+ * The obvious version issues one IndexedDB lookup per URL — 1,159 of them for a
+ * 3.6 km territory, sequentially, every time the screen mounts, which left the
+ * count reading zero for seconds after a download had plainly finished.
+ */
+export async function cachedCount(urls: string[]): Promise<number> {
+  if (!('caches' in globalThis) || urls.length === 0) return 0
+  try {
+    const cache = await caches.open(TILE_CACHE)
+    const stored = new Set((await cache.keys()).map((r) => r.url))
+    let n = 0
+    for (const url of urls) if (stored.has(url)) n += 1
+    return n
+  } catch {
+    return 0
+  }
+}
+
+export async function clearTileCache(): Promise<void> {
+  try {
+    await caches.delete(TILE_CACHE)
+  } catch {
+    /* nothing cached, or storage unavailable */
+  }
+}
