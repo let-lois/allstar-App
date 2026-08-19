@@ -42,7 +42,7 @@ export function InAppBrowserNotice({ tone = 'light' }: { tone?: 'light' | 'dark'
     <div
       role="alert"
       className={`shrink-0 px-3 py-2.5 text-xs ${
-        tone === 'dark' ? 'bg-amber-400/15 text-amber-100' : 'bg-amber-50 text-amber-900'
+        tone === 'dark' ? 'bg-warn/15 text-[#FDE68A]' : 'bg-warn-bg text-warn'
       }`}
     >
       <div className="mx-auto flex max-w-[600px] items-start gap-2.5">
@@ -57,10 +57,10 @@ export function InAppBrowserNotice({ tone = 'light' }: { tone?: 'light' | 'dark'
             {info.platform === 'android' ? (
               <button
                 onClick={openInChromeAndroid}
-                className={`focusable min-h-tap rounded-xl px-3.5 font-semibold ${
+                className={`focusable min-h-tap rounded-field px-3.5 font-semibold ${
                   tone === 'dark'
-                    ? 'bg-amber-100 text-amber-900'
-                    : 'bg-amber-900 text-white'
+                    ? 'bg-warn-bg text-warn'
+                    : 'bg-warn text-white'
                 }`}
               >
                 Open in Chrome
@@ -68,10 +68,10 @@ export function InAppBrowserNotice({ tone = 'light' }: { tone?: 'light' | 'dark'
             ) : (
               <button
                 onClick={async () => setCopied(await copyCurrentUrl())}
-                className={`focusable min-h-tap rounded-xl px-3.5 font-semibold ${
+                className={`focusable min-h-tap rounded-field px-3.5 font-semibold ${
                   tone === 'dark'
-                    ? 'bg-amber-100 text-amber-900'
-                    : 'bg-amber-900 text-white'
+                    ? 'bg-warn-bg text-warn'
+                    : 'bg-warn text-white'
                 }`}
               >
                 {copied ? 'Link copied — paste in Safari' : 'Copy link'}
@@ -79,7 +79,7 @@ export function InAppBrowserNotice({ tone = 'light' }: { tone?: 'light' | 'dark'
             )}
             <button
               onClick={dismiss}
-              className="focusable min-h-tap rounded-xl px-3 font-semibold underline-offset-2 hover:underline"
+              className="focusable min-h-tap rounded-field px-3 font-semibold underline-offset-2 hover:underline"
             >
               Continue anyway
             </button>

@@ -50,7 +50,7 @@ export function PropertyPeek({
       </div>
 
       {(contact || property.opportunityValue) && (
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-sunk px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3 rounded-field bg-surface-sunk px-3 py-2.5">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">{contact?.name ?? 'No contact'}</p>
             <p className="truncate text-xs text-ink-mute">
@@ -59,7 +59,7 @@ export function PropertyPeek({
           </div>
           {property.opportunityValue != null && (
             <div className="shrink-0 text-right">
-              <p className="nums font-bold text-emerald-700">
+              <p className="nums font-bold text-good">
                 {moneyFull(property.opportunityValue)}
               </p>
               <p className="text-[11px] text-ink-mute">Opportunity</p>
@@ -88,7 +88,7 @@ export function PropertyPeek({
 
       <button
         onClick={() => (onOpenFull ? onOpenFull() : nav(`/property/${property.id}`))}
-        className="focusable min-h-tap w-full rounded-xl text-sm font-semibold text-brand-600 active:bg-brand-50"
+        className="focusable min-h-tap w-full rounded-field text-sm font-semibold text-brand-600 active:bg-brand-50"
       >
         View full profile
       </button>

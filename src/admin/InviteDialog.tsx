@@ -107,7 +107,7 @@ export function InviteDialog({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-float">
+      <div className="w-full max-w-lg rounded-card bg-surface p-6 shadow-float">
         {created ? (
           <>
             <h2 className="text-xl font-black">Invite ready for {created.email}</h2>
@@ -117,7 +117,7 @@ export function InviteDialog({
               choose a password, and it stops working once they do.
             </p>
 
-            <div className="mt-4 rounded-xl bg-surface-sunk p-3 ring-1 ring-slate-200">
+            <div className="mt-4 rounded-field bg-surface-sunk p-3 ring-1 ring-ink/10">
               <p className="break-all font-mono text-xs">{created.url}</p>
             </div>
 
@@ -129,7 +129,7 @@ export function InviteDialog({
                 )}&body=${encodeURIComponent(
                   `Set your password here:\n\n${created.url}\n\nThe link expires in a week.`,
                 )}`}
-                className="press focusable inline-flex min-h-tap items-center rounded-xl border border-slate-200 px-4 text-sm font-semibold"
+                className="press focusable inline-flex min-h-tap items-center rounded-field border border-ink/10 px-4 text-sm font-semibold"
               >
                 Open in email
               </a>
@@ -138,7 +138,7 @@ export function InviteDialog({
               </span>
             </div>
 
-            <div className="mt-5 flex gap-2 border-t border-slate-100 pt-4">
+            <div className="mt-5 flex gap-2 border-t border-ink/[0.06] pt-4">
               <Button variant="secondary" onClick={onClose}>
                 Done
               </Button>
@@ -171,7 +171,7 @@ export function InviteDialog({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   autoFocus
-                  className="focusable mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                  className="focusable mt-1 h-11 w-full rounded-lg border border-ink/15 px-3 text-sm"
                   placeholder="Marcus Vance"
                 />
               </label>
@@ -186,7 +186,7 @@ export function InviteDialog({
                   autoCapitalize="off"
                   autoCorrect="off"
                   spellCheck={false}
-                  className="focusable mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                  className="focusable mt-1 h-11 w-full rounded-lg border border-ink/15 px-3 text-sm"
                   placeholder="marcus@yourcompany.com"
                 />
               </label>
@@ -198,7 +198,7 @@ export function InviteDialog({
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   inputMode="tel"
-                  className="focusable mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                  className="focusable mt-1 h-11 w-full rounded-lg border border-ink/15 px-3 text-sm"
                   placeholder="(512) 555-0134"
                 />
               </label>
@@ -212,8 +212,8 @@ export function InviteDialog({
                 {roles.map((r) => (
                   <label
                     key={r}
-                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${
-                      role === r ? 'border-brand-500 bg-brand-50' : 'border-slate-200'
+                    className={`flex cursor-pointer items-start gap-3 rounded-field border p-3 ${
+                      role === r ? 'border-brand-500 bg-brand-50' : 'border-ink/10'
                     }`}
                   >
                     <input
@@ -233,12 +233,12 @@ export function InviteDialog({
             </fieldset>
 
             {error && (
-              <p role="alert" className="mt-3 text-sm font-medium text-red-700">
+              <p role="alert" className="mt-3 text-sm font-medium text-bad">
                 {error}
               </p>
             )}
 
-            <div className="mt-5 flex gap-2 border-t border-slate-100 pt-4">
+            <div className="mt-5 flex gap-2 border-t border-ink/[0.06] pt-4">
               <Button type="submit" disabled={busy}>
                 {busy ? 'Creating…' : 'Create invite'}
               </Button>

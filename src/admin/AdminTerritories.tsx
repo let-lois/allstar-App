@@ -142,7 +142,7 @@ export function AdminTerritories() {
       description={`${rows.length} territories · ${totals.properties.toLocaleString()} properties · ${moneyFull(totals.open)} open`}
     >
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
+        <div className="overflow-hidden rounded-card border border-ink/10 bg-surface">
           <table className="w-full text-sm">
             <thead className="bg-surface-sunk text-xs text-ink-mute">
               <tr>
@@ -159,8 +159,8 @@ export function AdminTerritories() {
                   key={t.id}
                   onClick={() => setSelected(t.id)}
                   aria-selected={selected === t.id}
-                  className={`cursor-pointer border-t border-slate-100 ${
-                    selected === t.id ? 'bg-brand-50' : 'hover:bg-slate-50'
+                  className={`cursor-pointer border-t border-ink/[0.06] ${
+                    selected === t.id ? 'bg-brand-50' : 'hover:bg-surface-field'
                   }`}
                 >
                   <td className="px-4 py-3 font-medium">{label(t.id)}</td>
@@ -170,7 +170,7 @@ export function AdminTerritories() {
                       disabled={mode !== 'live' || saving !== null}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => void assign(t.id, e.target.value)}
-                      className="focusable min-h-[36px] rounded-lg border border-slate-200 bg-surface px-2 text-xs disabled:opacity-60"
+                      className="focusable min-h-[36px] rounded-lg border border-ink/10 bg-surface px-2 text-xs disabled:opacity-60"
                     >
                       <option value="">{t.mixed ? 'Mixed — pick one' : 'Unassigned'}</option>
                       {repOptions.map((r) => (
@@ -197,20 +197,20 @@ export function AdminTerritories() {
                       <span className="nums text-xs font-semibold">{t.coverage}%</span>
                     </span>
                   </td>
-                  <td className="nums px-4 py-3 text-right font-semibold text-emerald-700">
+                  <td className="nums px-4 py-3 text-right font-semibold text-good">
                     {moneyFull(t.openValue)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="border-t border-slate-100 px-4 py-3 text-xs">
+          <div className="border-t border-ink/[0.06] px-4 py-3 text-xs">
             {assignError ? (
-              <p role="alert" className="font-medium text-red-700">
+              <p role="alert" className="font-medium text-bad">
                 {assignError}
               </p>
             ) : assigned ? (
-              <p role="status" className="font-medium text-emerald-700">
+              <p role="status" className="font-medium text-good">
                 {assigned} They’ll see them next time their phone syncs.
               </p>
             ) : (
@@ -223,8 +223,8 @@ export function AdminTerritories() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
-          <div className="flex items-baseline justify-between border-b border-slate-100 px-4 py-3">
+        <div className="overflow-hidden rounded-card border border-ink/10 bg-surface">
+          <div className="flex items-baseline justify-between border-b border-ink/[0.06] px-4 py-3">
             <h2 className="text-sm font-bold">
               {selected ? label(selected) : 'All territories'}
             </h2>

@@ -19,12 +19,12 @@ export function Collapsible({ title, count, defaultOpen = false, children, right
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="focusable flex min-h-tap w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-slate-50"
+        className="focusable flex min-h-tap w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-surface-field"
       >
         <span className="flex items-center gap-2 font-semibold">
           {title}
           {count != null && (
-            <span className="nums rounded-full bg-slate-100 px-2 py-0.5 text-xs text-ink-mute">
+            <span className="nums rounded-full bg-ink/[0.06] px-2 py-0.5 text-xs text-ink-mute">
               {count}
             </span>
           )}
@@ -48,7 +48,7 @@ export function Collapsible({ title, count, defaultOpen = false, children, right
           </svg>
         </span>
       </button>
-      {open && <div className="border-t border-slate-100 px-4 py-3">{children}</div>}
+      {open && <div className="border-t border-ink/[0.06] px-4 py-3">{children}</div>}
     </section>
   )
 }

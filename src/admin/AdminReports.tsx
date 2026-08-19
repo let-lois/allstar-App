@@ -109,7 +109,7 @@ export function AdminReports() {
             {r.label}
           </Chip>
         ))}
-        <span className="mx-2 h-6 w-px bg-slate-200" />
+        <span className="mx-2 h-6 w-px bg-ink/10" />
         <Chip size="sm" selected={repId === 'all'} onClick={() => setRepId('all')}>
           Whole team
         </Chip>
@@ -145,7 +145,7 @@ export function AdminReports() {
         />
       </div>
 
-      <section className="mt-4 rounded-2xl border border-slate-200 bg-surface p-5">
+      <section className="mt-4 rounded-card border border-ink/10 bg-surface p-5">
         <h2 className="text-sm font-bold">
           Daily volume{repId !== 'all' && ` — ${team.find((r) => r.id === repId)?.name ?? repId}`}
         </h2>
@@ -156,13 +156,13 @@ export function AdminReports() {
       </section>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <section className="rounded-2xl border border-slate-200 bg-surface p-5">
+        <section className="rounded-card border border-ink/10 bg-surface p-5">
           <h2 className="text-sm font-bold">Doors by rep</h2>
           <p className="mb-3 text-xs text-ink-mute">Volume over the selected range.</p>
           <Bars data={doorsByRep} variant="single" format={(v) => v.toLocaleString()} />
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-surface p-5">
+        <section className="rounded-card border border-ink/10 bg-surface p-5">
           <h2 className="text-sm font-bold">Contact rate by rep</h2>
           <p className="mb-3 text-xs text-ink-mute">
             Conversations per door — the number volume alone can hide.
@@ -171,7 +171,7 @@ export function AdminReports() {
         </section>
       </div>
 
-      <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-surface">
+      <section className="mt-4 overflow-hidden rounded-card border border-ink/10 bg-surface">
         <h2 className="px-5 pb-2 pt-4 text-sm font-bold">Full breakdown</h2>
         <table className="w-full text-sm">
           <thead className="bg-surface-sunk text-xs text-ink-mute">
@@ -188,7 +188,7 @@ export function AdminReports() {
           </thead>
           <tbody>
             {repRows.map((r) => (
-              <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50">
+              <tr key={r.id} className="border-t border-ink/[0.06] hover:bg-surface-field">
                 <td className="px-5 py-2.5 font-medium">{r.name}</td>
                 <td className="nums px-3 py-2.5 text-right">{r.knocks.toLocaleString()}</td>
                 <td className="nums px-3 py-2.5 text-right">{r.conversations}</td>
@@ -196,14 +196,14 @@ export function AdminReports() {
                 <td className="nums px-3 py-2.5 text-right">{r.appointments}</td>
                 <td className="nums px-3 py-2.5 text-right">{r.quotes}</td>
                 <td className="nums px-3 py-2.5 text-right">{r.sold}</td>
-                <td className="nums px-5 py-2.5 text-right font-semibold text-emerald-700">
+                <td className="nums px-5 py-2.5 text-right font-semibold text-good">
                   {money(r.pipelineValue)}
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-slate-200 bg-surface-sunk font-semibold">
+            <tr className="border-t-2 border-ink/10 bg-surface-sunk font-semibold">
               <td className="px-5 py-2.5">Team</td>
               <td className="nums px-3 py-2.5 text-right">
                 {repRows.reduce((a, r) => a + r.knocks, 0).toLocaleString()}
@@ -228,7 +228,7 @@ export function AdminReports() {
               <td className="nums px-3 py-2.5 text-right">
                 {repRows.reduce((a, r) => a + r.sold, 0)}
               </td>
-              <td className="nums px-5 py-2.5 text-right text-emerald-700">
+              <td className="nums px-5 py-2.5 text-right text-good">
                 {money(repRows.reduce((a, r) => a + r.pipelineValue, 0))}
               </td>
             </tr>

@@ -9,11 +9,11 @@ export function useSync(): SyncSnapshot {
 }
 
 const TONE = {
-  synced: { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', label: 'Synced' },
-  syncing: { dot: 'bg-brand-500', text: 'text-brand-700', bg: 'bg-brand-50', label: 'Syncing' },
-  pending: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50', label: 'Pending' },
-  offline: { dot: 'bg-slate-400', text: 'text-slate-700', bg: 'bg-slate-100', label: 'Offline' },
-  error: { dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50', label: 'Sync failed' },
+  synced: { dot: 'bg-good', text: 'text-good', bg: 'bg-good-bg', label: 'Synced' },
+  syncing: { dot: 'bg-brand-400', text: 'text-brand-700', bg: 'bg-brand-50', label: 'Syncing' },
+  pending: { dot: 'bg-warn', text: 'text-warn', bg: 'bg-warn-bg', label: 'Pending' },
+  offline: { dot: 'bg-ink-faint', text: 'text-ink-soft', bg: 'bg-ink/[0.06]', label: 'Offline' },
+  error: { dot: 'bg-bad', text: 'text-bad', bg: 'bg-bad-bg', label: 'Sync failed' },
 } as const
 
 /**
@@ -32,7 +32,7 @@ export function SyncBadge({ onClick }: { onClick?: () => void }) {
     <button
       onClick={onClick}
       aria-label={`Sync status: ${tone.label}${count ? `, ${count} waiting` : ''}`}
-      className={`focusable inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3 text-xs font-semibold ${tone.bg} ${tone.text}`}
+      className={`focusable inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold ${tone.bg} ${tone.text}`}
     >
       <span
         className={`h-2 w-2 rounded-full ${tone.dot} ${snap.state === 'syncing' ? 'animate-pulse' : ''}`}
@@ -50,7 +50,7 @@ export function SyncDetail() {
 
   return (
     <div className="space-y-3">
-      <div className={`flex items-center gap-3 rounded-2xl p-4 ${tone.bg}`}>
+      <div className={`flex items-center gap-3 rounded-card p-4 ${tone.bg}`}>
         <span className={`h-3 w-3 rounded-full ${tone.dot}`} />
         <div className="min-w-0 flex-1">
           <p className={`font-semibold ${tone.text}`}>{tone.label}</p>
@@ -74,7 +74,7 @@ export function SyncDetail() {
       {(snap.pending > 0 || snap.failed > 0) && (
         <button
           onClick={() => void drain()}
-          className="focusable min-h-tap w-full rounded-xl border border-slate-200 font-medium active:bg-slate-50"
+          className="focusable min-h-tap w-full rounded-field border border-ink/10 font-medium active:bg-surface-field"
         >
           Try now
         </button>
@@ -92,7 +92,7 @@ export function OfflineBanner() {
   if (snap.state !== 'offline') return null
   return (
     <div className="flex items-center gap-2 bg-ink px-4 py-1.5 text-xs font-medium text-white">
-      <span className="h-2 w-2 shrink-0 rounded-full bg-slate-400" />
+      <span className="h-2 w-2 shrink-0 rounded-full bg-ink-faint" />
       Working offline — {snap.pending} change{snap.pending === 1 ? '' : 's'} saved on this
       phone
     </div>

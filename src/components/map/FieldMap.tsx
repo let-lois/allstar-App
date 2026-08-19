@@ -3,6 +3,9 @@ import type { Property, Route } from '../../types'
 import { project, unproject, type Position } from '../../lib/geo'
 import { STATUS_COLOR } from '../../data/outcomes'
 
+/** brand-500 — the one place on the map that is allowed to be orange by default. */
+const SELECTED_PIN = '#F26419'
+
 /**
  * Touch-first map renderer.
  *
@@ -329,7 +332,7 @@ export function FieldMap({
     : 0
 
   return (
-    <div ref={boxRef} className={`relative touch-none overflow-hidden bg-[#eef1f5] ${className}`}>
+    <div ref={boxRef} className={`relative touch-none overflow-hidden bg-[#EFEAE4] ${className}`}>
       <svg
         width={size.w}
         height={size.h}
@@ -341,17 +344,20 @@ export function FieldMap({
         onWheel={onWheel}
       >
         {/* basemap */}
-        <rect width={size.w} height={size.h} fill="#eef1f5" />
+        {/* Warm ground, white roads — the same off-white family as the app
+            background, so the map reads as part of the product rather than an
+            embedded widget from somewhere else. */}
+        <rect width={size.w} height={size.h} fill="#EFEAE4" />
         <path d={grid.minor.join(' ')} stroke="#ffffff" strokeWidth={7} fill="none" />
         <path d={grid.major.join(' ')} stroke="#ffffff" strokeWidth={13} fill="none" />
-        <path d={grid.major.join(' ')} stroke="#e2e8f0" strokeWidth={1} fill="none" />
+        <path d={grid.major.join(' ')} stroke="#E4DCD3" strokeWidth={1} fill="none" />
 
         {/* route */}
         {routePaths && (
           <>
             <path
               d={routePaths.todo}
-              stroke="#2563eb"
+              stroke="#F26419"
               strokeWidth={5}
               strokeLinecap="round"
               strokeDasharray="2 10"
@@ -360,7 +366,7 @@ export function FieldMap({
             />
             <path
               d={routePaths.done}
-              stroke="#94a3b8"
+              stroke="#B9AEA3"
               strokeWidth={4}
               strokeLinecap="round"
               fill="none"
@@ -386,8 +392,8 @@ export function FieldMap({
         {/* clusters */}
         {clusters.map((c, i) => (
           <g key={`c${i}`} data-marker="cluster" data-index={i} className="cursor-pointer">
-            <circle cx={c.x} cy={c.y} r={22} fill="#0b1220" opacity={0.08} />
-            <circle cx={c.x} cy={c.y} r={19} fill="#ffffff" stroke="#0b1220" strokeWidth={1.5} />
+            <circle cx={c.x} cy={c.y} r={23} fill="#111827" opacity={0.10} />
+            <circle cx={c.x} cy={c.y} r={19} fill="#ffffff" stroke="#111827" strokeWidth={1.5} />
             <text
               x={c.x}
               y={c.y + 5}
@@ -395,7 +401,7 @@ export function FieldMap({
               className="nums"
               fontSize={14}
               fontWeight={700}
-              fill="#0b1220"
+              fill="#111827"
             >
               {c.members.length}
             </text>
@@ -405,7 +411,13 @@ export function FieldMap({
         {/* individual properties */}
         {pins.map((pin, i) => {
           const selected = pin.id === selectedId
-          const color = STATUS_COLOR[pin.property.status]
+          /*
+            Status colours the dot; selection overrides it with the brand orange.
+            Selection is a UI state rather than a property of the lead, and
+            "the same colour but bigger" is unreadable the moment the pin beside
+            it shares a status.
+          */
+          const color = selected ? SELECTED_PIN : STATUS_COLOR[pin.property.status]
           const r = selected ? 13 : 9
           return (
             <g key={pin.id} data-marker="pin" data-index={i} className="cursor-pointer">
@@ -413,7 +425,7 @@ export function FieldMap({
                   hit reliably with a thumb, so the target is decoupled from it. */}
               <circle cx={pin.x} cy={pin.y} r={22} fill="transparent" />
               {selected && (
-                <circle cx={pin.x} cy={pin.y} r={22} fill={color} opacity={0.18} />
+                <circle cx={pin.x} cy={pin.y} r={22} fill={color} opacity={0.2} />
               )}
               <circle
                 cx={pin.x}
@@ -441,19 +453,19 @@ export function FieldMap({
           className="pointer-events-auto absolute right-3 flex flex-col items-center gap-2"
           style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
         >
-          <div className="flex flex-col overflow-hidden rounded-2xl bg-surface shadow-float">
+          <div className="flex flex-col overflow-hidden rounded-card bg-surface shadow-float ring-1 ring-ink/[0.06]">
             <button
               onClick={() => setView((v) => ({ ...v, zoom: clamp(v.zoom + 1, MIN_ZOOM, MAX_ZOOM) }))}
               aria-label="Zoom in"
-              className="focusable grid h-12 w-12 place-items-center text-xl font-semibold active:bg-slate-100"
+              className="focusable grid h-12 w-12 place-items-center text-xl font-semibold text-ink-soft active:bg-ink/[0.06]"
             >
               +
             </button>
-            <span className="h-px bg-slate-200" />
+            <span className="h-px bg-ink/10" />
             <button
               onClick={() => setView((v) => ({ ...v, zoom: clamp(v.zoom - 1, MIN_ZOOM, MAX_ZOOM) }))}
               aria-label="Zoom out"
-              className="focusable grid h-12 w-12 place-items-center text-xl font-semibold active:bg-slate-100"
+              className="focusable grid h-12 w-12 place-items-center text-xl font-semibold text-ink-soft active:bg-ink/[0.06]"
             >
               −
             </button>
@@ -476,7 +488,9 @@ export function FieldMap({
             aria-label="Center on my location"
             aria-pressed={followMe}
             className={`press focusable grid h-12 w-12 place-items-center rounded-full shadow-float ${
-              followMe ? 'bg-brand-500 text-white' : 'bg-surface text-ink'
+              followMe
+                ? 'bg-brand-600 text-white'
+                : 'bg-surface text-ink-soft ring-1 ring-ink/[0.06]'
             }`}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

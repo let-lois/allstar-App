@@ -305,7 +305,7 @@ export default function AdminImport() {
       }
     >
       {mode === 'demo' && (
-        <div className="mb-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200">
+        <div className="mb-4 rounded-field bg-warn-bg p-4 text-sm text-warn ring-1 ring-warn/25">
           <p className="font-semibold">You’re in the demo.</p>
           <p className="mt-1 leading-relaxed">
             You can load a file and check the column mapping and preview here, but
@@ -318,7 +318,7 @@ export default function AdminImport() {
       <Steps stage={stage} />
 
       {error && (
-        <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm font-medium text-red-800 ring-1 ring-red-200">
+        <p role="alert" className="mb-4 rounded-field bg-bad-bg p-3 text-sm font-medium text-bad ring-1 ring-bad/25">
           {error}
         </p>
       )}
@@ -338,7 +338,7 @@ export default function AdminImport() {
                 const f = e.dataTransfer.files[0]
                 if (f) void onFile(f)
               }}
-              className="mt-4 grid place-items-center rounded-xl border-2 border-dashed border-slate-300 bg-surface-sunk p-8 text-center"
+              className="mt-4 grid place-items-center rounded-field border-2 border-dashed border-ink/15 bg-surface-sunk p-8 text-center"
             >
               <p className="text-sm text-ink-mute">Drag a file here</p>
               <Button variant="secondary" className="mt-3" onClick={() => fileInput.current?.click()}>
@@ -368,7 +368,7 @@ export default function AdminImport() {
               rows={7}
               spellCheck={false}
               placeholder={SAMPLE}
-              className="focusable mt-3 w-full rounded-xl border border-slate-300 p-3 font-mono text-xs"
+              className="focusable mt-3 w-full rounded-field border border-ink/15 p-3 font-mono text-xs"
             />
             <div className="mt-3 flex gap-2">
               <Button onClick={() => load(raw)} disabled={!raw.trim()}>
@@ -399,13 +399,13 @@ export default function AdminImport() {
           </div>
 
           {!mapping.address1 && (
-            <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">
+            <p className="mt-3 rounded-lg bg-warn-bg p-3 text-sm text-warn ring-1 ring-warn/25">
               Pick the column holding the street address — it’s the one field an import
               can’t do without.
             </p>
           )}
           {ragged > 0 && (
-            <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">
+            <p className="mt-3 rounded-lg bg-warn-bg p-3 text-sm text-warn ring-1 ring-warn/25">
               {ragged.toLocaleString()} row{ragged === 1 ? '' : 's'} had a different number
               of columns than the header. Missing values will be blank — worth a look if
               that’s unexpected.
@@ -417,14 +417,14 @@ export default function AdminImport() {
               <label key={key} className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
                   {label}
-                  {required && <span className="ml-1 text-red-600">*</span>}
+                  {required && <span className="ml-1 text-bad">*</span>}
                 </span>
                 <select
                   value={mapping[key] ?? ''}
                   onChange={(e) =>
                     setMapping((m) => ({ ...m, [key]: e.target.value || undefined }))
                   }
-                  className="focusable mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm"
+                  className="focusable mt-1 h-11 w-full rounded-lg border border-ink/15 bg-white px-2 text-sm"
                 >
                   <option value="">— not imported —</option>
                   {headers.map((h) => (
@@ -492,7 +492,7 @@ export default function AdminImport() {
                 <select
                   value={assignRepId}
                   onChange={(e) => setAssignRepId(e.target.value)}
-                  className="focusable mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm"
+                  className="focusable mt-1 h-11 w-full rounded-lg border border-ink/15 bg-white px-2 text-sm"
                 >
                   <option value="">Nobody yet — assign later</option>
                   {reps.map((r) => (
@@ -515,7 +515,7 @@ export default function AdminImport() {
                   value={territoryName}
                   onChange={(e) => setTerritoryName(e.target.value)}
                   placeholder="e.g. Cedar Bend — August"
-                  className="focusable mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                  className="focusable mt-1 h-11 w-full rounded-lg border border-ink/15 px-3 text-sm"
                 />
                 <span className="mt-1 block text-xs text-ink-mute">
                   Groups this batch so you can find and reassign it as a unit.
@@ -523,7 +523,7 @@ export default function AdminImport() {
               </label>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-ink/[0.06] pt-4">
               <Button
                 onClick={() => void runImport()}
                 disabled={busy !== null || importable.length === 0 || mode === 'demo'}
@@ -575,7 +575,7 @@ export default function AdminImport() {
               </summary>
               <ul className="mt-2 max-h-52 overflow-y-auto text-sm text-ink-mute">
                 {result.rejected.map((r) => (
-                  <li key={r.ref} className="border-b border-slate-100 py-1.5">
+                  <li key={r.ref} className="border-b border-ink/[0.06] py-1.5">
                     <span className="font-mono text-xs">{r.ref}</span> — {r.reason}
                   </li>
                 ))}
@@ -612,16 +612,16 @@ function Steps({ stage }: { stage: Stage }) {
           <span
             className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${
               i < activeIdx
-                ? 'bg-emerald-600 text-white'
+                ? 'bg-good text-white'
                 : i === activeIdx
                   ? 'bg-ink text-white'
-                  : 'bg-slate-200 text-ink-mute'
+                  : 'bg-ink/10 text-ink-mute'
             }`}
           >
             {i < activeIdx ? '✓' : i + 1}
           </span>
           <span className={i === activeIdx ? 'font-semibold' : 'text-ink-mute'}>{label}</span>
-          {i < steps.length - 1 && <span className="mx-1 text-slate-300">→</span>}
+          {i < steps.length - 1 && <span className="mx-1 text-ink-faint">→</span>}
         </li>
       ))}
     </ol>
@@ -639,14 +639,14 @@ function Tally({
 }) {
   const ring =
     tone === 'good'
-      ? 'ring-emerald-200 bg-emerald-50'
+      ? 'ring-good/25 bg-good-bg'
       : tone === 'warn'
-        ? 'ring-amber-200 bg-amber-50'
+        ? 'ring-warn/25 bg-warn-bg'
         : tone === 'bad'
-          ? 'ring-red-200 bg-red-50'
-          : 'ring-slate-200 bg-surface'
+          ? 'ring-bad/25 bg-bad-bg'
+          : 'ring-ink/10 bg-surface'
   return (
-    <div className={`rounded-xl p-4 ring-1 ${ring}`}>
+    <div className={`rounded-field p-4 ring-1 ${ring}`}>
       <p className="nums text-2xl font-black">{value.toLocaleString()}</p>
       <p className="mt-0.5 text-xs font-semibold uppercase tracking-wide text-ink-mute">{label}</p>
     </div>
@@ -673,7 +673,7 @@ function PreviewTable({ rows }: { rows: PreparedRow[] }) {
         </p>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] border-t border-slate-200 text-sm">
+        <table className="w-full min-w-[820px] border-t border-ink/10 text-sm">
           <thead className="bg-surface-sunk text-left text-xs uppercase tracking-wide text-ink-mute">
             <tr>
               <th className="px-3 py-2 font-semibold">Row</th>
@@ -689,7 +689,7 @@ function PreviewTable({ rows }: { rows: PreparedRow[] }) {
               const placed = r.lat != null && r.lng != null
               const missingAddress = !r.values.address1
               return (
-                <tr key={r.ref} className="border-b border-slate-100 last:border-0">
+                <tr key={r.ref} className="border-b border-ink/[0.06] last:border-0">
                   <td className="px-3 py-2 font-mono text-xs text-ink-mute">{r.ref}</td>
                   <td className="px-3 py-2">
                     {missingAddress ? (
@@ -715,7 +715,7 @@ function PreviewTable({ rows }: { rows: PreparedRow[] }) {
                       pin is somewhere plausible and possibly wrong.
                     */}
                     {r.partial && (
-                      <span className="block text-xs font-medium text-amber-700">
+                      <span className="block text-xs font-medium text-warn">
                         ↳ close match — check this one
                       </span>
                     )}
@@ -747,10 +747,10 @@ function PreviewTable({ rows }: { rows: PreparedRow[] }) {
 function Badge({ tone, children }: { tone: 'good' | 'warn' | 'bad'; children: React.ReactNode }) {
   const cls =
     tone === 'good'
-      ? 'bg-emerald-100 text-emerald-800'
+      ? 'bg-good-bg text-good'
       : tone === 'warn'
-        ? 'bg-amber-100 text-amber-800'
-        : 'bg-red-100 text-red-800'
+        ? 'bg-warn-bg text-warn'
+        : 'bg-bad-bg text-bad'
   return (
     <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>
       {children}

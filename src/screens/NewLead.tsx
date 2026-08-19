@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import { Field } from '../components/ui/Input'
 import { useAppStore } from '../store/useAppStore'
 import { getPosition } from '../lib/geo'
 import { uid } from '../lib/id'
@@ -73,64 +75,60 @@ export function NewLead() {
     <div className="flex min-h-0 flex-1 flex-col">
       <TopBar title="Add lead" back />
 
-      <div className="scroll-pane bg-surface-sunk p-3">
-        <div className="card space-y-4 p-4">
-          <label className="block">
-            <span className="text-sm font-semibold">Address</span>
-            <input
+      <div className="scroll-pane bg-surface-sunk px-4 py-4">
+        <div className="content-col">
+          <Card className="space-y-4">
+            <Field
+              label="Address"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               autoFocus
               autoComplete="street-address"
               enterKeyHint="next"
               placeholder="123 Main Street"
-              className="focusable mt-1 min-h-[52px] w-full rounded-xl border border-slate-200 px-3 text-base"
             />
-          </label>
 
-          <label className="block">
-            <span className="text-sm font-semibold">
-              Contact name <span className="font-normal text-ink-mute">(optional)</span>
-            </span>
-            <input
+            <Field
+              label="Contact name"
+              hint="Optional — you can add it during the visit."
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
-              className="focusable mt-1 min-h-[52px] w-full rounded-xl border border-slate-200 px-3 text-base"
             />
-          </label>
 
-          <label className="block">
-            <span className="text-sm font-semibold">
-              Phone <span className="font-normal text-ink-mute">(optional)</span>
-            </span>
-            <input
+            <Field
+              label="Phone"
+              hint="Optional."
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               type="tel"
               inputMode="tel"
               autoComplete="tel"
               enterKeyHint="done"
-              className="focusable mt-1 min-h-[52px] w-full rounded-xl border border-slate-200 px-3 text-base"
             />
-          </label>
 
-          <div className="rounded-xl bg-surface-sunk p-3 text-sm">
-            <p className="font-semibold">Location</p>
-            <p className="nums mt-0.5 text-xs text-ink-mute">
-              {locating
-                ? 'Getting your position…'
-                : coords
-                  ? `Pinned at ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
-                  : 'Location unavailable — enable location to drop a pin.'}
-            </p>
-          </div>
+            {/*
+              Read-only, and stated rather than silent: the pin is the one field
+              the rep can't correct by typing, so if GPS hasn't answered yet they
+              need to see that before the save button refuses them.
+            */}
+            <div className="rounded-field bg-surface-warm px-3.5 py-3">
+              <p className="eyebrow">Location</p>
+              <p className="nums mt-1 text-[13px] text-ink-soft">
+                {locating
+                  ? 'Getting your position…'
+                  : coords
+                    ? `Pinned at ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
+                    : 'Location unavailable — enable location to drop a pin.'}
+              </p>
+            </div>
+          </Card>
         </div>
       </div>
 
       <div
-        className="shrink-0 border-t border-slate-200 bg-surface px-4 pt-3"
-        style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
+        className="shrink-0 bg-surface px-4 pt-3.5 shadow-nav"
+        style={{ paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))' }}
       >
         <Button
           size="lg"

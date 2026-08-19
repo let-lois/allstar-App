@@ -130,12 +130,12 @@ export default function AdminLeads() {
           }}
           type="search"
           placeholder="Search address, city, ZIP or owner"
-          className="focusable min-h-[40px] w-72 rounded-xl border border-slate-200 px-3 text-sm"
+          className="focusable min-h-[40px] w-72 rounded-field border border-ink/10 px-3 text-sm"
         />
         <select
           value={repFilter}
           onChange={(e) => setRepFilter(e.target.value)}
-          className="focusable min-h-[40px] rounded-xl border border-slate-200 bg-surface px-2 text-sm"
+          className="focusable min-h-[40px] rounded-field border border-ink/10 bg-surface px-2 text-sm"
         >
           <option value="all">Everyone</option>
           <option value="unassigned">Unassigned</option>
@@ -148,7 +148,7 @@ export default function AdminLeads() {
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
-          className="focusable min-h-[40px] rounded-xl border border-slate-200 bg-surface px-2 text-sm"
+          className="focusable min-h-[40px] rounded-field border border-ink/10 bg-surface px-2 text-sm"
         >
           <option value="address">By address</option>
           <option value="recent">Most recently visited</option>
@@ -169,12 +169,12 @@ export default function AdminLeads() {
       </FilterBar>
 
       {notice && (
-        <p role="status" className="mb-3 rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-800">
+        <p role="status" className="mb-3 rounded-field bg-good-bg p-3 text-sm font-medium text-good">
           {notice} They’ll see it next time their phone syncs.
         </p>
       )}
       {error && (
-        <p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm font-medium text-red-800">
+        <p role="alert" className="mb-3 rounded-field bg-bad-bg p-3 text-sm font-medium text-bad">
           {error}
         </p>
       )}
@@ -182,14 +182,14 @@ export default function AdminLeads() {
       {/* Only appears once something is selected — a permanently visible bulk
           bar is a permanently available way to move the wrong things. */}
       {selected.size > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl bg-brand-50 p-3 ring-1 ring-brand-200">
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-field bg-brand-50 p-3 ring-1 ring-brand-200">
           <span className="text-sm font-semibold">
             {selected.size.toLocaleString()} selected
           </span>
           <select
             value={assignTo}
             onChange={(e) => setAssignTo(e.target.value)}
-            className="focusable min-h-[38px] rounded-lg border border-slate-300 bg-surface px-2 text-sm"
+            className="focusable min-h-[38px] rounded-lg border border-ink/15 bg-surface px-2 text-sm"
           >
             <option value="">Unassign</option>
             {reps.map((r) => (
@@ -213,7 +213,7 @@ export default function AdminLeads() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-surface">
+      <div className="overflow-x-auto rounded-card border border-ink/10 bg-surface">
         <table className="w-full min-w-[880px] text-sm">
           <thead className="bg-surface-sunk text-xs text-ink-mute">
             <tr>
@@ -297,7 +297,7 @@ function Row({
 }) {
   const outcome = p.lastOutcome ? outcomeByCode(p.lastOutcome) : undefined
   return (
-    <tr className={`border-t border-slate-100 ${checked ? 'bg-brand-50' : 'hover:bg-slate-50'}`}>
+    <tr className={`border-t border-ink/[0.06] ${checked ? 'bg-brand-50' : 'hover:bg-surface-field'}`}>
       <td className="px-3 py-2.5">
         <input
           type="checkbox"
@@ -331,7 +331,7 @@ function Row({
         {outcome && <span className="block text-xs text-ink-mute">{outcome.label}</span>}
       </td>
       <td className="px-3 py-2.5">
-        {repName ?? <span className="text-amber-700">Nobody</span>}
+        {repName ?? <span className="text-warn">Nobody</span>}
       </td>
       <td className="px-3 py-2.5 text-ink-mute">{territoryName}</td>
       <td className="nums px-3 py-2.5 text-right">

@@ -101,7 +101,16 @@ export function App() {
       <OfflineBanner />
       <div className="flex min-h-0 flex-1">
         {!inConsole && <SideRail role={user.role} />}
-        <main className="flex min-h-0 flex-1 flex-col">
+        {/*
+          `min-w-0` is load-bearing, not tidiness: without it a flex item's
+          floor is its content's min-content width, and one horizontally
+          scrolling filter rail on the Leads header was stretching this pane to
+          857px inside a 390px viewport. The app shell clips overflow, so nothing
+          looked broken — the right-hand side of every list row, lead score
+          included, was simply rendered off-screen where no viewport audit that
+          measures document scrollWidth can see it.
+        */}
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Routes>
             <Route
               path="/today"
@@ -157,10 +166,10 @@ function Splash() {
   return (
     <div className="app-shell items-center justify-center bg-ink text-white">
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
-        <span className="grid h-16 w-16 place-items-center rounded-2xl bg-brand-500 text-2xl font-black">
+        <span className="grid h-16 w-16 place-items-center rounded-card bg-brand-400 text-2xl font-black">
           A
         </span>
-        <p className="text-sm text-slate-400">Loading your territory…</p>
+        <p className="text-sm text-ink-mute">Loading your territory…</p>
       </div>
     </div>
   )

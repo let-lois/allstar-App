@@ -136,7 +136,7 @@ export function VisitMode() {
 
   if (step === 'done') {
     return (
-      <div className="app-shell bg-emerald-600 text-white">
+      <div className="app-shell bg-good text-white">
         <div className="scroll-pane pad-top flex flex-col justify-center px-6 text-center">
           <div className="mx-auto w-full max-w-sm">
             <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-white/15 text-4xl">
@@ -152,14 +152,14 @@ export function VisitMode() {
               {nextAt && nextType !== 'none' && ` · follow-up ${relativeLower(nextAt)}`}
             </p>
             {/* State the truth for the situation the rep is actually in. */}
-            <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-2 text-xs font-semibold">
+            <p className="mt-5 inline-flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-2 text-[12.5px] font-semibold">
               <span
                 className={`h-2 w-2 rounded-full ${
                   sync.state === 'offline'
-                    ? 'bg-slate-300'
+                    ? 'bg-white/60'
                     : sync.state === 'synced'
                       ? 'bg-white'
-                      : 'bg-amber-300'
+                      : 'bg-[#FCD34D]'
                 }`}
               />
               {sync.state === 'offline'
@@ -197,7 +197,7 @@ export function VisitMode() {
           )}
           <button
             onClick={() => nav('/today', { replace: true })}
-            className="focusable min-h-tap w-full rounded-xl text-sm font-semibold text-white/80 active:bg-white/10"
+            className="focusable min-h-tap w-full rounded-field text-[15px] font-semibold text-white/85 active:bg-white/10"
           >
             Back to Today
           </button>
@@ -224,12 +224,12 @@ export function VisitMode() {
           </button>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] font-bold leading-tight">{property.address1}</p>
-            <p className="truncate text-xs text-white/60">
+            <p className="truncate text-[12.5px] text-white/70">
               {contact?.name ?? 'No contact'}
               {dist != null && ` · ${formatDistance(dist)} away`}
             </p>
           </div>
-          <span className="nums shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold">
+          <span className="nums shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-[12px] font-semibold">
             {duration(elapsed)}
           </span>
         </div>
@@ -242,7 +242,7 @@ export function VisitMode() {
         */}
         {sync.state === 'offline' && (
           <p className="flex items-center gap-2 bg-white/10 px-4 py-1.5 text-[11px] font-medium text-white/90">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#FCD34D]" />
             Offline — this visit is saving to your phone
           </p>
         )}
@@ -251,7 +251,7 @@ export function VisitMode() {
           {STEPS.map((s, i) => (
             <li key={s.key} className="flex-1">
               <div
-                className={`h-1 rounded-full ${i <= stepIndex ? 'bg-brand-500' : 'bg-white/20'}`}
+                className={`h-1 rounded-full ${i <= stepIndex ? 'bg-brand-400' : 'bg-white/20'}`}
               />
               <span
                 className={`mt-1 block text-[10px] font-semibold ${
@@ -269,49 +269,49 @@ export function VisitMode() {
         {step === 'outcome' && (
           <>
             {property.lastVisitAt && (
-              <div className="card mb-3 flex items-center gap-3 p-3">
+              <div className="card mb-3.5 flex items-center gap-3 p-4">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
-                    Last time
-                  </p>
-                  <p className="mt-0.5 flex items-center gap-2 text-sm">
+                  <p className="eyebrow">Last time</p>
+                  <p className="mt-1.5 flex items-center gap-2 text-[14px]">
                     <OutcomePill code={property.lastOutcome} />
                     <span className="text-ink-mute">{relative(property.lastVisitAt)}</span>
                   </p>
                 </div>
               </div>
             )}
-            <h2 className="mb-3 text-lg font-bold">What happened?</h2>
+            <h2 className="mb-3.5 text-[21px] font-bold">What happened?</h2>
             <OutcomeGrid value={visit.outcome} onChange={(c) => void chooseOutcome(c)} />
           </>
         )}
 
         {step === 'capture' && (
           <div className="space-y-4">
-            <div className="card p-3">
+            <div className="card px-4 py-3.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold">Outcome</span>
+                <span className="eyebrow">Outcome</span>
                 <button
                   onClick={() => setStep('outcome')}
-                  className="focusable min-h-[44px] rounded-lg px-3 text-sm font-semibold text-brand-600"
+                  className="focusable -mr-1.5 min-h-[36px] rounded-field px-1.5 text-[13px] font-semibold text-brand-600"
                 >
                   Change
                 </button>
               </div>
-              <p className="mt-1 text-lg font-bold" style={{ color: undefined }}>
+              <p className="mt-1 text-[19px] font-bold">
                 {outcomeDef?.glyph} {outcomeDef?.label}
               </p>
             </div>
 
             {contact && (
-              <div className="card p-3">
-                <p className="mb-2 text-sm font-semibold">Reach {contact.name.split(' ')[0]}</p>
+              <div className="card p-4">
+                <p className="mb-3 text-[15px] font-semibold">
+                  Reach {contact.name.split(' ')[0]}
+                </p>
                 <CommActions property={property} contact={contact} compact />
               </div>
             )}
 
-            <section className="card p-3">
-              <h2 className="mb-2 font-bold">Notes</h2>
+            <section className="card p-4">
+              <h2 className="mb-3 text-[15px] font-semibold">Notes</h2>
               <NoteComposer
                 body={noteBody}
                 tags={noteTags}
@@ -320,8 +320,8 @@ export function VisitMode() {
               />
             </section>
 
-            <section className="card p-3">
-              <h2 className="mb-2 font-bold">Photos</h2>
+            <section className="card p-4">
+              <h2 className="mb-3 text-[15px] font-semibold">Photos</h2>
               <PhotoStrip propertyId={property.id} visitId={visit.id} photos={photos} />
             </section>
           </div>
@@ -330,8 +330,8 @@ export function VisitMode() {
         {step === 'next' && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-lg font-bold">What's next here?</h2>
-              <p className="mt-0.5 text-sm text-ink-mute">
+              <h2 className="text-[21px] font-bold">What's next here?</h2>
+              <p className="mt-1 text-[14px] text-ink-mute">
                 This becomes a follow-up on your Today screen.
               </p>
             </div>
@@ -353,10 +353,10 @@ export function VisitMode() {
                     if (o.key !== 'none' && !nextAt) setNextAt(defaultFollowUp())
                   }}
                   aria-pressed={nextType === o.key}
-                  className={`press focusable flex min-h-[76px] flex-col items-center justify-center gap-1 rounded-2xl border-2 font-bold ${
+                  className={`press focusable flex min-h-[80px] flex-col items-center justify-center gap-1.5 rounded-card text-[15px] font-bold transition-shadow ${
                     nextType === o.key
-                      ? 'border-brand-500 bg-brand-500 text-white'
-                      : 'border-slate-200 bg-surface text-ink'
+                      ? 'bg-brand-600 text-white shadow-raise'
+                      : 'bg-surface text-ink ring-1 ring-ink/10 active:bg-surface-field'
                   }`}
                 >
                   <span className="text-xl" aria-hidden>
@@ -368,9 +368,9 @@ export function VisitMode() {
             </div>
 
             {nextType !== 'none' && (
-              <div className="card space-y-3 p-3">
-                <p className="text-sm font-semibold">When?</p>
-                <div className="grid grid-cols-2 gap-2">
+              <div className="card space-y-3.5 p-4">
+                <p className="text-[15px] font-semibold">When?</p>
+                <div className="grid grid-cols-2 gap-2.5">
                   {quickWhen().map((w) => (
                     <button
                       key={w.label}
@@ -379,10 +379,10 @@ export function VisitMode() {
                         setNextAt(w.at)
                       }}
                       aria-pressed={nextAt === w.at}
-                      className={`press focusable min-h-[52px] rounded-xl border-2 text-sm font-semibold ${
+                      className={`press focusable min-h-[52px] rounded-field text-[14px] font-semibold transition-colors ${
                         nextAt === w.at
-                          ? 'border-brand-500 bg-brand-50 text-brand-700'
-                          : 'border-slate-200'
+                          ? 'bg-brand-50 text-brand-700 ring-2 ring-brand-500'
+                          : 'bg-surface text-ink ring-1 ring-ink/10 active:bg-surface-field'
                       }`}
                     >
                       {w.label}
@@ -390,20 +390,18 @@ export function VisitMode() {
                   ))}
                 </div>
                 <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
-                    Or pick a time
-                  </span>
+                  <span className="eyebrow">Or pick a time</span>
                   <input
                     type="datetime-local"
                     value={nextAt ? toLocalInput(nextAt) : ''}
                     onChange={(e) =>
                       setNextAt(e.target.value ? new Date(e.target.value).getTime() : undefined)
                     }
-                    className="focusable mt-1 min-h-tap w-full rounded-xl border border-slate-200 px-3"
+                    className="field mt-1.5 h-[52px]"
                   />
                 </label>
                 {nextAt && (
-                  <p className="text-xs text-ink-mute">
+                  <p className="text-[13px] text-ink-mute">
                     Scheduled for {new Date(nextAt).toLocaleDateString('en-US', {
                       weekday: 'short',
                       month: 'short',
@@ -421,15 +419,15 @@ export function VisitMode() {
       {/* Action bar pinned to the bottom — the same target every step. */}
       {step !== 'outcome' && (
         <div
-          className="shrink-0 border-t border-slate-200 bg-surface px-4 pt-3"
-          style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
+          className="shrink-0 bg-surface px-4 pt-3.5 shadow-nav"
+          style={{ paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))' }}
         >
           {step === 'next' && nextType !== 'none' && !nextAt && (
-            <p className="pb-2 text-center text-xs font-medium text-amber-700">
+            <p className="pb-2.5 text-center text-[13px] font-semibold text-warn">
               Pick when to come back, or choose “Nothing”.
             </p>
           )}
-          <div className="flex gap-2">
+          <div className="flex gap-2.5">
             <Button
               variant="secondary"
               size="lg"

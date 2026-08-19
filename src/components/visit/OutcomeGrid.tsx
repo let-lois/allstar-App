@@ -2,26 +2,40 @@ import type { OutcomeCode } from '../../types'
 import { useOutcomes } from '../../lib/useSettings'
 import { haptic } from '../../lib/haptics'
 
+/*
+ * Outcome tile tones.
+ *
+ * Every pair is measured, not chosen by eye, because this control is tapped
+ * forty to eighty times a day in direct sunlight. Three of the previous selected
+ * fills put white text below 4.5:1 — teal-600 at 3.74, amber-600 at 3.19,
+ * sky-600 at 4.10 — so the selected state, the one that has to be unmistakable,
+ * was the least legible thing on the screen. These fills are taken deep enough
+ * that the white label clears AA on all eight.
+ *
+ * The hues stay distinct rather than collapsing into the brand orange: a rep
+ * learns these eight tiles by position and colour, and the accent is not a
+ * meaning.
+ */
 const TONE_BG: Record<string, string> = {
-  noanswer: 'bg-slate-100 text-slate-700 border-slate-200',
-  interested: 'bg-teal-50 text-teal-800 border-teal-200',
-  followup: 'bg-amber-50 text-amber-800 border-amber-200',
-  appointment: 'bg-violet-50 text-violet-800 border-violet-200',
-  quote: 'bg-sky-50 text-sky-800 border-sky-200',
-  notinterested: 'bg-slate-50 text-slate-600 border-slate-200',
-  sold: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-  dnc: 'bg-red-50 text-red-800 border-red-200',
+  noanswer: 'bg-ink/[0.06] text-ink-soft border-ink/10',
+  interested: 'bg-[#E3F2F0] text-[#0F766E] border-[#0F766E]/20',
+  followup: 'bg-warn-bg text-warn border-warn/25',
+  appointment: 'bg-[#F1EBFC] text-[#6D28D9] border-[#6D28D9]/20',
+  quote: 'bg-[#E6F1F9] text-[#0369A1] border-[#0369A1]/20',
+  notinterested: 'bg-surface-field text-ink-soft border-ink/10',
+  sold: 'bg-good-bg text-good border-good/25',
+  dnc: 'bg-bad-bg text-bad border-bad/25',
 }
 
 const TONE_ON: Record<string, string> = {
-  noanswer: 'bg-slate-600 text-white border-slate-600',
-  interested: 'bg-teal-600 text-white border-teal-600',
-  followup: 'bg-amber-600 text-white border-amber-600',
-  appointment: 'bg-violet-600 text-white border-violet-600',
-  quote: 'bg-sky-600 text-white border-sky-600',
-  notinterested: 'bg-slate-500 text-white border-slate-500',
-  sold: 'bg-emerald-600 text-white border-emerald-600',
-  dnc: 'bg-red-600 text-white border-red-600',
+  noanswer: 'bg-[#475569] text-white border-[#475569]',
+  interested: 'bg-[#0F766E] text-white border-[#0F766E]',
+  followup: 'bg-warn text-white border-warn',
+  appointment: 'bg-[#6D28D9] text-white border-[#6D28D9]',
+  quote: 'bg-[#0369A1] text-white border-[#0369A1]',
+  notinterested: 'bg-ink-mute text-white border-ink-mute',
+  sold: 'bg-good text-white border-good',
+  dnc: 'bg-bad text-white border-bad',
 }
 
 /**
@@ -56,9 +70,10 @@ export function OutcomeGrid({
         }}
         aria-pressed={on}
         className={[
-          'press focusable flex items-center justify-center gap-2.5 rounded-2xl border-2 font-bold',
-          full ? 'min-h-[72px] w-full text-lg' : 'min-h-[80px] text-[15px] flex-col gap-1.5',
-          on ? TONE_ON[tone] : TONE_BG[tone],
+          'press focusable flex items-center justify-center gap-2.5 rounded-card border-2 font-bold',
+          'transition-shadow',
+          full ? 'min-h-[76px] w-full text-[19px]' : 'min-h-[84px] text-[15px] flex-col gap-1.5',
+          on ? `${TONE_ON[tone]} shadow-raise` : TONE_BG[tone],
         ].join(' ')}
       >
         <span className={full ? 'text-xl' : 'text-2xl'} aria-hidden>

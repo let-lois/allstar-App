@@ -64,6 +64,25 @@ export const STATUS_COLOR: Record<LeadStatus, string> = {
   dnc: '#b91c1c',
 }
 
+/*
+ * Status pill tones — a dark foreground on its own light tint.
+ *
+ * Separate from STATUS_COLOR because that value is a *swatch*: a map dot, a
+ * 6px rail, a bar fill, where only hue matters. As pill text those same hues
+ * land between 3:1 and 3.5:1 on their own tint, which fails WCAG 1.4.3 at pill
+ * sizes. Every pair below is measured and clears 4.5:1.
+ */
+export const STATUS_TONE: Record<LeadStatus, { fg: string; bg: string }> = {
+  new: { fg: '#475569', bg: '#EEF1F5' },
+  contacted: { fg: '#1D4ED8', bg: '#E8EEFD' },
+  working: { fg: '#0F766E', bg: '#E3F2F0' },
+  appointment: { fg: '#6D28D9', bg: '#F1EBFC' },
+  quoted: { fg: '#B45309', bg: '#FEF3E2' },
+  won: { fg: '#166534', bg: '#E8F5EC' },
+  lost: { fg: '#475569', bg: '#F1F2F4' },
+  dnc: { fg: '#B91C1C', bg: '#FDECEC' },
+}
+
 export const PIPELINE_STAGES: LeadStatus[] = [
   'new',
   'contacted',

@@ -110,12 +110,12 @@ export function ManageUser({
   return (
     <div className="space-y-5 pt-1">
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-medium text-red-800">
+        <p role="alert" className="rounded-lg bg-bad-bg p-3 text-sm font-medium text-bad">
           {error}
         </p>
       )}
       {notice && (
-        <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm font-medium text-emerald-800">
+        <p role="status" className="rounded-lg bg-good-bg p-3 text-sm font-medium text-good">
           {notice}
         </p>
       )}
@@ -138,7 +138,7 @@ export function ManageUser({
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
               placeholder={`At least ${MIN_PASSWORD} characters`}
-              className="focusable h-11 w-full rounded-lg border border-slate-300 pl-3 pr-16 text-sm"
+              className="focusable h-11 w-full rounded-lg border border-ink/15 pl-3 pr-16 text-sm"
             />
             <button
               type="button"
@@ -167,7 +167,7 @@ export function ManageUser({
           </Button>
         </div>
 
-        <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="mt-3 border-t border-ink/[0.06] pt-3">
           <Button
             variant="secondary"
             disabled={busy !== null}
@@ -186,7 +186,7 @@ export function ManageUser({
           </p>
 
           {link && (
-            <div className="mt-3 rounded-lg bg-surface-sunk p-3 ring-1 ring-slate-200">
+            <div className="mt-3 rounded-lg bg-surface-sunk p-3 ring-1 ring-ink/10">
               <p className="break-all font-mono text-xs">{link}</p>
               <Button
                 size="sm"
@@ -211,7 +211,7 @@ export function ManageUser({
 
       {/* --- role -------------------------------------------------------- */}
       {!isSelf && (
-        <section className="border-t border-slate-100 pt-4">
+        <section className="border-t border-ink/[0.06] pt-4">
           <h3 className="text-sm font-bold">Role</h3>
           <p className="mt-1 text-xs leading-relaxed text-ink-mute">
             Changing it signs {user.name.split(' ')[0]} out, so a demotion takes effect on
@@ -227,7 +227,7 @@ export function ManageUser({
                 setNotice(`${user.name} is now a ${ROLE_LABEL[next]}.`)
               })
             }
-            className="focusable mt-2 h-11 w-full rounded-lg border border-slate-300 bg-surface px-3 text-sm disabled:opacity-60"
+            className="focusable mt-2 h-11 w-full rounded-lg border border-ink/15 bg-surface px-3 text-sm disabled:opacity-60"
           >
             {/* The role they already hold is always listed, even if this admin
                 could not grant it — otherwise the dropdown would silently show
@@ -243,10 +243,10 @@ export function ManageUser({
 
       {/* --- access ------------------------------------------------------ */}
       {!isSelf && (
-        <section className="border-t border-slate-100 pt-4">
+        <section className="border-t border-ink/[0.06] pt-4">
           <h3 className="text-sm font-bold">Access</h3>
           {user.pending && user.active && (
-            <p className="mt-1 rounded-lg bg-amber-50 p-2.5 text-xs leading-relaxed text-amber-900">
+            <p className="mt-1 rounded-lg bg-warn-bg p-2.5 text-xs leading-relaxed text-warn">
               {user.name} hasn’t opened their invite yet, so they have no password.
               Setting one above works, or create a fresh link — the old one keeps
               working until it expires.
@@ -298,8 +298,8 @@ export function ManageUser({
 
       {/* --- delete ------------------------------------------------------ */}
       {!isSelf && (
-        <section className="border-t border-slate-100 pt-4">
-          <h3 className="text-sm font-bold text-red-700">Delete permanently</h3>
+        <section className="border-t border-ink/[0.06] pt-4">
+          <h3 className="text-sm font-bold text-bad">Delete permanently</h3>
 
           {!confirming ? (
             <>
@@ -309,21 +309,21 @@ export function ManageUser({
               </p>
               <Button
                 variant="secondary"
-                className="mt-2 text-red-700"
+                className="mt-2 text-bad"
                 onClick={() => setConfirming(true)}
               >
                 Delete {user.name}…
               </Button>
             </>
           ) : (
-            <div className="mt-2 rounded-xl bg-red-50 p-3 ring-1 ring-red-200">
-              <p className="text-sm font-semibold text-red-900">
+            <div className="mt-2 rounded-field bg-bad-bg p-3 ring-1 ring-bad/25">
+              <p className="text-sm font-semibold text-bad">
                 This deletes {totalRecords.toLocaleString()} record
                 {totalRecords === 1 ? '' : 's'} and cannot be undone.
               </p>
 
               {foot ? (
-                <ul className="mt-2 grid grid-cols-2 gap-x-4 text-xs text-red-900">
+                <ul className="mt-2 grid grid-cols-2 gap-x-4 text-xs text-bad">
                   <Count label="visits" n={foot.visits} />
                   <Count label="notes" n={foot.notes} />
                   <Count label="photos" n={foot.photos} />
@@ -332,10 +332,10 @@ export function ManageUser({
                   <Count label="activity entries" n={foot.activity} />
                 </ul>
               ) : (
-                <p className="mt-2 text-xs text-red-900">Counting what would be lost…</p>
+                <p className="mt-2 text-xs text-bad">Counting what would be lost…</p>
               )}
 
-              <p className="mt-2 text-xs text-red-900">
+              <p className="mt-2 text-xs text-bad">
                 {foot?.assignedProperties
                   ? `Their ${foot.assignedProperties.toLocaleString()} assigned lead${
                       foot.assignedProperties === 1 ? '' : 's'
@@ -345,20 +345,20 @@ export function ManageUser({
               </p>
 
               <label className="mt-3 block">
-                <span className="text-xs font-semibold text-red-900">
+                <span className="text-xs font-semibold text-bad">
                   Type “{user.name}” to confirm
                 </span>
                 <input
                   value={typed}
                   onChange={(e) => setTyped(e.target.value)}
-                  className="focusable mt-1 h-10 w-full rounded-lg border border-red-300 px-3 text-sm"
+                  className="focusable mt-1 h-10 w-full rounded-lg border border-bad/25 px-3 text-sm"
                 />
               </label>
 
               <div className="mt-3 flex gap-2">
                 <Button
                   variant="secondary"
-                  className="text-red-700"
+                  className="text-bad"
                   disabled={typed.trim() !== user.name || busy !== null}
                   onClick={() =>
                     void run('delete', async (token) => {
@@ -385,7 +385,7 @@ export function ManageUser({
       )}
 
       {isSelf && (
-        <p className="border-t border-slate-100 pt-4 text-xs text-ink-mute">
+        <p className="border-t border-ink/[0.06] pt-4 text-xs text-ink-mute">
           You can’t remove or delete your own account — that’s how a company locks
           itself out. Ask another administrator.
         </p>
@@ -396,7 +396,7 @@ export function ManageUser({
 
 function Count({ label, n }: { label: string; n: number }) {
   return (
-    <li className="flex justify-between border-b border-red-200/60 py-0.5">
+    <li className="flex justify-between border-b border-bad/25/60 py-0.5">
       <span>{label}</span>
       <span className="nums font-semibold">{n.toLocaleString()}</span>
     </li>

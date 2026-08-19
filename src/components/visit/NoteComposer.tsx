@@ -113,20 +113,20 @@ export function NoteComposer({ body, tags, onBody, onTags, placeholder }: Props)
           onChange={(e) => onBody(e.target.value)}
           rows={4}
           placeholder={placeholder ?? 'Tap a quick note above, dictate, or type…'}
-          className="focusable w-full resize-none rounded-2xl border border-slate-200 p-3 pr-14 text-base leading-relaxed placeholder:text-slate-400"
+          className="focusable w-full resize-none rounded-card border border-ink/10 p-3 pr-14 text-base leading-relaxed placeholder:text-ink-mute"
         />
         {supported && (
           <button
             onClick={toggleDictation}
             aria-label={listening ? 'Stop dictation' : 'Dictate note'}
             aria-pressed={listening}
-            className={`press focusable absolute right-2.5 top-2.5 grid h-11 w-11 place-items-center rounded-xl ${
-              listening ? 'bg-red-600 text-white' : 'bg-slate-100 text-ink-mute'
+            className={`press focusable absolute right-2.5 top-2.5 grid h-11 w-11 place-items-center rounded-field ${
+              listening ? 'bg-bad text-white' : 'bg-ink/[0.06] text-ink-mute'
             }`}
           >
             {listening && (
               <span
-                className="absolute inset-0 rounded-xl bg-red-500"
+                className="absolute inset-0 rounded-field bg-bad"
                 style={{ animation: 'pulse-ring 1.4s ease-out infinite' }}
                 aria-hidden
               />
@@ -138,10 +138,10 @@ export function NoteComposer({ body, tags, onBody, onTags, placeholder }: Props)
         )}
       </div>
       {listening && (
-        <p className="-mt-1 text-xs font-medium text-red-600">Listening — speak now</p>
+        <p className="-mt-1 text-xs font-medium text-bad">Listening — speak now</p>
       )}
       {!listening && error && (
-        <p className="-mt-1 rounded-lg bg-amber-50 px-2.5 py-2 text-xs font-medium leading-relaxed text-amber-800">
+        <p className="-mt-1 rounded-lg bg-warn-bg px-2.5 py-2 text-xs font-medium leading-relaxed text-warn">
           {ERROR_COPY[error]}
         </p>
       )}
