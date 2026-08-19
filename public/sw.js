@@ -27,7 +27,7 @@
  * had never once had anything to delete. A poisoned entry was therefore
  * permanent, and unreachable from a rep's phone.
  */
-const VERSION = 'v4'
+const VERSION = 'v5'
 const CACHE = `allstar-shell-${VERSION}`
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon-32.png']
 
@@ -45,8 +45,18 @@ const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon-32.png']
  */
 const TILE_HOST = 'api.maptiler.com'
 const TILE_CACHE = 'allstar-tiles-v1'
-/** ~1,500 tiles is roughly 40 MB of satellite imagery — a few territories. */
-const TILE_LIMIT = 1500
+/*
+ * Cap chosen against what a real territory costs, not picked round.
+ *
+ * A 3.6 km territory prefetched across z14-18 is ~1,160 tiles. At the old cap of
+ * 1,500 a single download all but filled the cache, and the oldest-first trim
+ * below would then start evicting the tiles the rep had just downloaded the
+ * moment they panned anywhere else — the exact opposite of what a deliberate
+ * offline download is for. 4,000 leaves room for a territory plus normal
+ * wandering, and is around 100 MB worst case for satellite, which is opt-in and
+ * clearable from the More screen.
+ */
+const TILE_LIMIT = 4000
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
