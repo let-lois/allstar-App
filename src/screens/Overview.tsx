@@ -281,7 +281,7 @@ export function Overview({ role }: { role: Role }) {
                 return (
                   <li key={ev.id} className="flex min-h-[52px] items-center gap-3 px-4 py-2.5">
                     <span
-                      className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-warm text-[13px]"
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[13px]"
                       aria-hidden
                     >
                       {def?.glyph ?? '·'}

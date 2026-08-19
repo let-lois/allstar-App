@@ -112,7 +112,7 @@ export function NewLead() {
               the rep can't correct by typing, so if GPS hasn't answered yet they
               need to see that before the save button refuses them.
             */}
-            <div className="rounded-field bg-surface-warm px-3.5 py-3">
+            <div className="rounded-field bg-surface-tint px-3.5 py-3">
               <p className="eyebrow">Location</p>
               <p className="nums mt-1 text-[13px] text-ink-soft">
                 {locating

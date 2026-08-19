@@ -56,7 +56,7 @@ export function PropertyRow({
       right={{
         label: 'Start visit',
         glyph: '▶',
-        color: '#C2410C',
+        color: '#0A6B7D',
         onAction: () => nav(`/property/${property.id}?start=1`),
       }}
       className="border-b border-ink/[0.06] last:border-0"

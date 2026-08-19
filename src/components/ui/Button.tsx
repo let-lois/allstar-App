@@ -16,10 +16,10 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 /*
  * The primary button is `brand-600`, not the brighter brand orange.
  *
- * That is a measured decision rather than a taste one: white text on #FF8A3D is
- * 2.35:1, which fails at every text size. #C2410C is 5.18:1 and still reads
- * unmistakably orange. The bright shade is used for fills — bars, dots, active
- * indicators — where nothing has to be legible on top of it.
+ * That is a measured decision rather than a taste one: white text on the logo
+ * teal #07B3CA is 2.53:1, which fails at every text size. #0A6B7D is 6.15:1 and
+ * still reads unmistakably teal. The bright shade is used for fills — bars,
+ * dots, active indicators — where nothing has to be legible on top of it.
  */
 /*
  * The filled variants carry the embossed treatment; the quiet ones deliberately
@@ -31,10 +31,10 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
  * exactly what ruled white glyphs out for the light nav badges.
  */
 const FILL: Record<string, string> = {
-  // #E4590C would be the brighter, more obviously glossy top — and it measures
-  // 4.25:1 for the white label once the gloss overlay lifts it, just under AA.
-  // #D14E0A is the lightest stop that clears 4.5:1.
-  primary: '[--btn-top:#D14E0A] [--btn-bottom:#9A3412]',
+  // #0E8FA6 would be the brighter, more obviously glossy top — and it measures
+  // 4.38:1 for the white label once the gloss overlay lifts it, just under AA.
+  // #0A8296 is the lightest stop that clears 4.5:1 (5.14:1).
+  primary: '[--btn-top:#0A8296] [--btn-bottom:#064E5D]',
   danger: '[--btn-top:#DC2626] [--btn-bottom:#991B1B]',
   success: '[--btn-top:#1D7A44] [--btn-bottom:#14532D]',
 }

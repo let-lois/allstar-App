@@ -3,18 +3,23 @@
 /*
  * Design tokens.
  *
- * The palette is warm orange on near-white, and the shades are picked against
- * measured contrast rather than by eye. Two of them matter enough to record why:
+ * The palette is the company's teal on white and near-black, and the shades are
+ * picked against measured contrast rather than by eye. Two matter enough to
+ * record why:
  *
- * `brand-400` (#FF8A3D) is the brand orange — warm, energetic, and only 2.35:1
- * against white. It is a **fill**: bars, dots, icon glyphs, active indicators.
- * It can never carry white label text, and it is not strong enough to be a focus
+ * `brand-400` (#07B3CA) is the logo teal, sampled from the artwork. It is 2.53:1
+ * against white, so it is a **fill**: bars, dots, glyphs, active indicators. It
+ * can never carry white label text, and it is not strong enough to be a focus
  * ring either (WCAG 1.4.11 wants 3:1 for a UI component).
  *
- * `brand-600` (#C2410C) is the same hue family taken deep enough to be a
- * **surface**: 5.18:1 with white, so a button label passes AA at any size, and it
- * doubles as orange text on white. Splitting the accent into "fill" and "surface"
- * is what lets the interface look bright without any of it being unreadable.
+ * `brand-600` (#0A6B7D) is the same hue taken deep enough to be a **surface**:
+ * 6.15:1 with white, so a button label passes AA at any size, and it doubles as
+ * teal text on white. Splitting the accent into "fill" and "surface" is what
+ * lets the interface look bright without any of it being unreadable.
+ *
+ * The neutrals are true greys rather than the warm cast this palette used to
+ * carry — an off-white with a warm tint under a cool accent reads as a mistake
+ * rather than as a choice.
  */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
@@ -43,37 +48,33 @@ export default {
         },
         surface: {
           DEFAULT: '#ffffff',
-          /** The app ground: off-white with a warm cast, so white cards lift off it. */
-          sunk: '#FAF7F4',
-          /** Secondary surface — cream, for grouped rows and quiet callouts. */
-          warm: '#FFF4EC',
-          /** Inputs: a hair of warmth so a field reads as recessed, not as a card. */
-          field: '#F6F2EE',
+          /** The app ground: a cool off-white, so white cards lift off it. */
+          sunk: '#F4F7F8',
+          /** Secondary surface — the faintest teal, for grouped rows and callouts. */
+          tint: '#E9F6F9',
+          /** Inputs: a shade down from the ground so a field reads as recessed. */
+          field: '#EEF3F5',
           raised: '#ffffff',
         },
         brand: {
-          50: '#FFF4EC',
-          100: '#FFE6D5',
-          200: '#FFCFAE',
-          /** Fill only. 2.35:1 — no text on this, no focus rings. */
-          400: '#FF8A3D',
-          500: '#F26419',
-          /** Surface and text. 5.18:1 with white — labels pass AA at any size. */
-          600: '#C2410C',
-          700: '#9A3412',
+          50: '#E9F6F9',
+          100: '#CBEDF4',
+          200: '#9FDFEB',
+          /** The logo teal. Fill only — 2.53:1, so no text on it and no focus rings. */
+          400: '#07B3CA',
+          500: '#0A8296',
+          /** Surface and text. 6.15:1 with white — labels pass AA at any size. */
+          600: '#0A6B7D',
+          700: '#064E5D',
         },
         /*
-         * The company's logo teal, sampled from the artwork (#07B3CA), not
-         * eyeballed.
-         *
-         * Recorded as a token but deliberately not used as the UI accent. The
-         * interface accent stays warm orange, which is what the design brief
-         * asked for and what every shade here was measured against. A brand mark
-         * and an interface palette are allowed to differ — the mark identifies
-         * the company, the accent directs attention — and swapping one for the
-         * other would mean re-measuring contrast across the whole app.
+         * The logo teal, sampled from the artwork. Now the same value as
+         * brand-400: the mark and the interface accent were deliberately
+         * separate while the app was orange, and are deliberately the same now
+         * that it is not. Kept as its own name so anything that means "the
+         * logo's colour" — rather than "the accent" — still says so.
          */
-        logo: { DEFAULT: '#07B3CA', ink: '#06879A' },
+        logo: { DEFAULT: '#07B3CA', ink: '#0A6B7D' },
         // Semantic, and deliberately not orange: a warning that shares the brand
         // hue stops reading as a warning.
         good: { DEFAULT: '#166534', bg: '#E8F5EC' },

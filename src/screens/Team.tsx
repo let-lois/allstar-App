@@ -110,7 +110,7 @@ export function Team() {
                             className="-mx-2 flex min-h-[46px] w-[calc(100%+1rem)] items-center gap-2.5 rounded-field px-2 text-left text-[14px] active:bg-surface-field"
                           >
                             <span
-                              className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-warm text-[13px]"
+                              className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[13px]"
                               aria-hidden
                             >
                               {def?.glyph ?? '·'}
