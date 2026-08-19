@@ -76,16 +76,24 @@ export function Login() {
               Width is capped rather than set, so the mark keeps its own
               proportions at every viewport instead of being stretched to fill.
             */}
-            <img
-              src="/logo-light.png"
-              alt="Allstar Home Solutions"
-              width={720}
-              height={184}
-              className="h-auto w-[232px] max-w-full"
-            />
-            <h1 className="mt-6 text-[26px] font-extrabold leading-tight tracking-[-0.02em]">
-              Field sales, built for the phone.
-            </h1>
+            {/*
+              The mark and the promise sit on one raised plaque rather than
+              floating on the background — the same glass the buttons below are
+              made of, so the screen reads as one material instead of a logo
+              dropped onto a dark rectangle.
+            */}
+            <div className="glass-dark rounded-card px-5 py-5">
+              <img
+                src="/logo-light.png"
+                alt="Allstar Home Solutions"
+                width={720}
+                height={184}
+                className="h-auto w-[204px] max-w-full"
+              />
+              <h1 className="mt-4 text-[23px] font-extrabold leading-tight tracking-[-0.02em] [text-shadow:0_1px_2px_rgba(0,0,0,0.55)]">
+                Field sales, built for the phone.
+              </h1>
+            </div>
           </div>
 
           {sessionExpired && (
@@ -139,7 +147,7 @@ export function Login() {
                   type="button"
                   onClick={() => setReveal((v) => !v)}
                   aria-pressed={reveal}
-                  className="glass-dark focusable absolute right-1.5 top-1.5 grid h-11 w-[64px] place-items-center rounded-field text-xs font-bold uppercase tracking-wide text-white/80"
+                  className="glass-dark focusable absolute right-1.5 top-1.5 grid h-11 w-[64px] place-items-center rounded-field text-xs font-bold uppercase tracking-wide text-white"
                 >
                   {reveal ? 'Hide' : 'Show'}
                 </button>
