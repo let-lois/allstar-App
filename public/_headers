@@ -7,19 +7,24 @@
 /manifest.webmanifest
   Cache-Control: no-cache
 
-# Build assets are content-hashed, so a given URL's contents can never change.
+# Build assets are content-hashed, so a given URL's contents can never change —
+# which is the textbook case for `immutable` and a one-year max-age. Both are
+# deliberately absent here, because that combination caused a real outage.
 #
-# One day rather than the usual year, deliberately. `immutable` means a browser
-# will not revalidate for the whole of max-age, so whatever it stored — including
-# a wrong response — is what it uses until the clock runs out. A year of that is
-# an outage nobody can clear from the field; a day is an inconvenience.
+# Pages answers a request for an asset it has not finished propagating with the
+# SPA fallback: index.html, content-type text/html, status 200. This rule is what
+# decided how long that wrong answer would live. At a year with `immutable`, the
+# stylesheet for a whole deployment was served as a brotli-compressed HTML
+# document from the edge — status 200, nosniff correctly refusing to apply it,
+# every screen unstyled — and a purge-by-URL could not evict it because
+# `Vary: accept-encoding` had split it into variants.
 #
-# It costs essentially nothing here: repeat loads are served by the service
-# worker out of Cache Storage, which never consults the HTTP cache, so this TTL
-# only governs the first request after an install. Offline support comes from
-# the worker, not from this header.
+# Five minutes means the same mistake heals itself before anyone finishes
+# reporting it. The cost is near zero: repeat loads never reach this layer at all,
+# because the service worker serves assets from Cache Storage, which does not
+# consult the HTTP cache. Offline support comes from the worker, not from here.
 /assets/*
-  Cache-Control: public, max-age=86400, immutable
+  Cache-Control: public, max-age=300
 
 # Applied to every page. The app loads nothing from another origin — no CDN, no
 # analytics, no embedded fonts — so the policy can be strict rather than
