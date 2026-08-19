@@ -266,7 +266,7 @@ export default {
                   zip: '20500',
                 },
             ],
-            env.GOOGLE_MAPS_API_KEY,
+            { maptiler: env.MAPTILER_API_KEY, google: env.GOOGLE_MAPS_API_KEY },
           )
           const m = matches[0]
           return json(
@@ -311,6 +311,7 @@ export default {
               setupToken: !!env.SETUP_TOKEN,
               // Present means rooftop geocoding via Google; absent means the
               // free Census geocoder, which places a house on the right block.
+              maptilerGeocoding: !!env.MAPTILER_API_KEY,
               googleGeocoding: !!env.GOOGLE_MAPS_API_KEY,
               appUrl: env.APP_URL ?? null,
               allowedOrigins: (env.ALLOWED_ORIGINS ?? '').split(',').filter(Boolean).length,
@@ -544,7 +545,16 @@ export default {
           return json({ error: `Send at most ${GEOCODE_CHUNK} addresses.` }, 413, cors)
         }
         try {
-          return json({ matches: await geocode(rows, env.GOOGLE_MAPS_API_KEY) }, 200, cors)
+          return json(
+            {
+              matches: await geocode(rows, {
+                maptiler: env.MAPTILER_API_KEY,
+                google: env.GOOGLE_MAPS_API_KEY,
+              }),
+            },
+            200,
+            cors,
+          )
         } catch (err) {
           // A geocoder outage must not read as "these addresses are bad". The
           // console needs to distinguish "couldn't look them up" from "looked
