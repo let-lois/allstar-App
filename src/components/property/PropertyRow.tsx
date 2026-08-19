@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import type { Property } from '../../types'
+import { STATUS_COLOR } from '../../data/outcomes'
 import { OutcomePill, ScoreBar, StatusPill } from '../ui/StatusPill'
 import { SwipeRow } from '../ui/SwipeRow'
 import { distanceMiles, formatDistance, type Position } from '../../lib/geo'
@@ -7,7 +8,7 @@ import { money, relative, telHref } from '../../lib/format'
 import { useAppStore } from '../../store/useAppStore'
 
 /**
- * Dense list row, ~76px tall.
+ * Dense list row, ~84px tall.
  *
  * Answers the four questions a rep asks while scanning a list — where, who,
  * what happened last, how far — and nothing else. Swipe right to call, swipe
@@ -44,7 +45,7 @@ export function PropertyRow({
           ? {
               label: 'Call',
               glyph: '📞',
-              color: '#0d9488',
+              color: '#166534',
               onAction: () => {
                 logComm(property.id, 'call', contact?.name)
                 window.location.href = tel
@@ -55,38 +56,38 @@ export function PropertyRow({
       right={{
         label: 'Start visit',
         glyph: '▶',
-        color: '#2563eb',
+        color: '#C2410C',
         onAction: () => nav(`/property/${property.id}?start=1`),
       }}
-      className="border-b border-slate-100 last:border-0"
+      className="border-b border-ink/[0.06] last:border-0"
     >
       <button
         onClick={() =>
           onPreview ? onPreview(property.id) : nav(`/property/${property.id}`)
         }
         aria-current={active ? 'true' : undefined}
-        className={`flex min-h-[76px] w-full items-center gap-3 px-4 py-3 text-left active:bg-slate-50 ${
+        className={`flex min-h-[84px] w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-field ${
           active ? 'bg-brand-50' : ''
         }`}
       >
         <span
-          className="h-11 w-1.5 shrink-0 rounded-full"
-          style={{ backgroundColor: statusColorOf(property) }}
+          className="h-12 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: STATUS_COLOR[property.status] }}
           aria-hidden
         />
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline gap-2">
-            <span className="truncate font-semibold">{property.address1}</span>
+            <span className="truncate text-[15px] font-semibold">{property.address1}</span>
             {showDistance && dist != null && (
-              <span className="nums shrink-0 text-xs font-medium text-ink-mute">
+              <span className="nums shrink-0 text-[12.5px] font-semibold text-ink-mute">
                 {formatDistance(dist)}
               </span>
             )}
           </span>
-          <span className="mt-0.5 flex items-center gap-2 text-xs text-ink-mute">
+          <span className="mt-1 flex items-center gap-2 text-[13px] text-ink-mute">
             <span className="truncate">{contact?.name ?? 'No contact on file'}</span>
             {property.opportunityValue && (
-              <span className="nums shrink-0 font-semibold text-emerald-700">
+              <span className="nums shrink-0 font-semibold text-good">
                 {money(property.opportunityValue)}
               </span>
             )}
@@ -95,7 +96,7 @@ export function PropertyRow({
             <StatusPill status={property.status} size="sm" />
             <OutcomePill code={property.lastOutcome} />
             {property.lastVisitAt && (
-              <span className="text-[11px] text-ink-mute">{relative(property.lastVisitAt)}</span>
+              <span className="text-[11.5px] text-ink-mute">{relative(property.lastVisitAt)}</span>
             )}
           </span>
         </span>
@@ -103,18 +104,4 @@ export function PropertyRow({
       </button>
     </SwipeRow>
   )
-}
-
-function statusColorOf(p: Property) {
-  const map: Record<string, string> = {
-    new: '#64748b',
-    contacted: '#0284c7',
-    working: '#0d9488',
-    appointment: '#7c3aed',
-    quoted: '#d97706',
-    won: '#15803d',
-    lost: '#cbd5e1',
-    dnc: '#b91c1c',
-  }
-  return map[p.status] ?? '#64748b'
 }

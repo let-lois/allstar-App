@@ -92,7 +92,7 @@ export default function AdminAudit() {
   if (mode !== 'live') {
     return (
       <AdminPage title="Activity log" description="Who changed what, and when.">
-        <p className="rounded-xl bg-amber-50 p-4 text-sm leading-relaxed text-amber-900 ring-1 ring-amber-200">
+        <p className="rounded-field bg-warn-bg p-4 text-sm leading-relaxed text-warn ring-1 ring-warn/25">
           The demo keeps no log — nothing you do here touches a real account. Sign in
           with real credentials to see one.
         </p>
@@ -113,7 +113,7 @@ export default function AdminAudit() {
         ))}
       </FilterBar>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
+      <div className="overflow-hidden rounded-card border border-ink/10 bg-surface">
         {shown.length === 0 && !loading ? (
           <p className="p-8 text-center text-sm text-ink-mute">
             {entries.length === 0
@@ -125,7 +125,7 @@ export default function AdminAudit() {
             {shown.map((e) => (
               <li
                 key={e.id}
-                className="flex items-start gap-3 border-b border-slate-100 px-5 py-3 last:border-0"
+                className="flex items-start gap-3 border-b border-ink/[0.06] px-5 py-3 last:border-0"
               >
                 <span
                   aria-hidden

@@ -21,13 +21,13 @@ interface Props {
 export function TopBar({ title, subtitle, back, right, below }: Props) {
   const nav = useNavigate()
   return (
-    <header className="pad-top z-20 shrink-0 border-b border-slate-200 bg-surface/95 backdrop-blur">
+    <header className="pad-top z-20 shrink-0 border-b border-ink/10 bg-surface/95 backdrop-blur">
       <div className="flex min-h-[52px] items-center gap-2 px-2">
         {back && (
           <button
             onClick={() => (typeof back === 'string' ? nav(back) : nav(-1))}
             aria-label="Back"
-            className="focusable grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink active:bg-slate-100"
+            className="focusable grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink active:bg-ink/[0.06]"
           >
             <IconBack />
           </button>

@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { SyncDetail, useSync } from '../components/sync/SyncBadge'
 import { Button } from '../components/ui/Button'
+import { Card, SectionHeader } from '../components/ui/Card'
+import { Field } from '../components/ui/Input'
+import { Avatar } from '../components/ui/Avatar'
 import { Collapsible } from '../components/ui/Collapsible'
 import { useAppStore } from '../store/useAppStore'
 import { estimateStorage } from '../lib/db'
@@ -52,15 +55,13 @@ export function More() {
       <TopBar title="More" />
 
       <div className="scroll-pane pad-nav bg-surface-sunk">
-        <div className="content-col space-y-3 p-3">
+        <div className="content-col page anim-rise">
           {/* --- identity ------------------------------------------------- */}
-          <section className="card flex items-center gap-3 p-4">
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand-500 font-bold text-white">
-              {user?.avatarInitials}
-            </span>
+          <Card className="flex items-center gap-3.5">
+            <Avatar initials={user?.avatarInitials ?? '?'} name={user?.name} size="lg" />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-bold">{user?.name}</p>
-              <p className="truncate text-xs text-ink-mute">
+              <p className="truncate text-[17px] font-bold">{user?.name}</p>
+              <p className="truncate text-[13px] text-ink-mute">
                 {ROLE_LABEL[user?.role ?? '']} · {user?.clientName}
               </p>
               {/*
@@ -69,17 +70,17 @@ export function More() {
                 dataset has no way to trust the app, and an admin demoing to a
                 prospect needs to know that nothing they tap is real.
               */}
-              <p className="mt-1 truncate text-[11px] font-semibold uppercase tracking-wide text-ink-mute">
+              <p className="eyebrow mt-1.5 truncate">
                 {mode === 'live' ? 'Signed in · syncing to server' : 'Demo — sample data'}
               </p>
             </div>
-          </section>
+          </Card>
 
           {/* --- sync ----------------------------------------------------- */}
-          <section className="card p-4">
-            <h2 className="mb-3 font-bold">Sync &amp; offline</h2>
+          <Card>
+            <SectionHeader title="Sync &amp; offline" className="mb-3.5" />
             <SyncDetail />
-          </section>
+          </Card>
 
           {/* --- what's cached ------------------------------------------- */}
           <Collapsible
@@ -91,7 +92,7 @@ export function More() {
               </span>
             }
           >
-            <dl className="grid grid-cols-2 gap-y-2.5 text-sm">
+            <dl className="grid grid-cols-2 gap-y-3 text-[14px]">
               <Row label="Properties" value={String(Object.keys(properties).length)} />
               <Row label="Photos" value={`${Object.keys(photos).length}`} />
               <Row label="Photo storage" value={`${Math.round(photoBytes / 1024)} KB`} />
@@ -106,7 +107,7 @@ export function More() {
               <Row label="Last sync" value={relative(snap.lastSyncedAt)} />
               <Row label="Waiting to upload" value={String(snap.pending)} />
             </dl>
-            <p className="mt-3 text-xs leading-relaxed text-ink-mute">
+            <p className="mt-4 text-[13px] leading-relaxed text-ink-mute">
               Your route, leads, contacts, appointments and follow-ups are cached here so
               the app works with no signal. Visits, outcomes, notes and photos are recorded
               locally and uploaded when you reconnect.
@@ -121,10 +122,10 @@ export function More() {
               <>
                 <ul className="space-y-2">
                   {outbox.slice(0, 25).map((m) => (
-                    <li key={m.id} className="flex items-center gap-2 text-sm">
+                    <li key={m.id} className="flex min-h-[28px] items-center gap-2.5 text-[14px]">
                       <span
                         className={`h-2 w-2 shrink-0 rounded-full ${
-                          m.status === 'failed' ? 'bg-red-500' : 'bg-amber-500'
+                          m.status === 'failed' ? 'bg-bad' : 'bg-warn'
                         }`}
                       />
                       <span className="min-w-0 flex-1 truncate">{m.kind}</span>
@@ -134,7 +135,7 @@ export function More() {
                     </li>
                   ))}
                 </ul>
-                <div className="mt-3 flex gap-2">
+                <div className="mt-4 flex gap-2.5">
                   <Button variant="secondary" full onClick={() => void drain()}>
                     Upload now
                   </Button>
@@ -152,8 +153,8 @@ export function More() {
           <Collapsible title="Field testing">
             <label className="flex min-h-tap items-center justify-between gap-3">
               <span className="min-w-0">
-                <span className="block text-sm font-medium">Simulate no signal</span>
-                <span className="block text-xs text-ink-mute">
+                <span className="block text-[15px] font-semibold">Simulate no signal</span>
+                <span className="mt-0.5 block text-[13px] text-ink-mute">
                   Verify the offline flow without leaving coverage.
                 </span>
               </span>
@@ -167,13 +168,13 @@ export function More() {
                   if (!next) void drain()
                   else window.dispatchEvent(new Event('offline'))
                 }}
-                className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${
-                  offlineSim ? 'bg-ink' : 'bg-slate-300'
+                className={`focusable relative h-8 w-[52px] shrink-0 rounded-full transition-colors ${
+                  offlineSim ? 'bg-brand-600' : 'bg-ink/15'
                 }`}
               >
                 <span
-                  className={`absolute top-1 h-6 w-6 rounded-full bg-white transition-transform ${
-                    offlineSim ? 'translate-x-7' : 'translate-x-1'
+                  className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-card transition-transform ${
+                    offlineSim ? 'translate-x-[24px]' : 'translate-x-1'
                   }`}
                 />
               </button>
@@ -188,16 +189,16 @@ export function More() {
               button would only offer to delete a rep's real work.
             */}
             {mode === 'demo' && (
-              <div className="mt-3 border-t border-slate-100 pt-3">
-                <p className="text-sm font-medium">Reset demo data</p>
-                <p className="mt-0.5 text-xs text-ink-mute">
+              <div className="mt-4 border-t border-ink/[0.06] pt-4">
+                <p className="text-[15px] font-semibold">Reset demo data</p>
+                <p className="mt-1 text-[13px] leading-snug text-ink-mute">
                   Restores the sample territory, routes and team activity. Clears any
                   visits, notes and photos recorded on this device.
                 </p>
                 <Button
                   variant="secondary"
                   full
-                  className="mt-2"
+                  className="mt-3"
                   disabled={resetting}
                   onClick={async () => {
                     if (!window.confirm('Reset the demo? Work recorded on this device is cleared.'))
@@ -216,7 +217,7 @@ export function More() {
             )}
           </Collapsible>
 
-          <nav className="card overflow-hidden">
+          <nav className="card row-group overflow-hidden">
             <MoreLink label="Today's route" onClick={() => nav('/route')} />
             <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
             <MoreLink label="Schedule an appointment" onClick={() => nav('/schedule/new')} />
@@ -235,31 +236,28 @@ export function More() {
           */}
           {mode === 'live' && (
             <Collapsible title="Change my password">
-              <p className="text-xs leading-relaxed text-ink-mute">
+              <p className="text-[13px] leading-relaxed text-ink-mute">
                 Changing it signs you out on every device, including this one. Anything
                 you’ve recorded is saved here and uploads once you sign back in.
               </p>
-              <input
+              <Field
                 type="password"
                 value={pw}
                 onChange={(e) => setPw(e.target.value)}
                 autoComplete="new-password"
                 placeholder="At least 10 characters"
-                className="focusable mt-3 h-12 w-full rounded-xl border border-slate-300 px-3 text-base"
+                className="mt-4"
+                error={pwErr}
               />
-              {pwErr && (
-                <p role="alert" className="mt-2 text-sm font-medium text-red-700">
-                  {pwErr}
-                </p>
-              )}
               {pwMsg && (
-                <p role="status" className="mt-2 text-sm font-medium text-emerald-700">
+                <p role="status" className="mt-2 text-[13px] font-semibold text-good">
                   {pwMsg}
                 </p>
               )}
               <Button
+                size="lg"
                 full
-                className="mt-3"
+                className="mt-4"
                 disabled={pwBusy || pw.length < 10}
                 onClick={async () => {
                   const token = liveToken()
@@ -290,12 +288,14 @@ export function More() {
             full
             size="lg"
             onClick={() => void signOut()}
-            className="text-red-600"
+            className="mt-1 text-bad"
           >
             Sign out
           </Button>
 
-          <p className="pb-2 text-center text-xs text-ink-mute">Allstar Field · v0.1.0</p>
+          <p className="pb-1 pt-1 text-center text-[12.5px] text-ink-mute">
+            Allstar Field · v0.1.0
+          </p>
         </div>
       </div>
     </div>
@@ -306,7 +306,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <>
       <dt className="text-ink-mute">{label}</dt>
-      <dd className="nums text-right font-medium">{value}</dd>
+      <dd className="nums text-right font-semibold text-ink">{value}</dd>
     </>
   )
 }
@@ -315,10 +315,10 @@ function MoreLink({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex min-h-[56px] w-full items-center justify-between border-b border-slate-100 px-4 text-left font-medium last:border-0 active:bg-slate-50"
+      className="flex min-h-[58px] w-full items-center justify-between px-4 text-left text-[15px] font-medium active:bg-surface-field"
     >
       {label}
-      <span className="text-ink-mute">
+      <span className="text-ink-faint">
         <IconChevron />
       </span>
     </button>

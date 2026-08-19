@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
+import { ProgressBar } from '../components/ui/ProgressBar'
 import { SwipeRow } from '../components/ui/SwipeRow'
 import { OutcomePill } from '../components/ui/StatusPill'
 import { useAppStore, useRouteProgress } from '../store/useAppStore'
@@ -45,9 +46,9 @@ export function RouteScreen() {
       <div className="flex min-h-0 flex-1 flex-col">
         <TopBar title="Route" back="/today" />
         <div className="grid flex-1 place-items-center p-8 text-center">
-          <div className="max-w-xs">
-            <p className="font-semibold">No route planned yet</p>
-            <p className="mt-1 text-sm leading-relaxed text-ink-mute">
+          <div className="max-w-[19rem]">
+            <p className="text-[19px] font-bold">No route planned yet</p>
+            <p className="mt-2 text-[14px] leading-relaxed text-ink-mute">
               {routable.length > 0
                 ? `${routable.length.toLocaleString()} lead${routable.length === 1 ? '' : 's'} are waiting. Put the closest ones in walking order and get going.`
                 : 'Nothing is assigned to you for today.'}
@@ -56,7 +57,7 @@ export function RouteScreen() {
               <Button
                 size="lg"
                 full
-                className="mt-4"
+                className="mt-5"
                 disabled={building}
                 onClick={async () => {
                   setBuilding(true)
@@ -86,14 +87,14 @@ export function RouteScreen() {
 
       <div className="scroll-pane pad-nav bg-surface">
         <div className="content-col">
-        <div className="sticky top-0 z-10 border-b border-slate-100 bg-surface px-4 py-2.5">
-          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-            <div
-              className="h-full rounded-full bg-brand-500"
-              style={{ width: `${progress.pct}%` }}
-            />
-          </div>
-          <p className="mt-1.5 text-xs text-ink-mute">
+        <div className="sticky top-0 z-10 border-b border-ink/[0.06] bg-surface/95 px-4 py-3 backdrop-blur">
+          <ProgressBar
+            value={progress.done}
+            max={Math.max(progress.total, 1)}
+            animate={false}
+            label={`${progress.done} of ${progress.total} stops`}
+          />
+          <p className="mt-2 text-[12.5px] text-ink-mute">
             Swipe a stop left to skip it · started {route.startedAt ? time(route.startedAt) : '—'}
           </p>
         </div>
@@ -115,27 +116,27 @@ export function RouteScreen() {
                       ? {
                           label: 'Skip',
                           glyph: '⤼',
-                          color: '#d97706',
+                          color: '#B45309',
                           onAction: () => void skipStop(stop.propertyId),
                         }
                       : undefined
                   }
-                  className="border-b border-slate-100"
+                  className="border-b border-ink/[0.06]"
                 >
                   <div
-                    className={`flex items-center gap-3 px-4 py-3 ${
+                    className={`flex min-h-[72px] items-center gap-3 px-4 py-3 ${
                       isActive ? 'bg-brand-50' : ''
                     }`}
                   >
                     <span
-                      className={`nums grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold ${
+                      className={`nums grid h-9 w-9 shrink-0 place-items-center rounded-full text-[14px] font-bold ${
                         isDone
-                          ? 'bg-emerald-100 text-emerald-700'
+                          ? 'bg-good-bg text-good'
                           : isSkipped
-                            ? 'bg-slate-100 text-slate-400'
+                            ? 'bg-ink/[0.06] text-ink-mute'
                             : isActive
-                              ? 'bg-brand-500 text-white'
-                              : 'bg-slate-100 text-ink-mute'
+                              ? 'bg-brand-600 text-white'
+                              : 'bg-ink/[0.06] text-ink-mute'
                       }`}
                     >
                       {isDone ? '✓' : isSkipped ? '–' : stop.order + 1}
@@ -146,13 +147,13 @@ export function RouteScreen() {
                       className="min-w-0 flex-1 text-left"
                     >
                       <span
-                        className={`block truncate font-semibold ${
+                        className={`block truncate text-[15px] font-semibold ${
                           isDone || isSkipped ? 'text-ink-mute line-through' : ''
                         }`}
                       >
                         {p.address1}
                       </span>
-                      <span className="mt-0.5 flex items-center gap-2 text-xs text-ink-mute">
+                      <span className="mt-1 flex items-center gap-2 text-[13px] text-ink-mute">
                         {dist != null && <span className="nums">{formatDistance(dist)}</span>}
                         <OutcomePill code={p.lastOutcome} />
                       </span>
@@ -165,7 +166,7 @@ export function RouteScreen() {
                           target="_blank"
                           rel="noreferrer"
                           aria-label={`Navigate to ${p.address1}`}
-                          className="press focusable grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-surface"
+                          className="press focusable grid h-11 w-11 place-items-center rounded-field bg-surface text-ink-soft ring-1 ring-ink/10"
                         >
                           <IconNavigate />
                         </a>

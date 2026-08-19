@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
+import { Card, SectionHeader } from '../components/ui/Card'
+import { Field } from '../components/ui/Input'
 import { useAppStore } from '../store/useAppStore'
 import { distanceMiles } from '../lib/geo'
 import { haptic } from '../lib/haptics'
@@ -63,21 +65,22 @@ export function ScheduleNew() {
     <div className="flex min-h-0 flex-1 flex-col">
       <TopBar title="New appointment" back />
 
-      <div className="scroll-pane space-y-3 bg-surface-sunk p-3">
+      <div className="scroll-pane bg-surface-sunk">
+        <div className="content-col page anim-rise">
         {/* --- property --------------------------------------------------- */}
-        <section className="card p-4">
-          <h2 className="mb-2 font-bold">Property</h2>
+        <Card>
+          <SectionHeader title="Property" className="mb-3" />
           {selected ? (
-            <div className="flex items-center gap-3 rounded-xl bg-surface-sunk p-3">
+            <div className="flex items-center gap-3 rounded-field bg-surface-warm py-2 pl-3.5 pr-1.5">
               <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold">{selected.address1}</p>
-                <p className="truncate text-xs text-ink-mute">
+                <p className="truncate text-[15px] font-semibold">{selected.address1}</p>
+                <p className="truncate text-[13px] text-ink-mute">
                   {selected.contacts[0]?.name ?? 'No contact'}
                 </p>
               </div>
               <button
                 onClick={() => setPropertyId('')}
-                className="focusable min-h-tap shrink-0 rounded-lg px-3 text-sm font-semibold text-brand-600"
+                className="focusable min-h-tap shrink-0 rounded-field px-3 text-[14px] font-semibold text-brand-600"
               >
                 Change
               </button>
@@ -94,19 +97,21 @@ export function ScheduleNew() {
                   onChange={(e) => setQuery(e.target.value)}
                   type="search"
                   placeholder="Search address or name"
-                  className="focusable min-h-tap w-full rounded-xl border border-slate-200 pl-11 pr-3"
+                  className="field h-[52px] pl-11 pr-3"
                 />
               </label>
-              <ul className="mt-2 max-h-72 overflow-y-auto">
+              <ul className="row-group mt-1 max-h-72 overflow-y-auto">
                 {candidates.map((p) => (
                   <li key={p.id}>
                     <button
                       onClick={() => setPropertyId(p.id)}
-                      className="flex min-h-[56px] w-full items-center border-b border-slate-100 px-1 text-left last:border-0 active:bg-slate-50"
+                      className="flex min-h-[58px] w-full items-center px-1 text-left active:bg-surface-field"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate font-medium">{p.address1}</span>
-                        <span className="block truncate text-xs text-ink-mute">
+                        <span className="block truncate text-[15px] font-medium">
+                          {p.address1}
+                        </span>
+                        <span className="block truncate text-[13px] text-ink-mute">
                           {p.contacts[0]?.name ?? 'No contact'}
                         </span>
                       </span>
@@ -116,12 +121,12 @@ export function ScheduleNew() {
               </ul>
             </>
           )}
-        </section>
+        </Card>
 
         {/* --- when ------------------------------------------------------- */}
-        <section className="card space-y-3 p-4">
-          <h2 className="font-bold">When</h2>
-          <div className="grid grid-cols-2 gap-2">
+        <Card>
+          <SectionHeader title="When" className="mb-3" />
+          <div className="grid grid-cols-2 gap-2.5">
             {slots().map((s) => (
               <button
                 key={s.at}
@@ -130,50 +135,45 @@ export function ScheduleNew() {
                   setWhen(s.at)
                 }}
                 aria-pressed={when === s.at}
-                className={`press focusable min-h-[56px] rounded-xl border-2 px-2 text-sm font-semibold ${
-                  when === s.at ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-200'
+                className={`press focusable min-h-[60px] rounded-field px-2 text-[14px] font-semibold transition-colors ${
+                  when === s.at
+                    ? 'bg-brand-50 text-brand-700 ring-2 ring-brand-500'
+                    : 'bg-surface text-ink ring-1 ring-ink/10 active:bg-surface-field'
                 }`}
               >
                 {s.label}
-                <span className="nums block text-xs font-normal opacity-70">
+                <span className="nums mt-0.5 block text-[12.5px] font-medium text-ink-mute">
                   {time(s.at)}
                 </span>
               </button>
             ))}
           </div>
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
-              Or pick exactly
-            </span>
+          <label className="mt-4 block">
+            <span className="eyebrow">Or pick exactly</span>
             <input
               type="datetime-local"
               value={toLocalInput(when)}
               onChange={(e) => e.target.value && setWhen(new Date(e.target.value).getTime())}
-              className="focusable mt-1 min-h-tap w-full rounded-xl border border-slate-200 px-3"
+              className="field mt-1.5 h-[52px]"
             />
           </label>
-        </section>
+        </Card>
 
         {/* --- details ---------------------------------------------------- */}
-        <section className="card space-y-3 p-4">
-          <label className="block">
-            <span className="text-sm font-semibold">Title</span>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="focusable mt-1 min-h-[52px] w-full rounded-xl border border-slate-200 px-3 text-base"
-            />
-          </label>
+        <Card className="space-y-4">
+          <Field label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
           <div>
-            <span className="text-sm font-semibold">Length</span>
-            <div className="mt-1 flex gap-2">
+            <span className="mb-1.5 block text-[13px] font-semibold text-ink">Length</span>
+            <div className="flex gap-2">
               {[30, 45, 60, 90].map((m) => (
                 <button
                   key={m}
                   onClick={() => setDuration(m)}
                   aria-pressed={duration === m}
-                  className={`press focusable min-h-tap flex-1 rounded-xl border-2 text-sm font-semibold ${
-                    duration === m ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-200'
+                  className={`press focusable min-h-[52px] flex-1 rounded-field text-[14px] font-semibold transition-colors ${
+                    duration === m
+                      ? 'bg-brand-50 text-brand-700 ring-2 ring-brand-500'
+                      : 'bg-surface text-ink ring-1 ring-ink/10 active:bg-surface-field'
                   }`}
                 >
                   {m}m
@@ -181,12 +181,13 @@ export function ScheduleNew() {
               ))}
             </div>
           </div>
-        </section>
+        </Card>
+        </div>
       </div>
 
       <div
-        className="shrink-0 border-t border-slate-200 bg-surface px-4 pt-3"
-        style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
+        className="shrink-0 bg-surface px-4 pt-3.5 shadow-nav"
+        style={{ paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))' }}
       >
         <Button size="lg" full onClick={() => void save()} disabled={!selected || saving}>
           {saving ? 'Saving…' : 'Create appointment'}

@@ -51,28 +51,40 @@ export function BottomNav({ role }: { role: Role }) {
 
   return (
     <nav
-      className="z-30 shrink-0 border-t border-slate-200 bg-surface/95 backdrop-blur md:hidden"
+      className="z-30 shrink-0 bg-surface/95 shadow-nav backdrop-blur-md md:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       aria-label="Primary"
     >
-      <ul className="flex">
+      <ul className="flex px-1 pt-1">
         {items.map(({ to, label, Icon }) => (
           <li key={to} className="flex-1">
             <NavLink
               to={to}
               className={({ isActive }) =>
                 [
-                  'flex min-h-[60px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium',
-                  isActive ? 'text-brand-500' : 'text-ink-mute',
+                  'focusable relative flex min-h-[58px] flex-col items-center justify-center gap-1',
+                  'rounded-card text-[11px] font-semibold transition-colors',
+                  isActive ? 'text-brand-600' : 'text-ink-mute active:bg-ink/[0.04]',
                 ].join(' ')
               }
             >
               {({ isActive }) => (
                 <>
-                  <span className={isActive ? 'scale-105' : ''}>
+                  {/*
+                    A soft orange plate behind the active icon rather than a
+                    coloured bar or an enlarged glyph. It reads instantly at a
+                    glance, survives being looked at in sunlight, and doesn't
+                    shift the row's layout when the tab changes.
+                  */}
+                  <span
+                    className={[
+                      'grid h-8 w-12 place-items-center rounded-full transition-colors',
+                      isActive ? 'bg-brand-50' : '',
+                    ].join(' ')}
+                  >
                     <Icon />
                   </span>
-                  <span>{label}</span>
+                  <span className="leading-none">{label}</span>
                 </>
               )}
             </NavLink>
@@ -92,11 +104,11 @@ export function SideRail({ role }: { role: Role }) {
   const showConsole = role !== 'field_rep'
   return (
     <nav
-      className="hidden w-[76px] shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-surface py-4 md:flex lg:w-56 lg:items-stretch lg:px-3"
+      className="hidden w-[76px] shrink-0 flex-col items-center gap-1 border-r border-ink/10 bg-surface py-4 md:flex lg:w-56 lg:items-stretch lg:px-3"
       aria-label="Primary"
     >
       <div className="mb-4 flex items-center gap-2 px-1 lg:px-2">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-ink text-sm font-bold text-white">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-field bg-ink text-sm font-bold text-white">
           A
         </span>
         <span className="hidden text-sm font-bold lg:block">Allstar</span>
@@ -107,9 +119,9 @@ export function SideRail({ role }: { role: Role }) {
           to={to}
           className={({ isActive }) =>
             [
-              'flex min-h-tap items-center gap-3 rounded-xl px-3 text-sm font-medium lg:justify-start',
+              'flex min-h-tap items-center gap-3 rounded-field px-3 text-sm font-medium lg:justify-start',
               'justify-center',
-              isActive ? 'bg-brand-50 text-brand-600' : 'text-ink-mute hover:bg-slate-50',
+              isActive ? 'bg-brand-50 text-brand-600' : 'text-ink-mute hover:bg-surface-field',
             ].join(' ')
           }
         >
@@ -125,8 +137,8 @@ export function SideRail({ role }: { role: Role }) {
           to="/admin"
           className={({ isActive }) =>
             [
-              'mt-auto flex min-h-tap items-center justify-center gap-3 rounded-xl px-3 text-sm font-medium lg:justify-start',
-              isActive ? 'bg-brand-50 text-brand-600' : 'text-ink-mute hover:bg-slate-50',
+              'mt-auto flex min-h-tap items-center justify-center gap-3 rounded-field px-3 text-sm font-medium lg:justify-start',
+              isActive ? 'bg-brand-50 text-brand-600' : 'text-ink-mute hover:bg-surface-field',
             ].join(' ')
           }
         >

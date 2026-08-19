@@ -12,6 +12,8 @@ import { SyncBadge, SyncDetail } from '../components/sync/SyncBadge'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { PullToRefresh } from '../components/ui/PullToRefresh'
 import { Button } from '../components/ui/Button'
+import { Card, SectionHeader } from '../components/ui/Card'
+import { ProgressBar } from '../components/ui/ProgressBar'
 import { OutcomePill } from '../components/ui/StatusPill'
 import { distanceMiles, formatDistance, navigationUrl, walkMinutes } from '../lib/geo'
 import { money, relative, relativeLower, time } from '../lib/format'
@@ -106,50 +108,62 @@ export function Today() {
         }}
         className="pad-nav bg-surface-sunk"
       >
-        <div className="content-col space-y-3 p-3">
+        <div className="content-col page anim-rise">
           {/* --- progress ------------------------------------------------- */}
-          <section className="card p-4" aria-label="Today's progress">
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
-                  Route progress
-                </p>
-                <p className="nums mt-0.5 text-3xl font-black leading-none">
+          <Card aria-label="Today's progress">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="eyebrow">Route progress</p>
+                <p className="nums mt-1.5 text-kpi font-extrabold text-ink">
                   {progress.done}
-                  <span className="text-lg font-bold text-ink-mute"> / {progress.total}</span>
+                  <span className="text-[19px] font-bold text-ink-faint"> / {progress.total}</span>
                 </p>
-                <p className="mt-1 text-xs text-ink-mute">
+                <p className="mt-1 text-[13px] text-ink-mute">
                   {progress.remaining} doors left
                   {progress.skipped ? ` · ${progress.skipped} skipped` : ''}
                 </p>
               </div>
-              <div className="text-right">
-                <p className="nums text-2xl font-black leading-none text-emerald-600">{wins}</p>
-                <p className="text-xs text-ink-mute">conversations</p>
+              {/* The right column is the outcome, not the effort — so it gets
+                  green, and the doors number stays neutral. */}
+              <div className="shrink-0 text-right">
+                <p className="eyebrow">Conversations</p>
+                <p className="nums mt-1.5 text-kpi-sm font-extrabold text-good">{wins}</p>
                 {pipelineToday > 0 && (
-                  <p className="nums mt-1 text-xs font-semibold text-emerald-700">
+                  <p className="nums mt-1 text-[13px] font-semibold text-good">
                     +{money(pipelineToday)} pipeline
                   </p>
                 )}
               </div>
             </div>
-            <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-brand-500 transition-[width]"
-                style={{ width: `${progress.pct}%` }}
-              />
-            </div>
-          </section>
+            <ProgressBar
+              value={progress.done}
+              max={Math.max(progress.total, 1)}
+              className="mt-4"
+              label={`${progress.done} of ${progress.total} doors`}
+            />
+          </Card>
 
           {/* --- next stop: the single most important block --------------- */}
           {nextStop ? (
-            <section className="card overflow-hidden" aria-label="Next property">
-              <div className="flex items-center justify-between gap-2 bg-brand-500 px-4 py-2">
-                <p className="text-xs font-bold uppercase tracking-wide text-white/90">
+            /*
+              The hero card.
+
+              A cream band rather than a saturated one. There is no shade of this
+              orange that is both bright and safe to put white text on — the ramp
+              from #FF8A3D to #C2410C never clears 4.5:1 with white until it is
+              already a deep rust — and a brick-coloured bar across the top of the
+              first card makes the whole screen read heavy. So the band carries
+              orange *text* on a tint, and the single saturated orange on the
+              screen is the button that starts work. That is what "use the accent
+              selectively" means in practice.
+            */
+            <Card padded={false} className="overflow-hidden" aria-label="Next property">
+              <div className="flex items-center justify-between gap-2 bg-brand-50 px-4 py-2.5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-brand-600">
                   Next stop
                 </p>
                 {dist != null && (
-                  <p className="nums text-xs font-semibold text-white">
+                  <p className="nums text-[12.5px] font-semibold text-brand-700">
                     {formatDistance(dist)} · {walkMinutes(dist)} min
                   </p>
                 )}
@@ -157,35 +171,35 @@ export function Today() {
 
               <button
                 onClick={() => nav(`/property/${nextStop.id}`)}
-                className="flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-slate-50"
+                className="flex w-full items-center gap-3 px-4 pb-3 pt-4 text-left active:bg-surface-field"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xl font-bold leading-tight">
+                  <span className="block truncate text-title font-extrabold">
                     {nextStop.address1}
                   </span>
-                  <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-mute">
+                  <span className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-ink-mute">
                     <span className="truncate">
                       {nextStop.contacts[0]?.name ?? 'No contact on file'}
                     </span>
                     <OutcomePill code={nextStop.lastOutcome} />
                   </span>
                   {nextStop.lastVisitAt && (
-                    <span className="mt-1 block text-xs text-ink-mute">
+                    <span className="mt-1.5 block text-[13px] text-ink-mute">
                       Last visit {relativeLower(nextStop.lastVisitAt)}
                     </span>
                   )}
                 </span>
-                <span className="shrink-0 text-ink-mute">
+                <span className="shrink-0 text-ink-faint">
                   <IconChevron />
                 </span>
               </button>
 
-              <div className="flex gap-2 px-3 pb-3">
+              <div className="flex gap-2.5 px-4 pb-4 pt-1">
                 <a
                   href={navigationUrl({ lat: nextStop.lat, lng: nextStop.lng })}
                   target="_blank"
                   rel="noreferrer"
-                  className="press focusable flex min-h-[56px] flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 font-semibold active:bg-slate-50"
+                  className="press focusable flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-[16px] bg-surface text-[15px] font-semibold ring-1 ring-ink/10 active:bg-surface-field"
                 >
                   <IconNavigate />
                   Navigate
@@ -199,7 +213,7 @@ export function Today() {
                   Start visit
                 </Button>
               </div>
-            </section>
+            </Card>
           ) : progress.total === 0 ? (
             /*
               No route at all — a rep's first morning, or a day nobody planned.
@@ -210,26 +224,26 @@ export function Today() {
             */
             <PlanDayCard />
           ) : (
-            <section className="card p-5 text-center">
-              <p className="text-base font-semibold">Route complete</p>
-              <p className="mt-1 text-sm text-ink-mute">
+            <Card className="px-5 py-6 text-center">
+              <p className="text-[19px] font-bold">Route complete</p>
+              <p className="mx-auto mt-1.5 max-w-[34ch] text-[14px] leading-relaxed text-ink-mute">
                 {progress.done} of {progress.total} doors knocked today. Nice work.
               </p>
-              <div className="mt-3 space-y-2">
-                <Button full onClick={() => void buildTodayRoute()}>
+              <div className="mt-5 space-y-2.5">
+                <Button size="lg" full onClick={() => void buildTodayRoute()}>
                   Plan more doors
                 </Button>
-                <Button variant="secondary" full onClick={() => nav('/map')}>
+                <Button variant="secondary" size="lg" full onClick={() => nav('/map')}>
                   Find more properties
                 </Button>
               </div>
-            </section>
+            </Card>
           )}
 
           {/* --- appointments --------------------------------------------- */}
           {todaysAppointments.length > 0 && (
             <Section title="Appointments" count={todaysAppointments.length}>
-              <ul>
+              <ul className="row-group">
                 {todaysAppointments.map((a) => {
                   const p = properties[a.propertyId]
                   const past = a.startsAt < Date.now()
@@ -237,22 +251,24 @@ export function Today() {
                     <li key={a.id}>
                       <button
                         onClick={() => p && nav(`/property/${p.id}`)}
-                        className="flex min-h-[64px] w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left last:border-0 active:bg-slate-50"
+                        className="flex min-h-[68px] w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-field"
                       >
                         <span
-                          className={`nums w-16 shrink-0 rounded-lg px-1 py-1.5 text-center text-xs font-bold ${
-                            past ? 'bg-slate-100 text-ink-mute' : 'bg-violet-50 text-violet-700'
+                          className={`nums w-[58px] shrink-0 rounded-field px-1 py-2 text-center text-[12.5px] font-bold ${
+                            past ? 'bg-ink/[0.06] text-ink-mute' : 'bg-info-bg text-info'
                           }`}
                         >
                           {time(a.startsAt)}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate font-semibold">{a.title}</span>
-                          <span className="block truncate text-xs text-ink-mute">
+                          <span className="block truncate text-[15px] font-semibold">
+                            {a.title}
+                          </span>
+                          <span className="block truncate text-[13px] text-ink-mute">
                             {p?.address1 ?? 'Property'}
                           </span>
                         </span>
-                        <span className="shrink-0 text-ink-mute">
+                        <span className="shrink-0 text-ink-faint">
                           <IconChevron />
                         </span>
                       </button>
@@ -266,7 +282,7 @@ export function Today() {
           {/* --- follow-ups / tasks --------------------------------------- */}
           {openTasks.length > 0 && (
             <Section title="Follow-ups" count={openTasks.length}>
-              <ul>
+              <ul className="row-group">
                 {openTasks.slice(0, 6).map((t) => (
                   <TaskRow key={t.id} id={t.id} />
                 ))}
@@ -277,20 +293,27 @@ export function Today() {
           {/* --- recent activity ------------------------------------------ */}
           {todayVisits.length > 0 && (
             <Section title="Today's activity" count={todayVisits.length}>
-              <ul>
+              <ul className="row-group">
                 {todayVisits.slice(0, 8).map((ev) => {
                   const def = outcomeByCode(ev.outcome)
                   return (
                     <li key={ev.id}>
                       <button
                         onClick={() => ev.propertyId && nav(`/property/${ev.propertyId}`)}
-                        className="flex min-h-[52px] w-full items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left last:border-0 active:bg-slate-50"
+                        className="flex min-h-[56px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-surface-field"
                       >
-                        <span className="w-6 shrink-0 text-center" aria-hidden>
+                        <span
+                          className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-warm text-[13px]"
+                          aria-hidden
+                        >
                           {def?.glyph ?? '·'}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-sm">{ev.summary}</span>
-                        <span className="shrink-0 text-xs text-ink-mute">{time(ev.at)}</span>
+                        <span className="min-w-0 flex-1 truncate text-[14px] text-ink-soft">
+                          {ev.summary}
+                        </span>
+                        <span className="nums shrink-0 text-[12.5px] text-ink-mute">
+                          {time(ev.at)}
+                        </span>
                       </button>
                     </li>
                   )
@@ -299,12 +322,9 @@ export function Today() {
             </Section>
           )}
 
-          <button
-            onClick={() => nav('/route')}
-            className="focusable min-h-tap w-full rounded-xl text-sm font-semibold text-brand-600 active:bg-brand-50"
-          >
+          <Button variant="secondary" size="lg" full onClick={() => nav('/route')}>
             View full route
-          </button>
+          </Button>
         </div>
       </PullToRefresh>
 
@@ -330,17 +350,10 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <section className="card overflow-hidden">
-      <div className="flex items-center gap-2 px-4 pb-1 pt-3">
-        <h2 className="text-sm font-bold">{title}</h2>
-        {count != null && (
-          <span className="nums rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-ink-mute">
-            {count}
-          </span>
-        )}
-      </div>
+    <Card padded={false} className="overflow-hidden">
+      <SectionHeader title={title} count={count} className="px-4 pb-2.5 pt-4" />
       {children}
-    </section>
+    </Card>
   )
 }
 
@@ -355,29 +368,31 @@ function TaskRow({ id }: { id: string }) {
   const overdue = task.dueAt < Date.now()
 
   return (
-    <li className="flex items-center border-b border-slate-100 last:border-0">
+    <li className="flex items-center">
       {/* 48px checkbox — this gets tapped while walking. */}
       <button
         onClick={() => void toggleTask(task.id)}
         aria-label={`Mark ${task.title} complete`}
-        className="focusable grid h-[60px] w-14 shrink-0 place-items-center active:bg-slate-50"
+        className="focusable grid h-[60px] w-14 shrink-0 place-items-center active:bg-surface-field"
       >
-        <span className="grid h-6 w-6 place-items-center rounded-md border-2 border-slate-300" />
+        <span className="grid h-[22px] w-[22px] place-items-center rounded-[7px] border-2 border-ink/20" />
       </button>
       <button
         onClick={() => (property ? nav(`/property/${property.id}`) : undefined)}
-        className="flex min-h-[60px] flex-1 items-center gap-2 py-2 pr-4 text-left active:bg-slate-50"
+        className="flex min-h-[60px] flex-1 items-center gap-2 py-2 pr-4 text-left active:bg-surface-field"
       >
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{task.title}</span>
+          <span className="block truncate text-[15px] font-medium">{task.title}</span>
           <span
-            className={`block text-xs ${overdue ? 'font-semibold text-amber-600' : 'text-ink-mute'}`}
+            className={`block text-[13px] ${overdue ? 'font-semibold text-warn' : 'text-ink-mute'}`}
           >
             {overdue ? 'Overdue · ' : ''}
             {relative(task.dueAt)}
           </span>
         </span>
-        <IconCalendar />
+        <span className="shrink-0 text-ink-faint">
+          <IconCalendar />
+        </span>
       </button>
     </li>
   )
@@ -416,26 +431,26 @@ function PlanDayCard() {
 
   if (available.length === 0) {
     return (
-      <section className="card p-5 text-center">
-        <p className="text-base font-semibold">No doors to walk yet</p>
-        <p className="mt-1 text-sm leading-relaxed text-ink-mute">
+      <Card className="px-5 py-6 text-center">
+        <p className="text-[19px] font-bold">No doors to walk yet</p>
+        <p className="mx-auto mt-1.5 max-w-[36ch] text-[14px] leading-relaxed text-ink-mute">
           Nothing is assigned to you for today. Your manager can import a lead list
           and assign it — or you can add a house yourself while you’re standing in
           front of it.
         </p>
-        <Button variant="secondary" className="mt-3" full onClick={() => nav('/lead/new')}>
+        <Button variant="secondary" size="lg" className="mt-5" full onClick={() => nav('/lead/new')}>
           Add a lead
         </Button>
-      </section>
+      </Card>
     )
   }
 
   const target = Math.min(DEFAULT_ROUTE_SIZE, available.length)
 
   return (
-    <section className="card p-5 text-center">
-      <p className="text-base font-semibold">Ready to plan your day</p>
-      <p className="mt-1 text-sm leading-relaxed text-ink-mute">
+    <Card className="px-5 py-6 text-center">
+      <p className="text-[19px] font-bold">Ready to plan your day</p>
+      <p className="mx-auto mt-1.5 max-w-[36ch] text-[14px] leading-relaxed text-ink-mute">
         {available.length.toLocaleString()} lead{available.length === 1 ? '' : 's'} waiting.
         We’ll put the closest {target} in walking order
         {position ? ' from where you are now' : ''}.
@@ -444,7 +459,7 @@ function PlanDayCard() {
         size="lg"
         full
         buzz
-        className="mt-4"
+        className="mt-5"
         disabled={building}
         onClick={async () => {
           setBuilding(true)
@@ -457,9 +472,9 @@ function PlanDayCard() {
       >
         {building ? 'Planning…' : `Plan ${target} doors`}
       </Button>
-      <Button variant="secondary" full className="mt-2" onClick={() => nav('/map')}>
+      <Button variant="secondary" size="lg" full className="mt-2.5" onClick={() => nav('/map')}>
         Pick them on the map
       </Button>
-    </section>
+    </Card>
   )
 }

@@ -130,7 +130,7 @@ export function AdminTeam() {
         the fix is one click away rather than buried in documentation.
       */}
       {mode === 'live' && admins.length === 1 && (
-        <div className="mb-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200">
+        <div className="mb-4 rounded-field bg-warn-bg p-4 text-sm text-warn ring-1 ring-warn/25">
           <p className="font-semibold">You’re the only administrator.</p>
           <p className="mt-1 leading-relaxed">
             There’s no password recovery by email yet, so if you lose this password
@@ -149,14 +149,14 @@ export function AdminTeam() {
           onChange={(e) => setQuery(e.target.value)}
           type="search"
           placeholder="Search name or email"
-          className="focusable min-h-[40px] w-64 rounded-xl border border-slate-200 px-3 text-sm"
+          className="focusable min-h-[40px] w-64 rounded-field border border-ink/10 px-3 text-sm"
         />
         {(['all', 'field_rep', 'manager', 'client_admin'] as const).map((r) => (
           <Chip key={r} size="sm" selected={roleFilter === r} onClick={() => setRoleFilter(r)}>
             {r === 'all' ? 'All roles' : ROLE_LABEL[r]}
           </Chip>
         ))}
-        <span className="mx-2 h-6 w-px bg-slate-200" />
+        <span className="mx-2 h-6 w-px bg-ink/10" />
         {RANGES.map((r) => (
           <Chip key={r.key} size="sm" selected={range === r.key} onClick={() => setRange(r.key)}>
             {r.label}
@@ -164,7 +164,7 @@ export function AdminTeam() {
         ))}
       </FilterBar>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
+      <div className="overflow-hidden rounded-card border border-ink/10 bg-surface">
         <table className="w-full text-sm">
           <thead className="bg-surface-sunk text-xs text-ink-mute">
             <tr>
@@ -185,7 +185,7 @@ export function AdminTeam() {
               const t = todayById.get(m.id)
               const isRep = m.role === 'field_rep'
               return (
-                <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50">
+                <tr key={m.id} className="border-t border-ink/[0.06] hover:bg-surface-field">
                   <td className="px-5 py-3">
                     <span className="flex items-center gap-2.5">
                       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-50 text-[11px] font-bold text-brand-600">
@@ -311,7 +311,7 @@ function MemberDetail({
       </div>
 
       {today && (
-        <dl className="grid grid-cols-2 gap-3 rounded-xl bg-surface-sunk p-3 text-sm">
+        <dl className="grid grid-cols-2 gap-3 rounded-field bg-surface-sunk p-3 text-sm">
           <div>
             <dt className="text-xs text-ink-mute">Route today</dt>
             <dd className="nums font-semibold">
@@ -348,7 +348,7 @@ function MemberDetail({
           onClose={onClose}
         />
       ) : (
-        <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-900">
+        <p className="rounded-field bg-warn-bg px-3 py-2.5 text-xs leading-relaxed text-warn">
           This is the demo roster — nobody here has a real account, so there's nothing to
           reset or remove. Sign in with real credentials to manage people.
         </p>

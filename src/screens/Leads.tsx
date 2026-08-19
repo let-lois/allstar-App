@@ -31,7 +31,7 @@ const STATUS_FILTERS: (LeadStatus | 'all')[] = [
   'won',
 ]
 
-const ROW_HEIGHT = 100
+const ROW_HEIGHT = 108
 
 /**
  * Lead list.
@@ -95,7 +95,7 @@ export function Leads() {
         title="Leads"
         subtitle={`${list.length} of ${scoped.length}`}
         below={
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <label className="relative block">
               <span className="sr-only">Search leads</span>
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-mute">
@@ -108,7 +108,7 @@ export function Leads() {
                 inputMode="search"
                 enterKeyHint="search"
                 placeholder="Address or name"
-                className="focusable min-h-tap w-full rounded-xl border border-slate-200 bg-surface-sunk pl-11 pr-3 md:max-w-md"
+                className="field h-[46px] bg-surface-field pl-11 pr-3 md:max-w-md"
               />
             </label>
             <div className="snap-x-row">
@@ -122,7 +122,7 @@ export function Leads() {
                   {s.label}
                 </Chip>
               ))}
-              <span className="mx-1 w-px shrink-0 self-stretch bg-slate-200" />
+              <span className="mx-1 w-px shrink-0 self-stretch bg-ink/10" />
               {STATUS_FILTERS.map((s) => (
                 <Chip key={s} size="sm" selected={status === s} onClick={() => setStatus(s)}>
                   {s === 'all' ? 'All' : STATUS_LABEL[s]}
@@ -139,7 +139,7 @@ export function Leads() {
         context (who, history, next action) rather than wider rows.
       */}
       <div className="flex min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:max-w-[460px] lg:border-r lg:border-slate-200">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:max-w-[460px] lg:border-r lg:border-ink/10">
           <VirtualList
             items={list}
             itemHeight={ROW_HEIGHT}
@@ -154,7 +154,7 @@ export function Leads() {
               />
             )}
             empty={
-              <div className="grid place-items-center p-10 text-center text-sm text-ink-mute">
+              <div className="grid place-items-center px-8 py-14 text-center text-[14px] text-ink-mute">
                 No leads match those filters.
               </div>
             }
@@ -174,7 +174,7 @@ export function Leads() {
                 </div>
               </div>
             ) : (
-              <div className="grid h-full place-items-center p-10 text-center text-sm text-ink-mute">
+              <div className="grid h-full place-items-center p-10 text-center text-[14px] text-ink-mute">
                 Select a lead to preview it here.
               </div>
             )}

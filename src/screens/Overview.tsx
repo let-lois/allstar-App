@@ -3,8 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { SyncBadge } from '../components/sync/SyncBadge'
 import { PullToRefresh } from '../components/ui/PullToRefresh'
+import { Card, SectionHeader } from '../components/ui/Card'
+import { KpiCard } from '../components/ui/KpiCard'
+import { ProgressBar } from '../components/ui/ProgressBar'
+import { StatusBadge } from '../components/ui/StatusBadge'
+import { Avatar } from '../components/ui/Avatar'
 import { useAppStore } from '../store/useAppStore'
-import { PIPELINE_STAGES, STATUS_COLOR, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
+import { PIPELINE_STAGES, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
 import { money, relative } from '../lib/format'
 import { drain } from '../lib/sync'
 import { useTeamStats, useTeamTotals } from '../store/teamStats'
@@ -58,6 +63,11 @@ export function Overview({ role }: { role: Role }) {
     return map
   }, [properties])
 
+  const stageMax = useMemo(
+    () => Math.max(...PIPELINE_STAGES.map((s) => stageCounts.get(s) ?? 0), 1),
+    [stageCounts],
+  )
+
   const upcoming = useMemo(
     () =>
       Object.values(appointments)
@@ -87,198 +97,213 @@ export function Overview({ role }: { role: Role }) {
         }}
         className="pad-nav bg-surface-sunk"
       >
-        <div className="content-col space-y-3 p-3">
-          {/* --- headline numbers ----------------------------------------- */}
+        <div className="content-col page anim-rise">
+          {/*
+            Headline numbers.
+            Two columns, and deliberately not four identically-coloured tiles:
+            conversations carry the accent because that is the number a manager
+            is actually watching, money won carries green, and volume stays
+            neutral. Colouring everything is the same as colouring nothing.
+          */}
           <div className="grid grid-cols-2 gap-3">
-            <Stat label="Doors today" value={String(totals.knocks)} />
-            <Stat
+            <KpiCard label="Doors today" value={totals.knocks} />
+            <KpiCard
               label="Conversations"
-              value={String(totals.conversations)}
+              value={totals.conversations}
               sub={`${totals.contactRate}% contact rate`}
-              tone="text-emerald-600"
+              tone="brand"
             />
-            <Stat label="Open pipeline" value={money(stats.openValue)} sub={`${stats.openCount} leads`} />
-            <Stat label="Won" value={money(stats.wonValue)} tone="text-emerald-600" />
+            <KpiCard
+              label="Open pipeline"
+              value={money(stats.openValue)}
+              sub={`${stats.openCount} leads`}
+            />
+            <KpiCard label="Won" value={money(stats.wonValue)} tone="good" />
           </div>
 
           {isSuper && (
-            <section className="card p-4">
-              <h2 className="mb-2 text-sm font-bold">Clients</h2>
-              <ul className="space-y-2">
+            <Card padded={false}>
+              <SectionHeader title="Clients" className="px-4 pb-3 pt-4" />
+              <ul className="row-group">
                 {[
                   { name: 'Summit Exteriors', reps: 12, status: 'Healthy' },
                   { name: 'Bright Path Solar', reps: 28, status: 'Healthy' },
                   { name: 'Redline Roofing', reps: 7, status: 'Low activity' },
                 ].map((c) => (
-                  <li
-                    key={c.name}
-                    className="flex min-h-[52px] items-center gap-3 border-b border-slate-100 last:border-0"
-                  >
+                  <li key={c.name} className="flex min-h-[60px] items-center gap-3 px-4 py-2.5">
+                    <Avatar
+                      initials={c.name
+                        .split(' ')
+                        .slice(0, 2)
+                        .map((w) => w[0])
+                        .join('')}
+                      name={c.name}
+                    />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">{c.name}</span>
-                      <span className="block text-xs text-ink-mute">{c.reps} reps</span>
+                      <span className="block truncate text-[15px] font-semibold">{c.name}</span>
+                      <span className="nums block text-[13px] text-ink-mute">{c.reps} reps</span>
                     </span>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        c.status === 'Healthy'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-amber-50 text-amber-700'
-                      }`}
-                    >
+                    <StatusBadge tone={c.status === 'Healthy' ? 'good' : 'warn'}>
                       {c.status}
-                    </span>
+                    </StatusBadge>
                   </li>
                 ))}
               </ul>
-              <p className="mt-3 text-xs text-ink-mute">
+              <p className="px-4 pb-4 pt-3 text-[13px] leading-snug text-ink-mute">
                 Full administration, analytics and audit logs are on desktop.
               </p>
-            </section>
+            </Card>
           )}
 
           {/* --- team ----------------------------------------------------- */}
-          <section className="card overflow-hidden">
-            <div className="flex items-center justify-between px-4 pb-1 pt-3">
-              <h2 className="text-sm font-bold">Team today</h2>
-              <button
-                onClick={() => nav('/team')}
-                className="focusable min-h-[44px] rounded-lg px-3 text-sm font-semibold text-brand-600"
-              >
-                All
-              </button>
-            </div>
-            <ul>
+          <Card padded={false} className="overflow-hidden">
+            <SectionHeader
+              title="Team today"
+              className="px-4 pb-2.5 pt-4"
+              action="All"
+              onAction={() => nav('/team')}
+            />
+            <ul className="row-group">
               {teamStats.map((rep) => (
                 <li key={rep.id}>
                   <button
                     onClick={() => nav('/team')}
-                    className="flex min-h-[64px] w-full items-center gap-3 border-b border-slate-100 px-4 text-left last:border-0 active:bg-slate-50"
+                    className="flex min-h-[72px] w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-field"
                   >
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-600">
-                      {rep.initials}
-                    </span>
+                    <Avatar initials={rep.initials} name={rep.name} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold">{rep.name}</span>
-                      <span className="nums block text-xs text-ink-mute">
-                        {rep.knocks} doors · {rep.conversations} conversations ·{' '}
-                        {rep.done}/{rep.total} stops
+                      <span className="block truncate text-[15px] font-semibold">{rep.name}</span>
+                      {/*
+                        Never wrapped, and never truncated mid-word either.
+
+                        Three facts wrapped to a second line at 390px, which made
+                        every row a different height. Two facts still truncate to
+                        "11 conve…" at 320px, so the narrowest phones drop the
+                        second fact rather than mangling it — the mobile-first
+                        move is to *add* the detail once there is room for it,
+                        not to squeeze it in everywhere and clip the result.
+                      */}
+                      <span className="nums mt-0.5 block truncate text-[13px] text-ink-mute">
+                        {rep.knocks} doors
+                        <span className="hidden xs:inline">
+                          {' '}
+                          · {rep.conversations} conversations
+                        </span>
                       </span>
                     </span>
-                    <span className="nums shrink-0 text-xs font-semibold text-emerald-700">
+                    {/*
+                      Not green. A contact rate is a measurement, not an
+                      achievement, and painting 27% the same green as 58% tells a
+                      manager the thing they opened the screen to find out is
+                      fine when it isn't.
+                    */}
+                    <span className="nums shrink-0 text-[15px] font-bold text-ink">
                       {rep.contactRate}%
                     </span>
-                    <span className="shrink-0 text-ink-mute">
+                    <span className="shrink-0 text-ink-faint">
                       <IconChevron />
                     </span>
                   </button>
                 </li>
               ))}
             </ul>
-          </section>
+          </Card>
 
           {/* --- pipeline snapshot ---------------------------------------- */}
-          <section className="card p-4">
-            <h2 className="mb-3 text-sm font-bold">Pipeline</h2>
-            <ul className="space-y-2">
+          <Card>
+            <SectionHeader title="Pipeline" className="mb-3.5" />
+            <ul className="space-y-3">
               {PIPELINE_STAGES.map((s) => {
                 const count = stageCounts.get(s) ?? 0
-                const max = Math.max(...PIPELINE_STAGES.map((x) => stageCounts.get(x) ?? 0), 1)
                 return (
                   <li key={s} className="flex items-center gap-3">
-                    <span className="w-24 shrink-0 text-xs font-medium">{STATUS_LABEL[s]}</span>
-                    <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-                      <span
-                        className="block h-full rounded-full"
-                        style={{
-                          width: `${(count / max) * 100}%`,
-                          backgroundColor: STATUS_COLOR[s],
-                        }}
-                      />
+                    <span className="w-[74px] shrink-0 text-[13px] font-medium text-ink-soft">
+                      {STATUS_LABEL[s]}
                     </span>
-                    <span className="nums w-8 shrink-0 text-right text-xs font-semibold">
+                    <ProgressBar
+                      value={count}
+                      max={stageMax}
+                      tone={s === 'won' ? 'good' : 'brand'}
+                      label={`${STATUS_LABEL[s]}: ${count}`}
+                      className="flex-1"
+                    />
+                    <span className="nums w-7 shrink-0 text-right text-[13px] font-bold">
                       {count}
                     </span>
                   </li>
                 )
               })}
             </ul>
-          </section>
+          </Card>
 
           {/* --- upcoming ------------------------------------------------- */}
           {upcoming.length > 0 && (
-            <section className="card overflow-hidden">
-              <h2 className="px-4 pb-1 pt-3 text-sm font-bold">Upcoming appointments</h2>
-              <ul>
+            <Card padded={false} className="overflow-hidden">
+              <SectionHeader
+                title="Upcoming appointments"
+                count={upcoming.length}
+                className="px-4 pb-2.5 pt-4"
+              />
+              <ul className="row-group">
                 {upcoming.map((a) => {
                   const p = properties[a.propertyId]
                   return (
                     <li key={a.id}>
                       <button
                         onClick={() => p && nav(`/property/${p.id}`)}
-                        className="flex min-h-[56px] w-full items-center gap-3 border-b border-slate-100 px-4 text-left last:border-0 active:bg-slate-50"
+                        className="flex min-h-[60px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-surface-field"
                       >
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">{a.title}</span>
-                          <span className="block truncate text-xs text-ink-mute">
+                          <span className="block truncate text-[15px] font-semibold">
+                            {a.title}
+                          </span>
+                          <span className="block truncate text-[13px] text-ink-mute">
                             {p?.address1} · {relative(a.startsAt)}
                           </span>
+                        </span>
+                        <span className="shrink-0 text-ink-faint">
+                          <IconChevron />
                         </span>
                       </button>
                     </li>
                   )
                 })}
               </ul>
-            </section>
+            </Card>
           )}
 
           {/* --- recent activity ------------------------------------------ */}
-          <section className="card overflow-hidden">
-            <h2 className="px-4 pb-1 pt-3 text-sm font-bold">Live activity</h2>
-            <ul>
+          <Card padded={false} className="overflow-hidden">
+            <SectionHeader title="Live activity" className="px-4 pb-2.5 pt-4" />
+            <ul className="row-group">
               {activity.slice(0, 10).map((ev) => {
                 const def = outcomeByCode(ev.outcome)
                 return (
-                  <li
-                    key={ev.id}
-                    className="flex min-h-[48px] items-center gap-3 border-b border-slate-100 px-4 py-2 last:border-0"
-                  >
-                    <span className="w-6 shrink-0 text-center" aria-hidden>
+                  <li key={ev.id} className="flex min-h-[52px] items-center gap-3 px-4 py-2.5">
+                    <span
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-warm text-[13px]"
+                      aria-hidden
+                    >
                       {def?.glyph ?? '·'}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-sm">{ev.summary}</span>
-                    <span className="shrink-0 text-xs text-ink-mute">{relative(ev.at)}</span>
+                    <span className="min-w-0 flex-1 truncate text-[14px] text-ink-soft">
+                      {ev.summary}
+                    </span>
+                    <span className="shrink-0 text-[12.5px] text-ink-mute">
+                      {relative(ev.at)}
+                    </span>
                   </li>
                 )
               })}
             </ul>
-          </section>
+          </Card>
 
-          <p className="px-2 pb-2 text-center text-xs leading-relaxed text-ink-mute">
+          <p className="px-4 pb-1 pt-1 text-center text-[13px] leading-relaxed text-ink-mute">
             Open Allstar on a larger screen for user management, territories, imports and
             full reporting.
           </p>
         </div>
       </PullToRefresh>
-    </div>
-  )
-}
-
-function Stat({
-  label,
-  value,
-  sub,
-  tone = '',
-}: {
-  label: string
-  value: string
-  sub?: string
-  tone?: string
-}) {
-  return (
-    <div className="card p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-ink-mute">{label}</p>
-      <p className={`nums mt-1 text-2xl font-black leading-none ${tone}`}>{value}</p>
-      {sub && <p className="mt-1 text-xs text-ink-mute">{sub}</p>}
     </div>
   )
 }

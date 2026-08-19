@@ -106,7 +106,7 @@ export function BottomSheet({
           onPointerCancel={onPointerUp}
           className="flex shrink-0 cursor-grab touch-none flex-col items-center pb-1 pt-3 active:cursor-grabbing"
         >
-          <div className="h-1.5 w-10 rounded-full bg-slate-300" />
+          <div className="h-1.5 w-10 rounded-full bg-ink/15" />
           {title && (
             <h2 className="mt-2 px-4 text-center text-base font-semibold">{title}</h2>
           )}

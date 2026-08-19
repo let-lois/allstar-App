@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { BottomSheet } from '../ui/BottomSheet'
 import { haptic } from '../../lib/haptics'
 import {
@@ -21,9 +21,18 @@ import { useAppStore } from '../../store/useAppStore'
 export function QuickActions() {
   const [open, setOpen] = useState(false)
   const nav = useNavigate()
+  const { pathname } = useLocation()
   const route = useAppStore((s) => s.route)
 
   const activeStop = route?.stops.find((s) => s.status === 'active')
+
+  /*
+    Screens that pin their own primary action to the bottom don't get a floating
+    one on top of it. At 320px the button was landing squarely on "Start visit" —
+    a second orange circle covering the one control the whole screen exists to
+    offer. A quick-action shortcut is never worth obscuring the action itself.
+  */
+  if (/^\/(property|lead|schedule|visit|capture)/.test(pathname)) return null
 
   const actions: { label: string; hint: string; icon: JSX.Element; run: () => void }[] = [
     {
@@ -67,7 +76,7 @@ export function QuickActions() {
           setOpen(true)
         }}
         aria-label="Quick actions"
-        className="press focusable fixed right-4 z-30 grid h-14 w-14 place-items-center rounded-full bg-brand-500 text-white shadow-float md:hidden"
+        className="press focusable fixed right-4 z-30 grid h-14 w-14 place-items-center rounded-full bg-brand-600 text-white shadow-float md:hidden"
         style={{ bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
       >
         <IconPlus />
@@ -82,9 +91,9 @@ export function QuickActions() {
                   setOpen(false)
                   a.run()
                 }}
-                className="press focusable flex min-h-[64px] w-full items-center gap-3 rounded-2xl border border-slate-200 px-4 text-left active:bg-slate-50"
+                className="press focusable flex min-h-[64px] w-full items-center gap-3 rounded-card border border-ink/10 px-4 text-left active:bg-surface-field"
               >
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-field bg-brand-50 text-brand-600">
                   {a.icon}
                 </span>
                 <span className="min-w-0">

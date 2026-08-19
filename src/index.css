@@ -60,12 +60,44 @@
     -webkit-overflow-scrolling: touch;
   }
 
+  /*
+   * The card.
+   *
+   * One radius, one shadow, one background, used everywhere — a hairline ring
+   * instead of a border so the edge is defined at the top where the shadow is
+   * weakest, without the boxed-in look a real border gives.
+   */
   .card {
-    @apply rounded-2xl bg-surface shadow-raise;
+    @apply rounded-card bg-surface shadow-card ring-1 ring-ink/[0.04];
+  }
+
+  /** A card whose whole surface is tappable. */
+  .card-tap {
+    @apply card press transition-shadow active:shadow-none;
+  }
+
+  /** Grouped rows inside one card — dividers rather than a stack of cards. */
+  .row-group > * + * {
+    @apply border-t border-ink/[0.06];
+  }
+
+  /*
+   * Standard page padding and rhythm.
+   *
+   * The old layout used `space-y-3` and `p-3` — 12px — which is what made the
+   * interface read as a desktop dashboard compressed into a phone. 16px gutters
+   * and 14px between cards is the difference between cramped and composed.
+   */
+  .page {
+    @apply flex flex-col gap-3.5 px-4 py-4;
+  }
+
+  .section-gap {
+    @apply flex flex-col gap-3.5;
   }
 
   .pad-nav {
-    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   }
 
   /*
@@ -84,13 +116,45 @@
     padding-top: env(safe-area-inset-top, 0px);
   }
 
-  /* Focus ring that survives outdoors and doesn't show on touch. */
+  /*
+   * Focus ring that survives outdoors and doesn't show on touch.
+   *
+   * Uses brand-600 rather than the brighter brand-400: a focus indicator is a UI
+   * component under WCAG 1.4.11 and needs 3:1 against its surroundings. The
+   * brand orange is 2.35:1 on white — pretty, and invisible to the person who
+   * needs it most.
+   */
   .focusable:focus-visible {
-    @apply outline-none ring-2 ring-brand-500 ring-offset-2;
+    @apply outline-none ring-2 ring-brand-600 ring-offset-2;
   }
 
+  /*
+   * Input focus. An orange ring with a warm halo instead of the browser's blue,
+   * which is the single most obvious sign of an un-designed form.
+   */
+  .field {
+    @apply w-full rounded-field border border-ink/10 bg-surface px-3.5 text-base text-ink;
+    @apply placeholder:text-ink-faint;
+    transition:
+      border-color 150ms ease,
+      box-shadow 150ms ease;
+  }
+  .field:focus {
+    @apply border-brand-500 outline-none;
+    box-shadow: 0 0 0 3px rgba(255, 138, 61, 0.28);
+  }
+
+  /*
+   * Press feedback. 0.98 rather than 0.97 and a shorter curve: on a card-sized
+   * surface the deeper scale reads as a glitch rather than a press.
+   */
   .press {
-    @apply transition-transform active:scale-[0.97];
+    @apply transition-transform duration-100 active:scale-[0.98];
+  }
+
+  /** Section label above a group of cards. */
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-mute;
   }
 
   .hide-scrollbar::-webkit-scrollbar {
@@ -138,6 +202,26 @@
   }
 }
 
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 @keyframes pulse-ring {
   0% {
     transform: scale(0.7);
@@ -157,4 +241,19 @@
 }
 .anim-fade {
   animation: fade-in 140ms ease-out;
+}
+
+/*
+ * Entrance for a list or a stack of cards. Deliberately one short movement, not
+ * a staggered cascade: the second time someone opens a screen, a cascade is only
+ * a delay.
+ */
+.anim-rise {
+  animation: rise-in 220ms cubic-bezier(0.22, 0.8, 0.3, 1) both;
+}
+
+/* Progress bars fill from the left once, on mount. */
+.anim-bar {
+  transform-origin: left;
+  animation: bar-grow 420ms cubic-bezier(0.22, 0.8, 0.3, 1) both;
 }

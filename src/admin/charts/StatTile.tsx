@@ -27,7 +27,7 @@ export function StatTile({ label, value, delta, deltaLabel, sub, invert }: Props
   const arrow = delta == null ? '' : delta > 0 ? '↑' : delta < 0 ? '↓' : '→'
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-surface p-4">
+    <div className="rounded-card border border-ink/10 bg-surface p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-ink-mute">{label}</p>
       <p className="mt-1.5 text-[28px] font-black leading-none text-ink">{value}</p>
       {delta != null && (

@@ -91,7 +91,7 @@ export function MapScreen() {
         map, because there is no room for two panes and the map *is* the screen.
       */}
       {isWide && (
-        <aside className="hidden w-[320px] shrink-0 flex-col border-r border-slate-200 bg-surface md:flex lg:w-[380px]">
+        <aside className="hidden w-[320px] shrink-0 flex-col border-r border-ink/10 bg-surface md:flex lg:w-[380px]">
           {selected ? (
             <div className="scroll-pane p-4">
               <button
@@ -108,10 +108,8 @@ export function MapScreen() {
             </div>
           ) : (
             <>
-              <div className="border-b border-slate-100 px-3 py-2">
-                <p className="nums text-xs font-semibold text-ink-mute">
-                  {shown.length} properties
-                </p>
+              <div className="border-b border-ink/[0.06] px-4 py-3">
+                <p className="eyebrow">{shown.length} properties</p>
               </div>
               <ul className="scroll-pane">
                 {shown.slice(0, 200).map((p) => (
@@ -121,17 +119,17 @@ export function MapScreen() {
                         setSelectedId(p.id)
                         mapHandle.current?.flyTo(p.lat, p.lng)
                       }}
-                      className="flex min-h-[64px] w-full items-center gap-2.5 border-b border-slate-100 px-3 text-left active:bg-slate-50"
+                      className="flex min-h-[66px] w-full items-center gap-3 border-b border-ink/[0.06] px-4 text-left active:bg-surface-field"
                     >
                       <span
-                        className="h-8 w-1.5 shrink-0 rounded-full"
+                        className="h-9 w-1.5 shrink-0 rounded-full"
                         style={{ backgroundColor: STATUS_COLOR[p.status] }}
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold">
+                        <span className="block truncate text-[15px] font-semibold">
                           {p.address1}
                         </span>
-                        <span className="block truncate text-xs text-ink-mute">
+                        <span className="block truncate text-[13px] text-ink-mute">
                           {p.contacts[0]?.name ?? 'No contact'}
                           {position && ` · ${formatDistance(distanceMiles(position, p))}`}
                         </span>
@@ -180,7 +178,7 @@ export function MapScreen() {
                 </div>
               </div>
               <div className="pointer-events-auto flex items-center gap-2 px-3">
-                <span className="nums rounded-full bg-surface/95 px-2.5 py-1 text-xs font-semibold shadow-raise backdrop-blur">
+                <span className="nums rounded-full bg-surface/95 px-3 py-1.5 text-[12.5px] font-semibold text-ink-soft shadow-raise ring-1 ring-ink/[0.06] backdrop-blur">
                   {shown.length} properties
                 </span>
                 <SyncBadge onClick={() => nav('/more')} />
@@ -195,11 +193,11 @@ export function MapScreen() {
                   mapHandle.current?.flyTo(p.lat, p.lng, 18)
                   setSelectedId(nearest.id)
                 }}
-                className="press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-white shadow-float"
+                className="press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-field bg-surface px-4 text-[14px] font-semibold text-brand-600 shadow-float ring-1 ring-ink/[0.06]"
                 style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
               >
                 Nearest door
-                <span className="nums opacity-70">
+                <span className="nums font-medium text-ink-mute">
                   {(nearest.d * 5280).toFixed(0)} ft
                 </span>
               </button>

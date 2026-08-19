@@ -108,11 +108,11 @@ export function PropertyDetail() {
 
       <div className="scroll-pane bg-surface-sunk pb-4"><div className="content-col">
         {/* --- header: the porch questions ------------------------------- */}
-        <section className="bg-surface px-4 pb-4 pt-3">
+        <section className="bg-surface px-4 pb-5 pt-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h2 className="text-2xl font-black leading-tight">{property.address1}</h2>
-              <p className="mt-0.5 text-sm text-ink-mute">
+              <h2 className="text-title font-extrabold">{property.address1}</h2>
+              <p className="mt-1 text-[13px] text-ink-mute">
                 {property.city}, {property.state} {property.zip}
                 {dist != null && ` · ${formatDistance(dist)} · ${walkMinutes(dist)} min`}
               </p>
@@ -120,20 +120,20 @@ export function PropertyDetail() {
             <ScoreBar score={property.score} />
           </div>
 
-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <div className="mt-3.5 flex flex-wrap items-center gap-2">
             <StatusPill status={property.status} />
             <OutcomePill code={property.lastOutcome} />
             {property.opportunityValue != null && (
-              <span className="nums rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+              <span className="nums rounded-full bg-good-bg px-2.5 py-1 text-[11.5px] font-bold text-good">
                 {moneyFull(property.opportunityValue)}
               </span>
             )}
           </div>
 
           {contact && (
-            <div className="mt-3 rounded-2xl bg-surface-sunk p-3">
-              <p className="font-semibold">{contact.name}</p>
-              <p className="text-xs text-ink-mute">
+            <div className="mt-4 rounded-field bg-surface-warm px-3.5 py-3">
+              <p className="text-[15px] font-semibold">{contact.name}</p>
+              <p className="mt-0.5 text-[13px] text-ink-mute">
                 {contact.relationship ?? 'Contact'}
                 {contact.phone && ` · ${contact.phone}`}
               </p>
@@ -141,44 +141,44 @@ export function PropertyDetail() {
           )}
 
           {property.nextActionLabel && property.nextActionAt && (
-            <div className="mt-3 flex items-center gap-2 rounded-2xl bg-amber-50 px-3 py-2.5 text-sm">
-              <span className="text-amber-700" aria-hidden>
+            <div className="mt-3 flex items-center gap-2 rounded-field bg-warn-bg px-3.5 py-3 text-[14px]">
+              <span className="text-warn" aria-hidden>
                 ↻
               </span>
-              <span className="font-semibold text-amber-800">
+              <span className="font-semibold text-warn">
                 {property.nextActionLabel} {relativeLower(property.nextActionAt)}
               </span>
             </div>
           )}
 
-          <div className="mt-3">
+          <div className="mt-4">
             <CommActions property={property} contact={contact} />
           </div>
         </section>
 
         {/* --- collapsible detail ---------------------------------------- */}
-        <div className="space-y-2.5 p-3">
+        <div className="section-gap px-4 py-4">
           <Collapsible title="Notes" count={notes.length} defaultOpen={notes.length > 0}>
             {notes.length === 0 ? (
-              <p className="text-sm text-ink-mute">No notes yet.</p>
+              <p className="text-[14px] text-ink-mute">No notes yet.</p>
             ) : (
               <ul className="space-y-3">
                 {notes.map((n) => (
-                  <li key={n.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                    <p className="text-sm leading-relaxed">{n.body || '(tags only)'}</p>
+                  <li key={n.id} className="border-b border-ink/[0.06] pb-3 last:border-0 last:pb-0">
+                    <p className="text-[14.5px] leading-relaxed">{n.body || '(tags only)'}</p>
                     {n.tags.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         {n.tags.map((t) => (
                           <span
                             key={t}
-                            className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-ink-mute"
+                            className="rounded-full bg-ink/[0.06] px-2 py-0.5 text-[11px] font-semibold text-ink-soft"
                           >
                             {t.replace(/_/g, ' ')}
                           </span>
                         ))}
                       </div>
                     )}
-                    <p className="mt-1 text-[11px] text-ink-mute">
+                    <p className="mt-1.5 text-[11.5px] text-ink-mute">
                       {relative(n.createdAt)}
                       {n.pending && ' · waiting to upload'}
                     </p>
@@ -189,7 +189,7 @@ export function PropertyDetail() {
             <Button
               variant="secondary"
               full
-              className="mt-3"
+              className="mt-4"
               onClick={() => setNoteOpen(true)}
             >
               Add note
@@ -202,19 +202,24 @@ export function PropertyDetail() {
 
           <Collapsible title="Visit history" count={visits.length}>
             {visits.length === 0 ? (
-              <p className="text-sm text-ink-mute">No completed visits recorded.</p>
+              <p className="text-[14px] text-ink-mute">No completed visits recorded.</p>
             ) : (
-              <ul className="space-y-2.5">
+              <ul className="space-y-3">
                 {visits.map((v) => {
                   const def = outcomeByCode(v.outcome)
                   return (
                     <li key={v.id} className="flex items-center gap-3">
-                      <span className="w-6 text-center" aria-hidden>
+                      <span
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-warm text-[13px]"
+                        aria-hidden
+                      >
                         {def?.glyph ?? '·'}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium">{def?.label ?? 'Visit'}</span>
-                        <span className="block text-xs text-ink-mute">
+                        <span className="block text-[14.5px] font-medium">
+                          {def?.label ?? 'Visit'}
+                        </span>
+                        <span className="block text-[12.5px] text-ink-mute">
                           {new Date(v.startedAt).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
@@ -232,15 +237,17 @@ export function PropertyDetail() {
 
           <Collapsible title="Timeline" count={timeline.length}>
             {timeline.length === 0 ? (
-              <p className="text-sm text-ink-mute">Nothing recorded yet.</p>
+              <p className="text-[14px] text-ink-mute">Nothing recorded yet.</p>
             ) : (
-              <ul className="space-y-2.5">
+              <ul className="space-y-3">
                 {timeline.map((ev) => (
                   <li key={ev.id} className="flex items-start gap-3">
-                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-slate-300" />
+                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-ink/15" />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm">{ev.summary}</span>
-                      <span className="block text-xs text-ink-mute">{relative(ev.at)}</span>
+                      <span className="block text-[14.5px] text-ink-soft">{ev.summary}</span>
+                      <span className="mt-0.5 block text-[12.5px] text-ink-mute">
+                        {relative(ev.at)}
+                      </span>
                     </span>
                   </li>
                 ))}
@@ -249,7 +256,7 @@ export function PropertyDetail() {
           </Collapsible>
 
           <Collapsible title="Property details">
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[14px]">
               <Detail label="Owner occupied" value={property.ownerOccupied ? 'Yes' : 'No'} />
               <Detail
                 label="Square feet"
@@ -265,12 +272,10 @@ export function PropertyDetail() {
             </dl>
             {property.contacts.length > 1 && (
               <div className="mt-4">
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-mute">
-                  Other contacts
-                </p>
-                <ul className="space-y-1.5">
+                <p className="eyebrow mb-2">Other contacts</p>
+                <ul className="space-y-2">
                   {property.contacts.slice(1).map((c) => (
-                    <li key={c.id} className="text-sm">
+                    <li key={c.id} className="text-[14px]">
                       {c.name}{' '}
                       <span className="text-ink-mute">
                         · {c.relationship} {c.phone}
@@ -287,8 +292,8 @@ export function PropertyDetail() {
 
       {/* Primary action bar — bottom of the screen, thumb range. */}
       <div
-        className="shrink-0 border-t border-slate-200 bg-surface px-4 pt-3"
-        style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
+        className="shrink-0 bg-surface px-4 pt-3.5 shadow-nav"
+        style={{ paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))' }}
       >
         <div className="content-col">
         <Button
