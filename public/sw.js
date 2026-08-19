@@ -128,14 +128,19 @@ async function asset(req, url) {
     let res = await fetch(req)
 
     /*
-     * A misdirected response can also be sitting in the browser's own HTTP
-     * cache, where `immutable` means it is reused for the whole of max-age
-     * without ever revalidating — so simply fetching again returns the same
-     * wrong bytes. One forced trip past that cache is enough to heal it, and
-     * costs a single request on the one load where it is needed.
+     * Heal a misdirected response rather than pass it on.
+     *
+     * `cache: 'reload'` gets past the browser's own HTTP cache. It does not get
+     * past Cloudflare's, which ignores a client's no-cache by design — so the
+     * query string is what actually matters: the edge caches per full URL, so a
+     * distinct one is a guaranteed miss and goes to the origin, while Pages
+     * matches static files on path alone and ignores the query entirely. The
+     * result is stored under the original request key, so this costs one extra
+     * request once, not on every load.
      */
     if (isMisdirected(url, res)) {
-      res = await fetch(req.url, { cache: 'reload', credentials: 'same-origin' })
+      const bust = `${url.pathname}?sw=${VERSION}`
+      res = await fetch(bust, { cache: 'reload', credentials: 'same-origin' })
     }
 
     if (storable(url, res)) {
