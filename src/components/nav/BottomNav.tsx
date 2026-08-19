@@ -1,5 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import type { Role } from '../../types'
+import { NavBadge } from './NavBadge'
+import { useSync } from '../sync/SyncBadge'
 import {
   IconLeads,
   IconMap,
@@ -44,6 +46,14 @@ export function navItemsForRole(role: Role): Item[] {
 export function BottomNav({ role }: { role: Role }) {
   const items = navItemsForRole(role)
   const { pathname } = useLocation()
+  /*
+    The only counter with anything real behind it.
+    Uploads that failed are the one thing a rep must notice and can act on — they
+    live behind More, so that is where the pip goes. Inventing counts for the
+    other destinations would make the badge decoration and teach reps to ignore
+    it, which is worse than not having one.
+  */
+  const failedUploads = useSync().failed
 
   // Visit Mode and the capture flows are full-attention screens — the nav would
   // only offer a way to lose work halfway through.
@@ -55,35 +65,33 @@ export function BottomNav({ role }: { role: Role }) {
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       aria-label="Primary"
     >
-      <ul className="flex px-1 pt-1">
+      <ul className="flex px-1 pb-0.5 pt-2">
         {items.map(({ to, label, Icon }) => (
           <li key={to} className="flex-1">
             <NavLink
               to={to}
+              aria-label={
+                to === '/more' && failedUploads > 0
+                  ? `${label}, ${failedUploads} uploads failed`
+                  : undefined
+              }
               className={({ isActive }) =>
                 [
-                  'focusable relative flex min-h-[58px] flex-col items-center justify-center gap-1',
+                  'focusable relative flex min-h-[70px] flex-col items-center justify-center gap-1.5',
                   'rounded-card text-[11px] font-semibold transition-colors',
-                  isActive ? 'text-brand-600' : 'text-ink-mute active:bg-ink/[0.04]',
+                  isActive ? 'text-ink' : 'text-ink-mute',
                 ].join(' ')
               }
             >
               {({ isActive }) => (
                 <>
-                  {/*
-                    A soft orange plate behind the active icon rather than a
-                    coloured bar or an enlarged glyph. It reads instantly at a
-                    glance, survives being looked at in sunlight, and doesn't
-                    shift the row's layout when the tab changes.
-                  */}
-                  <span
-                    className={[
-                      'grid h-8 w-12 place-items-center rounded-full transition-colors',
-                      isActive ? 'bg-brand-50' : '',
-                    ].join(' ')}
+                  <NavBadge
+                    to={to}
+                    active={isActive}
+                    count={to === '/more' ? failedUploads : undefined}
                   >
                     <Icon />
-                  </span>
+                  </NavBadge>
                   <span className="leading-none">{label}</span>
                 </>
               )}
@@ -104,7 +112,7 @@ export function SideRail({ role }: { role: Role }) {
   const showConsole = role !== 'field_rep'
   return (
     <nav
-      className="hidden w-[76px] shrink-0 flex-col items-center gap-1 border-r border-ink/10 bg-surface py-4 md:flex lg:w-56 lg:items-stretch lg:px-3"
+      className="hidden w-[76px] shrink-0 flex-col items-center gap-2 border-r border-ink/10 bg-surface py-4 md:flex lg:w-56 lg:items-stretch lg:px-3"
       aria-label="Primary"
     >
       {/*
@@ -135,14 +143,23 @@ export function SideRail({ role }: { role: Role }) {
           to={to}
           className={({ isActive }) =>
             [
-              'flex min-h-tap items-center gap-3 rounded-field px-3 text-sm font-medium lg:justify-start',
+              'flex min-h-[52px] items-center gap-3 rounded-field px-2 text-sm font-semibold lg:justify-start',
               'justify-center',
-              isActive ? 'bg-brand-50 text-brand-600' : 'text-ink-mute hover:bg-surface-field',
+              // Each badge now carries a permanent colour of its own, so colour
+              // no longer distinguishes the selected item — a ring and a scale
+              // alone are too quiet at rail size. The row tint carries it.
+              isActive ? 'bg-surface-field text-ink' : 'text-ink-mute hover:bg-surface-field',
             ].join(' ')
           }
         >
-          <Icon />
-          <span className="hidden lg:block">{label}</span>
+          {({ isActive }) => (
+            <>
+              <NavBadge to={to} active={isActive} size={38}>
+                <Icon />
+              </NavBadge>
+              <span className="hidden lg:block">{label}</span>
+            </>
+          )}
         </NavLink>
       ))}
 
@@ -153,13 +170,19 @@ export function SideRail({ role }: { role: Role }) {
           to="/admin"
           className={({ isActive }) =>
             [
-              'mt-auto flex min-h-tap items-center justify-center gap-3 rounded-field px-3 text-sm font-medium lg:justify-start',
-              isActive ? 'bg-brand-50 text-brand-600' : 'text-ink-mute hover:bg-surface-field',
+              'mt-auto flex min-h-[52px] items-center justify-center gap-3 rounded-field px-2 text-sm font-semibold lg:justify-start',
+              isActive ? 'bg-surface-field text-ink' : 'text-ink-mute hover:bg-surface-field',
             ].join(' ')
           }
         >
-          <IconPipeline />
-          <span className="hidden lg:block">Console</span>
+          {({ isActive }) => (
+            <>
+              <NavBadge to="/admin" active={isActive} size={38}>
+                <IconPipeline />
+              </NavBadge>
+              <span className="hidden lg:block">Console</span>
+            </>
+          )}
         </NavLink>
       )}
     </nav>
