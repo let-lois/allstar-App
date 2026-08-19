@@ -301,7 +301,13 @@ export interface GeocodeMatchDTO {
   lat?: number
   lng?: number
   matchedAddress?: string
-  status: 'match' | 'no_match' | 'tie'
+  /** `error` means the lookup failed, not that the address is wrong. */
+  status: 'match' | 'no_match' | 'tie' | 'error'
+  error?: string
+  precision?: 'rooftop' | 'interpolated' | 'approximate'
+  /** The provider answered a misspelled address by guessing. */
+  partial?: boolean
+  provider?: 'google' | 'census'
 }
 
 export function apiGeocode(token: string, rows: GeocodeRequestDTO[]) {

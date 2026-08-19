@@ -31,4 +31,8 @@ database_id = "3adac120-500e-404d-8a37-571ce3654bc0"
 ALLOWED_ORIGINS = "https://allstar.letlois.com,https://allstar-app.pages.dev,http://localhost:5173,http://127.0.0.1:4173"
 
 # Secrets (set with `wrangler secret put`, never committed):
-#   SESSION_PEPPER  — mixed into password hashing
+#   SESSION_PEPPER        — mixed into password hashing
+#   GOOGLE_MAPS_API_KEY   — optional. Present means addresses geocode to the
+#                           rooftop via Google; absent means the free US Census
+#                           geocoder, which places a house on the right block.
+#                           Everything works either way.
