@@ -92,13 +92,44 @@
    * instead of a border so the edge is defined at the top where the shadow is
    * weakest, without the boxed-in look a real border gives.
    */
+  /*
+   * The card, embossed.
+   *
+   * Four layers doing four jobs: a white top edge that reads as light catching a
+   * lifted lip, a soft dark bottom inset for the bevel, a hairline so the shape
+   * is defined against the warm page, and a wide low shadow for the lift.
+   *
+   * The face gradient stops at #FBF9F7. That is not a taste call — it is the
+   * darkest bottom stop where every text tone still clears AA on it. One step
+   * further (#F9F6F3) drops ink-mute to 4.42:1, and ink-mute carries most of the
+   * secondary text in the app.
+   *
+   * Written as raw box-shadow rather than @apply ring + shadow: Tailwind composes
+   * both into one box-shadow property, so a ring utility on any card would
+   * silently erase these insets.
+   */
   .card {
-    @apply rounded-card bg-surface shadow-card ring-1 ring-ink/[0.04];
+    @apply rounded-card;
+    background: linear-gradient(180deg, #ffffff, #fbf9f7);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -2px 3px rgba(17, 24, 39, 0.05),
+      0 0 0 1px rgba(17, 24, 39, 0.06),
+      0 4px 10px -2px rgba(17, 24, 39, 0.12);
   }
 
-  /** A card whose whole surface is tappable. */
+  /** A card whose whole surface is tappable — pressed, it sinks into the page. */
   .card-tap {
-    @apply card press transition-shadow active:shadow-none;
+    @apply card press;
+    transition:
+      box-shadow 140ms ease,
+      transform 100ms ease;
+  }
+
+  .card-tap:active {
+    box-shadow:
+      inset 0 2px 4px rgba(17, 24, 39, 0.12),
+      0 0 0 1px rgba(17, 24, 39, 0.07);
   }
 
   /** Grouped rows inside one card — dividers rather than a stack of cards. */
@@ -432,6 +463,43 @@
       inset 0 2px 5px rgba(0, 0, 0, 0.45),
       0 0 0 2px var(--brand-focus, #ff8a3d),
       inset 0 0 0 100px #0c111c;
+  }
+
+  /*
+   * Raised, for small things on a light surface — avatars, pills, chips.
+   *
+   * Lighter than the card: at 20-40px a full card bevel reads as grime rather
+   * than as depth, so this is one hairline, one highlight and a short shadow.
+   * Background-agnostic, so it composes over any tint.
+   */
+  .emboss {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.75),
+      inset 0 -1px 1px rgba(17, 24, 39, 0.1),
+      0 0 0 1px rgba(17, 24, 39, 0.06),
+      0 1px 2px rgba(17, 24, 39, 0.14);
+  }
+
+  /** Recessed, for anything that should read as a channel: progress tracks. */
+  .sunk {
+    box-shadow:
+      inset 0 1px 2px rgba(17, 24, 39, 0.16),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.7);
+  }
+
+  /** A filled bar, lit from the top so it sits in its channel. */
+  .fill-gloss {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .fill-gloss::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 50%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0));
+    pointer-events: none;
   }
 
   .hide-scrollbar::-webkit-scrollbar {
