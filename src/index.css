@@ -5,15 +5,40 @@
 @layer base {
   :root {
     color-scheme: light;
-    /* Live viewport height. 100vh is wrong on mobile Safari the moment the URL
-       bar collapses — full-screen map + bottom sheet depend on this. */
-    --app-h: 100dvh;
+    /*
+     * Live viewport height. 100vh is wrong on mobile Safari the moment the URL
+     * bar collapses — full-screen map + bottom sheet depend on this.
+     *
+     * Declared vh-first and upgraded behind @supports: dvh landed in iOS 15.4,
+     * and on anything older the custom property would simply be invalid, which
+     * takes `.app-shell` — and with it the map and every bottom sheet — down to
+     * zero height. Cheap phones outlive their OS support, and this app is meant
+     * to run on them.
+     */
+    --app-h: 100vh;
+  }
+
+  @supports (height: 100dvh) {
+    :root {
+      --app-h: 100dvh;
+    }
   }
 
   html,
   body,
   #root {
     height: 100%;
+  }
+
+  /*
+   * Stop iOS Safari inflating text when a phone is turned sideways. The type
+   * scale here is chosen for sunlight legibility at specific sizes; letting the
+   * browser scale it on rotation breaks the fit of every KPI card and truncates
+   * rows that were measured not to.
+   */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
