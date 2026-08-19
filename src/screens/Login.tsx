@@ -66,13 +66,26 @@ export function Login() {
       <div className="scroll-pane flex flex-col justify-center px-6 py-8">
         <div className="mx-auto w-full max-w-sm">
           <div className="mb-7">
-            <span className="grid h-14 w-14 place-items-center rounded-card bg-brand-400 text-2xl font-black text-ink shadow-raise">
-              A
-            </span>
-            <h1 className="mt-5 text-[30px] font-extrabold leading-tight tracking-[-0.02em]">
-              Allstar Field
+            {/*
+              The knockout wordmark, not the standard one: this screen is
+              near-black and the logo's type is black. `logo-light.png` recolours
+              only the achromatic pixels, so the star and "HOME SOLUTIONS" keep
+              the brand teal rather than the whole mark flattening to a
+              silhouette.
+
+              Width is capped rather than set, so the mark keeps its own
+              proportions at every viewport instead of being stretched to fill.
+            */}
+            <img
+              src="/logo-light.png"
+              alt="Allstar Home Solutions"
+              width={720}
+              height={184}
+              className="h-auto w-[232px] max-w-full"
+            />
+            <h1 className="mt-6 text-[26px] font-extrabold leading-tight tracking-[-0.02em]">
+              Field sales, built for the phone.
             </h1>
-            <p className="mt-2 text-[14px] text-ink-faint">Field sales, built for the phone.</p>
           </div>
 
           {sessionExpired && (

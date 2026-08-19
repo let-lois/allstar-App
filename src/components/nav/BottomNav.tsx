@@ -107,11 +107,27 @@ export function SideRail({ role }: { role: Role }) {
       className="hidden w-[76px] shrink-0 flex-col items-center gap-1 border-r border-ink/10 bg-surface py-4 md:flex lg:w-56 lg:items-stretch lg:px-3"
       aria-label="Primary"
     >
-      <div className="mb-4 flex items-center gap-2 px-1 lg:px-2">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-field bg-ink text-sm font-bold text-white">
-          A
-        </span>
-        <span className="hidden text-sm font-bold lg:block">Allstar</span>
+      {/*
+        The rail collapses to 76px on tablets, where a wordmark would be
+        unreadable — so the icon carries the brand at that width and the full
+        mark appears only once there is room for it.
+      */}
+      {/* px matches the nav links below so the mark and the icons share a left edge. */}
+      <div className="mb-5 flex items-center px-1 lg:px-3">
+        <img
+          src="/icon-192.png"
+          alt=""
+          width={192}
+          height={192}
+          className="h-9 w-9 shrink-0 rounded-field lg:hidden"
+        />
+        <img
+          src="/logo.png"
+          alt="Allstar Home Solutions"
+          width={720}
+          height={184}
+          className="hidden h-auto w-[164px] lg:block"
+        />
       </div>
       {items.map(({ to, label, Icon }) => (
         <NavLink

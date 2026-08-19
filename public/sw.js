@@ -27,9 +27,9 @@
  * had never once had anything to delete. A poisoned entry was therefore
  * permanent, and unreachable from a rep's phone.
  */
-const VERSION = 'v3'
+const VERSION = 'v4'
 const CACHE = `allstar-shell-${VERSION}`
-const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg']
+const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon-32.png']
 
 /*
  * Basemap tiles, kept apart from the app shell.
