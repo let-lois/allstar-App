@@ -99,7 +99,10 @@ function storable(url, res) {
 async function navigation(req) {
   try {
     const res = await fetch(req)
-    if (res && res.status === 200) {
+    // Only an HTML 200 is the app shell. A 404 page, or a stylesheet fetched by
+    // typing its URL into the address bar, must never be stored as /index.html —
+    // that would pin a broken shell for every later offline start.
+    if (res && res.status === 200 && (res.headers.get('content-type') || '').includes('text/html')) {
       const copy = res.clone()
       caches
         .open(CACHE)
