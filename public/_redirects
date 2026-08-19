@@ -1,3 +1,20 @@
+# Build assets are real files, and a request for one that does not exist must
+# fail as a 404. Without this rule the SPA fallback below answers it with
+# index.html and a 200 instead.
+#
+# That is not hypothetical. On the 20 Aug deploy a request for
+# /assets/index-CllsAgWs.css arrived while the deployment was still propagating,
+# the fallback answered it with the HTML shell and a 200, and the /assets/* rule
+# in _headers stamped that HTML `immutable, max-age=31536000`. Cloudflare cached
+# an HTML document under a .css URL, `nosniff` correctly refused to apply it as a
+# stylesheet, and the entire app rendered unstyled — with a 200, no console
+# error, and a year to live. A transient 404 became a permanent success.
+#
+# Ordering matters: first match wins, so this has to sit above the catch-all.
+# Static files are matched before _redirects is consulted, so this rule only
+# ever fires for an asset that genuinely is not there.
+/assets/*  /404.html  404
+
 # SPA fallback.
 #
 # Routing is client-side (react-router), so the server has no /today, /map or
