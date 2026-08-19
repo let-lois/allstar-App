@@ -1,23 +1,20 @@
-# Build assets are real files, and a request for one that does not exist must
-# fail as a 404. Without this rule the SPA fallback below answers it with
-# index.html and a 200 instead.
-#
-# That is not hypothetical. On the 20 Aug deploy a request for
-# /assets/index-CllsAgWs.css arrived while the deployment was still propagating,
-# the fallback answered it with the HTML shell and a 200, and the /assets/* rule
-# in _headers stamped that HTML `immutable, max-age=31536000`. Cloudflare cached
-# an HTML document under a .css URL, `nosniff` correctly refused to apply it as a
-# stylesheet, and the entire app rendered unstyled — with a 200, no console
-# error, and a year to live. A transient 404 became a permanent success.
-#
-# Ordering matters: first match wins, so this has to sit above the catch-all.
-# Static files are matched before _redirects is consulted, so this rule only
-# ever fires for an asset that genuinely is not there.
-/assets/*  /404.html  404
-
 # SPA fallback.
 #
 # Routing is client-side (react-router), so the server has no /today, /map or
 # /visit/:id to serve. Without this, a rep who bookmarks a screen — or reloads
 # mid-visit — gets a 404 instead of the app.
 /*  /index.html  200
+
+# Do not add rules above this one without testing them on a preview deployment
+# first.
+#
+# On 20 Aug a `/assets/*  /404.html  404` guard was added here to stop a missing
+# build asset from being answered with the HTML shell. Cloudflare Pages did not
+# accept it, and rather than skipping the one bad line it stopped applying the
+# whole file — so the catch-all below never ran, every client-side route missed,
+# and Pages served the 404.html that was added in the same commit. /today
+# returned 404 to every user. The rule was live for the length of one deploy.
+#
+# The protection that rule was reaching for now lives in two places that do not
+# depend on _redirects semantics: a bounded asset TTL in _headers, and sw.js
+# refusing to store or serve an HTML body under an /assets/ URL.
