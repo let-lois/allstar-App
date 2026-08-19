@@ -362,6 +362,78 @@
       0 0 0 2px var(--brand-focus, #ff8a3d);
   }
 
+  /*
+   * Autofill.
+   *
+   * Chrome paints saved-credential fields with its own near-white background and
+   * its own text colour, overriding anything set here — which on a dark form
+   * leaves white text on a white field and a reveal button nobody can see. It is
+   * the single most common way a dark login breaks, and it only appears for
+   * people who have actually saved a password, so it survives every test written
+   * by someone who has not.
+   *
+   * The background cannot be set directly; a very large inset shadow is the only
+   * thing that covers it, and -webkit-text-fill-color is the only thing that
+   * beats the forced text colour. The absurd transition delay stops Chrome
+   * animating its yellow flash back in on refocus.
+   *
+   * Shadow order matters: the fill is painted last so the bevel above it still
+   * reads.
+   */
+  .field-sunk:-webkit-autofill,
+  .field-sunk:-webkit-autofill:hover,
+  .field-sunk:-webkit-autofill:focus,
+  .field-sunk:-webkit-autofill:active {
+    -webkit-text-fill-color: #ffffff;
+    caret-color: #ffffff;
+    -webkit-box-shadow:
+      inset 0 2px 5px rgba(0, 0, 0, 0.45),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.07),
+      0 0 0 1px rgba(255, 255, 255, 0.12),
+      inset 0 0 0 100px #0c111c;
+    box-shadow:
+      inset 0 2px 5px rgba(0, 0, 0, 0.45),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.07),
+      0 0 0 1px rgba(255, 255, 255, 0.12),
+      inset 0 0 0 100px #0c111c;
+    transition: background-color 100000s ease-in-out 0s;
+  }
+
+  .field-sunk:-webkit-autofill:focus {
+    -webkit-box-shadow:
+      inset 0 2px 5px rgba(0, 0, 0, 0.45),
+      0 0 0 2px var(--brand-focus, #ff8a3d),
+      inset 0 0 0 100px #0c111c;
+    box-shadow:
+      inset 0 2px 5px rgba(0, 0, 0, 0.45),
+      0 0 0 2px var(--brand-focus, #ff8a3d),
+      inset 0 0 0 100px #0c111c;
+  }
+
+  /*
+   * The standard selector, in its own rule rather than appended to the list
+   * above: a browser that does not recognise one selector in a group discards
+   * the whole rule, so combining them would lose the fix in exactly the older
+   * browsers most likely to need it.
+   */
+  .field-sunk:autofill {
+    -webkit-text-fill-color: #ffffff;
+    caret-color: #ffffff;
+    box-shadow:
+      inset 0 2px 5px rgba(0, 0, 0, 0.45),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.07),
+      0 0 0 1px rgba(255, 255, 255, 0.12),
+      inset 0 0 0 100px #0c111c;
+    transition: background-color 100000s ease-in-out 0s;
+  }
+
+  .field-sunk:autofill:focus {
+    box-shadow:
+      inset 0 2px 5px rgba(0, 0, 0, 0.45),
+      0 0 0 2px var(--brand-focus, #ff8a3d),
+      inset 0 0 0 100px #0c111c;
+  }
+
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
   }
