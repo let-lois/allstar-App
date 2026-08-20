@@ -193,25 +193,68 @@ export interface ProbeVariant {
 }
 
 /**
- * The same address asked four different ways, reporting what came back.
+ * Query parameters a caller may override or add, per variant.
+ *
+ * A whitelist rather than a passthrough. Every value here is one MapTiler
+ * documents, and nothing else reaches the outbound URL — `key` in particular is
+ * not overridable, so no caller can point this at someone else's quota.
+ *
+ * The reason this exists at all: each code change to this file costs a push, a
+ * build, and a hunt through a build log for a preview URL. Each *parameter*
+ * change should cost a page reload. Testing a hypothesis about a query string
+ * should not require deploying a Worker.
+ */
+const TUNABLE = new Set([
+  'language',
+  'autocomplete',
+  'fuzzyMatch',
+  'types',
+  'excludeTypes',
+  'limit',
+  'proximity',
+  'bbox',
+])
+
+/** Extract the tunable parameters a caller supplied, ignoring everything else. */
+export function probeOverrides(params: URLSearchParams): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const k of TUNABLE) {
+    const v = params.get(k)
+    if (v != null) out[k] = v
+  }
+  return out
+}
+
+/**
+ * Build a query string, leaving commas literal.
+ *
+ * `types=address,road` is what MapTiler's own examples show. `%2C` ought to
+ * decode identically, but "ought to" is how the last three hours went, so the
+ * one thing already proven to work is what gets sent.
+ */
+const qs = (o: Record<string, string>) =>
+  Object.entries(o)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v).replace(/%2C/g, ',')}`)
+    .join('&')
+
+/**
+ * The same address asked several different ways, reporting what came back.
  *
  * This exists because the production path reports our *interpretation* of
  * MapTiler's answer — a precision bucket and a boolean — and when that answer is
  * wrong the interpretation tells you nothing about why. Reading the raw feature
  * list is the difference between one round trip and four.
  *
- * Each variant isolates one hypothesis about why a house number goes missing:
+ * The hypothesis under test now, and the reason `language` appears below:
+ * MapTiler documents a US-specific address parser that activates only when
+ * `country=us` and `language=en` are sent *together*. The import path has only
+ * ever sent the first. Without the second, "704 W 40th St" is handled by the
+ * generic parser, which token-matches `W`, `40th` and `St` across the state and
+ * scores a street in the wrong ZIP at 0.74 — while an exact, non-fuzzy search
+ * returns nothing at all.
  *
- *   `current`        what production sends, as the control.
- *   `address-only`   whether an address-level candidate exists at all. With
- *                    `limit=1` and both types allowed, a road that scores higher
- *                    hides a rooftop that was there the whole time.
- *   `literal`        autocomplete and fuzzy matching off. MapTiler treats the
- *                    last token as a prefix by default, and the last token here
- *                    is a ZIP code — prefix-matching a number is how you end up
- *                    on the right street in the wrong ZIP.
- *   `unfiltered`     no type filter, top five. Shows what MapTiler thinks the
- *                    query *is*, which is the one thing the filtered calls hide.
+ * Variants pair up so the comparison is direct: each `no-lang` case differs from
+ * its partner in exactly one parameter.
  *
  * Diagnostic only. Nothing in the import path calls this, so a change here can
  * never move a pin.
@@ -219,36 +262,39 @@ export interface ProbeVariant {
 export async function maptilerProbe(
   row: GeocodeRequest,
   key: string,
+  overrides: Record<string, string> = {},
 ): Promise<ProbeVariant[]> {
   const q = encodeURIComponent(oneLine(row))
-  const base = `${ENDPOINT}/${q}.json?key=${encodeURIComponent(key)}&country=us`
 
-  const variants: { label: string; why: string; qs: string }[] = [
+  const variants: { label: string; why: string; params: Record<string, string> }[] = [
     {
       label: 'current',
-      why: 'exactly what the import path sends today',
-      qs: '&limit=1&types=address,road',
+      why: 'the control — exactly what the import path sends today',
+      params: { country: 'us', limit: '1', types: 'address,road' },
     },
     {
-      label: 'address-only',
-      why: 'does an address-level candidate exist when a road cannot outrank it',
-      qs: '&limit=5&types=address',
+      label: 'us-parser',
+      why: 'country=us with language=en, which is what activates the documented US address parser',
+      params: { country: 'us', language: 'en', limit: '5', types: 'address' },
     },
     {
-      label: 'literal',
-      why: 'autocomplete and fuzzy matching off, so the trailing ZIP is not prefix-matched',
-      qs: '&limit=5&types=address&autocomplete=false&fuzzyMatch=false',
+      label: 'us-parser-unfiltered',
+      why: 'the US parser with no type filter, so a house number cannot be filtered out of the list',
+      params: { country: 'us', language: 'en', limit: '5' },
     },
     {
-      label: 'unfiltered',
-      why: 'no type filter, top five — shows what MapTiler thinks the query is',
-      qs: '&limit=5',
+      label: 'us-parser-exact',
+      why: 'the US parser with autocomplete off, so a hit is a real match rather than a prefix guess',
+      params: { country: 'us', language: 'en', limit: '5', types: 'address', autocomplete: 'false' },
     },
   ]
 
   const out: ProbeVariant[] = []
   for (const v of variants) {
-    const url = base + v.qs
+    // Overrides last so a caller can change one parameter of every variant at
+    // once — including removing a filter by passing it empty.
+    const params = { ...v.params, ...overrides }
+    const url = `${ENDPOINT}/${q}.json?key=${encodeURIComponent(key)}&${qs(params)}`
     const shown = url.replace(encodeURIComponent(key), '[redacted]')
     try {
       const res = await fetch(url)

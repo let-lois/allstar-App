@@ -19,7 +19,7 @@ import {
   type GeocodeAttempt,
   type GeocodeRequest,
 } from './geocode'
-import { maptilerProbe } from './geocode-maptiler'
+import { maptilerProbe, probeOverrides } from './geocode-maptiler'
 import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
 import { assignProperties, assignTerritory } from './assign'
 import { readAudit } from './audit'
@@ -281,7 +281,11 @@ export default {
             {
               ok: true,
               sent: probeRow,
-              variants: await maptilerProbe(probeRow, env.MAPTILER_API_KEY),
+              // Tunable parameters are read straight off the query string, so a
+              // new hypothesis about the request costs a page reload rather than
+              // a deploy. The whitelist is in geocode-maptiler.ts.
+              overrides: probeOverrides(q),
+              variants: await maptilerProbe(probeRow, env.MAPTILER_API_KEY, probeOverrides(q)),
             },
             200,
             cors,
