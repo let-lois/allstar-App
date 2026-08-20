@@ -9,24 +9,31 @@ import type { GeocodeMatch, GeocodeRequest } from './geocode'
  * provider that supplies the imagery removes that question rather than answering
  * it.
  *
- * What it does not do is find US buildings. Probed against real addresses from a
- * live territory:
+ * What it does badly is fail. Probed against two addresses from a live test
+ * list, with the key working and the request correct:
  *
  *   "704 W 40th St, Austin, TX, 78751"  ->  West 40th Street, Austin, 78756
  *   "1302 Deepwood Dr, Round Rock, TX"  ->  Deep Wood Drive, Round Rock
  *
- * In both cases the house number was discarded, the result was the street, and
- * the ZIP was ignored — the Austin lead came back in a different ZIP, and the
- * candidate list under it offered West 40th Street in Texarkana and in Mission at
- * relevance 0.62. Setting `language=en` alongside `country=us`, which is what
- * activates MapTiler's documented US address parser, changed nothing. Turning
- * fuzzy matching off returned no features at all — which is the proof: if an
- * address point existed, an exact search would find it.
+ * Both times the house number was discarded, the match was the street, and the
+ * ZIP was ignored — the Austin lead came back in a different ZIP, with West 40th
+ * Street in Texarkana and in Mission behind it at relevance 0.62. Setting
+ * `language=en` alongside `country=us`, which activates MapTiler's documented US
+ * address parser, changed nothing.
  *
- * So this provider sits below Census, which does read the house number and
- * interpolates along the right block. It is kept rather than deleted because it
- * can still offer an operator something to look at for an address nothing else
- * could place, and because coverage grows.
+ * What that does *not* establish, and an earlier version of this comment wrongly
+ * claimed: whether MapTiler has US address points at all. Both probed addresses
+ * came from `fixtures/test-leads-austin.csv`, which is real street names with
+ * *plausible* house numbers — see the header of make-test-leads.mjs. A house that
+ * does not exist cannot be found by anyone, so the test could not tell coverage
+ * apart from a bad address. Establishing that needs a verified address.
+ *
+ * What it does establish is the failure mode, which is the part that matters
+ * here. Census answers an address it cannot resolve with a no-match. MapTiler
+ * answers with a confident-looking street in the wrong ZIP. A wrong pin is worse
+ * than an absent one, because an absent one is visible — so a guess must never
+ * preempt a provider that actually parsed the address. That is what the chain
+ * ordering and the quality fall-through in geocode.ts are for.
  *
  * Practical details that shape this file:
  *

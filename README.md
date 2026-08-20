@@ -515,38 +515,44 @@ Every lead's pin is interpolated along a street, not placed on a building. A rep
 walking a route gets the right block and the right side of the street; they do not
 get the right house from the map alone.
 
-This was meant to be fixed by geocoding with MapTiler. It cannot be: MapTiler has
-no US address points for this kind of territory. Probed against real addresses
-from a live list, with the key working and the request correct:
+This was meant to be fixed by geocoding with MapTiler, and is not. What was
+measured, against two addresses from a live test list with the key working and the
+request correct:
 
 | Sent | Returned |
 | --- | --- |
 | `704 W 40th St, Austin, TX, 78751` | West 40th Street, Austin, **78756** |
 | `1302 Deepwood Dr, Round Rock, TX` | Deep **Wood** Drive, Round Rock |
 
-The house number is discarded, the match is the street, and the ZIP is ignored —
-the Austin lead came back in a different ZIP, with West 40th Street in Texarkana
-and in Mission scoring 0.62 right behind it. Adding `language=en` to activate
-MapTiler's documented US address parser changed nothing. Turning fuzzy matching
-off returned no features at all, which is the proof: an exact search would find an
-address point if one existed.
+Both times the house number was discarded, the match was the street, and the ZIP
+was ignored — with West 40th Street in Texarkana and in Mission behind it at
+relevance 0.62. Adding `language=en` to activate MapTiler's documented US address
+parser changed nothing.
 
-`GET /api/selftest/geocode?raw=1&address=...&city=...&state=...&zip=...` shows
-this directly, and takes `language`, `types`, `limit`, `autocomplete`,
+**What that does not establish** is whether MapTiler has US address points at all.
+Both addresses came from `fixtures/test-leads-austin.csv`, which is real street
+names with *plausible* house numbers — a house that does not exist cannot be found
+by anyone, so the test cannot tell thin coverage apart from a bad address.
+Settling that needs a verified address, and it is still open.
+
+**What it does establish** is the failure mode, which is what the chain order is
+built on. Census answers an address it cannot resolve with a no-match. MapTiler
+answers with a confident-looking street in the wrong ZIP. A wrong pin is worse
+than an absent one, because an absent one is visible — so Census is first and
+MapTiler is last, and a guessed match never ends the search.
+
+`GET /api/selftest/geocode?raw=1&address=...&city=...&state=...&zip=...` shows the
+raw provider response, and takes `language`, `types`, `limit`, `autocomplete`,
 `fuzzyMatch`, `proximity` and `bbox` off the query string so a hypothesis costs a
-page reload rather than a deploy.
+page reload rather than a deploy. Use a verified address with it — a synthetic one
+cannot answer a coverage question.
 
-So Census is first in the chain and MapTiler is last. Census reads the house
-number and interpolates along the correct block, which is strictly better than a
-fuzzy street match in the wrong ZIP.
-
-Closing this needs a provider with a US address-point database. The candidate
-worth pricing is **Geocodio** — US and Canada only, which matches this market,
-rooftop-level from OpenAddresses plus TIGER, no requirement that results be shown
-on the provider's own map, and cheap per thousand with a free daily allowance.
-That last property is the one that matters: it is why this is not simply "switch
-to Google", which would reintroduce the licensing question the MapTiler move was
-made to retire.
+Closing the rooftop gap needs a provider with a US address-point database. The
+candidate worth pricing is **Geocodio** — US and Canada only, which matches this
+market, rooftop-level from OpenAddresses plus TIGER, no requirement that results
+be shown on the provider's own map, and cheap per thousand with a free daily
+allowance. That last property is why this is not simply "switch to Google", which
+would reintroduce the licensing question the MapTiler move was made to retire.
 
 Until then, do not describe pins as rooftop-accurate to a customer. The import
 preview is honest about it — a guessed match is flagged "close match — check this

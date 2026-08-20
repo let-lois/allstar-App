@@ -243,6 +243,10 @@ export interface GeocodeAttempt {
  * house and answered about a street, or a street in another town. One of those
  * sends a rep to the wrong door, so it must never outrank an honest answer from
  * a provider that actually parsed the address.
+ *
+ * The rank is quality only, and deliberately says nothing about which provider
+ * an answer came from. Two providers disagreeing about the same address is not
+ * resolved by brand.
  */
 const CONFIDENT = 4
 
@@ -289,20 +293,22 @@ export async function geocode(
    *             and this app draws a MapTiler basemap. Reached only for rows
    *             Census could not parse, which keeps that exposure to the few
    *             addresses that need it instead of every address.
-   *   maptiler  last, because it has no US address points. Every result observed
-   *             for this dataset was a fuzzy street match with the house number
-   *             discarded and the ZIP ignored — "704 W 40th St, Austin, 78751"
-   *             returns West 40th Street in 78756 at relevance 0.74 — and an
-   *             exact, non-fuzzy search returns nothing at all. Kept below the
-   *             others so it can still offer an operator something to look at
-   *             for an address nobody else could place.
+   *   maptiler  last, because of how it fails rather than because of what it
+   *             covers. Asked about an address it cannot resolve, it returns a
+   *             fuzzy street match with the house number discarded and the ZIP
+   *             ignored — "704 W 40th St, Austin, 78751" comes back as West 40th
+   *             Street in 78756, with Texarkana and Mission behind it at 0.62.
+   *             Census answers the same address with an honest no-match. A wrong
+   *             pin is worse than an absent one because an absent one is visible,
+   *             so the provider that guesses goes last. Kept rather than removed
+   *             so it can still offer an operator something to look at, flagged.
    *
    * The trade this ordering accepts: a provider below Census is never asked about
    * a row Census placed, so a hypothetical rooftop from Google or MapTiler is
    * forgone in favour of a Census interpolation. That is the right call while
-   * MapTiler has no address points and Google carries a licensing question, and
-   * it is the wrong call the moment a rooftop-capable provider is added — at
-   * which point it goes above Census, not below.
+   * the providers below it are a guesser and a licensing question, and it is the
+   * wrong call the moment a provider with a verified US address-point database is
+   * added — at which point it goes above Census, not below.
    *
    * Rooftop accuracy for US addresses needs a provider with an address-point
    * database. See "Before this goes to a paying customer" in the README.
