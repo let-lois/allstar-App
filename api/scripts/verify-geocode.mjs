@@ -24,7 +24,10 @@ const load = async (entry, name) => {
 }
 const { parseCensusResponse, toCensusCsv } = await load('src/geocode.ts', 'geocode')
 const { parseGoogleResponse } = await load('src/geocode-google.ts', 'google')
-const { parseMapTilerResponse, maptilerProbe } = await load('src/geocode-maptiler.ts', 'maptiler')
+const { parseMapTilerResponse, maptilerProbe, probeOverrides } = await load(
+  'src/geocode-maptiler.ts',
+  'maptiler',
+)
 const { addressKey, propertyIdFor } = await load('src/import.ts', 'import')
 
 const fails = []
@@ -345,10 +348,10 @@ const ok = (cond, msg) => {
   )
   globalThis.fetch = realFetch
 
-  ok(variants.length === 4, `the probe asks the same address four ways (${variants.length})`)
   ok(
-    variants.map((v) => v.label).join(',') === 'current,address-only,literal,unfiltered',
-    'and reports them in the order they narrow the problem',
+    variants.map((v) => v.label).join(',') ===
+      'current,us-parser,us-parser-unfiltered,us-parser-exact',
+    'the probe pairs a control against the documented US-parser parameters',
   )
   ok(
     variants.every((v) => v.why && v.why.length > 10),
@@ -368,15 +371,19 @@ const ok = (cond, msg) => {
     'the real requests still carry the key — redaction is display-only',
   )
 
+  // The control has to keep sending exactly what production sends, or it stops
+  // being a control and the comparison means nothing.
   ok(
-    seen[0].includes('types=address%2Croad') || seen[0].includes('types=address,road'),
-    'the control variant sends exactly what the import path sends',
+    seen[0].includes('types=address,road') && seen[0].includes('limit=1'),
+    'the control sends exactly what the import path sends, commas unescaped',
   )
+  ok(!seen[0].includes('language='), 'and the control does not send language, which is the variable under test')
   ok(
-    seen[2].includes('autocomplete=false') && seen[2].includes('fuzzyMatch=false'),
-    'the literal variant turns off prefix and fuzzy matching',
+    seen.slice(1).every((u) => u.includes('language=en') && u.includes('country=us')),
+    'every US-parser variant sends country and language together — one without the other is the bug',
   )
-  ok(!seen[3].includes('types='), 'the unfiltered variant sends no type filter at all')
+  ok(!seen[2].includes('types='), 'the unfiltered variant sends no type filter at all')
+  ok(seen[3].includes('autocomplete=false'), 'the exact variant turns off prefix matching')
   ok(
     seen.every((u) => u.includes(encodeURIComponent('704 W 40th St, Austin, TX, 78751'))),
     'every variant asks about the same address',
@@ -389,6 +396,46 @@ const ok = (cond, msg) => {
   ok(
     Array.isArray(variants[0].features[0]?.place_type),
     'and place_type comes through unflattened, not reduced to our precision bucket',
+  )
+}
+
+/* --- tunable parameters --------------------------------------------------- */
+//
+// The point of the whitelist is that a new hypothesis about the query string
+// costs a page reload instead of a deploy. The point of it being a *whitelist*
+// is that nothing a caller sends can redirect the request or spend someone
+// else's quota.
+{
+  const picked = probeOverrides(
+    new URLSearchParams('language=de&limit=3&raw=1&address=x&key=attacker-key&types=poi'),
+  )
+  ok(picked.language === 'de' && picked.limit === '3' && picked.types === 'poi', 'tunable parameters are read from the query string')
+  ok(!('key' in picked), 'key is not tunable — a caller cannot point the probe at another account')
+  ok(
+    !('address' in picked) && !('raw' in picked),
+    'and unrelated parameters are dropped rather than forwarded',
+  )
+
+  const seen = []
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async (u) => {
+    seen.push(String(u))
+    return { ok: true, status: 200, json: async () => ({ features: [] }) }
+  }
+  await maptilerProbe({ ref: 'p', address1: '1 Main St' }, 'k', { limit: '9', language: 'es' })
+  globalThis.fetch = realFetch
+
+  ok(
+    seen.every((u) => u.includes('limit=9') && !u.includes('limit=1&') && !u.endsWith('limit=1')),
+    'an override replaces the variant default rather than appending a duplicate',
+  )
+  ok(
+    seen.every((u) => u.includes('language=es')),
+    'an override applies to every variant, including the control',
+  )
+  ok(
+    seen.every((u) => u.includes('key=k')),
+    'and the key survives the override merge',
   )
 }
 

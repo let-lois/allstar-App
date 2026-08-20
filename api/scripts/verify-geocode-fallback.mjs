@@ -5,10 +5,20 @@
  * decision logic, and a test that depends on a metered API being up is a test
  * that stops being run. The parsing itself is covered by verify-geocode.
  *
- * Two behaviours are pinned here. Precision is preferred but never required — an
- * expired key, an exhausted quota or an outage has to degrade the import to the
- * next provider rather than fail it. And the chain is ordered: each provider only
- * ever sees what the one before it could not place, so nothing is billed twice.
+ * Three behaviours are pinned here.
+ *
+ * Precision is preferred but never required — an expired key, an exhausted quota
+ * or an outage has to degrade the import to the next provider rather than fail
+ * it.
+ *
+ * The chain is ordered, and each provider only ever sees what the one before it
+ * could not place, so nothing is billed twice.
+ *
+ * And the fall-through is on *quality*, not on failure. This is the one that
+ * shipped broken: any `status: 'match'` used to end the search, so MapTiler's
+ * fuzzy street guess — house number discarded, ZIP ignored, relevance 0.74 —
+ * stopped Census from ever being asked, and a worse answer won because it
+ * arrived first. A guessed match must never outrank an honest one.
  */
 
 import { build } from 'esbuild'
@@ -87,10 +97,11 @@ const tilerOk = (lat, { relevance = 1, types = ['address'], address = '10' } = {
 })
 const tilerNone = () => ({ features: [] })
 
-const googleOk = (lat) => (address) => ({
+const googleOk = (lat, { partial = false } = {}) => (address) => ({
   status: 'OK',
   results: [{
     formatted_address: address.toUpperCase(),
+    partial_match: partial || undefined,
     geometry: { location: { lat, lng: -97.7 }, location_type: 'ROOFTOP' },
   }],
 })
@@ -101,6 +112,16 @@ const censusRows = (refs, matched = true) =>
       matched
         ? `"${r}","in","Match","Exact","OUT ${r}","-97.75,30.26","x","L"`
         : `"${r}","in","No_Match"`,
+    )
+    .join('\n')
+
+/** Census answers for every ref except the ones named. */
+const censusExcept = (...missing) => (refs) =>
+  refs
+    .map((r) =>
+      missing.includes(r)
+        ? `"${r}","in","No_Match"`
+        : `"${r}","in","Match","Exact","OUT ${r}","-97.75,30.26","x","L"`,
     )
     .join('\n')
 
@@ -118,89 +139,87 @@ const censusRows = (refs, matched = true) =>
   )
 }
 
-/* --- the request itself --------------------------------------------------- */
+/* --- Census goes first, even when paid keys are configured ---------------- */
 //
-// This is the check that would have caught the first release. `street` is not a
-// MapTiler place type; sending it makes the request invalid, MapTiler rejects
-// every address, and the chain degrades so gracefully that the only symptom is
-// results arriving from Census instead.
-{
-  let asked = ''
-  globalThis.fetch = async (url) => {
-    const href = String(url)
-    // Only the MapTiler request is under test. The chain falls through to Census
-    // after a no-match, and capturing every URL would leave us asserting against
-    // whichever one happened to be last.
-    if (href.includes('api.maptiler.com')) asked = href
-    if (href.includes('census.gov')) return { ok: true, status: 200, text: async () => '' }
-    return { ok: true, status: 200, json: async () => ({ features: [] }) }
-  }
-  await geocode([ROWS[0]], { maptiler: 'k' }).catch(() => {})
-  ok(/types=address%2Croad|types=address,road/.test(asked), "the request asks for MapTiler's own type names")
-  ok(!/street/.test(asked), "and never sends 'street', which MapTiler does not accept")
-  ok(/country=us/.test(asked) && /limit=1/.test(asked), 'scoped to one US result')
-}
-
-/* --- the trace makes a rejecting provider visible ------------------------- */
-//
-// The chain's strength is its blind spot: a dead provider degrades silently, so
-// a misconfigured key is indistinguishable from a provider with nothing to add.
-{
-  stub({
-    maptiler: () => ({ message: 'Bad request' }),
-    google: googleOk(30.9),
-    census: (refs) => censusRows(refs),
-  })
-  const trace = []
-  const res = await geocode(ROWS, { maptiler: 'k' }, trace)
-  ok(res.every((m) => m.status === 'match'), 'the import still succeeds')
-  ok(trace.length === 2, 'both providers that were asked are recorded')
-  const tiler = trace.find((t) => t.provider === 'maptiler')
-  ok(tiler.asked === 3 && tiler.matched === 0, 'MapTiler is shown as having placed nothing')
-  ok(/bad request/i.test(tiler.firstError ?? ''), "and its own reason is carried through")
-  const census = trace.find((t) => t.provider === 'census')
-  ok(census.matched === 3, 'while the fallback is shown doing the work')
-}
-
-/* --- MapTiler alone ------------------------------------------------------- */
-{
-  const calls = stub({ maptiler: tilerOk(30.3), google: googleOk(30.3), census: (refs) => censusRows(refs) })
-  const res = await geocode(ROWS, { maptiler: 'tiler-key' })
-  ok(calls.maptiler.length === 3, 'with a MapTiler key, every address goes to MapTiler')
-  ok(calls.google.length === 0 && calls.census === 0, 'and nothing else is called when nothing needs it')
-  ok(
-    res.every((m) => m.provider === 'maptiler' && m.precision === 'rooftop'),
-    'an address-level hit with a house number is a rooftop',
-  )
-}
-
-/* --- MapTiler goes first when both paid keys are present ------------------ */
-//
-// The ordering is not about accuracy. The basemap comes from MapTiler, and
-// Google's terms expect Google content on a Google map — so the provider that
-// supplies the imagery is the one that should supply the coordinates.
+// Not thrift — two separate reasons. Google's terms expect Google content on a
+// Google map and this app draws a MapTiler basemap, so reaching Google only for
+// what Census cannot parse keeps that exposure to the few addresses that need
+// it. And MapTiler has no US address points at all, so asking it first is how
+// the regression above happened.
 {
   const calls = stub({ maptiler: tilerOk(30.3), google: googleOk(30.9), census: (refs) => censusRows(refs) })
   const res = await geocode(ROWS, { maptiler: 'tiler-key', google: 'google-key' })
-  ok(calls.maptiler.length === 3, 'MapTiler sees the batch first')
+  ok(calls.census === 1, 'Census sees the batch first')
   ok(calls.google.length === 0, 'and Google is not billed for addresses already placed')
-  ok(res.every((m) => m.provider === 'maptiler'), 'every result comes from MapTiler')
+  ok(calls.maptiler.length === 0, 'nor is MapTiler asked about them')
+  ok(res.every((m) => m.provider === 'census'), 'every result comes from the free provider')
+}
+
+/* --- a guessed match must not end the search ----------------------------- */
+//
+// The regression, pinned. A provider that answers a house with a street — or a
+// street in another town — has guessed, and a guess must not stop a provider
+// that can actually parse the address from being asked.
+{
+  const calls = stub({
+    // Census cannot parse 'b', so the paid providers are reached for it.
+    census: censusExcept('b'),
+    // Google guesses. Under the old rule this ended the search for 'b'.
+    google: googleOk(30.9, { partial: true }),
+    maptiler: tilerOk(30.3),
+  })
+  const res = await geocode(ROWS, { google: 'google-key', maptiler: 'tiler-key' })
+  const b = res.find((m) => m.ref === 'b')
+  ok(calls.google.length === 1 && /2 B/.test(calls.google[0]), 'only the row Census missed reaches Google')
+  ok(
+    calls.maptiler.length === 1,
+    'and a guessed answer does not stop the next provider being asked about it',
+  )
+  ok(
+    b.provider === 'maptiler' && b.partial !== true,
+    'the confident answer wins over the guess that arrived first',
+  )
+  ok(
+    res.filter((m) => m.provider === 'census').length === 2,
+    'while rows Census placed are left alone',
+  )
+}
+
+/* --- but a guess is better than nothing ---------------------------------- */
+//
+// Kept rather than discarded: the import preview flags a partial match as "close
+// match — check this one" and shows what was matched, which is something an
+// operator can act on. An empty row is not.
+{
+  stub({
+    census: (refs) => censusRows(refs, false),
+    google: googleOk(30.9, { partial: true }),
+    maptiler: tilerNone,
+  })
+  const res = await geocode(ROWS, { google: 'google-key', maptiler: 'tiler-key' })
+  ok(
+    res.every((m) => m.status === 'match' && m.partial === true),
+    'when nothing confident exists, the flagged guess is still reported',
+  )
 }
 
 /* --- each link only sees what the last one missed ------------------------- */
 {
   const calls = stub({
-    maptiler: (q) => (q.startsWith('2 B') ? tilerNone() : tilerOk(30.3)(q)),
+    census: censusExcept('b'),
     google: googleOk(30.9),
-    census: (refs) => censusRows(refs),
+    maptiler: tilerOk(30.3),
   })
   const res = await geocode(ROWS, { maptiler: 'tiler-key', google: 'google-key' })
-  ok(calls.maptiler.length === 3, 'MapTiler is asked for all three')
+  // Two calls, not one: Census retries anything it could not match with the ZIP
+  // stripped, which is its own documented second pass rather than the chain
+  // asking twice.
+  ok(calls.census === 2, 'Census batches all three, then retries the miss without its ZIP')
   ok(calls.google.length === 1 && /2 B/.test(calls.google[0]), 'Google is asked for exactly the one that missed')
-  ok(calls.census === 0, 'and Census is not needed at all')
+  ok(calls.maptiler.length === 0, 'and MapTiler is not needed at all')
   const b = res.find((m) => m.ref === 'b')
   ok(b.status === 'match' && b.provider === 'google', 'the missed address is placed by the next provider')
-  ok(res.filter((m) => m.provider === 'maptiler').length === 2, 'while the rest keep their original results')
+  ok(res.filter((m) => m.provider === 'census').length === 2, 'while the rest keep their original results')
 }
 
 /* --- precision is reported, not flattered -------------------------------- */
@@ -210,9 +229,9 @@ const censusRows = (refs, matched = true) =>
 // not earned it.
 {
   stub({
+    census: (refs) => censusRows(refs, false),
     maptiler: tilerOk(30.3, { types: ['road'], address: undefined }),
     google: googleOk(30.9),
-    census: (refs) => censusRows(refs),
   })
   const res = await geocode(ROWS, { maptiler: 'tiler-key' })
   ok(
@@ -222,55 +241,108 @@ const censusRows = (refs, matched = true) =>
 }
 {
   stub({
+    census: (refs) => censusRows(refs, false),
     maptiler: tilerOk(30.3, { relevance: 0.6 }),
     google: googleOk(30.9),
-    census: (refs) => censusRows(refs),
   })
   const res = await geocode(ROWS, { maptiler: 'tiler-key' })
   ok(res.every((m) => m.partial === true), 'a low-relevance hit is flagged as a guess')
 }
 
-/* --- THE case: a paid provider is down or its key has expired ------------ */
+/* --- a rooftop from a later provider still wins -------------------------- */
 //
-// An import must not fail because a paid dependency did. This is the reason the
-// free geocoder is kept rather than deleted once a key exists.
+// The ordering forgoes a rooftop for rows Census placed, which is deliberate and
+// documented. It must not also forgo one for a row Census missed.
 {
-  const calls = stub({
-    maptiler: () => ({ message: 'Key is invalid' }),
+  stub({ census: censusExcept('a'), google: googleOk(30.9), maptiler: tilerNone })
+  const res = await geocode(ROWS, { google: 'google-key' })
+  const a = res.find((m) => m.ref === 'a')
+  ok(a.provider === 'google' && a.precision === 'rooftop', 'a rooftop is taken where Census could not parse the address')
+}
+
+/* --- the trace makes a rejecting provider visible ------------------------ */
+//
+// The chain's strength is its blind spot: a dead provider degrades silently, so
+// a misconfigured key is indistinguishable from a provider with nothing to add.
+{
+  stub({
+    census: (refs) => censusRows(refs, false),
+    maptiler: () => ({ message: 'Bad request' }),
     google: googleOk(30.9),
-    census: (refs) => censusRows(refs),
   })
-  const res = await geocode(ROWS, { maptiler: 'dead-key' })
-  ok(calls.census === 1, 'a dead MapTiler key sends the whole batch on to the next provider')
-  ok(res.every((m) => m.status === 'match'), 'and every address still gets placed')
-  ok(res.every((m) => m.provider === 'census'), 'on the free geocoder')
+  const trace = []
+  const res = await geocode(ROWS, { maptiler: 'k' }, trace)
+  ok(trace.length === 2, 'both providers that were asked are recorded')
+  const tiler = trace.find((t) => t.provider === 'maptiler')
+  ok(tiler.asked === 3 && tiler.matched === 0, 'MapTiler is shown as having placed nothing')
+  ok(/bad request/i.test(tiler.firstError ?? ''), "and its own reason is carried through")
+  ok(
+    res.every((m) => m.status === 'error' && /bad request/i.test(m.error ?? '')),
+    'the failure reaches the caller rather than being flattened to "not found"',
+  )
 }
 {
+  stub({ census: (refs) => censusRows(refs), maptiler: tilerOk(30.3), google: googleOk(30.9) })
+  const trace = []
+  await geocode(ROWS, { maptiler: 'k', google: 'k' }, trace)
+  ok(
+    trace.length === 1 && trace[0].provider === 'census',
+    'a provider that was never needed is not listed as having been asked',
+  )
+}
+
+/* --- THE case: a paid provider is down or its key has expired ------------ */
+//
+// An import must not fail because a paid dependency did. Census is first now, so
+// this matters for the rows Census could not parse — the ones that depend on a
+// paid provider being alive.
+{
   const calls = stub({
+    census: censusExcept('b'),
+    maptiler: () => ({ message: 'Key is invalid' }),
+    google: googleOk(30.9),
+  })
+  const res = await geocode(ROWS, { maptiler: 'dead-key' })
+  ok(calls.maptiler.length === 1, 'a dead key is still asked about the row nothing else could place')
+  ok(
+    res.filter((m) => m.status === 'match').length === 2,
+    'and the rest of the import is unaffected',
+  )
+  const b = res.find((m) => m.ref === 'b')
+  ok(b.status === 'error' && /invalid/i.test(b.error ?? ''), 'the one row that needed it reports why it failed')
+}
+{
+  stub({
+    census: (refs) => censusRows(refs),
     maptiler: () => ({ httpOk: false }),
     google: () => ({ httpOk: false }),
-    census: (refs) => censusRows(refs),
   })
   const res = await geocode(ROWS, { maptiler: 'k', google: 'k' })
-  ok(res.every((m) => m.status === 'match'), 'both paid providers failing still degrades rather than fails')
-  ok(calls.census === 1, 'via one fallback call')
+  ok(
+    res.every((m) => m.status === 'match' && m.provider === 'census'),
+    'both paid providers being down is invisible when the free one can answer',
+  )
 }
 
 /* --- Google alone still works, unchanged --------------------------------- */
 {
-  const calls = stub({ maptiler: tilerOk(30.3), google: googleOk(30.9), census: (refs) => censusRows(refs) })
+  const calls = stub({
+    census: (refs) => censusRows(refs, false),
+    maptiler: tilerOk(30.3),
+    google: googleOk(30.9),
+  })
   const res = await geocode(ROWS, { google: 'google-key' })
   ok(calls.maptiler.length === 0, 'a Google-only config never touches MapTiler')
-  ok(calls.google.length === 3, 'and Google answers the batch')
+  ok(calls.google.length === 3, 'and Google answers what Census could not')
   ok(res.every((m) => m.provider === 'google'), 'as before this chain existed')
 }
 
 /* --- when nothing can place it ------------------------------------------- */
 {
   stub({
+    census: (refs) => censusRows(refs, false),
     maptiler: tilerNone,
     google: () => ({ status: 'ZERO_RESULTS' }),
-    census: (refs) => censusRows(refs, false),
   })
   const res = await geocode(ROWS, { maptiler: 'k', google: 'k' })
   ok(
@@ -283,14 +355,14 @@ const censusRows = (refs, matched = true) =>
 /* --- a later no-match must not overwrite a real reason ------------------- */
 {
   stub({
-    maptiler: () => ({ message: 'quota exceeded' }),
-    google: googleOk(30.9),
     census: (refs) => censusRows(refs, false),
+    maptiler: () => ({ message: 'quota exceeded' }),
+    google: () => ({ status: 'ZERO_RESULTS' }),
   })
-  const res = await geocode(ROWS, { maptiler: 'k' })
+  const res = await geocode(ROWS, { maptiler: 'k', google: 'k' })
   ok(
     res.every((m) => m.status === 'error' && /quota/i.test(m.error ?? '')),
-    'when both fail, the more specific reason survives — "quota exceeded" beats "not found"',
+    'when everything fails, the more specific reason survives — "quota exceeded" beats "not found"',
   )
 }
 
