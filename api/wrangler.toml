@@ -55,7 +55,18 @@ ALLOWED_ORIGINS = "https://allstar.letlois.com,https://allstar-app.pages.dev,htt
 #                           a design. See "Before this goes to a paying
 #                           customer" in the root README for what it costs and
 #                           the two ways to close it.
-#   GOOGLE_MAPS_API_KEY   — optional. Tried after MapTiler.
+#   GOOGLE_MAPS_API_KEY   — optional, and tried FIRST when set. The only
+#                           provider here that returns a rooftop rather than a
+#                           point on a block.
+#
+#                           Two things to know before setting it. Google's terms
+#                           expect Google-derived content on a Google map, so
+#                           this belongs first only once the basemap is Google.
+#                           And those terms permit only temporary caching of
+#                           coordinates, while this app stores them permanently
+#                           so the map draws offline. Both are covered in the
+#                           README's pre-launch section; the second is a licence
+#                           question for counsel, not a code change.
 #
 # With neither key, addresses geocode via the free US Census service, which
 # places a house on the right block rather than on its roof. Everything works

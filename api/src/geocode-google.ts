@@ -22,6 +22,28 @@ import type { GeocodeMatch, GeocodeRequest } from './geocode'
  * **`partial_match` means it guessed.** Google returns a result for a misspelled
  * or incomplete address and flags it. Treating that as a clean match is how a
  * typo becomes a rep knocking on the wrong door.
+ *
+ * ---
+ *
+ * **A licence constraint this file cannot solve, recorded where it will be read.**
+ *
+ * Google's Maps Platform terms permit only temporary caching of latitude and
+ * longitude — on the order of thirty days — after which they are to be deleted.
+ * Place IDs are the stated exception and may be stored indefinitely.
+ *
+ * This app does the opposite: a lead's coordinates are written to D1 and to every
+ * phone's IndexedDB and kept for the life of the record, because the map has to
+ * draw with no signal. That is not an oversight in the offline design, it is a
+ * direct conflict between the offline requirement and this provider's terms, and
+ * no amount of code here resolves it.
+ *
+ * The compliant shape is to store the Place ID as the durable reference and
+ * resolve coordinates at display time, which costs the offline map. The decision
+ * is the product owner's and belongs with counsel, not in a comment. What is
+ * recorded here is that the choice exists and which way this codebase currently
+ * falls, so nobody discovers it from a letter.
+ *
+ * See "Before this goes to a paying customer" in the README.
  */
 
 const ENDPOINT = 'https://maps.googleapis.com/maps/api/geocode/json'

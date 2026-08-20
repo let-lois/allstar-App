@@ -547,6 +547,41 @@ raw provider response, and takes `language`, `types`, `limit`, `autocomplete`,
 page reload rather than a deploy. Use a verified address with it — a synthetic one
 cannot answer a coverage question.
 
+### Google's terms and the offline map are in direct conflict
+
+Only relevant once `GOOGLE_MAPS_API_KEY` is set, and then it is the most
+important item on this list.
+
+Google's Maps Platform terms permit only *temporary* caching of latitude and
+longitude — on the order of thirty days — after which they are to be deleted.
+Place IDs are the stated exception and may be stored indefinitely.
+
+This app does the opposite, deliberately. A lead's coordinates are written to D1
+and to every phone's IndexedDB and kept for the life of the record, because the
+map has to draw with no signal — which is the product's founding requirement, not
+a convenience. So this is not a bug to fix in code; it is a conflict between the
+offline requirement and the provider's licence.
+
+The compliant shape is to store the Place ID as the durable reference and resolve
+coordinates at display time. That costs the offline map, which is the one thing
+this product is built around.
+
+The three ways out, none of them free:
+
+1. **Accept it and get it reviewed.** Ask counsel whether the field-sales use and
+   retention period are defensible, in the same conversation as the DNC/TCPA
+   review. Cheapest, and a real answer rather than a guess.
+2. **Google for display, a storable geocoder for storage.** Google Maps for the
+   basemap and Street View; coordinates from a provider whose terms allow
+   permanent storage. Keeps the offline map, keeps rooftop accuracy, and the pins
+   are no longer Google-derived. Needs one more paid provider.
+3. **Place IDs, resolved online.** Fully compliant, and the offline map goes.
+
+Nothing in the code prevents any of these. What the code does is refuse to
+pretend the question isn't there: the constraint is recorded in
+`api/src/geocode-google.ts` next to the provider it governs, and in
+`api/wrangler.toml` next to the secret that activates it.
+
 Closing the rooftop gap needs a provider with a US address-point database. The
 candidate worth pricing is **Geocodio** — US and Canada only, which matches this
 market, rooftop-level from OpenAddresses plus TIGER, no requirement that results
