@@ -1,25 +1,44 @@
 import type { GeocodeMatch, GeocodeRequest } from './geocode'
 
 /**
- * MapTiler's geocoding API.
+ * MapTiler's geocoding API — last in the chain, and measured rather than assumed.
  *
- * Preferred over Google for one reason that has nothing to do with accuracy:
- * this app draws its basemap from MapTiler tiles, and Google's platform terms
- * generally expect Google-derived content to be shown on a Google map. Plotting
- * Google coordinates on a MapLibre-style basemap is at best an unresolved
- * question for a paying customer to inherit. Geocoding with the same provider
- * that supplies the imagery removes the question rather than answering it.
+ * It was added ahead of Google for a licensing reason that still holds: this app
+ * draws its basemap from MapTiler tiles, and Google's terms generally expect
+ * Google-derived content to be shown on a Google map. Geocoding with the same
+ * provider that supplies the imagery removes that question rather than answering
+ * it.
  *
- * Practical differences from Google that shape this file:
+ * What it does not do is find US buildings. Probed against real addresses from a
+ * live territory:
  *
- * **No batch endpoint either.** One request per address, so the same concurrency
- * discipline applies — a Worker has a hard cap on outbound subrequests and
- * blowing it fails the entire import rather than one row.
+ *   "704 W 40th St, Austin, TX, 78751"  ->  West 40th Street, Austin, 78756
+ *   "1302 Deepwood Dr, Round Rock, TX"  ->  Deep Wood Drive, Round Rock
+ *
+ * In both cases the house number was discarded, the result was the street, and
+ * the ZIP was ignored — the Austin lead came back in a different ZIP, and the
+ * candidate list under it offered West 40th Street in Texarkana and in Mission at
+ * relevance 0.62. Setting `language=en` alongside `country=us`, which is what
+ * activates MapTiler's documented US address parser, changed nothing. Turning
+ * fuzzy matching off returned no features at all — which is the proof: if an
+ * address point existed, an exact search would find it.
+ *
+ * So this provider sits below Census, which does read the house number and
+ * interpolates along the right block. It is kept rather than deleted because it
+ * can still offer an operator something to look at for an address nothing else
+ * could place, and because coverage grows.
+ *
+ * Practical details that shape this file:
+ *
+ * **No batch endpoint.** One request per address, so the concurrency discipline
+ * matters — a Worker has a hard cap on outbound subrequests and blowing it fails
+ * the entire import rather than one row.
  *
  * **Precision is inferred, not stated.** There is no `location_type` field.
  * MapTiler returns a GeoJSON feature whose `place_type` says what kind of thing
- * was matched, and only an address-level match with a house number is a rooftop.
- * Anything coarser is reported as such rather than flattered.
+ * was matched — but street geometry is typed `address` too, so only the presence
+ * of an `address` field distinguishes a building from a road. That guard is the
+ * one reason this has never reported a fake rooftop.
  *
  * The type vocabulary is MapTiler's own and worth stating, because it is not the
  * one it resembles: a street is `road` here, where the Mapbox-style APIs this
@@ -28,9 +47,8 @@ import type { GeocodeMatch, GeocodeRequest } from './geocode'
  * exactly what happened the first time this shipped.
  *
  * **`relevance` is how it says "I guessed".** Google sets `partial_match`;
- * MapTiler scores the match 0-1. A confident match is ~1.0, and anything
- * materially below that came back from a fuzzy search — which is exactly the
- * case where a rep ends up at the wrong door.
+ * MapTiler scores the match 0-1. Anything materially below 1.0 came back from a
+ * fuzzy search, and the chain treats a guess as not-yet-placed rather than done.
  */
 
 const ENDPOINT = 'https://api.maptiler.com/geocoding'

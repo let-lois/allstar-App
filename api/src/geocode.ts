@@ -223,6 +223,43 @@ export interface GeocodeAttempt {
  *     Census-only path it has always been, which is what makes the whole
  *     feature safe to ship before anyone has an account.
  */
+/**
+ * How good a result is, for choosing between two answers about the same address.
+ *
+ * The chain used to fall through on *failure* only: any `status: 'match'` was
+ * treated as placed and stopped the chain. That was wrong, and it shipped a
+ * regression. MapTiler answers a US street address by fuzzy-matching tokens
+ * against street geometry — "704 W 40th St, Austin, 78751" comes back as West
+ * 40th Street in 78756, relevance 0.74, with the house number discarded — and
+ * because that carried `status: 'match'`, Census was never asked. Census would
+ * have used the house number to interpolate along the correct block in the
+ * correct ZIP. A worse answer was silently preferred because it arrived first.
+ *
+ * So quality decides, not arrival order. Only a confident match ends the search;
+ * anything less is held as a fallback while the next provider tries.
+ *
+ * The `partial` cliff is deliberately steep. A guessed match is not a slightly
+ * worse rooftop, it is a different kind of thing: the provider was asked about a
+ * house and answered about a street, or a street in another town. One of those
+ * sends a rep to the wrong door, so it must never outrank an honest answer from
+ * a provider that actually parsed the address.
+ */
+const CONFIDENT = 4
+
+function rank(m: GeocodeMatch): number {
+  if (m.status === 'match') {
+    if (m.partial) return 3
+    if (m.precision === 'rooftop') return 6
+    if (m.precision === 'interpolated') return 5
+    return CONFIDENT
+  }
+  // A specific reason beats a bare "not found": "quota exceeded" sends an
+  // operator to the dashboard, "not found" sends them hunting for a typo.
+  if (m.status === 'error') return 2
+  if (m.status === 'tie') return 1
+  return 0
+}
+
 export async function geocode(
   rows: GeocodeRequest[],
   keys: GeocodeKeys = {},
@@ -236,19 +273,50 @@ export async function geocode(
   if (rows.length === 0) return []
 
   const byRef = new Map<string, GeocodeMatch>()
-  const pending = () => rows.filter((r) => byRef.get(r.ref)?.status !== 'match')
+  const held = (r: GeocodeRequest) => byRef.get(r.ref)
+  const pending = () => rows.filter((r) => rank(held(r) ?? { ref: r.ref, status: 'no_match' }) < CONFIDENT)
 
+  /*
+   * Ordered by what each provider can actually deliver for a US address,
+   * measured rather than assumed — and, where two are close, by which one this
+   * product would rather owe something to.
+   *
+   *   census    first. Free, no key, no card, US only, batched a thousand at a
+   *             time, public-domain output with no display restrictions, and it
+   *             reads the house number to interpolate along the right block.
+   *   google    rooftop, where a key is configured. Second rather than first on
+   *             purpose: Google's terms expect Google content on a Google map,
+   *             and this app draws a MapTiler basemap. Reached only for rows
+   *             Census could not parse, which keeps that exposure to the few
+   *             addresses that need it instead of every address.
+   *   maptiler  last, because it has no US address points. Every result observed
+   *             for this dataset was a fuzzy street match with the house number
+   *             discarded and the ZIP ignored — "704 W 40th St, Austin, 78751"
+   *             returns West 40th Street in 78756 at relevance 0.74 — and an
+   *             exact, non-fuzzy search returns nothing at all. Kept below the
+   *             others so it can still offer an operator something to look at
+   *             for an address nobody else could place.
+   *
+   * The trade this ordering accepts: a provider below Census is never asked about
+   * a row Census placed, so a hypothetical rooftop from Google or MapTiler is
+   * forgone in favour of a Census interpolation. That is the right call while
+   * MapTiler has no address points and Google carries a licensing question, and
+   * it is the wrong call the moment a rooftop-capable provider is added — at
+   * which point it goes above Census, not below.
+   *
+   * Rooftop accuracy for US addresses needs a provider with an address-point
+   * database. See "Before this goes to a paying customer" in the README.
+   */
   const chain: {
     name: GeocodeAttempt['provider']
     run: (batch: GeocodeRequest[]) => Promise<GeocodeMatch[]>
-  }[] = []
-  if (keys.maptiler) {
-    chain.push({ name: 'maptiler', run: (b) => maptilerGeocode(b, keys.maptiler as string) })
-  }
+  }[] = [{ name: 'census', run: censusGeocode }]
   if (keys.google) {
     chain.push({ name: 'google', run: (b) => googleGeocode(b, keys.google as string) })
   }
-  chain.push({ name: 'census', run: censusGeocode })
+  if (keys.maptiler) {
+    chain.push({ name: 'maptiler', run: (b) => maptilerGeocode(b, keys.maptiler as string) })
+  }
 
   for (const provider of chain) {
     const batch = pending()
@@ -256,11 +324,9 @@ export async function geocode(
 
     const results = await provider.run(batch)
     for (const m of results) {
-      // Only ever upgrade. A later provider's no-match must not overwrite an
-      // earlier one's more specific reason for refusing, and must never
-      // overwrite a match.
-      const held = byRef.get(m.ref)
-      if (!held || (held.status !== 'match' && m.status === 'match')) byRef.set(m.ref, m)
+      // Only ever upgrade, by quality rather than by order of arrival.
+      const prev = byRef.get(m.ref)
+      if (!prev || rank(m) > rank(prev)) byRef.set(m.ref, m)
     }
 
     trace?.push({
