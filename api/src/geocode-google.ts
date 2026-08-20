@@ -58,6 +58,8 @@ const CONCURRENCY = 6
 interface GoogleResult {
   formatted_address?: string
   partial_match?: boolean
+  /** What kind of thing was matched. See `tooCoarse`. */
+  types?: string[]
   geometry?: {
     location?: { lat?: number; lng?: number }
     location_type?: string
@@ -68,6 +70,51 @@ interface GoogleResponse {
   status?: string
   error_message?: string
   results?: GoogleResult[]
+}
+
+/**
+ * Result types that cannot be an answer to a street address.
+ *
+ * Asked about a house it cannot parse, Google does not return ZERO_RESULTS — it
+ * widens until something matches and hands back the centroid of that. A real
+ * probe against a rural East Texas address returned `"Texas, USA"` at
+ * 31.97,-99.90, which is the middle of the state and about 300 miles from the
+ * house. `partial_match` was set and `location_type` was APPROXIMATE, so nothing
+ * was hidden — but it still arrived as `status: 'match'` with coordinates, and a
+ * pin is a pin.
+ *
+ * A geocoder answering "which house?" with "Texas" has failed to parse the
+ * address. Reporting that as a match, however heavily flagged, means an operator
+ * can accept it and a rep can be routed to it. So it is a no-match, which also
+ * lets the chain move on to a provider that might do better.
+ *
+ * `postal_code` is deliberately absent from this list: a ZIP centroid is coarse
+ * but it is in the right neighbourhood, which is a different kind of wrong from
+ * the middle of a state.
+ */
+const TOO_COARSE = new Set([
+  'country',
+  'administrative_area_level_1',
+  'administrative_area_level_2',
+  'administrative_area_level_3',
+  'colloquial_area',
+  'continent',
+])
+
+/** A street-level type present anywhere in the list rescues the result. */
+const STREET_LEVEL = new Set([
+  'street_address',
+  'premise',
+  'subpremise',
+  'route',
+  'intersection',
+  'street_number',
+])
+
+function tooCoarse(types: string[] | undefined): boolean {
+  if (!types || types.length === 0) return false
+  if (types.some((t) => STREET_LEVEL.has(t))) return false
+  return types.some((t) => TOO_COARSE.has(t))
 }
 
 /** Google's own words for how sure it is, mapped to ours. */
@@ -109,6 +156,8 @@ export function parseGoogleResponse(ref: string, body: GoogleResponse): GeocodeM
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
     return { ref, status: 'no_match' }
   }
+  // "Texas" is not an answer to "which house". See TOO_COARSE.
+  if (tooCoarse(top?.types)) return { ref, status: 'no_match' }
 
   return {
     ref,

@@ -248,19 +248,30 @@ export interface GeocodeAttempt {
  * an answer came from. Two providers disagreeing about the same address is not
  * resolved by brand.
  */
-const CONFIDENT = 4
+const CONFIDENT = 40
+
+const PRECISION_RANK: Record<string, number> = { rooftop: 20, interpolated: 10, approximate: 0 }
 
 function rank(m: GeocodeMatch): number {
   if (m.status === 'match') {
-    if (m.partial) return 3
-    if (m.precision === 'rooftop') return 6
-    if (m.precision === 'interpolated') return 5
-    return CONFIDENT
+    const p = PRECISION_RANK[m.precision ?? 'approximate'] ?? 0
+    // A guess sits below every honest answer, however coarse that answer is —
+    // but guesses are still ordered among themselves by precision. Skipping that
+    // second part was a real bug: a guessed street in the right county and a
+    // guessed centroid of a whole state ranked identically, so whichever
+    // provider answered first won. Google returning "Texas, USA" for a rural
+    // address beat MapTiler returning the right street in the right county,
+    // and the pin landed 300 miles out.
+    //
+    // The partial band is halved so it cannot collide with CONFIDENT: a guessed
+    // rooftop scores 30, still below the coarsest honest match at 40. A guess
+    // that happened to land on a building is still a guess about which building.
+    return m.partial ? 20 + p / 2 : CONFIDENT + p
   }
   // A specific reason beats a bare "not found": "quota exceeded" sends an
   // operator to the dashboard, "not found" sends them hunting for a typo.
-  if (m.status === 'error') return 2
-  if (m.status === 'tie') return 1
+  if (m.status === 'error') return 15
+  if (m.status === 'tie') return 10
   return 0
 }
 
@@ -278,7 +289,8 @@ export async function geocode(
 
   const byRef = new Map<string, GeocodeMatch>()
   const held = (r: GeocodeRequest) => byRef.get(r.ref)
-  const pending = () => rows.filter((r) => rank(held(r) ?? { ref: r.ref, status: 'no_match' }) < CONFIDENT)
+  const pending = () =>
+    rows.filter((r) => rank(held(r) ?? { ref: r.ref, status: 'no_match' }) < CONFIDENT)
 
   /*
    * Ordered by what each provider can actually deliver for a US address,
