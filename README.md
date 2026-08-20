@@ -466,3 +466,41 @@ unset, the client uses the deployed Worker.
 
 Toggle **More → Field testing → Simulate no signal** to exercise the offline
 path without leaving coverage.
+
+## Before this goes to a paying customer
+
+Deliberate compromises taken to keep the prototype moving. Each is fine for
+building and testing and each is a real defect at launch, so they are written
+down here rather than left in a chat log.
+
+### The MapTiler key allows unknown origins
+
+`Allowed HTTP Origins` on the MapTiler key includes `?`, which permits requests
+that arrive with no `Origin` header.
+
+It is there because the key has two incompatible jobs and the free plan allows
+only one active key. The browser needs it origin-locked, because Vite compiles it
+into the bundle where anyone can read it. The Worker needs it origin-free,
+because a Worker sends no `Origin` and MapTiler rejects header-less requests when
+any origin is listed. `?` satisfies both.
+
+What it costs: another website embedding the key is still blocked, because a
+browser always sends an `Origin`. A script or `curl` is not. Anyone who reads the
+key out of the JavaScript bundle can use it.
+
+What that is worth today: the free tier is a hard 100k/month cap with no overage
+billing, so the worst case is the map going blank until the month rolls over —
+an outage, not an invoice.
+
+Two ways to close it, in order of preference:
+
+1. **Move geocoding into the browser.** The import screen runs on the app's own
+   origin, so a fully origin-locked key works there, and the Worker stops needing
+   a MapTiler key at all. Census stays on the Worker as the fallback. Roughly
+   half a day, and the key goes back to being properly locked.
+2. **Pay for a plan that allows two keys**, and split them: origin-locked for the
+   browser, origin-free for the Worker. No code change.
+
+Whichever is chosen, remove `?` afterwards and confirm with
+`/api/selftest/geocode` — its `attempts` array names the provider that answered
+and the reason any provider refused.
