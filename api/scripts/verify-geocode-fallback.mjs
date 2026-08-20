@@ -97,11 +97,27 @@ const tilerOk = (lat, { relevance = 1, types = ['address'], address = '10' } = {
 })
 const tilerNone = () => ({ features: [] })
 
+/**
+ * Google's real behaviour for an address it cannot parse: widen until something
+ * matches, and return that. Observed against a rural East Texas address, which
+ * came back as "Texas, USA" at the centroid of the state.
+ */
+const googleTooCoarse = () => () => ({
+  status: 'OK',
+  results: [{
+    formatted_address: 'Texas, USA',
+    partial_match: true,
+    types: ['administrative_area_level_1', 'political'],
+    geometry: { location: { lat: 31.9685988, lng: -99.9018131 }, location_type: 'APPROXIMATE' },
+  }],
+})
+
 const googleOk = (lat, { partial = false } = {}) => (address) => ({
   status: 'OK',
   results: [{
     formatted_address: address.toUpperCase(),
     partial_match: partial || undefined,
+    types: ['street_address'],
     geometry: { location: { lat, lng: -97.7 }, location_type: 'ROOFTOP' },
   }],
 })
@@ -369,6 +385,80 @@ const censusExcept = (...missing) => (refs) =>
   ok(
     res.every((m) => m.status === 'error' && /quota/i.test(m.error ?? '')),
     'when everything fails, the more specific reason survives — "quota exceeded" beats "not found"',
+  )
+}
+
+/* --- "Texas" is not an answer to "which house" --------------------------- */
+//
+// Both of these come from one real probe of a rural East Texas address. Google
+// returned the centroid of the state, flagged partial and APPROXIMATE. Nothing
+// was concealed — and it still arrived as a match with coordinates, which is all
+// a map needs to draw a pin 300 miles from the house.
+{
+  const calls = stub({
+    google: googleTooCoarse(),
+    census: (refs) => censusRows(refs, false),
+    maptiler: tilerOk(31.5, { relevance: 0.7, types: ['address'], address: undefined }),
+  })
+  const res = await geocode(ROWS, { google: 'google-key', maptiler: 'tiler-key' })
+
+  ok(
+    calls.census === 2 && calls.maptiler.length === 3,
+    'an administrative-area answer does not stop the chain',
+  )
+  ok(
+    res.every((m) => m.provider === 'maptiler'),
+    'a state centroid is refused outright, so it cannot win by arriving first',
+  )
+  ok(
+    res.every((m) => Math.abs(m.lat - 31.9685988) > 0.01),
+    'and no result carries the centroid coordinates',
+  )
+}
+
+/* --- guesses are ordered among themselves by precision ------------------- */
+//
+// The other half of the same bug. Even with the coarse result refused, two
+// providers can both guess — and a guessed street in the right county is not the
+// same as a guessed centroid. They used to rank identically, so first-to-answer
+// won regardless of how wrong it was.
+{
+  stub({
+    // Google guesses, but at postcode level rather than state, so it is kept.
+    google: () => ({
+      status: 'OK',
+      results: [{
+        formatted_address: 'AUSTIN, TX 78701, USA',
+        partial_match: true,
+        types: ['postal_code'],
+        geometry: { location: { lat: 30.26, lng: -97.74 }, location_type: 'APPROXIMATE' },
+      }],
+    }),
+    census: (refs) => censusRows(refs, false),
+    // MapTiler guesses too, but at street level — more use to an operator.
+    maptiler: tilerOk(30.3, { relevance: 0.7, types: ['road'], address: undefined }),
+  })
+  const res = await geocode(ROWS, { google: 'google-key', maptiler: 'tiler-key' })
+  ok(
+    res.every((m) => m.provider === 'maptiler' && m.precision === 'interpolated'),
+    'a guessed street beats a guessed postcode, whoever answered first',
+  )
+  ok(res.every((m) => m.partial === true), 'and it is still flagged as a guess')
+}
+
+/* --- but a guess never beats an honest answer ---------------------------- */
+{
+  stub({
+    // A guessed rooftop: the top of the partial band.
+    google: googleOk(30.9, { partial: true }),
+    // The coarsest honest answer there is.
+    census: (refs) => censusRows(refs),
+    maptiler: tilerNone,
+  })
+  const res = await geocode(ROWS, { google: 'google-key', maptiler: 'tiler-key' })
+  ok(
+    res.every((m) => m.provider === 'census' && m.partial !== true),
+    'even a guessed rooftop loses to an unguessed interpolation',
   )
 }
 
