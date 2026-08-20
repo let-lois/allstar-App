@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MarkerClusterer } from '@googlemaps/markerclusterer'
+import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer'
 import type { Property, Route } from '../../types'
 import type { Position } from '../../lib/geo'
 import { STATUS_COLOR } from '../../data/outcomes'
@@ -49,8 +49,24 @@ const DEFAULT_ZOOM = 16
  * short enough that a rep is not staring at grey wondering.
  */
 const DRAW_TIMEOUT = 10_000
-/** Matches FieldMap: below this, nearby pins merge into counts. */
-const CLUSTER_UNTIL_ZOOM = 17
+/**
+ * Clustering, matched to the self-rendered map so the two behave the same.
+ *
+ * `FieldMap` merges pins below zoom 17 using a 58px screen cell, so these have
+ * to mean the same thing — a rep switching between renderers should not find the
+ * map grouping doors differently.
+ *
+ * The units are the trap. supercluster computes `radius` relative to its own
+ * `extent`, which defaults to **512**, while Google renders **256px** tiles. So
+ * the library's default `radius: 60` is about 30 screen pixels, not 60 — half
+ * what it reads as, and half of what this map needs. Passing `extent: 256` makes
+ * `radius` mean device pixels, which is the only interpretation anyone reading
+ * this file would expect. Without it, pins 40px apart stayed stubbornly separate
+ * and looked like clustering was simply broken.
+ */
+const CLUSTER_MAX_ZOOM = 16
+const CLUSTER_RADIUS_PX = 58
+const CLUSTER_EXTENT = 256
 /** brand-500 — the one place on the map allowed to be teal by default. */
 const SELECTED_PIN = '#0A8296'
 
@@ -269,7 +285,13 @@ export function GoogleFieldMap({
           render: ({ count, position: at }) =>
             new AdvancedMarkerElement({ position: at, content: clusterElement(count), zIndex: 900 }),
         },
-        algorithmOptions: { maxZoom: CLUSTER_UNTIL_ZOOM },
+        // Constructed rather than passed as `algorithmOptions`, which is typed
+        // to `maxZoom` alone — `radius` and `extent` belong to the algorithm.
+        algorithm: new SuperClusterAlgorithm({
+          maxZoom: CLUSTER_MAX_ZOOM,
+          radius: CLUSTER_RADIUS_PX,
+          extent: CLUSTER_EXTENT,
+        }),
       })
     })()
 
