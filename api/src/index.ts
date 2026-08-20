@@ -19,6 +19,7 @@ import {
   type GeocodeAttempt,
   type GeocodeRequest,
 } from './geocode'
+import { maptilerProbe } from './geocode-maptiler'
 import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
 import { assignProperties, assignTerritory } from './assign'
 import { readAudit } from './audit'
@@ -252,6 +253,41 @@ export default {
         // coordinates, which is what catches a changed response format.
         const q = url.searchParams
         const custom = q.get('address')
+        const probeRow: GeocodeRequest = custom
+          ? {
+              ref: 'probe',
+              address1: custom,
+              city: q.get('city') ?? undefined,
+              state: q.get('state') ?? undefined,
+              zip: q.get('zip') ?? undefined,
+            }
+          : {
+              ref: 'probe',
+              address1: '1600 Pennsylvania Ave NW',
+              city: 'Washington',
+              state: 'DC',
+              zip: '20500',
+            }
+
+        // `?raw=1` reports what MapTiler actually said, rather than the precision
+        // bucket we sorted it into. Reach for it when a result is wrong in a way
+        // the parsed output cannot explain — a missing house number, or a match
+        // on a street in a ZIP nobody asked about.
+        if (q.get('raw') === '1') {
+          if (!env.MAPTILER_API_KEY) {
+            return json({ ok: false, error: 'MAPTILER_API_KEY is not configured' }, 200, cors)
+          }
+          return json(
+            {
+              ok: true,
+              sent: probeRow,
+              variants: await maptilerProbe(probeRow, env.MAPTILER_API_KEY),
+            },
+            200,
+            cors,
+          )
+        }
+
         try {
           // Every provider's attempt is reported, not just the winner. Without
           // this a provider rejecting every request is invisible: the chain
@@ -259,23 +295,7 @@ export default {
           // that the result came from further down than it should have.
           const attempts: GeocodeAttempt[] = []
           const matches = await geocode(
-            [
-            custom
-              ? {
-                  ref: 'probe',
-                  address1: custom,
-                  city: q.get('city') ?? undefined,
-                  state: q.get('state') ?? undefined,
-                  zip: q.get('zip') ?? undefined,
-                }
-              : {
-                  ref: 'probe',
-                  address1: '1600 Pennsylvania Ave NW',
-                  city: 'Washington',
-                  state: 'DC',
-                  zip: '20500',
-                },
-            ],
+            [probeRow],
             { maptiler: env.MAPTILER_API_KEY, google: env.GOOGLE_MAPS_API_KEY },
             attempts,
           )

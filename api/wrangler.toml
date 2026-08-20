@@ -41,10 +41,20 @@ ALLOWED_ORIGINS = "https://allstar.letlois.com,https://allstar-app.pages.dev,htt
 #
 #   SESSION_PEPPER        — mixed into password hashing. Never change it once
 #                           accounts exist; it would invalidate every password.
-#   MAPTILER_API_KEY      — optional. First choice for geocoding, and separate
-#                           from the front-end's VITE_MAPTILER_KEY: that one is
-#                           origin-locked to the site, and a Worker request
-#                           carries no Origin, so it would be rejected here.
+#   MAPTILER_API_KEY      — optional. First choice for geocoding.
+#
+#                           Currently the *same* key as the front-end's
+#                           VITE_MAPTILER_KEY, which is not the intended shape:
+#                           the free plan allows one active key, and the browser
+#                           needs it origin-locked while a Worker needs it
+#                           origin-free. The key's allowed-origins list carries
+#                           `?` to permit header-less requests, which is what
+#                           makes one key serve both.
+#
+#                           That is a knowing compromise for the prototype, not
+#                           a design. See "Before this goes to a paying
+#                           customer" in the root README for what it costs and
+#                           the two ways to close it.
 #   GOOGLE_MAPS_API_KEY   — optional. Tried after MapTiler.
 #
 # With neither key, addresses geocode via the free US Census service, which
