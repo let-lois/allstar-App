@@ -243,6 +243,10 @@ export interface GeocodeAttempt {
  * house and answered about a street, or a street in another town. One of those
  * sends a rep to the wrong door, so it must never outrank an honest answer from
  * a provider that actually parsed the address.
+ *
+ * The rank is quality only, and deliberately says nothing about which provider
+ * an answer came from. Two providers disagreeing about the same address is not
+ * resolved by brand.
  */
 const CONFIDENT = 4
 
@@ -278,42 +282,43 @@ export async function geocode(
 
   /*
    * Ordered by what each provider can actually deliver for a US address,
-   * measured rather than assumed — and, where two are close, by which one this
-   * product would rather owe something to.
+   * measured rather than assumed.
    *
-   *   census    first. Free, no key, no card, US only, batched a thousand at a
-   *             time, public-domain output with no display restrictions, and it
-   *             reads the house number to interpolate along the right block.
-   *   google    rooftop, where a key is configured. Second rather than first on
-   *             purpose: Google's terms expect Google content on a Google map,
-   *             and this app draws a MapTiler basemap. Reached only for rows
-   *             Census could not parse, which keeps that exposure to the few
-   *             addresses that need it instead of every address.
-   *   maptiler  last, because it has no US address points. Every result observed
-   *             for this dataset was a fuzzy street match with the house number
-   *             discarded and the ZIP ignored — "704 W 40th St, Austin, 78751"
-   *             returns West 40th Street in 78756 at relevance 0.74 — and an
-   *             exact, non-fuzzy search returns nothing at all. Kept below the
-   *             others so it can still offer an operator something to look at
-   *             for an address nobody else could place.
+   *   google    first, where a key is configured. It returns the rooftop where
+   *             it knows one and says so via `location_type`, which is the only
+   *             thing in this chain that can put a pin on the right house rather
+   *             than the right block. It sat second while this app drew a
+   *             MapTiler basemap, because Google's terms expect Google content on
+   *             a Google map; that objection retires when the basemap is Google.
+   *             See the caching constraint in geocode-google.ts before relying on
+   *             stored coordinates — it is a licence question, not a code one.
+   *   census    second, and never removed. Free, no key, no card, batched a
+   *             thousand at a time, public-domain output, US only, and it reads
+   *             the house number to interpolate along the right block. This is
+   *             what keeps an import working on a fresh deployment, when a card
+   *             expires, and when a paid provider is down.
+   *   maptiler  last, because of how it fails rather than what it covers. Asked
+   *             about an address it cannot resolve, it returns a fuzzy street
+   *             match with the house number discarded and the ZIP ignored —
+   *             "704 W 40th St, Austin, 78751" comes back as West 40th Street in
+   *             78756, with Texarkana and Mission behind it at 0.62. Census
+   *             answers the same address with an honest no-match. A wrong pin is
+   *             worse than an absent one because an absent one is visible, so the
+   *             provider that guesses goes last. Kept rather than removed so it
+   *             can still offer an operator something to look at, flagged.
    *
-   * The trade this ordering accepts: a provider below Census is never asked about
-   * a row Census placed, so a hypothetical rooftop from Google or MapTiler is
-   * forgone in favour of a Census interpolation. That is the right call while
-   * MapTiler has no address points and Google carries a licensing question, and
-   * it is the wrong call the moment a rooftop-capable provider is added — at
-   * which point it goes above Census, not below.
-   *
-   * Rooftop accuracy for US addresses needs a provider with an address-point
-   * database. See "Before this goes to a paying customer" in the README.
+   * With no keys at all this is Census alone, which is a working product rather
+   * than a degraded one. That property is the reason the free provider is never
+   * removed from the bottom of this list.
    */
   const chain: {
     name: GeocodeAttempt['provider']
     run: (batch: GeocodeRequest[]) => Promise<GeocodeMatch[]>
-  }[] = [{ name: 'census', run: censusGeocode }]
+  }[] = []
   if (keys.google) {
     chain.push({ name: 'google', run: (b) => googleGeocode(b, keys.google as string) })
   }
+  chain.push({ name: 'census', run: censusGeocode })
   if (keys.maptiler) {
     chain.push({ name: 'maptiler', run: (b) => maptilerGeocode(b, keys.maptiler as string) })
   }

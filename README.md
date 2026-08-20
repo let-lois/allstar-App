@@ -515,38 +515,79 @@ Every lead's pin is interpolated along a street, not placed on a building. A rep
 walking a route gets the right block and the right side of the street; they do not
 get the right house from the map alone.
 
-This was meant to be fixed by geocoding with MapTiler. It cannot be: MapTiler has
-no US address points for this kind of territory. Probed against real addresses
-from a live list, with the key working and the request correct:
+This was meant to be fixed by geocoding with MapTiler, and is not. What was
+measured, against two addresses from a live test list with the key working and the
+request correct:
 
 | Sent | Returned |
 | --- | --- |
 | `704 W 40th St, Austin, TX, 78751` | West 40th Street, Austin, **78756** |
 | `1302 Deepwood Dr, Round Rock, TX` | Deep **Wood** Drive, Round Rock |
 
-The house number is discarded, the match is the street, and the ZIP is ignored —
-the Austin lead came back in a different ZIP, with West 40th Street in Texarkana
-and in Mission scoring 0.62 right behind it. Adding `language=en` to activate
-MapTiler's documented US address parser changed nothing. Turning fuzzy matching
-off returned no features at all, which is the proof: an exact search would find an
-address point if one existed.
+Both times the house number was discarded, the match was the street, and the ZIP
+was ignored — with West 40th Street in Texarkana and in Mission behind it at
+relevance 0.62. Adding `language=en` to activate MapTiler's documented US address
+parser changed nothing.
 
-`GET /api/selftest/geocode?raw=1&address=...&city=...&state=...&zip=...` shows
-this directly, and takes `language`, `types`, `limit`, `autocomplete`,
+**What that does not establish** is whether MapTiler has US address points at all.
+Both addresses came from `fixtures/test-leads-austin.csv`, which is real street
+names with *plausible* house numbers — a house that does not exist cannot be found
+by anyone, so the test cannot tell thin coverage apart from a bad address.
+Settling that needs a verified address, and it is still open.
+
+**What it does establish** is the failure mode, which is what the chain order is
+built on. Census answers an address it cannot resolve with a no-match. MapTiler
+answers with a confident-looking street in the wrong ZIP. A wrong pin is worse
+than an absent one, because an absent one is visible — so Census is first and
+MapTiler is last, and a guessed match never ends the search.
+
+`GET /api/selftest/geocode?raw=1&address=...&city=...&state=...&zip=...` shows the
+raw provider response, and takes `language`, `types`, `limit`, `autocomplete`,
 `fuzzyMatch`, `proximity` and `bbox` off the query string so a hypothesis costs a
-page reload rather than a deploy.
+page reload rather than a deploy. Use a verified address with it — a synthetic one
+cannot answer a coverage question.
 
-So Census is first in the chain and MapTiler is last. Census reads the house
-number and interpolates along the correct block, which is strictly better than a
-fuzzy street match in the wrong ZIP.
+### Google's terms and the offline map are in direct conflict
 
-Closing this needs a provider with a US address-point database. The candidate
-worth pricing is **Geocodio** — US and Canada only, which matches this market,
-rooftop-level from OpenAddresses plus TIGER, no requirement that results be shown
-on the provider's own map, and cheap per thousand with a free daily allowance.
-That last property is the one that matters: it is why this is not simply "switch
-to Google", which would reintroduce the licensing question the MapTiler move was
-made to retire.
+Only relevant once `GOOGLE_MAPS_API_KEY` is set, and then it is the most
+important item on this list.
+
+Google's Maps Platform terms permit only *temporary* caching of latitude and
+longitude — on the order of thirty days — after which they are to be deleted.
+Place IDs are the stated exception and may be stored indefinitely.
+
+This app does the opposite, deliberately. A lead's coordinates are written to D1
+and to every phone's IndexedDB and kept for the life of the record, because the
+map has to draw with no signal — which is the product's founding requirement, not
+a convenience. So this is not a bug to fix in code; it is a conflict between the
+offline requirement and the provider's licence.
+
+The compliant shape is to store the Place ID as the durable reference and resolve
+coordinates at display time. That costs the offline map, which is the one thing
+this product is built around.
+
+The three ways out, none of them free:
+
+1. **Accept it and get it reviewed.** Ask counsel whether the field-sales use and
+   retention period are defensible, in the same conversation as the DNC/TCPA
+   review. Cheapest, and a real answer rather than a guess.
+2. **Google for display, a storable geocoder for storage.** Google Maps for the
+   basemap and Street View; coordinates from a provider whose terms allow
+   permanent storage. Keeps the offline map, keeps rooftop accuracy, and the pins
+   are no longer Google-derived. Needs one more paid provider.
+3. **Place IDs, resolved online.** Fully compliant, and the offline map goes.
+
+Nothing in the code prevents any of these. What the code does is refuse to
+pretend the question isn't there: the constraint is recorded in
+`api/src/geocode-google.ts` next to the provider it governs, and in
+`api/wrangler.toml` next to the secret that activates it.
+
+Closing the rooftop gap needs a provider with a US address-point database. The
+candidate worth pricing is **Geocodio** — US and Canada only, which matches this
+market, rooftop-level from OpenAddresses plus TIGER, no requirement that results
+be shown on the provider's own map, and cheap per thousand with a free daily
+allowance. That last property is why this is not simply "switch to Google", which
+would reintroduce the licensing question the MapTiler move was made to retire.
 
 Until then, do not describe pins as rooftop-accurate to a customer. The import
 preview is honest about it — a guessed match is flagged "close match — check this
