@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FieldMap, type MapHandle } from '../components/map/FieldMap'
+import { RouteList } from '../components/map/RouteList'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { PropertyPeek } from '../components/property/PropertyPeek'
 import { Chip } from '../components/ui/Chip'
@@ -43,6 +44,21 @@ export function MapScreen() {
   const hasRoute = (useAppStore((s) => s.route)?.stops.length ?? 0) > 0
   const [filter, setFilter] = useState<Filter>(hasRoute ? 'route' : 'open')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /*
+    Map or list. A choice for now, and the offline default later.
+
+    The map is moving to the Google Maps JavaScript API, which cannot draw
+    without a connection and whose terms forbid caching its tiles — so in a dead
+    zone there will be no basemap and this list becomes what the screen shows.
+    It is introduced as a toggle rather than wired to connectivity because the
+    map this replaces still works offline today: switching automatically now
+    would remove a working offline map and call it a feature. The automatic swap
+    belongs in the same change that swaps the renderer.
+
+    Useful on its own regardless. Some reps would rather read an ordered list
+    than a map, and until now the app had no answer for them on a phone.
+  */
+  const [view, setView] = useState<'map' | 'list'>('map')
   const mapHandle = useRef<MapHandle | null>(null)
   const isWide = useIsWide()
 
@@ -81,6 +97,57 @@ export function MapScreen() {
     }
     return best
   }, [shown, position])
+
+  const chips = (
+    <div className="snap-x-row flex-1 pr-1">
+      {FILTERS.filter((f) => f.key !== 'route' || hasRoute).map((f) => (
+        <Chip
+          key={f.key}
+          size="sm"
+          selected={filter === f.key}
+          onClick={() => setFilter(f.key)}
+          className={
+            filter === f.key ? 'shadow-float' : 'bg-surface/95 shadow-raise backdrop-blur'
+          }
+        >
+          {f.label}
+        </Chip>
+      ))}
+    </div>
+  )
+
+  /*
+    Count, sync state, and the view switch on one row. The switch sits here
+    rather than in thumb reach on purpose: it is a preference someone sets and
+    forgets, not an action they repeat, and the bottom corners belong to the
+    controls a rep uses at every door.
+  */
+  const statusRow = (
+    <div className="pointer-events-auto flex items-center gap-2 px-3">
+      <span className="nums rounded-full bg-surface/95 px-3 py-1.5 text-[12.5px] font-semibold text-ink-soft shadow-raise ring-1 ring-ink/[0.06] backdrop-blur">
+        {shown.length} properties
+      </span>
+      <SyncBadge onClick={() => nav('/more')} />
+      <div
+        role="group"
+        aria-label="View"
+        className="ml-auto flex overflow-hidden rounded-full bg-surface/95 shadow-raise ring-1 ring-ink/[0.06] backdrop-blur"
+      >
+        {(['map', 'list'] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            aria-pressed={view === v}
+            className={`focusable min-h-tap px-3.5 text-[12.5px] font-semibold capitalize ${
+              view === v ? 'bg-brand-600 text-white' : 'text-ink-soft'
+            }`}
+          >
+            {v}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 
   return (
     <div className="relative flex min-h-0 flex-1">
@@ -143,68 +210,68 @@ export function MapScreen() {
         </aside>
       )}
 
-      <FieldMap
-        className="min-h-0 flex-1"
-        properties={shown}
-        position={position}
-        route={filter === 'route' ? route : null}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-        handleRef={mapHandle}
-        initialCenter={
-          route?.stops.length
-            ? properties[route.stops[0].propertyId]
-            : undefined
-        }
-        overlay={
-          <>
-            {/* Floating filter rail — scrolls horizontally, never wraps. */}
-            <div className="pad-top pointer-events-none absolute inset-x-0 top-0">
-              <div className="pointer-events-auto flex items-center gap-2 px-3 pb-2 pt-2">
-                <div className="snap-x-row flex-1 pr-1">
-                  {FILTERS.filter((f) => f.key !== 'route' || hasRoute).map((f) => (
-                    <Chip
-                      key={f.key}
-                      size="sm"
-                      selected={filter === f.key}
-                      onClick={() => setFilter(f.key)}
-                      className={
-                        filter === f.key ? 'shadow-float' : 'bg-surface/95 shadow-raise backdrop-blur'
-                      }
-                    >
-                      {f.label}
-                    </Chip>
-                  ))}
+      {view === 'map' ? (
+        <FieldMap
+          className="min-h-0 flex-1"
+          properties={shown}
+          position={position}
+          route={filter === 'route' ? route : null}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          handleRef={mapHandle}
+          initialCenter={
+            route?.stops.length ? properties[route.stops[0].propertyId] : undefined
+          }
+          overlay={
+            <>
+              {/* Floating filter rail — scrolls horizontally, never wraps. */}
+              <div className="pad-top pointer-events-none absolute inset-x-0 top-0">
+                <div className="pointer-events-auto flex items-center gap-2 px-3 pb-2 pt-2">
+                  {chips}
                 </div>
+                {statusRow}
               </div>
-              <div className="pointer-events-auto flex items-center gap-2 px-3">
-                <span className="nums rounded-full bg-surface/95 px-3 py-1.5 text-[12.5px] font-semibold text-ink-soft shadow-raise ring-1 ring-ink/[0.06] backdrop-blur">
-                  {shown.length} properties
-                </span>
-                <SyncBadge onClick={() => nav('/more')} />
-              </div>
-            </div>
 
-            {/* Nearest-door shortcut, bottom-left, opposite the zoom controls. */}
-            {!selected && nearest && (
-              <button
-                onClick={() => {
-                  const p = properties[nearest.id]
-                  mapHandle.current?.flyTo(p.lat, p.lng, 18)
-                  setSelectedId(nearest.id)
-                }}
-                className="press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-field bg-surface px-4 text-[14px] font-semibold text-brand-600 shadow-float ring-1 ring-ink/[0.06]"
-                style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
-              >
-                Nearest door
-                <span className="nums font-medium text-ink-mute">
-                  {(nearest.d * 5280).toFixed(0)} ft
-                </span>
-              </button>
-            )}
-          </>
-        }
-      />
+              {/* Nearest-door shortcut, bottom-left, opposite the zoom controls. */}
+              {!selected && nearest && (
+                <button
+                  onClick={() => {
+                    const p = properties[nearest.id]
+                    mapHandle.current?.flyTo(p.lat, p.lng, 18)
+                    setSelectedId(nearest.id)
+                  }}
+                  className="press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-field bg-surface px-4 text-[14px] font-semibold text-brand-600 shadow-float ring-1 ring-ink/[0.06]"
+                  style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+                >
+                  Nearest door
+                  <span className="nums font-medium text-ink-mute">
+                    {(nearest.d * 5280).toFixed(0)} ft
+                  </span>
+                </button>
+              )}
+            </>
+          }
+        />
+      ) : (
+        /*
+          A real screen rather than a degraded map, so it gets a solid header
+          instead of controls floating over imagery that isn't there.
+        */
+        <div className="flex min-h-0 flex-1 flex-col bg-surface">
+          <div className="pad-top shrink-0 border-b border-ink/[0.06] bg-surface">
+            <div className="flex items-center gap-2 px-3 pb-2 pt-2">{chips}</div>
+            <div className="pb-2">{statusRow}</div>
+          </div>
+          <RouteList
+            className="pad-nav min-h-0 flex-1"
+            properties={shown}
+            route={filter === 'route' ? route : null}
+            position={position}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
+        </div>
+      )}
 
       {/* Scrim off: the rep should still be able to pan the map behind the sheet. */}
       <BottomSheet
