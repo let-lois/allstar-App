@@ -30,9 +30,23 @@ database_id = "3adac120-500e-404d-8a37-571ce3654bc0"
 # local development is a second one.
 ALLOWED_ORIGINS = "https://allstar.letlois.com,https://allstar-app.pages.dev,http://localhost:5173,http://127.0.0.1:4173"
 
-# Secrets (set with `wrangler secret put`, never committed):
-#   SESSION_PEPPER        — mixed into password hashing
-#   GOOGLE_MAPS_API_KEY   — optional. Present means addresses geocode to the
-#                           rooftop via Google; absent means the free US Census
-#                           geocoder, which places a house on the right block.
-#                           Everything works either way.
+# Secrets, never committed. Set them with `wrangler secret put NAME`, or in the
+# dashboard under Settings -> Variables and Secrets.
+#
+# They must be added as *Secrets*, not as Text variables. The [vars] block above
+# is authoritative: `wrangler deploy` replaces the Worker's plain-text variables
+# with exactly what is listed there, so a Text variable added in the dashboard
+# disappears at the next deploy — and since every merge to main deploys, that is
+# soon and silent. Secrets are stored separately and survive.
+#
+#   SESSION_PEPPER        — mixed into password hashing. Never change it once
+#                           accounts exist; it would invalidate every password.
+#   MAPTILER_API_KEY      — optional. First choice for geocoding, and separate
+#                           from the front-end's VITE_MAPTILER_KEY: that one is
+#                           origin-locked to the site, and a Worker request
+#                           carries no Origin, so it would be rejected here.
+#   GOOGLE_MAPS_API_KEY   — optional. Tried after MapTiler.
+#
+# With neither key, addresses geocode via the free US Census service, which
+# places a house on the right block rather than on its roof. Everything works
+# either way — /api/health reports which providers are configured.
