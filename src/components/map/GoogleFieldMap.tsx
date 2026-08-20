@@ -40,6 +40,15 @@ import type { MapHandle } from './FieldMap'
  */
 
 const DEFAULT_ZOOM = 16
+/**
+ * How long to wait for the map to actually paint before calling it broken.
+ *
+ * Generous on purpose. This has to clear a slow first paint on a cheap phone on
+ * a bad connection, because the cost of being wrong is taking away a map that
+ * was about to appear. Ten seconds is long enough that a real load wins and
+ * short enough that a rep is not staring at grey wondering.
+ */
+const DRAW_TIMEOUT = 10_000
 /** Matches FieldMap: below this, nearby pins merge into counts. */
 const CLUSTER_UNTIL_ZOOM = 17
 /** brand-500 — the one place on the map allowed to be teal by default. */
@@ -154,6 +163,29 @@ export function GoogleFieldMap({
           gestureHandling: 'greedy',
           clickableIcons: false,
         })
+
+        /*
+          A map that is created but never draws.
+
+          Vector maps need WebGL and a WebAssembly compile, and both can fail on
+          a device or under a policy that forbids them. When they do, Google
+          throws inside its own worker: no rejected promise, no failed request,
+          no callback. The map object exists and is perfectly happy. The rep sees
+          grey.
+
+          So success is defined as pixels, not as construction. `tilesloaded`
+          firing once is the proof, and not firing is the failure — which is the
+          only way this particular fault is observable from outside.
+        */
+        const drawn = window.setTimeout(() => {
+          onUnavailableRef.current?.(
+            new GmapsError('undrawable', 'The map loaded but could not draw on this device.'),
+          )
+        }, DRAW_TIMEOUT)
+        google.maps.event.addListenerOnce(mapRef.current, 'tilesloaded', () =>
+          window.clearTimeout(drawn),
+        )
+
         setReady(true)
       })
       .catch((err: unknown) => {
@@ -212,7 +244,9 @@ export function GoogleFieldMap({
           title: p.address1,
           gmpClickable: true,
         })
-        marker.addListener('click', () => onSelectRef.current(p.id))
+        // `gmp-click`, not `click`: advanced markers deprecated the DOM event
+        // name and warn about it on every listener attached.
+        marker.addListener('gmp-click', () => onSelectRef.current(p.id))
         live.set(p.id, marker)
       }
 

@@ -16,6 +16,15 @@ import { chromium } from 'playwright'
  * it, and makes the code under test absent:
  *
  *   VITE_GOOGLE_MAPS_KEY=dummy VITE_GOOGLE_MAP_ID=DEMO_MAP_ID npm run build
+ *
+ * **Not covered, deliberately: the `undrawable` case.** A vector map that is
+ * created successfully and then never paints — WebGL unavailable, or the
+ * WebAssembly compile blocked — is watched for with a paint timeout in
+ * GoogleFieldMap. Reproducing it needs a *working* Maps API with its WASM
+ * blocked, which needs a real key; and faking the API convincingly enough for
+ * the marker clusterer to run means maintaining a stub of Google's library,
+ * which is a liability that can break on its own. So this one is verified by
+ * reading, and it is written down here rather than left as an assumed pass.
  */
 
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:4173'

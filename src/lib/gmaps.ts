@@ -38,6 +38,16 @@ export type GmapsFailure =
   | 'rejected'
   /** The script never arrived. Almost always no connection. */
   | 'unreachable'
+  /**
+   * The API loaded and the map was created, but nothing was ever drawn.
+   *
+   * Its own category because it has its own cause: a vector map needs WebGL and
+   * a WebAssembly compile, and either can fail on a device or under a policy
+   * that blocks it — with no callback, no rejected promise and no failed
+   * request. It surfaces as an uncaught error inside Google's worker, which is
+   * to say it surfaces as a grey rectangle.
+   */
+  | 'undrawable'
 
 export class GmapsError extends Error {
   constructor(readonly reason: GmapsFailure, message: string) {
