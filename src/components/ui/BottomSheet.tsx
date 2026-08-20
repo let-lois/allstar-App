@@ -80,7 +80,27 @@ export function BottomSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={title}>
+    /*
+      Two different components share this markup, and the difference is `scrim`.
+      With a scrim it is a modal: it owns the screen until dismissed. Without one
+      it is a peek that sits over a map the rep is still working with.
+
+      That distinction has to be in the DOM, not just in the CSS. A full-viewport
+      wrapper captures every pointer event whether or not it is painted, so the
+      no-scrim variant was still swallowing pans, taps on the filter chips, and
+      the map/list switch — invisibly, which is why it read as correct. And
+      `aria-modal` claims the rest of the page is unavailable, which for the peek
+      is a lie a screen reader acts on: it stops announcing everything behind it.
+
+      So the peek turns off pointer capture on the wrapper and re-enables it on
+      the panel, and drops `aria-modal` because it isn't one.
+    */
+    <div
+      className={`fixed inset-0 z-40 ${scrim ? '' : 'pointer-events-none'}`}
+      role="dialog"
+      aria-modal={scrim ? true : undefined}
+      aria-label={title}
+    >
       {scrim && (
         <button
           aria-label="Close"
@@ -90,7 +110,7 @@ export function BottomSheet({
       )}
       <div
         ref={sheetRef}
-        className="anim-sheet absolute inset-x-0 bottom-0 flex flex-col rounded-t-sheet bg-surface shadow-sheet"
+        className="anim-sheet pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col rounded-t-sheet bg-surface shadow-sheet"
         style={{
           height: `${heightPct}%`,
           transform: dragY ? `translateY(${Math.max(dragY, -40)}px)` : undefined,

@@ -3,13 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Allstar \u2014 mobile-first field sales (D2D) application",
+  "description": "Allstar — mobile-first field sales (D2D) application",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit false --pretty",
-    "lint": "tsc -b",
+    "typecheck": "tsc --noEmit --pretty",
+    "lint": "tsc --noEmit",
     "audit:viewports": "node scripts/audit-viewports.mjs",
     "verify:offline": "node scripts/verify-offline.mjs",
     "verify:webview": "node scripts/verify-webview-notice.mjs",
@@ -20,12 +20,15 @@
     "verify:import": "node scripts/verify-import-ui.mjs",
     "verify:route": "node scripts/verify-route.mjs",
     "verify:maptiles": "node scripts/verify-map-tiles.mjs",
+    "verify:googlemap": "node scripts/verify-googlemap.mjs",
+    "verify:routelist": "node scripts/verify-routelist.mjs",
     "verify:offlinemaps": "node scripts/verify-offline-maps.mjs",
     "verify:firstday": "node scripts/verify-first-day.mjs",
     "leads:sample": "node scripts/make-test-leads.mjs",
     "verify:invite": "node scripts/verify-invite.mjs"
   },
   "dependencies": {
+    "@googlemaps/markerclusterer": "^2.6.2",
     "idb": "^8.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -33,6 +36,7 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@types/google.maps": "^3.65.5",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.2",
