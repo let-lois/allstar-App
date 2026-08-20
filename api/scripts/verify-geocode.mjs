@@ -24,6 +24,7 @@ const load = async (entry, name) => {
 }
 const { parseCensusResponse, toCensusCsv } = await load('src/geocode.ts', 'geocode')
 const { parseGoogleResponse } = await load('src/geocode-google.ts', 'google')
+const { parseMapTilerResponse } = await load('src/geocode-maptiler.ts', 'maptiler')
 const { addressKey, propertyIdFor } = await load('src/import.ts', 'import')
 
 const fails = []
@@ -219,6 +220,84 @@ const ok = (cond, msg) => {
     census.precision === 'interpolated',
     'and does not claim rooftop precision it cannot deliver',
   )
+}
+
+
+/* --- MapTiler ------------------------------------------------------------- */
+//
+// Same coordinate trap as Census, in a different disguise: GeoJSON `center` is
+// [longitude, latitude]. Read left-to-right, a Texas address lands off Somalia.
+{
+  const m = parseMapTilerResponse('1', {
+    features: [
+      {
+        place_name: '1600 Pennsylvania Ave NW, Washington, DC',
+        place_type: ['address'],
+        relevance: 1,
+        center: [-77.03535, 38.898754],
+        address: '1600',
+      },
+    ],
+  })
+  ok(m.status === 'match', 'a matched address is reported as a match')
+  ok(
+    Math.abs(m.lat - 38.898754) < 1e-6 && Math.abs(m.lng + 77.03535) < 1e-6,
+    'longitude and latitude are not transposed',
+  )
+  ok(m.provider === 'maptiler', 'attributed to the provider that answered')
+  ok(m.precision === 'rooftop', 'an address match carrying a house number is a rooftop')
+  ok(m.partial !== true, 'a full-relevance hit is not flagged as a guess')
+}
+
+// Precision has to be inferred here — there is no location_type field — so the
+// inference is what needs pinning. Claiming rooftop for a street match would
+// make the whole provider swap pointless.
+{
+  const street = parseMapTilerResponse('2', {
+    features: [{ place_name: 'Cedar Bend Dr', place_type: ['street'], relevance: 1, center: [-97.7, 30.5] }],
+  })
+  ok(street.precision === 'interpolated', 'a street match is interpolated, never rooftop')
+
+  const addressNoNumber = parseMapTilerResponse('3', {
+    features: [{ place_name: 'Cedar Bend Dr', place_type: ['address'], relevance: 1, center: [-97.7, 30.5] }],
+  })
+  ok(
+    addressNoNumber.precision === 'interpolated',
+    'an address match with no house number is not a rooftop either',
+  )
+
+  const place = parseMapTilerResponse('4', {
+    features: [{ place_name: 'Round Rock, TX', place_type: ['place'], relevance: 1, center: [-97.7, 30.5] }],
+  })
+  ok(place.precision === 'approximate', 'a place match is approximate')
+}
+
+// Relevance is how MapTiler says "I guessed", where Google sets partial_match.
+{
+  const fuzzy = parseMapTilerResponse('5', {
+    features: [{ place_name: 'X', place_type: ['address'], relevance: 0.62, center: [-97.7, 30.5], address: '1' }],
+  })
+  ok(fuzzy.partial === true, 'a low-relevance hit is flagged so an operator can look before importing')
+}
+
+// An empty feature list is a genuine miss; a message is a fault. Reporting a
+// fault as "not found" sends someone hunting for a typo that is not there.
+{
+  const none = parseMapTilerResponse('6', { features: [] })
+  ok(none.status === 'no_match', 'no features means not found')
+
+  const bad = parseMapTilerResponse('7', { message: 'Key is invalid' })
+  ok(bad.status === 'error', 'a message means the provider failed, not that the address is wrong')
+  ok(/invalid/i.test(bad.error ?? ''), 'and the reason is carried through')
+}
+
+// A latitude beyond ±90 only makes sense the other way round, which is a parse
+// error rather than data.
+{
+  const swapped = parseMapTilerResponse('8', {
+    features: [{ place_name: 'X', place_type: ['address'], center: [30.5, -197.7] }],
+  })
+  ok(swapped.status === 'no_match', 'an impossible coordinate pair is refused rather than plotted')
 }
 
 console.log(fails.length ? `\n${fails.length} check(s) failed` : '\ngeocode parsing and dedupe are correct')

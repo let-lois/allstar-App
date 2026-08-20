@@ -17,6 +17,13 @@ export interface Env {
    * block. Everything works either way — the difference is precision.
    */
   GOOGLE_MAPS_API_KEY?: string
+  /*
+   * Separate from the client's VITE_MAPTILER_KEY on purpose. That one is
+   * compiled into the bundle and locked to the site's origin, which a Worker
+   * request does not carry — so it would be rejected here. This is a second key
+   * with no origin restriction, which is why it has to live as a secret.
+   */
+  MAPTILER_API_KEY?: string
 }
 
 export type Role = 'super_admin' | 'client_admin' | 'manager' | 'field_rep'
