@@ -253,10 +253,21 @@ const ok = (cond, msg) => {
 // inference is what needs pinning. Claiming rooftop for a street match would
 // make the whole provider swap pointless.
 {
-  const street = parseMapTilerResponse('2', {
+  // MapTiler calls a street `road`. The Mapbox-style APIs this resembles call it
+  // `street`, and using their word both broke the request and mis-read the
+  // response — so both spellings are pinned here.
+  const road = parseMapTilerResponse('2', {
+    features: [{ place_name: 'Cedar Bend Dr', place_type: ['road'], relevance: 1, center: [-97.7, 30.5] }],
+  })
+  ok(road.precision === 'interpolated', 'a road match is interpolated, never rooftop')
+
+  const street = parseMapTilerResponse('2b', {
     features: [{ place_name: 'Cedar Bend Dr', place_type: ['street'], relevance: 1, center: [-97.7, 30.5] }],
   })
-  ok(street.precision === 'interpolated', 'a street match is interpolated, never rooftop')
+  ok(
+    street.precision === 'approximate',
+    "'street' is not a MapTiler type, so it must not be read as a road",
+  )
 
   const addressNoNumber = parseMapTilerResponse('3', {
     features: [{ place_name: 'Cedar Bend Dr', place_type: ['address'], relevance: 1, center: [-97.7, 30.5] }],

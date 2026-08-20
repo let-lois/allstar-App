@@ -13,7 +13,12 @@ import {
   readInvite,
   runSetup,
 } from './invites'
-import { GEOCODE_CHUNK, geocode, type GeocodeRequest } from './geocode'
+import {
+  GEOCODE_CHUNK,
+  geocode,
+  type GeocodeAttempt,
+  type GeocodeRequest,
+} from './geocode'
 import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
 import { assignProperties, assignTerritory } from './assign'
 import { readAudit } from './audit'
@@ -248,6 +253,11 @@ export default {
         const q = url.searchParams
         const custom = q.get('address')
         try {
+          // Every provider's attempt is reported, not just the winner. Without
+          // this a provider rejecting every request is invisible: the chain
+          // degrades to the next one, the probe succeeds, and the only symptom is
+          // that the result came from further down than it should have.
+          const attempts: GeocodeAttempt[] = []
           const matches = await geocode(
             [
             custom
@@ -267,12 +277,14 @@ export default {
                 },
             ],
             { maptiler: env.MAPTILER_API_KEY, google: env.GOOGLE_MAPS_API_KEY },
+            attempts,
           )
           const m = matches[0]
           return json(
             {
               ok: m?.status === 'match',
               parsed: m ?? null,
+              attempts,
               // Sanity-checked against a location we know: if this reads false
               // for the default address, the response format changed or lat/lng
               // arrived swapped. Only meaningful without a custom address.

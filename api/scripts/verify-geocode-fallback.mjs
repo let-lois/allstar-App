@@ -118,6 +118,50 @@ const censusRows = (refs, matched = true) =>
   )
 }
 
+/* --- the request itself --------------------------------------------------- */
+//
+// This is the check that would have caught the first release. `street` is not a
+// MapTiler place type; sending it makes the request invalid, MapTiler rejects
+// every address, and the chain degrades so gracefully that the only symptom is
+// results arriving from Census instead.
+{
+  let asked = ''
+  globalThis.fetch = async (url) => {
+    const href = String(url)
+    // Only the MapTiler request is under test. The chain falls through to Census
+    // after a no-match, and capturing every URL would leave us asserting against
+    // whichever one happened to be last.
+    if (href.includes('api.maptiler.com')) asked = href
+    if (href.includes('census.gov')) return { ok: true, status: 200, text: async () => '' }
+    return { ok: true, status: 200, json: async () => ({ features: [] }) }
+  }
+  await geocode([ROWS[0]], { maptiler: 'k' }).catch(() => {})
+  ok(/types=address%2Croad|types=address,road/.test(asked), "the request asks for MapTiler's own type names")
+  ok(!/street/.test(asked), "and never sends 'street', which MapTiler does not accept")
+  ok(/country=us/.test(asked) && /limit=1/.test(asked), 'scoped to one US result')
+}
+
+/* --- the trace makes a rejecting provider visible ------------------------- */
+//
+// The chain's strength is its blind spot: a dead provider degrades silently, so
+// a misconfigured key is indistinguishable from a provider with nothing to add.
+{
+  stub({
+    maptiler: () => ({ message: 'Bad request' }),
+    google: googleOk(30.9),
+    census: (refs) => censusRows(refs),
+  })
+  const trace = []
+  const res = await geocode(ROWS, { maptiler: 'k' }, trace)
+  ok(res.every((m) => m.status === 'match'), 'the import still succeeds')
+  ok(trace.length === 2, 'both providers that were asked are recorded')
+  const tiler = trace.find((t) => t.provider === 'maptiler')
+  ok(tiler.asked === 3 && tiler.matched === 0, 'MapTiler is shown as having placed nothing')
+  ok(/bad request/i.test(tiler.firstError ?? ''), "and its own reason is carried through")
+  const census = trace.find((t) => t.provider === 'census')
+  ok(census.matched === 3, 'while the fallback is shown doing the work')
+}
+
 /* --- MapTiler alone ------------------------------------------------------- */
 {
   const calls = stub({ maptiler: tilerOk(30.3), google: googleOk(30.3), census: (refs) => censusRows(refs) })
@@ -166,14 +210,14 @@ const censusRows = (refs, matched = true) =>
 // not earned it.
 {
   stub({
-    maptiler: tilerOk(30.3, { types: ['street'], address: undefined }),
+    maptiler: tilerOk(30.3, { types: ['road'], address: undefined }),
     google: googleOk(30.9),
     census: (refs) => censusRows(refs),
   })
   const res = await geocode(ROWS, { maptiler: 'tiler-key' })
   ok(
     res.every((m) => m.precision === 'interpolated'),
-    'a street-level match is interpolated, never rooftop',
+    'a road-level match is interpolated, never rooftop',
   )
 }
 {

@@ -183,6 +183,24 @@ export interface GeocodeKeys {
 }
 
 /**
+ * What one provider did with the batch it was handed.
+ *
+ * Added because the chain's greatest strength is also its blind spot: a provider
+ * that rejects every request degrades so gracefully that nothing anywhere says
+ * so. A misconfigured key looks identical to a provider that simply had nothing
+ * to add — the import succeeds, the pins are merely worse than they should be,
+ * and the operator has no way to tell. This is what makes that visible.
+ */
+export interface GeocodeAttempt {
+  provider: 'maptiler' | 'google' | 'census'
+  asked: number
+  matched: number
+  errors: number
+  /** The provider's own words, so a bad key reads as a bad key. */
+  firstError?: string
+}
+
+/**
  * Geocode a batch, using the best provider available.
  *
  * An ordered chain — MapTiler, then Google, then Census — where each provider
@@ -208,27 +226,50 @@ export interface GeocodeKeys {
 export async function geocode(
   rows: GeocodeRequest[],
   keys: GeocodeKeys = {},
+  /**
+   * Filled in with one entry per provider that was asked. Optional because the
+   * import path does not need it; the selftest endpoint does, and without it a
+   * provider silently rejecting every request is undiagnosable from outside.
+   */
+  trace?: GeocodeAttempt[],
 ): Promise<GeocodeMatch[]> {
   if (rows.length === 0) return []
 
   const byRef = new Map<string, GeocodeMatch>()
   const pending = () => rows.filter((r) => byRef.get(r.ref)?.status !== 'match')
 
-  const chain: ((batch: GeocodeRequest[]) => Promise<GeocodeMatch[]>)[] = []
-  if (keys.maptiler) chain.push((batch) => maptilerGeocode(batch, keys.maptiler as string))
-  if (keys.google) chain.push((batch) => googleGeocode(batch, keys.google as string))
-  chain.push(censusGeocode)
+  const chain: {
+    name: GeocodeAttempt['provider']
+    run: (batch: GeocodeRequest[]) => Promise<GeocodeMatch[]>
+  }[] = []
+  if (keys.maptiler) {
+    chain.push({ name: 'maptiler', run: (b) => maptilerGeocode(b, keys.maptiler as string) })
+  }
+  if (keys.google) {
+    chain.push({ name: 'google', run: (b) => googleGeocode(b, keys.google as string) })
+  }
+  chain.push({ name: 'census', run: censusGeocode })
 
   for (const provider of chain) {
     const batch = pending()
     if (batch.length === 0) break
-    for (const m of await provider(batch)) {
+
+    const results = await provider.run(batch)
+    for (const m of results) {
       // Only ever upgrade. A later provider's no-match must not overwrite an
       // earlier one's more specific reason for refusing, and must never
       // overwrite a match.
       const held = byRef.get(m.ref)
       if (!held || (held.status !== 'match' && m.status === 'match')) byRef.set(m.ref, m)
     }
+
+    trace?.push({
+      provider: provider.name,
+      asked: batch.length,
+      matched: results.filter((m) => m.status === 'match').length,
+      errors: results.filter((m) => m.status === 'error').length,
+      firstError: results.find((m) => m.status === 'error')?.error,
+    })
   }
 
   return rows.map((r) => byRef.get(r.ref) ?? { ref: r.ref, status: 'no_match' as const })

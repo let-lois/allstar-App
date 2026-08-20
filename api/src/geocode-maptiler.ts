@@ -21,6 +21,12 @@ import type { GeocodeMatch, GeocodeRequest } from './geocode'
  * was matched, and only an address-level match with a house number is a rooftop.
  * Anything coarser is reported as such rather than flattered.
  *
+ * The type vocabulary is MapTiler's own and worth stating, because it is not the
+ * one it resembles: a street is `road` here, where the Mapbox-style APIs this
+ * looks like call it `street`. Sending `street` makes the request invalid, and
+ * the whole provider silently degrades to the next in the chain — which is
+ * exactly what happened the first time this shipped.
+ *
  * **`relevance` is how it says "I guessed".** Google sets `partial_match`;
  * MapTiler scores the match 0-1. A confident match is ~1.0, and anything
  * materially below that came back from a fuzzy search — which is exactly the
@@ -103,8 +109,8 @@ export function parseMapTilerResponse(ref: string, body: Response): GeocodeMatch
 /**
  * What kind of thing was matched.
  *
- * Only an address with a house number is a building. A match on `street` is the
- * road, and a match on `place` or `postal_code` is the middle of something far
+ * Only an address with a house number is a building. A match on `road` is the
+ * street, and a match on `place` or `postal_code` is the middle of something far
  * bigger than a house — reporting either as a rooftop would be the one lie that
  * makes this whole change pointless.
  */
@@ -113,7 +119,7 @@ function precisionOf(f: Feature): GeocodeMatch['precision'] {
   if (types.includes('address')) {
     return f.address ? 'rooftop' : 'interpolated'
   }
-  if (types.includes('street')) return 'interpolated'
+  if (types.includes('road')) return 'interpolated'
   return 'approximate'
 }
 
@@ -124,12 +130,15 @@ const oneLine = (r: GeocodeRequest) =>
     .join(', ')
 
 async function geocodeOne(row: GeocodeRequest, key: string): Promise<GeocodeMatch> {
-  // `limit=1` because only the top hit is ever used, and `types=address` keeps a
+  // `limit=1` because only the top hit is ever used, and the type filter keeps a
   // failed house number from silently resolving to the middle of the city — a
   // plausible-looking pin in the wrong place is worse than an honest no-match.
+  //
+  // `address,road` are MapTiler's spellings. `street` is not a MapTiler type and
+  // makes the request invalid; see the note in the header.
   const url =
     `${ENDPOINT}/${encodeURIComponent(oneLine(row))}.json` +
-    `?key=${encodeURIComponent(key)}&limit=1&types=address,street&country=us`
+    `?key=${encodeURIComponent(key)}&limit=1&types=address,road&country=us`
 
   try {
     const res = await fetch(url)
