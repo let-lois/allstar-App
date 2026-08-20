@@ -24,7 +24,7 @@ const load = async (entry, name) => {
 }
 const { parseCensusResponse, toCensusCsv } = await load('src/geocode.ts', 'geocode')
 const { parseGoogleResponse } = await load('src/geocode-google.ts', 'google')
-const { parseMapTilerResponse } = await load('src/geocode-maptiler.ts', 'maptiler')
+const { parseMapTilerResponse, maptilerProbe } = await load('src/geocode-maptiler.ts', 'maptiler')
 const { addressKey, propertyIdFor } = await load('src/import.ts', 'import')
 
 const fails = []
@@ -309,6 +309,103 @@ const ok = (cond, msg) => {
     features: [{ place_name: 'X', place_type: ['address'], center: [30.5, -197.7] }],
   })
   ok(swapped.status === 'no_match', 'an impossible coordinate pair is refused rather than plotted')
+}
+
+/* --- the raw probe -------------------------------------------------------- */
+//
+// A diagnostic that echoes its own request URL is one paste away from leaking the
+// key into a chat log or a screenshot, so the redaction is tested as a property
+// rather than trusted as an intention.
+{
+  const KEY = 'sk-super-secret-maptiler-key'
+  const seen = []
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async (u) => {
+    seen.push(String(u))
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        features: [
+          {
+            place_name: '704 West 40th Street, Austin, Texas 78751, United States',
+            place_type: ['address'],
+            relevance: 1,
+            address: '704',
+            center: [-97.74, 30.31],
+          },
+        ],
+      }),
+    }
+  }
+
+  const variants = await maptilerProbe(
+    { ref: 'probe', address1: '704 W 40th St', city: 'Austin', state: 'TX', zip: '78751' },
+    KEY,
+  )
+  globalThis.fetch = realFetch
+
+  ok(variants.length === 4, `the probe asks the same address four ways (${variants.length})`)
+  ok(
+    variants.map((v) => v.label).join(',') === 'current,address-only,literal,unfiltered',
+    'and reports them in the order they narrow the problem',
+  )
+  ok(
+    variants.every((v) => v.why && v.why.length > 10),
+    'each variant says what hypothesis it isolates',
+  )
+
+  ok(
+    variants.every((v) => !v.url.includes(KEY)),
+    'no reported URL contains the key',
+  )
+  ok(
+    variants.every((v) => v.url.includes('[redacted]')),
+    'the key is replaced rather than dropped, so the request shape stays readable',
+  )
+  ok(
+    seen.every((u) => u.includes(KEY)),
+    'the real requests still carry the key — redaction is display-only',
+  )
+
+  ok(
+    seen[0].includes('types=address%2Croad') || seen[0].includes('types=address,road'),
+    'the control variant sends exactly what the import path sends',
+  )
+  ok(
+    seen[2].includes('autocomplete=false') && seen[2].includes('fuzzyMatch=false'),
+    'the literal variant turns off prefix and fuzzy matching',
+  )
+  ok(!seen[3].includes('types='), 'the unfiltered variant sends no type filter at all')
+  ok(
+    seen.every((u) => u.includes(encodeURIComponent('704 W 40th St, Austin, TX, 78751'))),
+    'every variant asks about the same address',
+  )
+
+  ok(
+    variants[0].features[0]?.address === '704',
+    'a house number in the response is surfaced — it is the whole point of reading raw',
+  )
+  ok(
+    Array.isArray(variants[0].features[0]?.place_type),
+    'and place_type comes through unflattened, not reduced to our precision bucket',
+  )
+}
+
+/* --- the probe when the provider rejects it ------------------------------- */
+{
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: false, status: 403, text: async () => 'forbidden' })
+  const variants = await maptilerProbe({ ref: 'p', address1: 'x' }, 'k')
+  globalThis.fetch = realFetch
+  ok(
+    variants.length === 4 && variants.every((v) => v.status === 403),
+    'a rejected probe still reports every variant rather than throwing',
+  )
+  ok(
+    variants.every((v) => /forbidden/.test(v.error ?? '')),
+    "and carries the provider's own words",
+  )
 }
 
 console.log(fails.length ? `\n${fails.length} check(s) failed` : '\ngeocode parsing and dedupe are correct')

@@ -167,3 +167,126 @@ export async function maptilerGeocode(
   }
   return out
 }
+
+/* --- diagnostics ---------------------------------------------------------- */
+
+/**
+ * What one variant of the request returned.
+ *
+ * `url` has the key replaced rather than trimmed, so the shape of the request
+ * stays readable in a browser tab without the secret travelling with it.
+ */
+export interface ProbeVariant {
+  label: string
+  why: string
+  url: string
+  status: number
+  features: {
+    place_name?: string
+    place_type?: string[]
+    relevance?: number
+    /** Present only on a true address-level hit — this is the house number. */
+    address?: string
+    center?: number[]
+  }[]
+  error?: string
+}
+
+/**
+ * The same address asked four different ways, reporting what came back.
+ *
+ * This exists because the production path reports our *interpretation* of
+ * MapTiler's answer — a precision bucket and a boolean — and when that answer is
+ * wrong the interpretation tells you nothing about why. Reading the raw feature
+ * list is the difference between one round trip and four.
+ *
+ * Each variant isolates one hypothesis about why a house number goes missing:
+ *
+ *   `current`        what production sends, as the control.
+ *   `address-only`   whether an address-level candidate exists at all. With
+ *                    `limit=1` and both types allowed, a road that scores higher
+ *                    hides a rooftop that was there the whole time.
+ *   `literal`        autocomplete and fuzzy matching off. MapTiler treats the
+ *                    last token as a prefix by default, and the last token here
+ *                    is a ZIP code — prefix-matching a number is how you end up
+ *                    on the right street in the wrong ZIP.
+ *   `unfiltered`     no type filter, top five. Shows what MapTiler thinks the
+ *                    query *is*, which is the one thing the filtered calls hide.
+ *
+ * Diagnostic only. Nothing in the import path calls this, so a change here can
+ * never move a pin.
+ */
+export async function maptilerProbe(
+  row: GeocodeRequest,
+  key: string,
+): Promise<ProbeVariant[]> {
+  const q = encodeURIComponent(oneLine(row))
+  const base = `${ENDPOINT}/${q}.json?key=${encodeURIComponent(key)}&country=us`
+
+  const variants: { label: string; why: string; qs: string }[] = [
+    {
+      label: 'current',
+      why: 'exactly what the import path sends today',
+      qs: '&limit=1&types=address,road',
+    },
+    {
+      label: 'address-only',
+      why: 'does an address-level candidate exist when a road cannot outrank it',
+      qs: '&limit=5&types=address',
+    },
+    {
+      label: 'literal',
+      why: 'autocomplete and fuzzy matching off, so the trailing ZIP is not prefix-matched',
+      qs: '&limit=5&types=address&autocomplete=false&fuzzyMatch=false',
+    },
+    {
+      label: 'unfiltered',
+      why: 'no type filter, top five — shows what MapTiler thinks the query is',
+      qs: '&limit=5',
+    },
+  ]
+
+  const out: ProbeVariant[] = []
+  for (const v of variants) {
+    const url = base + v.qs
+    const shown = url.replace(encodeURIComponent(key), '[redacted]')
+    try {
+      const res = await fetch(url)
+      if (!res.ok) {
+        out.push({
+          label: v.label,
+          why: v.why,
+          url: shown,
+          status: res.status,
+          features: [],
+          error: (await res.text()).slice(0, 300),
+        })
+        continue
+      }
+      const body = (await res.json()) as Response
+      out.push({
+        label: v.label,
+        why: v.why,
+        url: shown,
+        status: res.status,
+        features: (body.features ?? []).map((f) => ({
+          place_name: f.place_name,
+          place_type: f.place_type,
+          relevance: f.relevance,
+          address: f.address,
+          center: f.center ?? f.geometry?.coordinates,
+        })),
+      })
+    } catch (err) {
+      out.push({
+        label: v.label,
+        why: v.why,
+        url: shown,
+        status: 0,
+        features: [],
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+  return out
+}
