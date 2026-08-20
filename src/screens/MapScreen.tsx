@@ -2,6 +2,8 @@ import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FieldMap, type MapHandle } from '../components/map/FieldMap'
 import { RouteList } from '../components/map/RouteList'
+import { GoogleFieldMap } from '../components/map/GoogleFieldMap'
+import { gmapsConfigured, type GmapsError } from '../lib/gmaps'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { PropertyPeek } from '../components/property/PropertyPeek'
 import { Chip } from '../components/ui/Chip'
@@ -59,6 +61,19 @@ export function MapScreen() {
     than a map, and until now the app had no answer for them on a phone.
   */
   const [view, setView] = useState<'map' | 'list'>('map')
+
+  /*
+    Why the Google map could not be shown, if it could not.
+
+    Connectivity is not checked separately, on purpose. Offline, no signal, a
+    rejected key and a blocked script all surface here as a *named* load failure,
+    and every one of them has the same correct response: show the route as a list
+    and say why. Adding an `online` check on top would be a second source of
+    truth for the same question, and the two would disagree on a flaky connection
+    — which is precisely the condition this screen exists for.
+  */
+  const [mapError, setMapError] = useState<GmapsError | null>(null)
+  const googleMap = gmapsConfigured()
   const mapHandle = useRef<MapHandle | null>(null)
   const isWide = useIsWide()
 
@@ -149,6 +164,59 @@ export function MapScreen() {
     </div>
   )
 
+  /*
+    Which renderer, and when the list stands in for it.
+
+    With no Google key this is unchanged from before: the self-rendered map, which
+    works with no signal and is not going anywhere — deleting a working offline
+    map because a paid one exists would be a downgrade dressed as an upgrade.
+  */
+  const showList = view === 'list' || (googleMap && !!mapError)
+
+  /*
+    One prop bundle for both renderers. They are not variants of one map — they
+    are two maps behind one contract — and keeping the call sites identical is
+    what stops them drifting into different behaviour on the screen a rep spends
+    their day in.
+  */
+  const mapProps = {
+    className: 'min-h-0 flex-1',
+    properties: shown,
+    position,
+    route: filter === 'route' ? route : null,
+    selectedId,
+    onSelect: setSelectedId,
+    handleRef: mapHandle,
+    initialCenter: route?.stops.length ? properties[route.stops[0].propertyId] : undefined,
+    overlay: (
+      <>
+        {/* Floating filter rail — scrolls horizontally, never wraps. */}
+        <div className="pad-top pointer-events-none absolute inset-x-0 top-0">
+          <div className="pointer-events-auto flex items-center gap-2 px-3 pb-2 pt-2">{chips}</div>
+          {statusRow}
+        </div>
+
+        {/* Nearest-door shortcut, bottom-left, opposite the zoom controls. */}
+        {!selected && nearest && (
+          <button
+            onClick={() => {
+              const p = properties[nearest.id]
+              mapHandle.current?.flyTo(p.lat, p.lng, 18)
+              setSelectedId(nearest.id)
+            }}
+            className="press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-field bg-surface px-4 text-[14px] font-semibold text-brand-600 shadow-float ring-1 ring-ink/[0.06]"
+            style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+          >
+            Nearest door
+            <span className="nums font-medium text-ink-mute">
+              {(nearest.d * 5280).toFixed(0)} ft
+            </span>
+          </button>
+        )}
+      </>
+    ),
+  }
+
   return (
     <div className="relative flex min-h-0 flex-1">
       {/*
@@ -210,48 +278,12 @@ export function MapScreen() {
         </aside>
       )}
 
-      {view === 'map' ? (
-        <FieldMap
-          className="min-h-0 flex-1"
-          properties={shown}
-          position={position}
-          route={filter === 'route' ? route : null}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          handleRef={mapHandle}
-          initialCenter={
-            route?.stops.length ? properties[route.stops[0].propertyId] : undefined
-          }
-          overlay={
-            <>
-              {/* Floating filter rail — scrolls horizontally, never wraps. */}
-              <div className="pad-top pointer-events-none absolute inset-x-0 top-0">
-                <div className="pointer-events-auto flex items-center gap-2 px-3 pb-2 pt-2">
-                  {chips}
-                </div>
-                {statusRow}
-              </div>
-
-              {/* Nearest-door shortcut, bottom-left, opposite the zoom controls. */}
-              {!selected && nearest && (
-                <button
-                  onClick={() => {
-                    const p = properties[nearest.id]
-                    mapHandle.current?.flyTo(p.lat, p.lng, 18)
-                    setSelectedId(nearest.id)
-                  }}
-                  className="press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-field bg-surface px-4 text-[14px] font-semibold text-brand-600 shadow-float ring-1 ring-ink/[0.06]"
-                  style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
-                >
-                  Nearest door
-                  <span className="nums font-medium text-ink-mute">
-                    {(nearest.d * 5280).toFixed(0)} ft
-                  </span>
-                </button>
-              )}
-            </>
-          }
-        />
+      {!showList ? (
+        googleMap ? (
+          <GoogleFieldMap {...mapProps} onUnavailable={setMapError} />
+        ) : (
+          <FieldMap {...mapProps} />
+        )
       ) : (
         /*
           A real screen rather than a degraded map, so it gets a solid header
@@ -262,6 +294,22 @@ export function MapScreen() {
             <div className="flex items-center gap-2 px-3 pb-2 pt-2">{chips}</div>
             <div className="pb-2">{statusRow}</div>
           </div>
+
+          {/*
+            Only when the map failed, and only saying what happened. A rep who
+            cannot see a map already knows it; what they do not know is whether
+            their work is still being saved, which is why the reason is named and
+            the reassurance is explicit.
+          */}
+          {mapError && (
+            <div role="status" className="shrink-0 bg-warn-bg px-4 py-2.5 text-[13px] text-warn">
+              <span className="font-semibold">Map unavailable.</span>{' '}
+              {mapError.reason === 'unreachable'
+                ? 'No connection for map imagery. Your route and every visit you log are saved on this phone.'
+                : mapError.message}
+            </div>
+          )}
+
           <RouteList
             className="pad-nav min-h-0 flex-1"
             properties={shown}

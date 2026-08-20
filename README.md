@@ -547,6 +547,50 @@ raw provider response, and takes `language`, `types`, `limit`, `autocomplete`,
 page reload rather than a deploy. Use a verified address with it — a synthetic one
 cannot answer a coverage question.
 
+### The map has two renderers
+
+`FieldMap` draws its own basemap and layers MapTiler tiles over it. `GoogleFieldMap`
+uses the Google Maps JavaScript API. They are not variants of one map — they are
+two maps behind one prop contract, chosen at runtime, and both are kept.
+
+Which one runs:
+
+| `VITE_GOOGLE_MAPS_KEY` + `VITE_GOOGLE_MAP_ID` | Online | Offline |
+| --- | --- | --- |
+| Both set | Google map | Route list, with the reason named |
+| Either missing | `FieldMap` | `FieldMap` — it works offline |
+
+The self-rendered map is not legacy code waiting to be deleted. It is the only
+renderer that works with no signal, no key and no billing account, and removing it
+because a paid map exists would be a downgrade dressed as an upgrade. With the
+vars unset, Rollup proves the Google branch dead and strips the entire renderer
+and its clusterer from the bundle — a deployment that does not use Google pays
+nothing for it. With them set, the whole Google path costs about 6 kB raw, 2 kB
+gzipped.
+
+**Connectivity is never checked directly.** Offline, a rejected key, a blocked
+script and a stalled connection all arrive as one thing: a named load failure. All
+four have the same correct response — show the route as a list and say which one
+happened. A separate `online` check would be a second source of truth for the same
+question, and the two would disagree on exactly the flaky connection this screen
+exists for.
+
+Advanced markers are why the Map ID is required rather than optional. They render
+as real DOM, so the status colours and selected state already in this product
+carry over instead of becoming Google teardrops, and they are focusable, which
+sprite markers are not. Without a Map ID they silently do not appear — so a key
+with no Map ID is treated as unconfigured, and says so in the console rather than
+leaving someone to wonder where their leads went.
+
+`npm run verify:googlemap` covers what a real key cannot be tested for in CI: the
+three ways this fails. It needs a build with placeholder values, because with the
+vars unset the code under test is not in the bundle at all:
+
+```bash
+VITE_GOOGLE_MAPS_KEY=dummy VITE_GOOGLE_MAP_ID=DEMO_MAP_ID npm run build
+npm run verify:googlemap
+```
+
 ### Google's terms and the offline map are in direct conflict
 
 Only relevant once `GOOGLE_MAPS_API_KEY` is set, and then it is the most

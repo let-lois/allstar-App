@@ -26,17 +26,38 @@
 /assets/*
   Cache-Control: public, max-age=300
 
-# Applied to every page. The app loads nothing from another origin except
-# basemap tiles — no CDN, no analytics, no embedded fonts — so the policy can be
-# strict rather than aspirational. `connect-src` and `img-src` name the API and
-# the tile host explicitly; anything else the app tried to talk to would be a bug
-# or a compromise, and either way should fail.
+# Applied to every page. The app loads nothing from another origin except the
+# map — no CDN, no analytics, no third-party fonts of its own — so the policy
+# names hosts explicitly rather than opening a category. Anything else the app
+# tried to reach would be a bug or a compromise, and either way should fail.
 #
-# api.maptiler.com appears in both: `img-src` for the tiles themselves, and
-# `connect-src` because the service worker fetches them to cache for offline use,
-# which is a fetch rather than an image load.
+# api.maptiler.com appears in both `img-src` and `connect-src`: the first for the
+# tiles themselves, the second because the service worker *fetches* them to cache
+# for offline use, which is a fetch rather than an image load.
+#
+# The Google hosts are what the Maps JavaScript API needs, and they are not
+# guessable from the docs alone — each one is here for a specific reason:
+#
+#   maps.googleapis.com     the bootstrap script, the tile and metadata requests
+#                           it makes afterwards, and Street View Static images.
+#   maps.gstatic.com        the secondary scripts and sprites the API pulls in.
+#   fonts.googleapis.com    Maps injects a stylesheet link for Roboto. Without
+#                           this the map renders with fallback type; harmless,
+#                           but it produces a console error on every load, and a
+#                           console full of noise is where real errors go to die.
+#   fonts.gstatic.com       the font files that stylesheet points at.
+#   *.ggpht.com and
+#   *.googleusercontent.com Street View imagery is served from these.
+#   worker-src blob:        vector maps run their rendering in a worker created
+#                           from a blob URL. Without this the map is blank with
+#                           no network error to explain it.
+#
+# Deliberately NOT added: 'unsafe-eval'. Some CSP guides list it for Maps and it
+# is not required for the parts this app uses. If a future Maps feature does need
+# it, that is a decision to take explicitly — it re-enables eval for the entire
+# application, and this app handles credentials and customer records.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.maptiler.com; font-src 'self'; connect-src 'self' https://allstar-api.josh-af6.workers.dev https://api.maptiler.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://api.maptiler.com https://maps.googleapis.com https://maps.gstatic.com https://*.ggpht.com https://*.googleusercontent.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://allstar-api.josh-af6.workers.dev https://api.maptiler.com https://maps.googleapis.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(self), camera=(self), microphone=(self), payment=(), usb=()
