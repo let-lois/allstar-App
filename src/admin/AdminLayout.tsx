@@ -1,19 +1,37 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
-import { useMediaQuery } from '../lib/useMediaQuery'
 import { Button } from '../components/ui/Button'
+import { IconBack } from '../components/nav/icons'
 import type { Role } from '../types'
 
 /**
  * The office console.
  *
- * This is the one part of the product that is deliberately **desktop-first**.
- * Everywhere else, mobile is the design and desktop is the enhancement; here
- * the work itself — comparing reps across a month, reassigning territories,
- * auditing configuration — is dense, wide, and done sitting down.
+ * **Mobile first, like the rest of the product.** This used to be the one
+ * deliberate exception: below 1024px it refused to render and handed off to the
+ * field screens instead, on the reasoning that comparing reps across a month is
+ * dense work done sitting down.
  *
- * Rather than cram that onto a phone badly, a phone gets an honest handoff to
- * the mobile screens that actually answer the on-the-go questions.
+ * That reasoning described the *desk* half of the job and missed the other half.
+ * An owner approves a lead import from a truck. A manager reassigns a territory
+ * when a rep calls in sick, at seven in the morning, from a kitchen. Those are
+ * not desk tasks that happen to be possible on a phone — they are the tasks that
+ * are urgent, and urgency is exactly when nobody is at a desk. A console that
+ * refuses to open is not neutral in that moment; it sends someone to find a
+ * laptop.
+ *
+ * So the mobile layout is the design and the wide one is the enhancement:
+ *
+ *   - Nine sections is too many for a bar of five, so on a phone they are a
+ *     scrolling row of chips under the header. Every section is one tap, and the
+ *     row remembers nothing — where you are is where the chip is.
+ *   - Tables become lists. A table is a comparison instrument and a phone cannot
+ *     hold one; the same rows as cards answer "what is this one" instead, which
+ *     is the question a phone is usually being asked.
+ *   - The side rail comes back at `md`, and the tables with it at `lg`.
+ *
+ * The role gate is unchanged and is the part that matters: a field rep cannot
+ * reach this by nav or by typing the URL.
  */
 
 interface Item {
@@ -39,8 +57,6 @@ export const ADMIN_ROLES: Role[] = ['manager', 'client_admin', 'super_admin']
 export function AdminLayout() {
   const user = useAppStore((s) => s.user)
   const nav = useNavigate()
-  // 1024px: below this there isn't room for a table that's worth reading.
-  const wideEnough = useMediaQuery('(min-width: 1024px)')
 
   if (!user) return null
 
@@ -48,7 +64,7 @@ export function AdminLayout() {
     return (
       <div className="grid flex-1 place-items-center p-8 text-center">
         <div className="max-w-sm">
-          <p className="text-lg font-bold">Not available for your role</p>
+          <p className="text-lg font-semibold">Not available for your role</p>
           <p className="mt-1 text-sm text-ink-mute">
             The console is for managers and administrators.
           </p>
@@ -60,40 +76,57 @@ export function AdminLayout() {
     )
   }
 
-  if (!wideEnough) {
-    return (
-      <div className="scroll-pane grid place-items-center p-8 text-center">
-        <div className="max-w-sm">
-          <span className="text-3xl" aria-hidden>
-            🖥
-          </span>
-          <h1 className="mt-3 text-xl font-bold">Open the console on a larger screen</h1>
-          <p className="mt-2 text-sm leading-relaxed text-ink-mute">
-            User management, territories and reporting are built for a desktop — wide
-            tables and month-long comparisons. Squeezing them onto a phone would make
-            both worse.
-          </p>
-          <p className="mt-4 text-sm font-medium">On this phone you can still:</p>
-          <div className="mt-2 space-y-2">
-            <Button variant="secondary" full onClick={() => nav('/today')}>
-              See today’s company overview
-            </Button>
-            <Button variant="secondary" full onClick={() => nav('/team')}>
-              Check what the team is doing
-            </Button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   const items = NAV.filter((i) => i.roles.includes(user.role))
 
   return (
-    <div className="flex min-h-0 flex-1 bg-surface-sunk">
-      <nav className="flex w-56 shrink-0 flex-col border-r border-line bg-surface px-3 py-4">
+    <div className="flex min-h-0 flex-1 flex-col bg-surface-sunk md:flex-row">
+      {/*
+        --- the phone shell -------------------------------------------------
+        A header that says where you are and gets you out, over a scrolling row
+        of sections. Nine destinations will not fit a tab bar, and a hamburger
+        drawer would hide the whole console behind one more tap on the device
+        where taps are most expensive — so the sections are simply visible.
+      */}
+      <header className="pad-top z-20 shrink-0 border-b border-line bg-surface md:hidden">
+        <div className="flex min-h-[54px] items-center gap-2 px-2">
+          <button
+            onClick={() => nav('/today')}
+            aria-label="Back to the field app"
+            className="focusable grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink active:bg-surface-field"
+          >
+            <IconBack />
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[17px] font-semibold leading-tight tracking-[-0.01em]">
+              {user.clientName}
+            </p>
+            <p className="truncate text-[12.5px] leading-tight text-ink-mute">Console</p>
+          </div>
+        </div>
+        <div className="snap-x-row px-2 pb-2">
+          {items.map((i) => (
+            <NavLink
+              key={i.to}
+              to={i.to}
+              end={i.to === '/admin'}
+              className={({ isActive }) =>
+                [
+                  'focusable flex min-h-[40px] shrink-0 items-center whitespace-nowrap rounded-full border px-3.5 text-[13px] font-medium',
+                  isActive
+                    ? 'border-brand-600 bg-brand-600 text-white'
+                    : 'border-line bg-surface text-ink-mute active:bg-surface-field',
+                ].join(' ')
+              }
+            >
+              {i.label}
+            </NavLink>
+          ))}
+        </div>
+      </header>
+
+      <nav className="hidden w-56 shrink-0 flex-col border-r border-line bg-surface px-3 py-4 md:flex">
         <div className="mb-5 px-2">
-          <p className="text-sm font-bold">{user.clientName}</p>
+          <p className="text-sm font-semibold">{user.clientName}</p>
           <p className="text-xs text-ink-mute">Console</p>
         </div>
 
@@ -128,7 +161,9 @@ export function AdminLayout() {
         </div>
       </nav>
 
-      <main className="scroll-pane">
+      {/* min-w-0: without it the pane's widest table sets a floor on the flex
+          item and pushes the whole console sideways on a phone. */}
+      <main className="scroll-pane min-w-0 flex-1">
         <Outlet />
       </main>
     </div>
@@ -148,13 +183,27 @@ export function AdminPage({
   children: React.ReactNode
 }) {
   return (
-    <div className="mx-auto max-w-[1200px] p-6 xl:p-8">
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-black leading-tight">{title}</h1>
-          {description && <p className="mt-1 text-sm text-ink-mute">{description}</p>}
+    <div
+      className="mx-auto max-w-[1200px] px-4 py-4 md:p-6 xl:p-8"
+      /* The field app's bottom bar is absent in here, but a phone still has a
+         home indicator to clear at the end of a scroll. */
+      style={{ paddingBottom: 'calc(28px + env(safe-area-inset-bottom, 0px))' }}
+    >
+      {/*
+        The heading is 20px on a phone and 24 on a desktop, and never `font-black`
+        — a page title set heavier than everything under it is how a console
+        starts reading as a report.
+      */}
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-3 md:mb-5">
+        <div className="min-w-0">
+          <h1 className="text-[20px] font-semibold leading-tight tracking-[-0.02em] md:text-2xl">
+            {title}
+          </h1>
+          {description && (
+            <p className="mt-1 text-[13px] leading-snug text-ink-mute md:text-sm">{description}</p>
+          )}
         </div>
-        {actions && <div className="flex items-center gap-2">{actions}</div>}
+        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </header>
       {children}
     </div>

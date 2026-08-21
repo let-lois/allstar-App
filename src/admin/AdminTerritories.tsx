@@ -3,10 +3,10 @@ import { AdminPage } from './AdminLayout'
 import { FieldMap, fitZoom } from '../components/map/FieldMap'
 import { useAppStore } from '../store/useAppStore'
 import { UNASSIGNED_TERRITORY, inTerritory, useTerritories } from './useAdminData'
+import { DataList } from './DataList'
 import { ApiError, apiAssignTerritory } from '../lib/http'
 import { liveToken } from '../lib/session'
 import { moneyFull } from '../lib/format'
-import { INK, SINGLE } from './charts/tokens'
 
 /**
  * Territory management.
@@ -142,69 +142,88 @@ export function AdminTerritories() {
       description={`${rows.length} territories · ${totals.properties.toLocaleString()} properties · ${moneyFull(totals.open)} open`}
     >
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
-        <div className="overflow-hidden rounded-card border border-line bg-surface">
-          <table className="w-full text-sm">
-            <thead className="bg-surface-sunk text-xs text-ink-mute">
-              <tr>
-                <th className="px-4 py-2.5 text-left font-semibold">Territory</th>
-                <th className="px-3 py-2.5 text-left font-semibold">Assigned rep</th>
-                <th className="px-3 py-2.5 text-right font-semibold">Properties</th>
-                <th className="px-3 py-2.5 text-left font-semibold">Coverage</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Open value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((t) => (
-                <tr
-                  key={t.id}
-                  onClick={() => setSelected(t.id)}
-                  aria-selected={selected === t.id}
-                  className={`cursor-pointer border-t border-line-soft ${
-                    selected === t.id ? 'bg-brand-50' : 'hover:bg-surface-field'
-                  }`}
+        <>
+        <DataList
+          rows={rows}
+          keyOf={(t) => t.id}
+          onRow={(t) => setSelected(t.id)}
+          isSelected={(t) => selected === t.id}
+          rowLabel={(t) => `Show ${label(t.id)} on the map`}
+          empty="No territories yet — they appear once leads carry one."
+          columns={[
+            {
+              header: 'Territory',
+              phone: 'title',
+              /*
+                The bare label, with the weight on the cell. Wrapping it in a
+                span made the span the smallest element containing the text,
+                which is what Playwright's `:text-is` matches — so a gate that
+                located a row by its first cell stopped finding any row. The
+                markup a test locates by is part of the contract.
+              */
+              className: 'font-medium',
+              cell: (t) => label(t.id),
+            },
+            {
+              header: 'Assigned rep',
+              cell: (t) => (
+                <select
+                  value={t.repId ?? ''}
+                  disabled={mode !== 'live' || saving !== null}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => void assign(t.id, e.target.value)}
+                  /* 44px on a phone: this is the one control in the console a
+                     manager reaches for one-handed, reassigning a patch because
+                     somebody called in sick. */
+                  className="focusable min-h-[44px] w-full rounded-lg border border-line bg-surface px-2 text-[13px] disabled:opacity-60 lg:min-h-[36px] lg:w-auto lg:text-xs"
                 >
-                  <td className="px-4 py-3 font-medium">{label(t.id)}</td>
-                  <td className="px-3 py-3">
-                    <select
-                      value={t.repId ?? ''}
-                      disabled={mode !== 'live' || saving !== null}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => void assign(t.id, e.target.value)}
-                      className="focusable min-h-[36px] rounded-lg border border-line bg-surface px-2 text-xs disabled:opacity-60"
-                    >
-                      <option value="">{t.mixed ? 'Mixed — pick one' : 'Unassigned'}</option>
-                      {repOptions.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="nums px-3 py-3 text-right">{t.properties}</td>
-                  <td className="px-3 py-3">
-                    {/* Coverage is a magnitude, so it's a bar — plus the number,
-                        because a bar alone can't be read precisely. */}
-                    <span className="flex items-center gap-2">
-                      <span
-                        className="h-2 w-24 overflow-hidden rounded-full"
-                        style={{ backgroundColor: INK.grid }}
-                      >
-                        <span
-                          className="block h-full rounded-full"
-                          style={{ width: `${t.coverage}%`, backgroundColor: SINGLE }}
-                        />
-                      </span>
-                      <span className="nums text-xs font-semibold">{t.coverage}%</span>
-                    </span>
-                  </td>
-                  <td className="nums px-4 py-3 text-right font-semibold text-good">
-                    {moneyFull(t.openValue)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="border-t border-line-soft px-4 py-3 text-xs">
+                  <option value="">{t.mixed ? 'Mixed — pick one' : 'Unassigned'}</option>
+                  {repOptions.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              ),
+            },
+            { header: 'Properties', align: 'right', cell: (t) => t.properties },
+            {
+              header: 'Coverage',
+              cell: (t) => (
+                /* A magnitude, so a bar — plus the number, because a bar alone
+                   cannot be read precisely. */
+                <span className="flex items-center gap-2">
+                  <span className="h-2 w-full max-w-[96px] overflow-hidden rounded-full bg-line-soft">
+                    <span
+                      className="block h-full rounded-full bg-brand-500"
+                      style={{ width: `${t.coverage}%` }}
+                    />
+                  </span>
+                  <span className="nums shrink-0 text-xs font-semibold">{t.coverage}%</span>
+                </span>
+              ),
+            },
+            /*
+              Last, not second.
+
+              Column order is not cosmetic here: a whole-row click selects the
+              territory, and the rep `<select>` calls `stopPropagation` so its own
+              clicks do not. With Open value in position two the select sat in the
+              middle of the row — which is where a click on a table row lands —
+              so selecting a territory on a desktop silently stopped working.
+            */
+            {
+              header: 'Open value',
+              phone: 'trailing',
+              align: 'right',
+              cell: (t) => (
+                <span className="nums font-semibold text-ink">{moneyFull(t.openValue)}</span>
+              ),
+            },
+          ]}
+        />
+        <div className="mt-3 rounded-card border border-line bg-surface px-4 py-3 text-xs lg:mt-0 lg:rounded-none lg:border-0 lg:border-t lg:border-line-soft">
+
             {assignError ? (
               <p role="alert" className="font-medium text-bad">
                 {assignError}
@@ -220,12 +239,12 @@ export function AdminTerritories() {
                   : 'Demo data — assignment needs a live account. Coverage is knocked properties over total, not route completion.'}
               </p>
             )}
-          </div>
         </div>
+        </>
 
         <div className="overflow-hidden rounded-card border border-line bg-surface">
           <div className="flex items-baseline justify-between border-b border-line-soft px-4 py-3">
-            <h2 className="text-sm font-bold">
+            <h2 className="text-sm font-semibold">
               {selected ? label(selected) : 'All territories'}
             </h2>
             <span className="nums text-xs text-ink-mute">{shown.length} properties</span>

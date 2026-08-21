@@ -132,7 +132,7 @@ export function AdminDashboard() {
           <h2 className="text-sm font-bold">Rep performance</h2>
           <button
             onClick={() => nav('/admin/reports')}
-            className="focusable min-h-[32px] rounded-lg px-2 text-xs font-semibold text-brand-600 hover:bg-brand-50"
+            className="focusable min-h-[44px] rounded-lg px-2 text-xs font-semibold text-brand-600 hover:bg-brand-50 lg:min-h-[32px]"
           >
             Full report
           </button>

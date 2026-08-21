@@ -7,6 +7,7 @@ import type {
   Property,
   Route,
   Task,
+  Territory,
   User,
   DailyStat,
 } from '../types'
@@ -197,6 +198,16 @@ const MISS: OutcomeCode[] = ['no_answer', 'no_answer', 'no_answer', 'not_interes
 export interface SeedBundle {
   /** The day this bundle was generated for — used to detect a stale demo. */
   day: string
+  /**
+   * Named patches, one per pair of streets.
+   *
+   * The seed assigned `territoryId: 't_0'` and never created the records those
+   * ids point at, so every screen that resolved an id to a name fell through to
+   * the id — a rep's territory read "t_0" and the console's territory list was a
+   * column of them. It went unnoticed because the only screen wide enough to
+   * show that column was one nobody could open on a phone.
+   */
+  territories: Territory[]
   properties: Property[]
   routes: Route[]
   appointments: Appointment[]
@@ -408,7 +419,32 @@ export function buildSeed(now = Date.now()): SeedBundle {
 
   const dailyStats = buildHistory(now, activity)
 
-  return { day: today, properties, routes, appointments, tasks, activity, dailyStats }
+  /*
+    Named from the streets in each patch, because that is what a rep and a
+    manager both call them out loud: two streets to a territory, matching the
+    `t_${floor(s / 2)}` grouping the properties already use.
+  */
+  const territories: Territory[] = []
+  for (let t = 0; t * 2 < STREETS.length; t++) {
+    const a = STREETS[t * 2]
+    const b = STREETS[t * 2 + 1]
+    territories.push({
+      id: `t_${t}`,
+      name: b ? `${shortStreet(a)} & ${shortStreet(b)}` : shortStreet(a),
+      repId: repOfStreet.get(t * 2)?.id,
+    })
+  }
+
+  return {
+    day: today,
+    territories,
+    properties,
+    routes,
+    appointments,
+    tasks,
+    activity,
+    dailyStats,
+  }
 }
 
 /**
@@ -420,6 +456,11 @@ export function buildSeed(now = Date.now()): SeedBundle {
  * the big knocking days in this business and Sundays are quiet, and a trend
  * line without that shape looks obviously fake to anyone in the industry.
  */
+/** "Cypress Ridge Dr" -> "Cypress Ridge". The suffix is noise in a patch name. */
+function shortStreet(name: string): string {
+  return name.replace(/\s+(Dr|Ln|Rd|Way|Ave|Ct|Blvd|Trail|Hollow)$/, '')
+}
+
 function buildHistory(now: number, todayActivity: ActivityEvent[]): DailyStat[] {
   const rand = rng(770315)
   const rows: DailyStat[] = []

@@ -415,7 +415,7 @@ export default function AdminImport() {
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {IMPORT_FIELDS.map(({ key, label, required }) => (
               <label key={key} className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+                <span className="text-[12.5px] font-medium text-ink-mute">
                   {label}
                   {required && <span className="ml-1 text-bad">*</span>}
                 </span>
@@ -486,7 +486,7 @@ export default function AdminImport() {
             <h2 className="font-bold">Where do these go?</h2>
             <div className="mt-3 grid gap-4 md:grid-cols-2">
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+                <span className="text-[12.5px] font-medium text-ink-mute">
                   Assign to
                 </span>
                 <select
@@ -508,7 +508,7 @@ export default function AdminImport() {
                 </span>
               </label>
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+                <span className="text-[12.5px] font-medium text-ink-mute">
                   Territory name (optional)
                 </span>
                 <input
@@ -648,7 +648,7 @@ function Tally({
   return (
     <div className={`rounded-field p-4 ring-1 ${ring}`}>
       <p className="nums text-2xl font-black">{value.toLocaleString()}</p>
-      <p className="mt-0.5 text-xs font-semibold uppercase tracking-wide text-ink-mute">{label}</p>
+      <p className="mt-0.5 text-[12.5px] font-medium text-ink-mute">{label}</p>
     </div>
   )
 }

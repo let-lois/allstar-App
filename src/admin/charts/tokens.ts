@@ -13,6 +13,14 @@
  * Categorical slots, assigned in fixed order and never cycled.
  * Validated: worst adjacent CVD ΔE 24.7 (protan), normal-vision ΔE 33.6, both
  * clear of the floors; both clear 3:1 on white.
+ *
+ * Kept blue/orange through the teal redesign, deliberately. Two line series have
+ * to be separable by someone with protanopia, and this pair is measured to be;
+ * a teal-and-something pair would have to clear the same floors and the
+ * validator these numbers came from is not in this repo to re-run. A data series
+ * is also not interface chrome — the redesign's ban on orange is about surfaces,
+ * and this is the one place in the product where hue is carrying information
+ * that nothing else carries. Revisit with a validator in hand, not by eye.
  */
 export const SERIES = ['#2a78d6', '#eb6834'] as const
 
@@ -39,14 +47,22 @@ export const STATUS = {
   critical: '#d03b3b',
 } as const
 
-/** Chart chrome. Text always wears ink tokens — never the series color. */
+/**
+ * Chart chrome. Text always wears ink tokens — never the series color.
+ *
+ * These are the app's own neutrals now, not the warm greys they used to be. A
+ * chart is not a separate product: its axis labels and gridlines sit inside a
+ * card next to the interface's own text, and a warm grey axis beside a cool grey
+ * caption reads as two typefaces rather than one system. The values match
+ * `ink-*` and `line-*` in tailwind.config.js exactly.
+ */
 export const INK = {
-  primary: '#0b1220',
-  secondary: '#52514e',
-  muted: '#898781',
-  grid: '#e1e0d9',
-  axis: '#c3c2b7',
+  primary: '#111827',
+  secondary: '#334155',
+  muted: '#64748B',
+  grid: '#EDF1F3',
+  axis: '#E3E8EA',
   surface: '#ffffff',
-  deltaGood: '#006300',
-  deltaBad: '#b91c1c',
+  deltaGood: '#166534',
+  deltaBad: '#B91C1C',
 } as const

@@ -25,6 +25,7 @@ const SEED_DAY_KEY = 'allstar.seedDay'
 /** Stores owned by the demo seed and safe to replace wholesale. */
 const SEEDED_STORES: StoreName[] = [
   'properties',
+  'territories',
   'routes',
   'appointments',
   'tasks',
@@ -43,6 +44,9 @@ async function writeSeed(bundle: SeedBundle) {
   await Promise.all([...SEEDED_STORES, ...USER_STORES].map((s) => db.clear(s)))
   await Promise.all([
     db.putAll('properties', bundle.properties),
+    // The store has always existed; the seed simply never wrote to it, so every
+    // territory name in the demo resolved to its own id.
+    db.putAll('territories', bundle.territories),
     db.putAll('routes', bundle.routes),
     db.putAll('appointments', bundle.appointments),
     db.putAll('tasks', bundle.tasks),

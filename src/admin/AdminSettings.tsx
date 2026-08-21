@@ -152,7 +152,11 @@ export function AdminSettings() {
                             return next
                           })
                         }
-                        className="focusable h-6 w-6 rounded text-xs text-ink-mute disabled:opacity-30"
+                        /* 44px on a phone. A 24px arrow is a cursor target;
+                           reordering outcomes is exactly the kind of setup an
+                           owner does once, often from a phone, and missing the
+                           arrow moves the wrong row. */
+                        className="focusable h-11 w-11 rounded text-sm text-ink-mute disabled:opacity-30 lg:h-6 lg:w-6 lg:text-xs"
                       >
                         ↑
                       </button>
@@ -166,7 +170,11 @@ export function AdminSettings() {
                             return next
                           })
                         }
-                        className="focusable h-6 w-6 rounded text-xs text-ink-mute disabled:opacity-30"
+                        /* 44px on a phone. A 24px arrow is a cursor target;
+                           reordering outcomes is exactly the kind of setup an
+                           owner does once, often from a phone, and missing the
+                           arrow moves the wrong row. */
+                        className="focusable h-11 w-11 rounded text-sm text-ink-mute disabled:opacity-30 lg:h-6 lg:w-6 lg:text-xs"
                       >
                         ↓
                       </button>

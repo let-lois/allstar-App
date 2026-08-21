@@ -164,7 +164,7 @@ export function InviteDialog({
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+                <span className="text-[12.5px] font-medium text-ink-mute">
                   Name
                 </span>
                 <input
@@ -176,7 +176,7 @@ export function InviteDialog({
                 />
               </label>
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+                <span className="text-[12.5px] font-medium text-ink-mute">
                   Email
                 </span>
                 <input
@@ -191,7 +191,7 @@ export function InviteDialog({
                 />
               </label>
               <label className="block sm:col-span-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+                <span className="text-[12.5px] font-medium text-ink-mute">
                   Phone (optional)
                 </span>
                 <input
@@ -205,7 +205,7 @@ export function InviteDialog({
             </div>
 
             <fieldset className="mt-4">
-              <legend className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+              <legend className="text-[12.5px] font-medium text-ink-mute">
                 Role
               </legend>
               <div className="mt-2 space-y-2">

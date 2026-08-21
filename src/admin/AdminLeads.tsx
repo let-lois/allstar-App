@@ -7,7 +7,8 @@ import { ApiError, apiAssignProperties } from '../lib/http'
 import { liveToken } from '../lib/session'
 import { STATUS_COLOR, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
 import { money, relative } from '../lib/format'
-import type { LeadStatus, Property } from '../types'
+import type { LeadStatus } from '../types'
+import { DataList } from './DataList'
 
 /**
  * Every lead, from a desk.
@@ -213,59 +214,124 @@ export default function AdminLeads() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-card border border-line bg-surface">
-        <table className="w-full min-w-[880px] text-sm">
-          <thead className="bg-surface-sunk text-xs text-ink-mute">
-            <tr>
-              <th className="w-10 px-3 py-2.5">
-                <input
-                  type="checkbox"
-                  checked={allOnPageSelected}
-                  aria-label="Select everything shown"
-                  onChange={() =>
-                    setSelected((prev) => {
-                      const next = new Set(prev)
-                      if (allOnPageSelected) page.forEach((p) => next.delete(p.id))
-                      else page.forEach((p) => next.add(p.id))
-                      return next
-                    })
-                  }
-                />
-              </th>
-              <th className="px-3 py-2.5 text-left font-semibold">Address</th>
-              <th className="px-3 py-2.5 text-left font-semibold">Owner</th>
-              <th className="px-3 py-2.5 text-left font-semibold">Status</th>
-              <th className="px-3 py-2.5 text-left font-semibold">Assigned</th>
-              <th className="px-3 py-2.5 text-left font-semibold">Territory</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Value</th>
-              <th className="px-3 py-2.5 text-left font-semibold">Last visit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {page.map((p) => (
-              <Row
-                key={p.id}
-                p={p}
-                checked={selected.has(p.id)}
-                onToggle={() => toggle(p.id)}
-                repName={nameOf(p.assignedRepId)}
-                territoryName={
-                  p.territoryId
-                    ? (territories[p.territoryId]?.name ?? p.territoryId)
-                    : UNASSIGNED_LABEL
-                }
-              />
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && (
-          <p className="p-8 text-center text-sm text-ink-mute">
-            {Object.keys(properties).length === 0
-              ? 'No leads yet. Import a list to get started.'
-              : 'Nothing matches those filters.'}
-          </p>
+      {/*
+        Cards on a phone, the table on a desktop — see `DataList`. This one keeps
+        its select-all: reassigning a street's worth of leads is exactly the job
+        somebody does from a phone after a rep quits.
+      */}
+      <DataList
+        rows={page}
+        keyOf={(p) => p.id}
+        leading={(p) => (
+          <input
+            type="checkbox"
+            checked={selected.has(p.id)}
+            onChange={() => toggle(p.id)}
+            aria-label={`Select ${p.address1}`}
+            className="h-[18px] w-[18px] accent-brand-600"
+          />
         )}
-      </div>
+        leadingHeader={
+          <input
+            type="checkbox"
+            checked={allOnPageSelected}
+            aria-label="Select everything shown"
+            onChange={() =>
+              setSelected((prev) => {
+                const next = new Set(prev)
+                if (allOnPageSelected) page.forEach((p) => next.delete(p.id))
+                else page.forEach((p) => next.add(p.id))
+                return next
+              })
+            }
+          />
+        }
+        empty={
+          Object.keys(properties).length === 0
+            ? 'No leads yet. Import a list to get started.'
+            : 'Nothing matches those filters.'
+        }
+        columns={[
+          {
+            header: 'Address',
+            phone: 'title',
+            cell: (p) => (
+              <>
+                <span className="font-medium">{p.address1}</span>
+                <span className="block text-xs text-ink-mute">
+                  {[p.city, p.state, p.zip].filter(Boolean).join(', ')}
+                </span>
+              </>
+            ),
+          },
+          {
+            header: 'Value',
+            phone: 'trailing',
+            align: 'right',
+            cell: (p) =>
+              p.opportunityValue ? (
+                <span className="nums font-semibold">{money(p.opportunityValue)}</span>
+              ) : (
+                <span className="text-ink-mute">—</span>
+              ),
+          },
+          {
+            header: 'Status',
+            cell: (p) => {
+              const outcome = p.lastOutcome ? outcomeByCode(p.lastOutcome) : undefined
+              return (
+                <>
+                  {/* A word as well as a colour — never colour alone. */}
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium">
+                    <span
+                      aria-hidden
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: STATUS_COLOR[p.status] }}
+                    />
+                    {STATUS_LABEL[p.status]}
+                  </span>
+                  {outcome && (
+                    <span className="block truncate text-xs text-ink-mute">{outcome.label}</span>
+                  )}
+                </>
+              )
+            },
+          },
+          {
+            header: 'Owner',
+            cell: (p) => (
+              <>
+                {p.contacts[0]?.name ?? <span className="text-ink-mute">—</span>}
+                {p.contacts[0]?.phone && (
+                  <span className="nums block text-xs text-ink-mute">{p.contacts[0].phone}</span>
+                )}
+              </>
+            ),
+          },
+          {
+            header: 'Assigned',
+            cell: (p) => nameOf(p.assignedRepId) ?? <span className="text-warn">Nobody</span>,
+          },
+          {
+            header: 'Territory',
+            cell: (p) => (
+              <span className="text-ink-mute">
+                {p.territoryId
+                  ? (territories[p.territoryId]?.name ?? p.territoryId)
+                  : UNASSIGNED_LABEL}
+              </span>
+            ),
+          },
+          {
+            header: 'Last visit',
+            cell: (p) => (
+              <span className="text-ink-mute">
+                {p.lastVisitAt ? relative(p.lastVisitAt) : 'Never'}
+              </span>
+            ),
+          },
+        ]}
+      />
 
       {shown < rows.length && (
         <Button
@@ -281,65 +347,3 @@ export default function AdminLeads() {
 }
 
 const UNASSIGNED_LABEL = 'Unassigned'
-
-function Row({
-  p,
-  checked,
-  onToggle,
-  repName,
-  territoryName,
-}: {
-  p: Property
-  checked: boolean
-  onToggle: () => void
-  repName: string | null
-  territoryName: string
-}) {
-  const outcome = p.lastOutcome ? outcomeByCode(p.lastOutcome) : undefined
-  return (
-    <tr className={`border-t border-line-soft ${checked ? 'bg-brand-50' : 'hover:bg-surface-field'}`}>
-      <td className="px-3 py-2.5">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={onToggle}
-          aria-label={`Select ${p.address1}`}
-        />
-      </td>
-      <td className="px-3 py-2.5">
-        <span className="font-medium">{p.address1}</span>
-        <span className="block text-xs text-ink-mute">
-          {[p.city, p.state, p.zip].filter(Boolean).join(', ')}
-        </span>
-      </td>
-      <td className="px-3 py-2.5">
-        {p.contacts[0]?.name ?? <span className="text-ink-mute">—</span>}
-        {p.contacts[0]?.phone && (
-          <span className="nums block text-xs text-ink-mute">{p.contacts[0].phone}</span>
-        )}
-      </td>
-      <td className="px-3 py-2.5">
-        {/* Status carries a word as well as a colour — never colour alone. */}
-        <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium">
-          <span
-            aria-hidden
-            className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: STATUS_COLOR[p.status] }}
-          />
-          {STATUS_LABEL[p.status]}
-        </span>
-        {outcome && <span className="block text-xs text-ink-mute">{outcome.label}</span>}
-      </td>
-      <td className="px-3 py-2.5">
-        {repName ?? <span className="text-warn">Nobody</span>}
-      </td>
-      <td className="px-3 py-2.5 text-ink-mute">{territoryName}</td>
-      <td className="nums px-3 py-2.5 text-right">
-        {p.opportunityValue ? money(p.opportunityValue) : <span className="text-ink-mute">—</span>}
-      </td>
-      <td className="px-3 py-2.5 text-ink-mute">
-        {p.lastVisitAt ? relative(p.lastVisitAt) : 'Never'}
-      </td>
-    </tr>
-  )
-}
