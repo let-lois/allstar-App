@@ -61,11 +61,16 @@ export function BottomNav({ role }: { role: Role }) {
 
   return (
     <nav
-      className="z-30 shrink-0 bg-surface/95 shadow-nav backdrop-blur-md md:hidden"
+      /*
+        A hairline, not a shadow. The bar is a boundary between the content and
+        the home indicator, and a drop shadow there reads as a floating panel —
+        which is what made the old bar feel like a widget bolted to the bottom.
+      */
+      className="z-30 shrink-0 border-t border-line bg-surface/95 backdrop-blur-md md:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       aria-label="Primary"
     >
-      <ul className="flex px-1 pb-0.5 pt-2">
+      <ul className="flex px-1 pb-1 pt-1.5">
         {items.map(({ to, label, Icon }) => (
           <li key={to} className="flex-1">
             <NavLink
@@ -77,9 +82,12 @@ export function BottomNav({ role }: { role: Role }) {
               }
               className={({ isActive }) =>
                 [
-                  'focusable relative flex min-h-[70px] flex-col items-center justify-center gap-1.5',
-                  'rounded-card text-[11px] font-semibold transition-colors',
-                  isActive ? 'text-ink' : 'text-ink-mute',
+                  'focusable relative flex min-h-[58px] flex-col items-center justify-center gap-1',
+                  'rounded-pill text-[11px] transition-colors',
+                  // The label follows the icon: teal and semibold when selected,
+                  // quiet grey otherwise. Weight carries as much of this as
+                  // colour does, which is what keeps it legible in sunlight.
+                  isActive ? 'font-semibold text-brand-600' : 'font-medium text-ink-mute',
                 ].join(' ')
               }
             >
@@ -112,7 +120,7 @@ export function SideRail({ role }: { role: Role }) {
   const showConsole = role !== 'field_rep'
   return (
     <nav
-      className="hidden w-[76px] shrink-0 flex-col items-center gap-2 border-r border-ink/10 bg-surface py-4 md:flex lg:w-56 lg:items-stretch lg:px-3"
+      className="hidden w-[76px] shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-4 md:flex lg:w-56 lg:items-stretch lg:px-3"
       aria-label="Primary"
     >
       {/*
@@ -145,10 +153,11 @@ export function SideRail({ role }: { role: Role }) {
             [
               'flex min-h-[52px] items-center gap-3 rounded-field px-2 text-sm font-semibold lg:justify-start',
               'justify-center',
-              // Each badge now carries a permanent colour of its own, so colour
-              // no longer distinguishes the selected item — a ring and a scale
-              // alone are too quiet at rail size. The row tint carries it.
-              isActive ? 'bg-surface-field text-ink' : 'text-ink-mute hover:bg-surface-field',
+              // At rail width the pill alone is too quiet, so the whole row
+              // tints — same two colours, more surface.
+              isActive
+                ? 'bg-brand-50 text-brand-600'
+                : 'text-ink-mute hover:bg-surface-field',
             ].join(' ')
           }
         >
@@ -171,7 +180,9 @@ export function SideRail({ role }: { role: Role }) {
           className={({ isActive }) =>
             [
               'mt-auto flex min-h-[52px] items-center justify-center gap-3 rounded-field px-2 text-sm font-semibold lg:justify-start',
-              isActive ? 'bg-surface-field text-ink' : 'text-ink-mute hover:bg-surface-field',
+              isActive
+                ? 'bg-brand-50 text-brand-600'
+                : 'text-ink-mute hover:bg-surface-field',
             ].join(' ')
           }
         >

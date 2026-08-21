@@ -114,7 +114,12 @@ export function PropertyDetail() {
         <section className="bg-surface px-4 pb-5 pt-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h2 className="text-title font-extrabold">{property.address1}</h2>
+              {/* Semibold and a touch smaller. The address is already in the bar
+                  above; repeating it in 26px extrabold made the top of every lead
+                  screen shout the one thing the rep is looking straight at. */}
+              <h2 className="text-[23px] font-semibold leading-tight tracking-[-0.02em]">
+                {property.address1}
+              </h2>
               <p className="mt-1 text-[13px] text-ink-mute">
                 {[
                   cityLine(property),
@@ -170,22 +175,28 @@ export function PropertyDetail() {
           </div>
         </section>
 
-        {/* --- collapsible detail ---------------------------------------- */}
-        <div className="section-gap px-4 py-4">
-          <Collapsible title="Notes" count={notes.length} defaultOpen={notes.length > 0}>
+        {/*
+          --- collapsible detail ----------------------------------------
+          One grouped list rather than five separate cards. See the note on
+          `Collapsible`'s `flat` prop: this is the whole lower half of the lead
+          screen, and as a stack of rectangles it was the most widget-like thing
+          in the product.
+        */}
+        <div className="plate row-group my-4 overflow-hidden sm:mx-4 sm:rounded-card sm:border">
+          <Collapsible flat title="Notes" count={notes.length} defaultOpen={notes.length > 0}>
             {notes.length === 0 ? (
               <p className="text-[14px] text-ink-mute">No notes yet.</p>
             ) : (
               <ul className="space-y-3.5">
                 {notes.map((n) => (
-                  <li key={n.id} className="border-b border-ink/[0.06] pb-3 last:border-0 last:pb-0">
+                  <li key={n.id} className="border-b border-line-soft pb-3 last:border-0 last:pb-0">
                     <p className="text-[14.5px] leading-relaxed">{n.body || '(tags only)'}</p>
                     {n.tags.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         {n.tags.map((t) => (
                           <span
                             key={t}
-                            className="rounded-full bg-ink/[0.06] px-2 py-0.5 text-[11px] font-semibold text-ink-soft"
+                            className="rounded-full bg-surface-field px-2 py-0.5 text-[11px] font-semibold text-ink-soft"
                           >
                             {t.replace(/_/g, ' ')}
                           </span>
@@ -210,11 +221,11 @@ export function PropertyDetail() {
             </Button>
           </Collapsible>
 
-          <Collapsible title="Photos" count={photos.length} defaultOpen={photos.length > 0}>
+          <Collapsible flat title="Photos" count={photos.length} defaultOpen={photos.length > 0}>
             <PhotoStrip propertyId={property.id} photos={photos} />
           </Collapsible>
 
-          <Collapsible title="Visit history" count={visits.length}>
+          <Collapsible flat title="Visit history" count={visits.length}>
             {visits.length === 0 ? (
               <p className="text-[14px] text-ink-mute">No completed visits recorded.</p>
             ) : (
@@ -249,7 +260,7 @@ export function PropertyDetail() {
             )}
           </Collapsible>
 
-          <Collapsible title="Timeline" count={timeline.length}>
+          <Collapsible flat title="Timeline" count={timeline.length}>
             {timeline.length === 0 ? (
               <p className="text-[14px] text-ink-mute">Nothing recorded yet.</p>
             ) : (
@@ -269,7 +280,7 @@ export function PropertyDetail() {
             )}
           </Collapsible>
 
-          <Collapsible title="Property details">
+          <Collapsible flat title="Property details">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[14px]">
               <Detail label="Owner occupied" value={property.ownerOccupied ? 'Yes' : 'No'} />
               <Detail

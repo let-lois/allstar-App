@@ -130,12 +130,12 @@ export default function AdminLeads() {
           }}
           type="search"
           placeholder="Search address, city, ZIP or owner"
-          className="focusable min-h-[40px] w-72 rounded-field border border-ink/10 px-3 text-sm"
+          className="focusable min-h-[40px] w-72 rounded-field border border-line px-3 text-sm"
         />
         <select
           value={repFilter}
           onChange={(e) => setRepFilter(e.target.value)}
-          className="focusable min-h-[40px] rounded-field border border-ink/10 bg-surface px-2 text-sm"
+          className="focusable min-h-[40px] rounded-field border border-line bg-surface px-2 text-sm"
         >
           <option value="all">Everyone</option>
           <option value="unassigned">Unassigned</option>
@@ -148,7 +148,7 @@ export default function AdminLeads() {
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
-          className="focusable min-h-[40px] rounded-field border border-ink/10 bg-surface px-2 text-sm"
+          className="focusable min-h-[40px] rounded-field border border-line bg-surface px-2 text-sm"
         >
           <option value="address">By address</option>
           <option value="recent">Most recently visited</option>
@@ -213,7 +213,7 @@ export default function AdminLeads() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-card border border-ink/10 bg-surface">
+      <div className="overflow-x-auto rounded-card border border-line bg-surface">
         <table className="w-full min-w-[880px] text-sm">
           <thead className="bg-surface-sunk text-xs text-ink-mute">
             <tr>
@@ -297,7 +297,7 @@ function Row({
 }) {
   const outcome = p.lastOutcome ? outcomeByCode(p.lastOutcome) : undefined
   return (
-    <tr className={`border-t border-ink/[0.06] ${checked ? 'bg-brand-50' : 'hover:bg-surface-field'}`}>
+    <tr className={`border-t border-line-soft ${checked ? 'bg-brand-50' : 'hover:bg-surface-field'}`}>
       <td className="px-3 py-2.5">
         <input
           type="checkbox"

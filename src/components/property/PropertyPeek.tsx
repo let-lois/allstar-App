@@ -30,7 +30,7 @@ export function PropertyPeek({
       <div>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="truncate text-lg font-bold leading-tight">{property.address1}</h3>
+            <h3 className="truncate text-lg font-semibold leading-tight">{property.address1}</h3>
             <p className="truncate text-sm text-ink-mute">
               {cityLine(property)}
             </p>
@@ -59,7 +59,7 @@ export function PropertyPeek({
           </div>
           {property.opportunityValue != null && (
             <div className="shrink-0 text-right">
-              <p className="nums font-bold text-good">
+              <p className="nums font-semibold text-good">
                 {moneyFull(property.opportunityValue)}
               </p>
               <p className="text-[11px] text-ink-mute">Opportunity</p>

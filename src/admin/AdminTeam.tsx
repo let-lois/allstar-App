@@ -149,14 +149,14 @@ export function AdminTeam() {
           onChange={(e) => setQuery(e.target.value)}
           type="search"
           placeholder="Search name or email"
-          className="focusable min-h-[40px] w-64 rounded-field border border-ink/10 px-3 text-sm"
+          className="focusable min-h-[40px] w-64 rounded-field border border-line px-3 text-sm"
         />
         {(['all', 'field_rep', 'manager', 'client_admin'] as const).map((r) => (
           <Chip key={r} size="sm" selected={roleFilter === r} onClick={() => setRoleFilter(r)}>
             {r === 'all' ? 'All roles' : ROLE_LABEL[r]}
           </Chip>
         ))}
-        <span className="mx-2 h-6 w-px bg-ink/10" />
+        <span className="mx-2 h-6 w-px bg-line" />
         {RANGES.map((r) => (
           <Chip key={r.key} size="sm" selected={range === r.key} onClick={() => setRange(r.key)}>
             {r.label}
@@ -164,7 +164,7 @@ export function AdminTeam() {
         ))}
       </FilterBar>
 
-      <div className="overflow-hidden rounded-card border border-ink/10 bg-surface">
+      <div className="overflow-hidden rounded-card border border-line bg-surface">
         <table className="w-full text-sm">
           <thead className="bg-surface-sunk text-xs text-ink-mute">
             <tr>
@@ -185,7 +185,7 @@ export function AdminTeam() {
               const t = todayById.get(m.id)
               const isRep = m.role === 'field_rep'
               return (
-                <tr key={m.id} className="border-t border-ink/[0.06] hover:bg-surface-field">
+                <tr key={m.id} className="border-t border-line-soft hover:bg-surface-field">
                   <td className="px-5 py-3">
                     <span className="flex items-center gap-2.5">
                       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-50 text-[11px] font-bold text-brand-600">

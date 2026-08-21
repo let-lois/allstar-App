@@ -158,7 +158,7 @@ export function MapSearch({
         results open lands on the backdrop and does nothing visible — the second
         time an unpainted overlay has quietly eaten taps in this codebase.
       */}
-      <div className="relative z-20 flex min-h-tap items-center gap-1.5 rounded-full bg-surface/95 px-3 shadow-raise ring-1 ring-ink/[0.06] backdrop-blur">
+      <div className="relative z-20 flex min-h-tap items-center gap-1.5 rounded-full border border-line bg-surface/95 px-3 shadow-card backdrop-blur">
         <span aria-hidden className="shrink-0 text-[13px] text-ink-mute">
           ⌕
         </span>
@@ -203,7 +203,7 @@ export function MapSearch({
             onClick={() => setOpen(false)}
             className="fixed inset-0 z-10 cursor-default"
           />
-          <div className="absolute inset-x-0 z-20 mt-1.5 overflow-hidden rounded-card bg-surface shadow-float ring-1 ring-ink/[0.08]">
+          <div className="absolute inset-x-0 z-20 mt-1.5 overflow-hidden rounded-card border border-line bg-surface shadow-raise">
             {leads.length > 0 && (
               <ul aria-label="Matching leads">
                 {leads.map((p) => (
@@ -213,7 +213,7 @@ export function MapSearch({
                         onPickLead(p.id)
                         setOpen(false)
                       }}
-                      className="flex min-h-tap w-full items-center gap-2.5 border-b border-ink/[0.06] px-3 py-2 text-left active:bg-surface-field"
+                      className="flex min-h-tap w-full items-center gap-2.5 border-b border-line-soft px-3 py-2 text-left active:bg-surface-field"
                     >
                       <span
                         aria-hidden
@@ -247,7 +247,7 @@ export function MapSearch({
                   one moves the map somewhere there is no lead. Without the label
                   it reads as "we found your lead" and it has not.
                 */}
-                <p className="eyebrow border-b border-ink/[0.06] bg-surface-sunk px-3 py-1.5">
+                <p className="eyebrow border-b border-line-soft bg-surface-sunk px-3 py-1.5">
                   Not a lead — go to this address
                 </p>
                 <ul aria-label="Matching addresses">
@@ -260,7 +260,7 @@ export function MapSearch({
                           })
                           setOpen(false)
                         }}
-                        className="flex min-h-tap w-full flex-col items-start justify-center gap-0.5 border-b border-ink/[0.06] px-3 py-2 text-left last:border-0 active:bg-surface-field"
+                        className="flex min-h-tap w-full flex-col items-start justify-center gap-0.5 border-b border-line-soft px-3 py-2 text-left last:border-0 active:bg-surface-field"
                       >
                         <span className="text-[14px] font-semibold leading-tight">{hit.main}</span>
                         {hit.secondary && (

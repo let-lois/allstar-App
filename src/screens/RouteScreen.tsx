@@ -47,7 +47,7 @@ export function RouteScreen() {
         <TopBar title="Route" back="/today" />
         <div className="grid flex-1 place-items-center p-8 text-center">
           <div className="max-w-[19rem]">
-            <p className="text-[19px] font-bold">No route planned yet</p>
+            <p className="text-[19px] font-semibold">No route planned yet</p>
             <p className="mt-2 text-[14px] leading-relaxed text-ink-mute">
               {routable.length > 0
                 ? `${routable.length.toLocaleString()} lead${routable.length === 1 ? '' : 's'} are waiting. Put the closest ones in walking order and get going.`
@@ -87,7 +87,7 @@ export function RouteScreen() {
 
       <div className="scroll-pane pad-nav bg-surface">
         <div className="content-col">
-        <div className="sticky top-0 z-10 border-b border-ink/[0.06] bg-surface/95 px-4 py-3 backdrop-blur">
+        <div className="sticky top-0 z-10 border-b border-line-soft bg-surface/95 px-4 py-3 backdrop-blur">
           <ProgressBar
             value={progress.done}
             max={Math.max(progress.total, 1)}
@@ -121,7 +121,7 @@ export function RouteScreen() {
                         }
                       : undefined
                   }
-                  className="border-b border-ink/[0.06]"
+                  className="border-b border-line-soft"
                 >
                   <div
                     className={`flex min-h-[72px] items-center gap-3 px-4 py-3 ${
@@ -129,14 +129,14 @@ export function RouteScreen() {
                     }`}
                   >
                     <span
-                      className={`nums grid h-9 w-9 shrink-0 place-items-center rounded-full text-[14px] font-bold ${
+                      className={`nums grid h-9 w-9 shrink-0 place-items-center rounded-full text-[14px] font-semibold ${
                         isDone
                           ? 'bg-good-bg text-good'
                           : isSkipped
-                            ? 'bg-ink/[0.06] text-ink-mute'
+                            ? 'bg-surface-field text-ink-mute'
                             : isActive
                               ? 'bg-brand-600 text-white'
-                              : 'bg-ink/[0.06] text-ink-mute'
+                              : 'bg-surface-field text-ink-mute'
                       }`}
                     >
                       {isDone ? '✓' : isSkipped ? '–' : stop.order + 1}
@@ -164,7 +164,7 @@ export function RouteScreen() {
                         <Link
                           to={`/navigate/${p.id}`}
                           aria-label={`Navigate to ${p.address1}`}
-                          className="press focusable grid h-11 w-11 place-items-center rounded-field bg-surface text-ink-soft ring-1 ring-ink/10"
+                          className="press focusable grid h-11 w-11 place-items-center rounded-field bg-surface text-ink-soft ring-1 ring-line"
                         >
                           <IconNavigate />
                         </Link>

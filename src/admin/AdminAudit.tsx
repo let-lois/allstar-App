@@ -113,7 +113,7 @@ export default function AdminAudit() {
         ))}
       </FilterBar>
 
-      <div className="overflow-hidden rounded-card border border-ink/10 bg-surface">
+      <div className="overflow-hidden rounded-card border border-line bg-surface">
         {shown.length === 0 && !loading ? (
           <p className="p-8 text-center text-sm text-ink-mute">
             {entries.length === 0
@@ -125,7 +125,7 @@ export default function AdminAudit() {
             {shown.map((e) => (
               <li
                 key={e.id}
-                className="flex items-start gap-3 border-b border-ink/[0.06] px-5 py-3 last:border-0"
+                className="flex items-start gap-3 border-b border-line-soft px-5 py-3 last:border-0"
               >
                 <span
                   aria-hidden

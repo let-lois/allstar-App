@@ -167,7 +167,7 @@ export function ManageUser({
           </Button>
         </div>
 
-        <div className="mt-3 border-t border-ink/[0.06] pt-3">
+        <div className="mt-3 border-t border-line-soft pt-3">
           <Button
             variant="secondary"
             disabled={busy !== null}
@@ -186,7 +186,7 @@ export function ManageUser({
           </p>
 
           {link && (
-            <div className="mt-3 rounded-lg bg-surface-sunk p-3 ring-1 ring-ink/10">
+            <div className="mt-3 rounded-lg bg-surface-sunk p-3 ring-1 ring-line">
               <p className="break-all font-mono text-xs">{link}</p>
               <Button
                 size="sm"
@@ -211,7 +211,7 @@ export function ManageUser({
 
       {/* --- role -------------------------------------------------------- */}
       {!isSelf && (
-        <section className="border-t border-ink/[0.06] pt-4">
+        <section className="border-t border-line-soft pt-4">
           <h3 className="text-sm font-bold">Role</h3>
           <p className="mt-1 text-xs leading-relaxed text-ink-mute">
             Changing it signs {user.name.split(' ')[0]} out, so a demotion takes effect on
@@ -243,7 +243,7 @@ export function ManageUser({
 
       {/* --- access ------------------------------------------------------ */}
       {!isSelf && (
-        <section className="border-t border-ink/[0.06] pt-4">
+        <section className="border-t border-line-soft pt-4">
           <h3 className="text-sm font-bold">Access</h3>
           {user.pending && user.active && (
             <p className="mt-1 rounded-lg bg-warn-bg p-2.5 text-xs leading-relaxed text-warn">
@@ -298,7 +298,7 @@ export function ManageUser({
 
       {/* --- delete ------------------------------------------------------ */}
       {!isSelf && (
-        <section className="border-t border-ink/[0.06] pt-4">
+        <section className="border-t border-line-soft pt-4">
           <h3 className="text-sm font-bold text-bad">Delete permanently</h3>
 
           {!confirming ? (
@@ -385,7 +385,7 @@ export function ManageUser({
       )}
 
       {isSelf && (
-        <p className="border-t border-ink/[0.06] pt-4 text-xs text-ink-mute">
+        <p className="border-t border-line-soft pt-4 text-xs text-ink-mute">
           You can’t remove or delete your own account — that’s how a company locks
           itself out. Ask another administrator.
         </p>
@@ -396,7 +396,7 @@ export function ManageUser({
 
 function Count({ label, n }: { label: string; n: number }) {
   return (
-    <li className="flex justify-between border-b border-bad/25/60 py-0.5">
+    <li className="flex justify-between border-b border-line-soft py-0.5">
       <span>{label}</span>
       <span className="nums font-semibold">{n.toLocaleString()}</span>
     </li>

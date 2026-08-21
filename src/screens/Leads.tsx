@@ -108,7 +108,7 @@ export function Leads() {
                 inputMode="search"
                 enterKeyHint="search"
                 placeholder="Address or name"
-                className="field h-[46px] bg-surface-field pl-11 pr-3 md:max-w-md"
+                className="field h-[48px] pl-11 pr-3 md:max-w-md"
               />
             </label>
             <div className="snap-x-row">
@@ -122,7 +122,7 @@ export function Leads() {
                   {s.label}
                 </Chip>
               ))}
-              <span className="mx-1 w-px shrink-0 self-stretch bg-ink/10" />
+              <span className="mx-1 w-px shrink-0 self-stretch bg-line" />
               {STATUS_FILTERS.map((s) => (
                 <Chip key={s} size="sm" selected={status === s} onClick={() => setStatus(s)}>
                   {s === 'all' ? 'All' : STATUS_LABEL[s]}
@@ -139,7 +139,7 @@ export function Leads() {
         context (who, history, next action) rather than wider rows.
       */}
       <div className="flex min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:max-w-[460px] lg:border-r lg:border-ink/10">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:max-w-[460px] lg:border-r lg:border-line">
           <VirtualList
             items={list}
             itemHeight={ROW_HEIGHT}

@@ -20,6 +20,11 @@ const VIEWPORTS = [
   { name: '320-small-android', width: 320, height: 640 },
   { name: '375-iphone-se', width: 375, height: 667 },
   { name: '390-iphone-14', width: 390, height: 844 },
+  // 393 and 412 are the two commonest Android widths — Pixel and the Samsung A
+  // series. They sit between the iPhone sizes, which is exactly where a layout
+  // tuned only to Apple's widths breaks: one breakpoint short of `sm`.
+  { name: '393-pixel', width: 393, height: 852 },
+  { name: '412-android', width: 412, height: 915 },
   { name: '430-iphone-pro-max', width: 430, height: 932 },
   { name: '768-tablet', width: 768, height: 1024 },
   { name: '1024-desktop', width: 1024, height: 800 },

@@ -607,17 +607,33 @@ export function FieldMap({
 
         {/* clusters */}
         {clusters.map((c, i) => (
+          /*
+            A white bubble with a teal hairline and a teal count.
+
+            It used to be a white disc ringed in near-black over a soft dark
+            halo, and eight of those on one screen read as a diagram rather than
+            a map — the loudest things on it were the things standing in for the
+            pins. The count is what carries the meaning, so the count gets the
+            colour and the ring is only there to hold the shape against imagery.
+          */
           <g key={`c${i}`} data-marker="cluster" data-index={i} className="cursor-pointer">
-            <circle cx={c.x} cy={c.y} r={23} fill="#111827" opacity={0.10} />
-            <circle cx={c.x} cy={c.y} r={19} fill="#ffffff" stroke="#111827" strokeWidth={1.5} />
+            <circle cx={c.x} cy={c.y} r={19} fill="#ffffff" opacity={0.55} />
+            <circle
+              cx={c.x}
+              cy={c.y}
+              r={17}
+              fill="#ffffff"
+              stroke="#087F8C"
+              strokeWidth={1.25}
+            />
             <text
               x={c.x}
               y={c.y + 5}
               textAnchor="middle"
               className="nums"
-              fontSize={14}
-              fontWeight={700}
-              fill="#111827"
+              fontSize={13.5}
+              fontWeight={600}
+              fill="#056470"
             >
               {c.members.length}
             </text>
@@ -669,19 +685,19 @@ export function FieldMap({
           className="pointer-events-auto absolute right-3 flex flex-col items-center gap-2"
           style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
         >
-          <div className="flex flex-col overflow-hidden rounded-card bg-surface shadow-float ring-1 ring-ink/[0.06]">
+          <div className="flex flex-col overflow-hidden rounded-pill border border-line bg-surface shadow-card">
             <button
               onClick={() => setView((v) => ({ ...v, zoom: clamp(v.zoom + 1, MIN_ZOOM, MAX_ZOOM) }))}
               aria-label="Zoom in"
-              className="focusable grid h-12 w-12 place-items-center text-xl font-semibold text-ink-soft active:bg-ink/[0.06]"
+              className="focusable grid h-11 w-11 place-items-center text-xl font-medium text-ink-soft active:bg-surface-field"
             >
               +
             </button>
-            <span className="h-px bg-ink/10" />
+            <span className="h-px bg-line-soft" />
             <button
               onClick={() => setView((v) => ({ ...v, zoom: clamp(v.zoom - 1, MIN_ZOOM, MAX_ZOOM) }))}
               aria-label="Zoom out"
-              className="focusable grid h-12 w-12 place-items-center text-xl font-semibold text-ink-soft active:bg-ink/[0.06]"
+              className="focusable grid h-11 w-11 place-items-center text-xl font-medium text-ink-soft active:bg-surface-field"
             >
               −
             </button>
@@ -700,7 +716,7 @@ export function FieldMap({
                 saveLayer(next)
               }}
               aria-label={`Switch to ${layer === 'streets' ? 'satellite' : 'streets'} view`}
-              className="press focusable grid h-12 w-12 place-items-center rounded-card bg-surface text-[10px] font-bold uppercase tracking-wide text-ink-soft shadow-float ring-1 ring-ink/[0.06]"
+              className="press focusable grid h-11 w-11 place-items-center rounded-pill border border-line bg-surface text-[10px] font-semibold uppercase tracking-wide text-ink-soft shadow-card"
             >
               {layer === 'streets' ? 'SAT' : 'MAP'}
             </button>
@@ -722,10 +738,14 @@ export function FieldMap({
             }}
             aria-label="Center on my location"
             aria-pressed={followMe}
-            className={`press focusable grid h-12 w-12 place-items-center rounded-full shadow-float ${
-              followMe
-                ? 'bg-brand-600 text-white'
-                : 'bg-surface text-ink-soft ring-1 ring-ink/[0.06]'
+            /*
+              White with a teal glyph when following, rather than a filled teal
+              disc. Two saturated circles stacked above the quick-action button
+              made the corner of the map the busiest part of the screen — and the
+              filled one was the *passive* state indicator, not the action.
+            */
+            className={`press focusable grid h-11 w-11 place-items-center rounded-full border border-line bg-surface shadow-card ${
+              followMe ? 'text-brand-600' : 'text-ink-soft'
             }`}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

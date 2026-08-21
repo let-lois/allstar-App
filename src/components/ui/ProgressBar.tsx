@@ -27,12 +27,14 @@ export function ProgressBar({
 }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0
   const width = value > 0 ? Math.max(pct, 4) : 0
+  // brand-500 rather than the brighter 400: at 8px tall a pale fill on a pale
+  // track disappears, and this is the bar a manager reads at arm's length.
   const fill =
-    tone === 'good' ? 'bg-good' : tone === 'neutral' ? 'bg-ink-faint' : 'bg-brand-400'
+    tone === 'good' ? 'bg-good' : tone === 'neutral' ? 'bg-ink-faint' : 'bg-brand-500'
 
   return (
     <div
-      className={`sunk h-2.5 overflow-hidden rounded-full bg-ink/[0.07] ${className}`}
+      className={`h-2 overflow-hidden rounded-full bg-line-soft ${className}`}
       role="progressbar"
       aria-valuenow={value}
       aria-valuemin={0}
@@ -40,7 +42,7 @@ export function ProgressBar({
       aria-label={label}
     >
       <div
-        className={`fill-gloss h-full rounded-full ${fill} ${animate ? 'anim-bar' : ''}`}
+        className={`h-full rounded-full ${fill} ${animate ? 'anim-bar' : ''}`}
         style={{ width: `${width}%` }}
       />
     </div>

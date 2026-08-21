@@ -114,9 +114,9 @@ export function Today() {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="eyebrow">Route progress</p>
-                <p className="nums mt-1.5 text-kpi font-extrabold text-ink">
+                <p className="nums mt-1 text-[34px] font-semibold leading-none tracking-[-0.02em] text-ink">
                   {progress.done}
-                  <span className="text-[19px] font-bold text-ink-faint"> / {progress.total}</span>
+                  <span className="text-[19px] font-medium text-ink-faint"> / {progress.total}</span>
                 </p>
                 <p className="mt-1 text-[13px] text-ink-mute">
                   {progress.remaining} doors left
@@ -127,9 +127,11 @@ export function Today() {
                   green, and the doors number stays neutral. */}
               <div className="shrink-0 text-right">
                 <p className="eyebrow">Conversations</p>
-                <p className="nums mt-1.5 text-kpi-sm font-extrabold text-good">{wins}</p>
+                <p className="nums mt-1 text-[28px] font-semibold leading-none tracking-[-0.02em] text-brand-600">
+                  {wins}
+                </p>
                 {pipelineToday > 0 && (
-                  <p className="nums mt-1 text-[13px] font-semibold text-good">
+                  <p className="nums mt-1 text-[13px] font-medium text-ink-mute">
                     +{money(pipelineToday)} pipeline
                   </p>
                 )}
@@ -159,7 +161,7 @@ export function Today() {
             */
             <Card padded={false} className="overflow-hidden" aria-label="Next property">
               <div className="flex items-center justify-between gap-2 bg-brand-50 px-4 py-2.5">
-                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-brand-600">
+                <p className="text-[12.5px] font-semibold text-brand-600">
                   Next stop
                 </p>
                 {dist != null && (
@@ -174,7 +176,7 @@ export function Today() {
                 className="flex w-full items-center gap-3 px-4 pb-3 pt-4 text-left active:bg-surface-field"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-title font-extrabold">
+                  <span className="block truncate text-[23px] font-semibold tracking-[-0.02em]">
                     {nextStop.address1}
                   </span>
                   <span className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-ink-mute">
@@ -205,7 +207,7 @@ export function Today() {
                 */}
                 <Link
                   to={`/navigate/${nextStop.id}`}
-                  className="press focusable flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-[16px] bg-surface text-[15px] font-semibold ring-1 ring-ink/10 active:bg-surface-field"
+                  className="press focusable flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-[16px] bg-surface text-[15px] font-semibold ring-1 ring-line active:bg-surface-field"
                 >
                   <IconNavigate />
                   Navigate
@@ -231,7 +233,7 @@ export function Today() {
             <PlanDayCard />
           ) : (
             <Card className="px-5 py-6 text-center">
-              <p className="text-[19px] font-bold">Route complete</p>
+              <p className="text-[19px] font-semibold">Route complete</p>
               <p className="mx-auto mt-1.5 max-w-[34ch] text-[14px] leading-relaxed text-ink-mute">
                 {progress.done} of {progress.total} doors knocked today. Nice work.
               </p>
@@ -260,8 +262,8 @@ export function Today() {
                         className="flex min-h-[68px] w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-field"
                       >
                         <span
-                          className={`nums w-[58px] shrink-0 rounded-field px-1 py-2 text-center text-[12.5px] font-bold ${
-                            past ? 'bg-ink/[0.06] text-ink-mute' : 'bg-info-bg text-info'
+                          className={`nums w-[58px] shrink-0 rounded-field px-1 py-2 text-center text-[12.5px] font-semibold ${
+                            past ? 'bg-surface-field text-ink-mute' : 'bg-info-bg text-info'
                           }`}
                         >
                           {time(a.startsAt)}
@@ -356,10 +358,17 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <Card padded={false} className="overflow-hidden">
-      <SectionHeader title={title} count={count} className="px-4 pb-2.5 pt-4" />
-      {children}
-    </Card>
+    <section className="section">
+      <SectionHeader title={title} count={count} standalone />
+      {/*
+        Full-bleed on a phone, and a card once there is room for a margin. A
+        titled band of rows reads as part of this screen; the same rows inside a
+        rounded rectangle read as a widget that happens to be on it.
+      */}
+      <div className="plate -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+        {children}
+      </div>
+    </section>
   )
 }
 
@@ -438,7 +447,7 @@ function PlanDayCard() {
   if (available.length === 0) {
     return (
       <Card className="px-5 py-6 text-center">
-        <p className="text-[19px] font-bold">No doors to walk yet</p>
+        <p className="text-[19px] font-semibold">No doors to walk yet</p>
         <p className="mx-auto mt-1.5 max-w-[36ch] text-[14px] leading-relaxed text-ink-mute">
           Nothing is assigned to you for today. Your manager can import a lead list
           and assign it — or you can add a house yourself while you’re standing in
@@ -455,7 +464,7 @@ function PlanDayCard() {
 
   return (
     <Card className="px-5 py-6 text-center">
-      <p className="text-[19px] font-bold">Ready to plan your day</p>
+      <p className="text-[19px] font-semibold">Ready to plan your day</p>
       <p className="mx-auto mt-1.5 max-w-[36ch] text-[14px] leading-relaxed text-ink-mute">
         {available.length.toLocaleString()} lead{available.length === 1 ? '' : 's'} waiting.
         We’ll put the closest {target} in walking order

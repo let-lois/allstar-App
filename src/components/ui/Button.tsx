@@ -14,42 +14,27 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 /*
- * The primary button is `brand-600`, not the brighter brand orange.
+ * Filled variants are flat colour. No gradient, no gloss, no bevel.
  *
- * That is a measured decision rather than a taste one: white text on the logo
- * teal #07B3CA is 2.53:1, which fails at every text size. #0A6B7D is 6.15:1 and
- * still reads unmistakably teal. The bright shade is used for fills — bars,
- * dots, active indicators — where nothing has to be legible on top of it.
- */
-/*
- * The filled variants carry the embossed treatment; the quiet ones deliberately
- * do not. Their gradients live here as custom properties so `.btn-3d` in
- * index.css stays colour-agnostic — the same arrangement the nav badges use.
+ * Which shade is a measured decision rather than a taste one. White on the brand
+ * accent #0FA9B8 is 2.84:1 and fails at every text size; `brand-600` #087F8C is
+ * 4.75:1 and still reads unmistakably teal. The brighter shades are for fills —
+ * bars, dots, active indicators — where nothing has to be legible on top.
  *
- * White text is legible on all three: these gradients stay dark enough that the
- * gloss overlay cannot lift the top stop into the range where it fails, which is
- * exactly what ruled white glyphs out for the light nav badges.
+ * Pressed states darken by one step instead of deforming, which is what the
+ * emboss used to do with an inset shadow.
  */
-const FILL: Record<string, string> = {
-  // #0E8FA6 would be the brighter, more obviously glossy top — and it measures
-  // 4.38:1 for the white label once the gloss overlay lifts it, just under AA.
-  // #0A8296 is the lightest stop that clears 4.5:1 (5.14:1).
-  primary: '[--btn-top:#0A8296] [--btn-bottom:#064E5D]',
-  danger: '[--btn-top:#DC2626] [--btn-bottom:#991B1B]',
-  success: '[--btn-top:#1D7A44] [--btn-bottom:#14532D]',
-}
-
 const variants: Record<Variant, string> = {
-  primary: `btn-3d text-white ${FILL.primary}`,
-  secondary: 'bg-surface text-ink ring-1 ring-ink/10 active:bg-surface-field',
-  ghost: 'bg-transparent text-ink-mute active:bg-ink/[0.05]',
-  danger: `btn-3d text-white ${FILL.danger}`,
-  success: `btn-3d text-white ${FILL.success}`,
+  primary: 'btn-fill',
+  secondary: 'bg-surface text-ink border border-line active:bg-surface-field',
+  ghost: 'bg-transparent text-ink-mute active:bg-ink/[0.04]',
+  danger: 'bg-bad text-white active:bg-[#8F1616]',
+  success: 'bg-good text-white active:bg-[#0F4A26]',
   // For dark/saturated backgrounds (the visit-complete screen). This exists as a
   // variant rather than a `className` override because competing Tailwind
   // utilities resolve by stylesheet order, not by the order they're written —
   // overriding here produced a white button with white text.
-  inverse: 'bg-white text-good active:bg-surface-field shadow-raise',
+  inverse: 'bg-white text-good active:bg-surface-field shadow-card',
 }
 
 /*
@@ -61,9 +46,9 @@ const variants: Record<Variant, string> = {
  * a pill, and a screen of pills has no way left to signal shape hierarchy.
  */
 const sizes: Record<Size, string> = {
-  sm: 'min-h-[44px] px-3.5 text-[13.5px] rounded-field gap-1.5',
+  sm: 'min-h-[44px] px-4 text-[13.5px] rounded-field gap-1.5',
   md: 'min-h-tap px-4 text-[15px] rounded-field gap-2',
-  lg: 'min-h-[54px] px-5 text-[16.5px] rounded-[16px] gap-2.5 font-semibold',
+  lg: 'min-h-[52px] px-5 text-[16px] rounded-[16px] gap-2.5 font-semibold',
 }
 
 export function Button({

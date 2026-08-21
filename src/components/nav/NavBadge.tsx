@@ -1,46 +1,43 @@
-import { useCallback, useRef, useState, type ReactNode } from 'react'
-import { accentVars } from './accents'
+import { type ReactNode } from 'react'
 
 /**
- * The embossed badge that wraps a nav icon.
+ * The pill behind a nav icon.
  *
- * Owns the tap bounce rather than leaving it to `:active`, for two reasons: an
- * animation bound to `:active` restarts unpredictably when a press turns into a
- * scroll, which on a nav bar at the bottom of a scrolling screen is most presses;
- * and the selected badge holds a persistent transform that `:active` would fight.
+ * This replaced a glossy embossed badge with a per-destination gradient, a glass
+ * reflection and a drop shadow. Five of those across the bottom of every screen
+ * was the loudest surface in the product, and the clearest sign the interface had
+ * been styled rather than designed: a navigation bar is somewhere a thumb goes,
+ * not the centrepiece.
  *
- * Motion is neutralised globally by the reduced-motion rule in the base layer, so
- * this stays a class toggle rather than growing its own media query.
+ * What is left is two states. Inactive is nothing — the icon sits on the white
+ * bar in mid grey. Selected gets a soft teal pill and a teal icon, which is
+ * 4.34:1 against that pill, so shape and colour each carry the state on their
+ * own and neither depends on the other being noticed.
+ *
+ * The accent table went with the gradients. Colour distinguished nothing (the
+ * five steps sat 1.3-1.9:1 apart) while costing a file of measured values, so
+ * the icon and its label do that job now, as they always actually did.
  */
 export function NavBadge({
-  to,
   active,
   children,
   count,
-  size = 44,
+  size,
 }: {
-  to: string
+  /** Kept in the signature — the side rail passes a route for its own reasons. */
+  to?: string
   active: boolean
   children: ReactNode
   /** Real, actionable count only. Rendered as "9+" past nine. */
   count?: number
+  /** The rail is denser than the bar; the bar leaves this alone. */
   size?: number
 }) {
-  const [popping, setPopping] = useState(false)
-  const timer = useRef<number | null>(null)
-
-  const pop = useCallback(() => {
-    if (timer.current) window.clearTimeout(timer.current)
-    setPopping(true)
-    timer.current = window.setTimeout(() => setPopping(false), 220)
-  }, [])
-
   return (
     <span
-      onPointerDown={pop}
       data-active={active ? 'true' : 'false'}
-      style={{ ...accentVars(to), width: size, height: size }}
-      className={`badge-3d grid shrink-0 place-items-center ${popping ? 'anim-pop' : ''}`}
+      style={size ? { width: size, height: size - 6 } : undefined}
+      className="nav-pill relative shrink-0"
     >
       {children}
       {count != null && count > 0 && (

@@ -60,7 +60,7 @@ export function PhotoStrip({
           onClick={() => openCamera((files) => void handleFiles(files))}
           disabled={busy}
           aria-label="Take photo"
-          className="press focusable grid h-24 w-24 shrink-0 place-items-center rounded-card border-2 border-dashed border-ink/15 bg-surface-field text-ink-mute active:bg-ink/[0.06] disabled:opacity-50"
+          className="press focusable grid h-24 w-24 shrink-0 place-items-center rounded-card border-2 border-dashed border-ink/15 bg-surface-field text-ink-mute active:bg-surface-field disabled:opacity-50"
         >
           <span className="flex flex-col items-center gap-1">
             <IconCamera />
@@ -74,7 +74,7 @@ export function PhotoStrip({
           onClick={() => openLibrary((files) => void handleFiles(files))}
           disabled={busy}
           aria-label="Choose from library"
-          className="press focusable grid h-24 w-24 shrink-0 place-items-center rounded-card border-2 border-dashed border-ink/15 bg-surface-field text-ink-mute active:bg-ink/[0.06] disabled:opacity-50"
+          className="press focusable grid h-24 w-24 shrink-0 place-items-center rounded-card border-2 border-dashed border-ink/15 bg-surface-field text-ink-mute active:bg-surface-field disabled:opacity-50"
         >
           <span className="flex flex-col items-center gap-1">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
@@ -91,7 +91,7 @@ export function PhotoStrip({
             <button
               key={p.id}
               onClick={() => setViewing(i)}
-              className="press relative h-24 w-24 shrink-0 overflow-hidden rounded-card bg-ink/10"
+              className="press relative h-24 w-24 shrink-0 overflow-hidden rounded-card bg-line"
             >
               <img
                 src={p.dataUrl}
@@ -145,7 +145,7 @@ export function PhotoStrip({
               <button
                 key={c.key}
                 onClick={() => void commit(c.key)}
-                className="press focusable flex min-h-[64px] items-center gap-2.5 rounded-card border-2 border-ink/10 px-4 font-semibold active:bg-surface-field"
+                className="press focusable flex min-h-[64px] items-center gap-2.5 rounded-card border-2 border-line px-4 font-semibold active:bg-surface-field"
               >
                 <span className="text-xl" aria-hidden>
                   {c.glyph}

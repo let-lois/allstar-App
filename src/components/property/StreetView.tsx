@@ -102,7 +102,7 @@ export function StreetView({
       href={pano}
       target="_blank"
       rel="noreferrer"
-      className="focusable mt-3.5 block overflow-hidden rounded-card ring-1 ring-ink/[0.08]"
+      className="focusable mt-3.5 block overflow-hidden rounded-card ring-1 ring-line"
       aria-label={`Street view of ${address} — opens in Google Maps`}
     >
       <img

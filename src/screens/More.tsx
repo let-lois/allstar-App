@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { SyncDetail, useSync } from '../components/sync/SyncBadge'
 import { Button } from '../components/ui/Button'
-import { Card, SectionHeader } from '../components/ui/Card'
+import { SectionHeader } from '../components/ui/Card'
 import { Field } from '../components/ui/Input'
 import { Avatar } from '../components/ui/Avatar'
 import { Collapsible } from '../components/ui/Collapsible'
@@ -57,12 +57,17 @@ export function More() {
 
       <div className="scroll-pane pad-nav bg-surface-sunk">
         <div className="content-col page anim-rise">
-          {/* --- identity ------------------------------------------------- */}
-          <Card className="flex items-center gap-3.5">
+          {/*
+            --- identity -------------------------------------------------
+            Not in a card. Who you are is the page's own heading, and wrapping it
+            in a bordered rectangle made it read as the first of six widgets
+            rather than as the top of a settings screen.
+          */}
+          <div className="flex items-center gap-3.5 pb-1 pt-1">
             <Avatar initials={user?.avatarInitials ?? '?'} name={user?.name} size="lg" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[17px] font-bold">{user?.name}</p>
-              <p className="truncate text-[13px] text-ink-mute">
+              <p className="truncate text-[19px] font-semibold tracking-[-0.01em]">{user?.name}</p>
+              <p className="truncate text-[13.5px] text-ink-mute">
                 {ROLE_LABEL[user?.role ?? '']} · {user?.clientName}
               </p>
               {/*
@@ -71,17 +76,17 @@ export function More() {
                 dataset has no way to trust the app, and an admin demoing to a
                 prospect needs to know that nothing they tap is real.
               */}
-              <p className="eyebrow mt-1.5 truncate">
+              <p className="mt-1 truncate text-[12.5px] font-medium text-ink-faint">
                 {mode === 'live' ? 'Signed in · syncing to server' : 'Demo — sample data'}
               </p>
             </div>
-          </Card>
+          </div>
 
           {/* --- sync ----------------------------------------------------- */}
-          <Card>
-            <SectionHeader title="Sync &amp; offline" className="mb-3.5" />
+          <section className="section">
+            <SectionHeader title="Sync &amp; offline" standalone />
             <SyncDetail />
-          </Card>
+          </section>
 
           {/* --- what's cached ------------------------------------------- */}
           <Collapsible
@@ -193,7 +198,7 @@ export function More() {
               button would only offer to delete a rep's real work.
             */}
             {mode === 'demo' && (
-              <div className="mt-4 border-t border-ink/[0.06] pt-4">
+              <div className="mt-4 border-t border-line-soft pt-4">
                 <p className="text-[15px] font-semibold">Reset demo data</p>
                 <p className="mt-1 text-[13px] leading-snug text-ink-mute">
                   Restores the sample territory, routes and team activity. Clears any
@@ -221,17 +226,20 @@ export function More() {
             )}
           </Collapsible>
 
-          <nav className="card row-group overflow-hidden">
-            <MoreLink label="Today's route" onClick={() => nav('/route')} />
-            <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
-            <MoreLink label="Schedule an appointment" onClick={() => nav('/schedule/new')} />
-            {user?.role !== 'field_rep' && (
-              <>
-                <MoreLink label="Team activity" onClick={() => nav('/team')} />
-                <MoreLink label="Admin console" onClick={() => nav('/admin')} />
-              </>
-            )}
-          </nav>
+          <section className="section">
+            <SectionHeader title="Go to" standalone />
+            <nav className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+              <MoreLink label="Today's route" onClick={() => nav('/route')} />
+              <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
+              <MoreLink label="Schedule an appointment" onClick={() => nav('/schedule/new')} />
+              {user?.role !== 'field_rep' && (
+                <>
+                  <MoreLink label="Team activity" onClick={() => nav('/team')} />
+                  <MoreLink label="Admin console" onClick={() => nav('/admin')} />
+                </>
+              )}
+            </nav>
+          </section>
 
           {/*
             Self-service, because routing every forgotten password through an
@@ -315,14 +323,15 @@ function Row({ label, value }: { label: string; value: string }) {
   )
 }
 
+/** One settings row: label, chevron, 56px of thumb. */
 function MoreLink({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex min-h-[58px] w-full items-center justify-between px-4 text-left text-[15px] font-medium active:bg-surface-field"
+      className="flex min-h-[56px] w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-medium active:bg-surface-field"
     >
       {label}
-      <span className="text-ink-faint">
+      <span className="shrink-0 text-ink-faint">
         <IconChevron />
       </span>
     </button>

@@ -142,7 +142,7 @@ export function AdminTerritories() {
       description={`${rows.length} territories · ${totals.properties.toLocaleString()} properties · ${moneyFull(totals.open)} open`}
     >
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
-        <div className="overflow-hidden rounded-card border border-ink/10 bg-surface">
+        <div className="overflow-hidden rounded-card border border-line bg-surface">
           <table className="w-full text-sm">
             <thead className="bg-surface-sunk text-xs text-ink-mute">
               <tr>
@@ -159,7 +159,7 @@ export function AdminTerritories() {
                   key={t.id}
                   onClick={() => setSelected(t.id)}
                   aria-selected={selected === t.id}
-                  className={`cursor-pointer border-t border-ink/[0.06] ${
+                  className={`cursor-pointer border-t border-line-soft ${
                     selected === t.id ? 'bg-brand-50' : 'hover:bg-surface-field'
                   }`}
                 >
@@ -170,7 +170,7 @@ export function AdminTerritories() {
                       disabled={mode !== 'live' || saving !== null}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => void assign(t.id, e.target.value)}
-                      className="focusable min-h-[36px] rounded-lg border border-ink/10 bg-surface px-2 text-xs disabled:opacity-60"
+                      className="focusable min-h-[36px] rounded-lg border border-line bg-surface px-2 text-xs disabled:opacity-60"
                     >
                       <option value="">{t.mixed ? 'Mixed — pick one' : 'Unassigned'}</option>
                       {repOptions.map((r) => (
@@ -204,7 +204,7 @@ export function AdminTerritories() {
               ))}
             </tbody>
           </table>
-          <div className="border-t border-ink/[0.06] px-4 py-3 text-xs">
+          <div className="border-t border-line-soft px-4 py-3 text-xs">
             {assignError ? (
               <p role="alert" className="font-medium text-bad">
                 {assignError}
@@ -223,8 +223,8 @@ export function AdminTerritories() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-card border border-ink/10 bg-surface">
-          <div className="flex items-baseline justify-between border-b border-ink/[0.06] px-4 py-3">
+        <div className="overflow-hidden rounded-card border border-line bg-surface">
+          <div className="flex items-baseline justify-between border-b border-line-soft px-4 py-3">
             <h2 className="text-sm font-bold">
               {selected ? label(selected) : 'All territories'}
             </h2>

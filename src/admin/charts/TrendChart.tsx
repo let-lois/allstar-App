@@ -202,7 +202,7 @@ export function TrendChart({ points, seriesNames, height = 220, format = String 
 
         {active && (
           <div
-            className="pointer-events-none absolute top-2 rounded-field border border-ink/10 bg-surface px-3 py-2 text-xs shadow-float"
+            className="pointer-events-none absolute top-2 rounded-field border border-line bg-surface px-3 py-2 text-xs shadow-float"
             style={{
               left: `${Math.min(80, ((x(hover!) / W) * 100))}%`,
               transform: 'translateX(8px)',
@@ -226,7 +226,7 @@ export function TrendChart({ points, seriesNames, height = 220, format = String 
       </div>
 
       {showTable && (
-        <div className="mt-3 max-h-64 overflow-y-auto rounded-field border border-ink/10">
+        <div className="mt-3 max-h-64 overflow-y-auto rounded-field border border-line">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-surface-sunk text-xs text-ink-mute">
               <tr>
@@ -240,7 +240,7 @@ export function TrendChart({ points, seriesNames, height = 220, format = String 
             </thead>
             <tbody>
               {points.map((p) => (
-                <tr key={p.day} className="border-t border-ink/[0.06]">
+                <tr key={p.day} className="border-t border-line-soft">
                   <td className="px-3 py-1.5">{p.label}</td>
                   {p.values.map((v, i) => (
                     <td key={i} className="nums px-3 py-1.5 text-right">

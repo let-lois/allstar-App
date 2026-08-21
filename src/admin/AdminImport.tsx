@@ -523,7 +523,7 @@ export default function AdminImport() {
               </label>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-ink/[0.06] pt-4">
+            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line-soft pt-4">
               <Button
                 onClick={() => void runImport()}
                 disabled={busy !== null || importable.length === 0 || mode === 'demo'}
@@ -575,7 +575,7 @@ export default function AdminImport() {
               </summary>
               <ul className="mt-2 max-h-52 overflow-y-auto text-sm text-ink-mute">
                 {result.rejected.map((r) => (
-                  <li key={r.ref} className="border-b border-ink/[0.06] py-1.5">
+                  <li key={r.ref} className="border-b border-line-soft py-1.5">
                     <span className="font-mono text-xs">{r.ref}</span> — {r.reason}
                   </li>
                 ))}
@@ -615,7 +615,7 @@ function Steps({ stage }: { stage: Stage }) {
                 ? 'bg-good text-white'
                 : i === activeIdx
                   ? 'bg-ink text-white'
-                  : 'bg-ink/10 text-ink-mute'
+                  : 'bg-line text-ink-mute'
             }`}
           >
             {i < activeIdx ? '✓' : i + 1}
@@ -644,7 +644,7 @@ function Tally({
         ? 'ring-warn/25 bg-warn-bg'
         : tone === 'bad'
           ? 'ring-bad/25 bg-bad-bg'
-          : 'ring-ink/10 bg-surface'
+          : 'ring-line bg-surface'
   return (
     <div className={`rounded-field p-4 ring-1 ${ring}`}>
       <p className="nums text-2xl font-black">{value.toLocaleString()}</p>
@@ -673,7 +673,7 @@ function PreviewTable({ rows }: { rows: PreparedRow[] }) {
         </p>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] border-t border-ink/10 text-sm">
+        <table className="w-full min-w-[820px] border-t border-line text-sm">
           <thead className="bg-surface-sunk text-left text-xs uppercase tracking-wide text-ink-mute">
             <tr>
               <th className="px-3 py-2 font-semibold">Row</th>
@@ -689,7 +689,7 @@ function PreviewTable({ rows }: { rows: PreparedRow[] }) {
               const placed = r.lat != null && r.lng != null
               const missingAddress = !r.values.address1
               return (
-                <tr key={r.ref} className="border-b border-ink/[0.06] last:border-0">
+                <tr key={r.ref} className="border-b border-line-soft last:border-0">
                   <td className="px-3 py-2 font-mono text-xs text-ink-mute">{r.ref}</td>
                   <td className="px-3 py-2">
                     {missingAddress ? (

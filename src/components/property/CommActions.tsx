@@ -44,7 +44,7 @@ export function CommActions({
           logComm(property.id, 'call', primary?.name)
         }}
         aria-disabled={!tel}
-        className={`press focusable flex items-center justify-center rounded-field ring-1 ring-ink/10 font-semibold ${cls} ${
+        className={`press focusable flex items-center justify-center rounded-field ring-1 ring-line font-semibold ${cls} ${
           tel ? 'text-ink-soft active:bg-surface-field' : 'pointer-events-none opacity-40'
         }`}
       >
@@ -59,7 +59,7 @@ export function CommActions({
           logComm(property.id, 'sms', primary?.name)
         }}
         aria-disabled={!sms}
-        className={`press focusable flex items-center justify-center rounded-field ring-1 ring-ink/10 font-semibold ${cls} ${
+        className={`press focusable flex items-center justify-center rounded-field ring-1 ring-line font-semibold ${cls} ${
           sms ? 'text-ink-soft active:bg-surface-field' : 'pointer-events-none opacity-40'
         }`}
       >
@@ -74,7 +74,7 @@ export function CommActions({
             logComm(property.id, 'email', primary?.name)
           }}
           aria-disabled={!mail}
-          className={`press focusable flex items-center justify-center rounded-field ring-1 ring-ink/10 font-semibold ${cls} ${
+          className={`press focusable flex items-center justify-center rounded-field ring-1 ring-line font-semibold ${cls} ${
             mail ? 'text-ink-soft active:bg-surface-field' : 'pointer-events-none opacity-40'
           }`}
         >

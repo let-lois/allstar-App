@@ -113,7 +113,7 @@ export function NoteComposer({ body, tags, onBody, onTags, placeholder }: Props)
           onChange={(e) => onBody(e.target.value)}
           rows={4}
           placeholder={placeholder ?? 'Tap a quick note above, dictate, or type…'}
-          className="focusable w-full resize-none rounded-card border border-ink/10 p-3 pr-14 text-base leading-relaxed placeholder:text-ink-mute"
+          className="focusable w-full resize-none rounded-card border border-line p-3 pr-14 text-base leading-relaxed placeholder:text-ink-mute"
         />
         {supported && (
           <button
@@ -121,7 +121,7 @@ export function NoteComposer({ body, tags, onBody, onTags, placeholder }: Props)
             aria-label={listening ? 'Stop dictation' : 'Dictate note'}
             aria-pressed={listening}
             className={`press focusable absolute right-2.5 top-2.5 grid h-11 w-11 place-items-center rounded-field ${
-              listening ? 'bg-bad text-white' : 'bg-ink/[0.06] text-ink-mute'
+              listening ? 'bg-bad text-white' : 'bg-surface-field text-ink-mute'
             }`}
           >
             {listening && (

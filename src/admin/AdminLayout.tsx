@@ -91,7 +91,7 @@ export function AdminLayout() {
 
   return (
     <div className="flex min-h-0 flex-1 bg-surface-sunk">
-      <nav className="flex w-56 shrink-0 flex-col border-r border-ink/10 bg-surface px-3 py-4">
+      <nav className="flex w-56 shrink-0 flex-col border-r border-line bg-surface px-3 py-4">
         <div className="mb-5 px-2">
           <p className="text-sm font-bold">{user.clientName}</p>
           <p className="text-xs text-ink-mute">Console</p>
@@ -113,7 +113,7 @@ export function AdminLayout() {
           </NavLink>
         ))}
 
-        <div className="mt-auto border-t border-ink/[0.06] pt-3">
+        <div className="mt-auto border-t border-line-soft pt-3">
           <button
             onClick={() => nav('/today')}
             className="focusable flex min-h-[40px] w-full items-center rounded-lg px-3 text-sm font-medium text-ink-mute hover:bg-surface-field"

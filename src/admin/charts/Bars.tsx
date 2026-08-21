@@ -77,7 +77,7 @@ export function Bars({ data, variant = 'single', format = String, showConversion
             >
               <div
                 // 4px rounded data-end, anchored to the baseline at the left.
-                className="fill-gloss h-full rounded-md transition-[width]"
+                className="h-full rounded-md transition-[width]"
                 style={{
                   width: `${Math.max(pct, d.value > 0 ? 1.5 : 0)}%`,
                   backgroundColor: color,

@@ -224,7 +224,7 @@ export function VisitMode() {
             <IconClose />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] font-bold leading-tight">{property.address1}</p>
+            <p className="truncate text-[15px] font-semibold leading-tight">{property.address1}</p>
             <p className="truncate text-[12.5px] text-white/70">
               {contact?.name ?? 'No contact'}
               {dist != null && ` · ${formatDistance(dist)} away`}
@@ -286,7 +286,7 @@ export function VisitMode() {
                 </div>
               </Card>
             )}
-            <h2 className="mb-3.5 text-[21px] font-bold">What happened?</h2>
+            <h2 className="mb-3.5 text-[21px] font-semibold">What happened?</h2>
             <OutcomeGrid value={visit.outcome} onChange={(c) => void chooseOutcome(c)} />
           </>
         )}
@@ -303,7 +303,7 @@ export function VisitMode() {
                   Change
                 </button>
               </div>
-              <p className="mt-1 text-[19px] font-bold">
+              <p className="mt-1 text-[19px] font-semibold">
                 {outcomeDef?.glyph} {outcomeDef?.label}
               </p>
             </Card>
@@ -337,7 +337,7 @@ export function VisitMode() {
         {step === 'next' && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-[21px] font-bold">What's next here?</h2>
+              <h2 className="text-[21px] font-semibold">What's next here?</h2>
               <p className="mt-1 text-[14px] text-ink-mute">
                 This becomes a follow-up on your Today screen.
               </p>
@@ -360,10 +360,10 @@ export function VisitMode() {
                     if (o.key !== 'none' && !nextAt) setNextAt(defaultFollowUp())
                   }}
                   aria-pressed={nextType === o.key}
-                  className={`press focusable flex min-h-[80px] flex-col items-center justify-center gap-1.5 rounded-card text-[15px] font-bold transition-shadow ${
+                  className={`press focusable flex min-h-[80px] flex-col items-center justify-center gap-1.5 rounded-card text-[15px] font-semibold transition-shadow ${
                     nextType === o.key
                       ? 'bg-brand-600 text-white shadow-raise'
-                      : 'bg-surface text-ink ring-1 ring-ink/10 active:bg-surface-field'
+                      : 'bg-surface text-ink ring-1 ring-line active:bg-surface-field'
                   }`}
                 >
                   <span className="text-xl" aria-hidden>
@@ -389,7 +389,7 @@ export function VisitMode() {
                       className={`press focusable min-h-[52px] rounded-field text-[14px] font-semibold transition-colors ${
                         nextAt === w.at
                           ? 'bg-brand-50 text-brand-700 ring-2 ring-brand-500'
-                          : 'bg-surface text-ink ring-1 ring-ink/10 active:bg-surface-field'
+                          : 'bg-surface text-ink ring-1 ring-line active:bg-surface-field'
                       }`}
                     >
                       {w.label}

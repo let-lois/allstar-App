@@ -40,7 +40,7 @@ export function AdminClients() {
         <StatTile label="MRR" value={moneyFull(mrr)} />
       </div>
 
-      <section className="mt-4 overflow-hidden rounded-card border border-ink/10 bg-surface">
+      <section className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
         <table className="w-full text-sm">
           <thead className="bg-surface-sunk text-xs text-ink-mute">
             <tr>
@@ -54,7 +54,7 @@ export function AdminClients() {
           </thead>
           <tbody>
             {CLIENTS.map((c) => (
-              <tr key={c.name} className="border-t border-ink/[0.06] hover:bg-surface-field">
+              <tr key={c.name} className="border-t border-line-soft hover:bg-surface-field">
                 <td className="px-5 py-3 font-medium">{c.name}</td>
                 <td className="nums px-3 py-3 text-right">{c.seats}</td>
                 <td className="nums px-3 py-3 text-right">{c.activeReps}</td>
@@ -79,7 +79,7 @@ export function AdminClients() {
         </table>
       </section>
 
-      <section className="mt-4 rounded-card border border-ink/10 bg-surface p-5">
+      <section className="mt-4 rounded-card border border-line bg-surface p-5">
         <h2 className="text-sm font-bold">Seat utilization</h2>
         <p className="mb-3 text-xs text-ink-mute">
           Reps active in the last 7 days as a share of seats sold — the earliest churn
