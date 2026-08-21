@@ -121,6 +121,24 @@ async function signIn(page) {
     Math.abs((row?.lat ?? 0) - 32.7767) < 0.01,
     `the pin is the rep's real position, not a hardcoded one (${row?.lat})`,
   )
+
+  /*
+    Storing blank is right, but three screens interpolated
+    `{city}, {state} {zip}` directly, so an unknown town rendered as a bare
+    comma — an honest value that read as a bug. The lead was saved above, which
+    navigates to its detail screen, so this is the screen a rep actually lands on
+    after adding a door.
+  */
+  await page.waitForTimeout(1200)
+  const detail = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+  ok(
+    !/^\s*,|·\s*,|,\s*·|,\s*$/m.test(detail) && !detail.includes(' ,'),
+    'a lead with no known town renders no orphaned punctuation',
+  )
+  ok(
+    detail.includes('4512 Cedar Springs Rd'),
+    'and the address it does know is shown',
+  )
   await ctx.close()
 }
 
