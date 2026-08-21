@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { FieldMap, type MapHandle } from '../components/map/FieldMap'
 import { RouteList } from '../components/map/RouteList'
 import { GoogleFieldMap } from '../components/map/GoogleFieldMap'
+import { MapSearch } from '../components/map/MapSearch'
 import { gmapsConfigured, type GmapsError } from '../lib/gmaps'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { PropertyPeek } from '../components/property/PropertyPeek'
@@ -139,9 +140,31 @@ export function MapScreen() {
   */
   const statusRow = (
     <div className="pointer-events-auto flex items-center gap-2 px-3">
-      <span className="nums rounded-full bg-surface/95 px-3 py-1.5 text-[12.5px] font-semibold text-ink-soft shadow-raise ring-1 ring-ink/[0.06] backdrop-blur">
-        {shown.length} properties
-      </span>
+      {/*
+        Search takes the space the property-count pill used to hold. The count
+        moved into its placeholder rather than getting a row of its own: on a
+        360px phone the map *is* the screen, and a third band of chrome over it
+        costs more than the pill was worth.
+      */}
+      <MapSearch
+        properties={shown}
+        position={position}
+        count={shown.length}
+        onPickLead={(id) => {
+          const p = properties[id]
+          if (!p) return
+          mapHandle.current?.flyTo(p.lat, p.lng, 18)
+          setSelectedId(id)
+          // A found lead is worth seeing on the map, so the list view steps
+          // aside for it rather than leaving the rep to switch back manually.
+          setView('map')
+        }}
+        onPickPlace={(at) => {
+          mapHandle.current?.flyTo(at.lat, at.lng, 17)
+          setSelectedId(null)
+          setView('map')
+        }}
+      />
       <SyncBadge onClick={() => nav('/more')} />
       <div
         role="group"
