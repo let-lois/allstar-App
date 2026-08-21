@@ -95,7 +95,7 @@ export function RouteList({
             <button
               onClick={() => onSelect(p.id)}
               aria-current={selectedId === p.id ? 'true' : undefined}
-              className={`flex min-h-[72px] w-full items-center gap-3 border-b border-ink/[0.06] px-4 py-2.5 text-left active:bg-surface-field ${
+              className={`flex min-h-[72px] w-full items-center gap-3 border-b border-line-soft px-4 py-2.5 text-left active:bg-surface-field ${
                 selectedId === p.id ? 'bg-brand-50' : ''
               }`}
             >

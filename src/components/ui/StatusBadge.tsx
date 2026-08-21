@@ -19,7 +19,7 @@ const tones: Record<Tone, string> = {
   bad: 'bg-bad-bg text-bad',
   info: 'bg-info-bg text-info',
   brand: 'bg-brand-50 text-brand-600',
-  neutral: 'bg-ink/[0.06] text-ink-mute',
+  neutral: 'bg-surface-field text-ink-mute',
 }
 
 const dots: Record<Tone, string> = {
@@ -44,7 +44,10 @@ export function StatusBadge({
 }) {
   return (
     <span
-      className={`emboss inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${tones[tone]} ${className}`}
+      // No raised edge, and a flatter tint. These appear several to a row, and a
+      // row of embossed pills is the accent that made this interface read as a
+      // reporting tool rather than an app.
+      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11.5px] font-medium ${tones[tone]} ${className}`}
     >
       {dot && <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${dots[tone]}`} />}
       {children}

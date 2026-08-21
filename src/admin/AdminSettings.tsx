@@ -90,7 +90,7 @@ export function AdminSettings() {
       title="Settings"
       description={`How the field app behaves for everyone at ${user?.clientName ?? 'your company'}`}
     >
-      <div className="mb-4 flex gap-1 border-b border-ink/10">
+      <div className="mb-4 flex gap-1 border-b border-line">
         {(
           [
             ['outcomes', 'Visit outcomes'],
@@ -113,8 +113,8 @@ export function AdminSettings() {
       </div>
 
       {tab === 'outcomes' && (
-        <section className="overflow-hidden rounded-card border border-ink/10 bg-surface">
-          <div className="border-b border-ink/[0.06] px-5 py-3">
+        <section className="overflow-hidden rounded-card border border-line bg-surface">
+          <div className="border-b border-line-soft px-5 py-3">
             <h2 className="text-sm font-bold">Visit outcomes</h2>
             <p className="mt-0.5 text-xs leading-relaxed text-ink-mute">
               These are the buttons a rep taps after every knock. Order is the order they
@@ -135,7 +135,7 @@ export function AdminSettings() {
             </thead>
             <tbody>
               {outcomes.map((o, i) => (
-                <tr key={o.code} className="border-t border-ink/[0.06]">
+                <tr key={o.code} className="border-t border-line-soft">
                   <td className="px-5 py-3">
                     <span className="flex items-center gap-1">
                       <span className="nums w-4 text-ink-mute">{i + 1}</span>
@@ -152,7 +152,11 @@ export function AdminSettings() {
                             return next
                           })
                         }
-                        className="focusable h-6 w-6 rounded text-xs text-ink-mute disabled:opacity-30"
+                        /* 44px on a phone. A 24px arrow is a cursor target;
+                           reordering outcomes is exactly the kind of setup an
+                           owner does once, often from a phone, and missing the
+                           arrow moves the wrong row. */
+                        className="focusable h-11 w-11 rounded text-sm text-ink-mute disabled:opacity-30 lg:h-6 lg:w-6 lg:text-xs"
                       >
                         ↑
                       </button>
@@ -166,7 +170,11 @@ export function AdminSettings() {
                             return next
                           })
                         }
-                        className="focusable h-6 w-6 rounded text-xs text-ink-mute disabled:opacity-30"
+                        /* 44px on a phone. A 24px arrow is a cursor target;
+                           reordering outcomes is exactly the kind of setup an
+                           owner does once, often from a phone, and missing the
+                           arrow moves the wrong row. */
+                        className="focusable h-11 w-11 rounded text-sm text-ink-mute disabled:opacity-30 lg:h-6 lg:w-6 lg:text-xs"
                       >
                         ↓
                       </button>
@@ -182,12 +190,12 @@ export function AdminSettings() {
                             prev.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)),
                           )
                         }
-                        className="focusable min-h-[36px] w-40 rounded-lg border border-ink/10 px-2 text-sm"
+                        className="focusable min-h-[36px] w-40 rounded-lg border border-line px-2 text-sm"
                       />
                     </span>
                   </td>
                   <td className="px-3 py-3">
-                    <code className="rounded bg-ink/[0.06] px-1.5 py-0.5 text-xs text-ink-mute">
+                    <code className="rounded bg-surface-field px-1.5 py-0.5 text-xs text-ink-mute">
                       {o.code}
                     </code>
                   </td>
@@ -211,7 +219,7 @@ export function AdminSettings() {
               ))}
             </tbody>
           </table>
-          <div className="flex items-center justify-between border-t border-ink/[0.06] px-5 py-3">
+          <div className="flex items-center justify-between border-t border-line-soft px-5 py-3">
             <p className="text-xs text-ink-mute">
               The code is permanent. Reports and pipeline rules key off it, so a renamed
               outcome keeps its history.
@@ -222,7 +230,7 @@ export function AdminSettings() {
       )}
 
       {tab === 'notes' && (
-        <section className="rounded-card border border-ink/10 bg-surface p-5">
+        <section className="rounded-card border border-line bg-surface p-5">
           <h2 className="text-sm font-bold">Quick note templates</h2>
           <p className="mb-4 mt-0.5 text-xs leading-relaxed text-ink-mute">
             One tap instead of thirty characters. These appear above the note box in Visit
@@ -237,7 +245,7 @@ export function AdminSettings() {
                   onChange={(e) =>
                     setTemplates((prev) => prev.map((x, xi) => (xi === i ? e.target.value : x)))
                   }
-                  className="focusable min-h-[38px] flex-1 rounded-lg border border-ink/10 px-3 text-sm"
+                  className="focusable min-h-[38px] flex-1 rounded-lg border border-line px-3 text-sm"
                 />
                 <button
                   onClick={() => setTemplates((prev) => prev.filter((_, xi) => xi !== i))}
@@ -262,7 +270,7 @@ export function AdminSettings() {
       )}
 
       {tab === 'photos' && (
-        <section className="rounded-card border border-ink/10 bg-surface p-5">
+        <section className="rounded-card border border-line bg-surface p-5">
           <h2 className="text-sm font-bold">Photo categories</h2>
           <p className="mb-4 mt-0.5 text-xs leading-relaxed text-ink-mute">
             Shown after a rep takes a shot. Keep this list short — it's a decision made
@@ -272,7 +280,7 @@ export function AdminSettings() {
             {categories.map((c, i) => (
               <div
                 key={c.key}
-                className="flex items-center gap-2 rounded-field border border-ink/10 px-3 py-2.5"
+                className="flex items-center gap-2 rounded-field border border-line px-3 py-2.5"
               >
                 <span aria-hidden>{c.glyph}</span>
                 <input
@@ -282,7 +290,7 @@ export function AdminSettings() {
                       prev.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)),
                     )
                   }
-                  className="focusable min-h-[32px] min-w-0 flex-1 rounded-lg border border-transparent px-1 text-sm hover:border-ink/10"
+                  className="focusable min-h-[32px] min-w-0 flex-1 rounded-lg border border-transparent px-1 text-sm hover:border-line"
                 />
               </div>
             ))}

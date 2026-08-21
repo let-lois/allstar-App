@@ -42,10 +42,12 @@ export function Team() {
       <div className="scroll-pane pad-nav bg-surface-sunk">
         <div className="content-col page anim-rise">
           {/* Company roll-up first — the "how is today going" answer. */}
-          <Card className="grid grid-cols-3 divide-x divide-ink/[0.06]">
+          <Card className="grid grid-cols-3 divide-x divide-line-soft">
             <Stat label="Doors" value={String(totals.knocks)} />
             <Stat label="Contact rate" value={`${totals.contactRate}%`} tone="text-brand-600" />
-            <Stat label="Pipeline" value={money(totals.pipelineToday)} tone="text-good" />
+            {/* Not green. Today's pipeline is opportunity, not revenue, and green
+                is what this product uses for money actually won. */}
+            <Stat label="Pipeline" value={money(totals.pipelineToday)} />
           </Card>
 
           {reps.map((rep, i) => {
@@ -69,14 +71,16 @@ export function Team() {
                     )}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[16px] font-bold">{rep.name}</p>
+                    <p className="truncate text-[16px] font-semibold tracking-[-0.01em]">
+                      {rep.name}
+                    </p>
                     <p className="truncate text-[13px] text-ink-mute">{rep.routeName}</p>
                   </div>
                   {tel && (
                     <a
                       href={tel}
                       aria-label={`Call ${rep.name}`}
-                      className="press focusable grid h-12 w-12 shrink-0 place-items-center rounded-field bg-surface text-ink-soft ring-1 ring-ink/10 active:bg-surface-field"
+                      className="press focusable grid h-12 w-12 shrink-0 place-items-center rounded-field bg-surface text-ink-soft ring-1 ring-line active:bg-surface-field"
                     >
                       <IconPhone />
                     </a>
@@ -84,7 +88,7 @@ export function Team() {
                 </div>
 
                 <div className="mt-4 flex items-baseline justify-between text-[13px]">
-                  <span className="nums font-semibold">
+                  <span className="nums font-medium text-ink-soft">
                     {rep.done}/{rep.total} stops
                   </span>
                   <span className="nums text-ink-mute">
@@ -99,7 +103,7 @@ export function Team() {
                 />
 
                 {repActivity.length > 0 ? (
-                  <ul className="mt-4 space-y-0.5 border-t border-ink/[0.06] pt-2">
+                  <ul className="mt-4 space-y-0.5 border-t border-line-soft pt-2">
                     {repActivity.map((ev) => {
                       const def = outcomeByCode(ev.outcome)
                       const p = ev.propertyId ? properties[ev.propertyId] : undefined
@@ -119,7 +123,7 @@ export function Team() {
                               {ev.summary}
                             </span>
                             {p?.opportunityValue != null && (
-                              <span className="nums shrink-0 text-[13px] font-semibold text-good">
+                              <span className="nums shrink-0 text-[13px] font-medium text-ink-soft">
                                 {money(p.opportunityValue)}
                               </span>
                             )}
@@ -132,7 +136,7 @@ export function Team() {
                     })}
                   </ul>
                 ) : (
-                  <p className="mt-4 border-t border-ink/[0.06] pt-3 text-[13px] text-ink-mute">
+                  <p className="mt-4 border-t border-line-soft pt-3 text-[13px] text-ink-mute">
                     No activity logged yet today.
                   </p>
                 )}
@@ -140,7 +144,7 @@ export function Team() {
             )
           })}
 
-          <p className="px-4 pb-1 pt-1 text-center text-[13px] leading-relaxed text-ink-mute">
+          <p className="px-2 pb-1 pt-2 text-center text-[13px] leading-relaxed text-ink-mute">
             Territory assignment, route building and rep performance reports are available
             on desktop.
           </p>
@@ -153,8 +157,12 @@ export function Team() {
 function Stat({ label, value, tone = '' }: { label: string; value: string; tone?: string }) {
   return (
     <div className="px-1 text-center first:pl-0 last:pr-0">
-      <p className={`nums text-kpi-sm font-extrabold ${tone}`}>{value}</p>
-      <p className="mt-1.5 text-[11.5px] font-medium text-ink-mute">{label}</p>
+      {/* Semibold with tight tracking, not extrabold. At 24px a heavy weight
+          stops reading as a number and starts reading as a headline. */}
+      <p className={`nums text-[24px] font-semibold leading-none tracking-[-0.02em] ${tone}`}>
+        {value}
+      </p>
+      <p className="mt-2 text-[12px] font-medium text-ink-mute">{label}</p>
     </div>
   )
 }

@@ -536,21 +536,21 @@ export function GoogleFieldMap({
         <button
           onClick={() => setSatellite((s) => !s)}
           aria-label={`Switch to ${satellite ? 'streets' : 'satellite'} view`}
-          className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field bg-surface text-[11px] font-bold text-brand-600 shadow-float ring-1 ring-ink/[0.06]"
+          className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field bg-surface text-[11px] font-bold text-brand-600 shadow-float ring-1 ring-line-soft"
         >
           {satellite ? 'MAP' : 'SAT'}
         </button>
         <button
           onClick={() => zoomBy(1)}
           aria-label="Zoom in"
-          className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field bg-surface text-xl font-semibold text-ink-soft shadow-float ring-1 ring-ink/[0.06]"
+          className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field bg-surface text-xl font-semibold text-ink-soft shadow-float ring-1 ring-line-soft"
         >
           +
         </button>
         <button
           onClick={() => zoomBy(-1)}
           aria-label="Zoom out"
-          className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field bg-surface text-xl font-semibold text-ink-soft shadow-float ring-1 ring-ink/[0.06]"
+          className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field bg-surface text-xl font-semibold text-ink-soft shadow-float ring-1 ring-line-soft"
         >
           −
         </button>
@@ -558,7 +558,7 @@ export function GoogleFieldMap({
           <button
             onClick={() => flyTo(position.lat, position.lng, 18)}
             aria-label="Center on my location"
-            className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field bg-surface text-base text-brand-600 shadow-float ring-1 ring-ink/[0.06]"
+            className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field bg-surface text-base text-brand-600 shadow-float ring-1 ring-line-soft"
           >
             ◎
           </button>

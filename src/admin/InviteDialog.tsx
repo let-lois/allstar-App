@@ -117,7 +117,7 @@ export function InviteDialog({
               choose a password, and it stops working once they do.
             </p>
 
-            <div className="mt-4 rounded-field bg-surface-sunk p-3 ring-1 ring-ink/10">
+            <div className="mt-4 rounded-field bg-surface-sunk p-3 ring-1 ring-line">
               <p className="break-all font-mono text-xs">{created.url}</p>
             </div>
 
@@ -129,7 +129,7 @@ export function InviteDialog({
                 )}&body=${encodeURIComponent(
                   `Set your password here:\n\n${created.url}\n\nThe link expires in a week.`,
                 )}`}
-                className="press focusable inline-flex min-h-tap items-center rounded-field border border-ink/10 px-4 text-sm font-semibold"
+                className="press focusable inline-flex min-h-tap items-center rounded-field border border-line px-4 text-sm font-semibold"
               >
                 Open in email
               </a>
@@ -138,7 +138,7 @@ export function InviteDialog({
               </span>
             </div>
 
-            <div className="mt-5 flex gap-2 border-t border-ink/[0.06] pt-4">
+            <div className="mt-5 flex gap-2 border-t border-line-soft pt-4">
               <Button variant="secondary" onClick={onClose}>
                 Done
               </Button>
@@ -164,7 +164,7 @@ export function InviteDialog({
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+                <span className="text-[12.5px] font-medium text-ink-mute">
                   Name
                 </span>
                 <input
@@ -176,7 +176,7 @@ export function InviteDialog({
                 />
               </label>
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+                <span className="text-[12.5px] font-medium text-ink-mute">
                   Email
                 </span>
                 <input
@@ -191,7 +191,7 @@ export function InviteDialog({
                 />
               </label>
               <label className="block sm:col-span-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+                <span className="text-[12.5px] font-medium text-ink-mute">
                   Phone (optional)
                 </span>
                 <input
@@ -205,7 +205,7 @@ export function InviteDialog({
             </div>
 
             <fieldset className="mt-4">
-              <legend className="text-xs font-semibold uppercase tracking-wide text-ink-mute">
+              <legend className="text-[12.5px] font-medium text-ink-mute">
                 Role
               </legend>
               <div className="mt-2 space-y-2">
@@ -213,7 +213,7 @@ export function InviteDialog({
                   <label
                     key={r}
                     className={`flex cursor-pointer items-start gap-3 rounded-field border p-3 ${
-                      role === r ? 'border-brand-500 bg-brand-50' : 'border-ink/10'
+                      role === r ? 'border-brand-500 bg-brand-50' : 'border-line'
                     }`}
                   >
                     <input
@@ -238,7 +238,7 @@ export function InviteDialog({
               </p>
             )}
 
-            <div className="mt-5 flex gap-2 border-t border-ink/[0.06] pt-4">
+            <div className="mt-5 flex gap-2 border-t border-line-soft pt-4">
               <Button type="submit" disabled={busy}>
                 {busy ? 'Creating…' : 'Create invite'}
               </Button>

@@ -9,6 +9,7 @@ import { useRepRangeRows, RANGES, type RangeKey } from './useAdminData'
 import { money, relative } from '../lib/format'
 import { STATUS } from './charts/tokens'
 import { InviteDialog } from './InviteDialog'
+import { DataList } from './DataList'
 import { ManageUser } from './ManageUser'
 import { ROLE_LABEL } from '../lib/roles'
 import type { Role } from '../types'
@@ -149,14 +150,14 @@ export function AdminTeam() {
           onChange={(e) => setQuery(e.target.value)}
           type="search"
           placeholder="Search name or email"
-          className="focusable min-h-[40px] w-64 rounded-field border border-ink/10 px-3 text-sm"
+          className="focusable min-h-[40px] w-64 rounded-field border border-line px-3 text-sm"
         />
         {(['all', 'field_rep', 'manager', 'client_admin'] as const).map((r) => (
           <Chip key={r} size="sm" selected={roleFilter === r} onClick={() => setRoleFilter(r)}>
             {r === 'all' ? 'All roles' : ROLE_LABEL[r]}
           </Chip>
         ))}
-        <span className="mx-2 h-6 w-px bg-ink/10" />
+        <span className="mx-2 h-6 w-px bg-line" />
         {RANGES.map((r) => (
           <Chip key={r.key} size="sm" selected={range === r.key} onClick={() => setRange(r.key)}>
             {r.label}
@@ -164,89 +165,114 @@ export function AdminTeam() {
         ))}
       </FilterBar>
 
-      <div className="overflow-hidden rounded-card border border-ink/10 bg-surface">
-        <table className="w-full text-sm">
-          <thead className="bg-surface-sunk text-xs text-ink-mute">
-            <tr>
-              <th className="px-5 py-2.5 text-left font-semibold">Name</th>
-              <th className="px-3 py-2.5 text-left font-semibold">Role</th>
-              <th className="px-3 py-2.5 text-left font-semibold">Territory</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Today</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Doors</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Contact rate</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Won</th>
-              <th className="px-3 py-2.5 text-left font-semibold">Status</th>
-              <th className="px-5 py-2.5 text-right font-semibold">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((m) => {
-              const r = rangeById.get(m.id)
+      {/*
+        Nine columns of table, or a card per person — see `DataList`. The three
+        numbers a manager actually opens this screen for on a phone (today's
+        stops, doors, contact rate) are the card's meta grid; e-mail is the
+        subtitle; the status dot rides beside the name.
+      */}
+      <DataList
+        rows={filtered}
+        keyOf={(m) => m.id}
+        onRow={(m) => setEditing(m)}
+        rowLabel={(m) => `Manage ${m.name}`}
+        empty={
+          members.length === 0
+            ? 'Nobody on the team yet. Invite your first rep to get started.'
+            : 'No one matches those filters.'
+        }
+        columns={[
+          {
+            header: 'Name',
+            phone: 'title',
+            cell: (m) => (
+              <span className="flex items-center gap-2.5">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-50 text-[11px] font-semibold text-brand-600">
+                  {m.initials}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{m.name}</span>
+                  {m.email && (
+                    <span className="block truncate text-xs text-ink-mute">{m.email}</span>
+                  )}
+                </span>
+              </span>
+            ),
+          },
+          {
+            header: 'Status',
+            phone: 'trailing',
+            cell: (m) => (
+              /* An icon and a word, never colour alone. */
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-ink-soft">
+                <span
+                  aria-hidden
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{
+                    backgroundColor: m.pending
+                      ? STATUS.warning
+                      : m.active
+                        ? STATUS.good
+                        : STATUS.serious,
+                  }}
+                />
+                {m.pending ? 'Invite pending' : m.active ? 'Active' : 'Deactivated'}
+              </span>
+            ),
+          },
+          { header: 'Role', cell: (m) => <span className="text-ink-mute">{ROLE_LABEL[m.role]}</span> },
+          {
+            header: 'Territory',
+            cell: (m) => <span className="text-ink-mute">{m.territory ?? '—'}</span>,
+          },
+          {
+            header: 'Today',
+            align: 'right',
+            cell: (m) => {
               const t = todayById.get(m.id)
-              const isRep = m.role === 'field_rep'
-              return (
-                <tr key={m.id} className="border-t border-ink/[0.06] hover:bg-surface-field">
-                  <td className="px-5 py-3">
-                    <span className="flex items-center gap-2.5">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-50 text-[11px] font-bold text-brand-600">
-                        {m.initials}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block font-medium">{m.name}</span>
-                        <span className="block truncate text-xs text-ink-mute">{m.email}</span>
-                      </span>
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-ink-mute">{ROLE_LABEL[m.role]}</td>
-                  <td className="px-3 py-3 text-ink-mute">{m.territory ?? '—'}</td>
-                  <td className="nums px-3 py-3 text-right">
-                    {isRep && t ? `${t.done}/${t.total}` : '—'}
-                  </td>
-                  <td className="nums px-3 py-3 text-right">
-                    {isRep && r ? r.knocks.toLocaleString() : '—'}
-                  </td>
-                  <td className="nums px-3 py-3 text-right font-semibold">
-                    {isRep && r ? `${r.contactRate}%` : '—'}
-                  </td>
-                  <td className="nums px-3 py-3 text-right">{isRep && r ? r.sold : '—'}</td>
-                  <td className="px-3 py-3">
-                    {/* Status carries an icon and a word — never color alone. */}
-                    <span className="inline-flex items-center gap-1.5 text-xs font-medium">
-                      <span
-                        aria-hidden
-                        className="h-2 w-2 rounded-full"
-                        style={{
-                          backgroundColor: m.pending
-                            ? STATUS.warning
-                            : m.active
-                              ? STATUS.good
-                              : STATUS.serious,
-                        }}
-                      />
-                      {m.pending ? 'Invite pending' : m.active ? 'Active' : 'Deactivated'}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <button
-                      onClick={() => setEditing(m)}
-                      className="focusable min-h-[32px] rounded-lg px-2 text-xs font-semibold text-brand-600 hover:bg-brand-50"
-                    >
-                      Manage
-                    </button>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-        {filtered.length === 0 && (
-          <p className="p-8 text-center text-sm text-ink-mute">
-            {members.length === 0
-              ? 'Nobody on the team yet. Invite your first rep to get started.'
-              : 'No one matches those filters.'}
-          </p>
-        )}
-      </div>
+              return m.role === 'field_rep' && t ? `${t.done}/${t.total}` : '—'
+            },
+          },
+          {
+            header: 'Doors',
+            align: 'right',
+            cell: (m) => {
+              const r = rangeById.get(m.id)
+              return m.role === 'field_rep' && r ? r.knocks.toLocaleString() : '—'
+            },
+          },
+          {
+            header: 'Contact rate',
+            align: 'right',
+            className: 'font-semibold',
+            cell: (m) => {
+              const r = rangeById.get(m.id)
+              return m.role === 'field_rep' && r ? `${r.contactRate}%` : '—'
+            },
+          },
+          {
+            header: 'Won',
+            align: 'right',
+            cell: (m) => {
+              const r = rangeById.get(m.id)
+              return m.role === 'field_rep' && r ? r.sold : '—'
+            },
+          },
+          {
+            header: 'Actions',
+            phone: 'off',
+            align: 'right',
+            cell: (m) => (
+              <button
+                onClick={() => setEditing(m)}
+                className="focusable min-h-[32px] rounded-lg px-2 text-xs font-semibold text-brand-600 hover:bg-brand-50"
+              >
+                Manage
+              </button>
+            ),
+          },
+        ]}
+      />
 
       <p className="mt-3 text-xs text-ink-mute">
         {mode === 'live'

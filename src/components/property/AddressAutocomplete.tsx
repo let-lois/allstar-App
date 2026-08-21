@@ -254,13 +254,13 @@ export function AddressAutocomplete({
             id="address-suggestions"
             role="listbox"
             aria-label="Address suggestions"
-            className="absolute inset-x-0 z-20 mt-1 overflow-hidden rounded-card bg-surface shadow-float ring-1 ring-ink/[0.08]"
+            className="absolute inset-x-0 z-20 mt-1 overflow-hidden rounded-card bg-surface shadow-float ring-1 ring-line"
           >
             {suggestions.map((s, i) => (
               <li key={`${s.main}-${i}`} role="option" aria-selected={false}>
                 <button
                   onClick={() => void choose(s)}
-                  className="flex min-h-tap w-full flex-col items-start justify-center gap-0.5 border-b border-ink/[0.06] px-3.5 py-2.5 text-left last:border-0 active:bg-surface-field"
+                  className="flex min-h-tap w-full flex-col items-start justify-center gap-0.5 border-b border-line-soft px-3.5 py-2.5 text-left last:border-0 active:bg-surface-field"
                 >
                   <span className="text-[15px] font-semibold leading-tight">{s.main}</span>
                   {s.secondary && (

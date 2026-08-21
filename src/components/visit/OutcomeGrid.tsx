@@ -17,12 +17,12 @@ import { haptic } from '../../lib/haptics'
  * meaning.
  */
 const TONE_BG: Record<string, string> = {
-  noanswer: 'bg-ink/[0.06] text-ink-soft border-ink/10',
+  noanswer: 'bg-surface-field text-ink-soft border-line',
   interested: 'bg-[#E3F2F0] text-[#0F766E] border-[#0F766E]/20',
   followup: 'bg-warn-bg text-warn border-warn/25',
   appointment: 'bg-[#F1EBFC] text-[#6D28D9] border-[#6D28D9]/20',
   quote: 'bg-[#E6F1F9] text-[#0369A1] border-[#0369A1]/20',
-  notinterested: 'bg-surface-field text-ink-soft border-ink/10',
+  notinterested: 'bg-surface-field text-ink-soft border-line',
   sold: 'bg-good-bg text-good border-good/25',
   dnc: 'bg-bad-bg text-bad border-bad/25',
 }

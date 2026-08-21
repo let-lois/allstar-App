@@ -30,7 +30,7 @@ export function Field({
 }: Common & InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className={`block ${className}`}>
-      {label && <span className="mb-1.5 block text-[13px] font-semibold text-ink">{label}</span>}
+      {label && <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">{label}</span>}
       <span className="relative block">
         <input
           {...rest}
@@ -62,7 +62,7 @@ export function TextArea({
 }: Common & TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <label className={`block ${className}`}>
-      {label && <span className="mb-1.5 block text-[13px] font-semibold text-ink">{label}</span>}
+      {label && <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">{label}</span>}
       <textarea {...rest} className={`field py-3 ${error ? 'border-bad focus:border-bad' : ''}`} />
       {error ? (
         <span role="alert" className="mt-1.5 block text-[13px] font-medium text-bad">

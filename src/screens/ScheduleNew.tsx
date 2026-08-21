@@ -138,7 +138,7 @@ export function ScheduleNew() {
                 className={`press focusable min-h-[60px] rounded-field px-2 text-[14px] font-semibold transition-colors ${
                   when === s.at
                     ? 'bg-brand-50 text-brand-700 ring-2 ring-brand-500'
-                    : 'bg-surface text-ink ring-1 ring-ink/10 active:bg-surface-field'
+                    : 'bg-surface text-ink ring-1 ring-line active:bg-surface-field'
                 }`}
               >
                 {s.label}
@@ -173,7 +173,7 @@ export function ScheduleNew() {
                   className={`press focusable min-h-[52px] flex-1 rounded-field text-[14px] font-semibold transition-colors ${
                     duration === m
                       ? 'bg-brand-50 text-brand-700 ring-2 ring-brand-500'
-                      : 'bg-surface text-ink ring-1 ring-ink/10 active:bg-surface-field'
+                      : 'bg-surface text-ink ring-1 ring-line active:bg-surface-field'
                   }`}
                 >
                   {m}m

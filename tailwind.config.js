@@ -3,23 +3,29 @@
 /*
  * Design tokens.
  *
- * The palette is the company's teal on white and near-black, and the shades are
- * picked against measured contrast rather than by eye. Two matter enough to
- * record why:
+ * White, teal and near-black, with true-grey neutrals. Every value here is a
+ * token on purpose: the whole visual system is meant to be changeable from this
+ * file, so nothing downstream hard-codes a hex.
  *
- * `brand-400` (#07B3CA) is the logo teal, sampled from the artwork. It is 2.53:1
- * against white, so it is a **fill**: bars, dots, glyphs, active indicators. It
- * can never carry white label text, and it is not strong enough to be a focus
- * ring either (WCAG 1.4.11 wants 3:1 for a UI component).
+ * The teal is split by *job*, not by shade, and the split is measured rather
+ * than chosen. Three of the four brand steps cannot legally carry white text:
  *
- * `brand-600` (#0A6B7D) is the same hue taken deep enough to be a **surface**:
- * 6.15:1 with white, so a button label passes AA at any size, and it doubles as
- * teal text on white. Splitting the accent into "fill" and "surface" is what
- * lets the interface look bright without any of it being unreadable.
+ *   `brand-400` #20C4D3 — 2.12:1 on white. Decorative fill only: bars, dots.
+ *   `brand-500` #0FA9B8 — 2.84:1. The brand accent. Fills, indicators, borders
+ *                          on tinted grounds. Never a label colour, never a
+ *                          focus ring — it misses even the 3:1 floor WCAG
+ *                          1.4.11 sets for a meaningful graphic.
+ *   `brand-600` #087F8C — 4.75:1. The *interactive* teal: filled buttons carry
+ *                          white labels at AA, and it doubles as teal text and
+ *                          as the active icon colour on a tinted pill (4.35:1
+ *                          over brand-50).
  *
- * The neutrals are true greys rather than the warm cast this palette used to
- * carry — an off-white with a warm tint under a cool accent reads as a mistake
- * rather than as a choice.
+ * That is why a primary button is 600 and the accent is 500. They look like one
+ * colour and behave like two, which is what lets the interface be bright without
+ * any of it being unreadable in sunlight.
+ *
+ * The neutrals are cool greys. An off-white with a warm cast under a cool accent
+ * reads as a mistake rather than as a choice.
  */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
@@ -39,8 +45,8 @@ export default {
           // 17.7:1 on white. Not pure black — reads warmer and less harsh.
           DEFAULT: '#111827',
           soft: '#334155',
-          // 4.76:1 on white, 4.46:1 on the app background. The lightest tone
-          // that may carry text.
+          // 4.76:1 on white, 4.51:1 on the app ground. The lightest tone that
+          // may carry text.
           mute: '#64748B',
           // Decorative only — 2.56:1. Dividers, disabled glyphs, placeholder
           // rules. Never text.
@@ -48,24 +54,30 @@ export default {
         },
         surface: {
           DEFAULT: '#ffffff',
-          /** The app ground: a cool off-white, so white cards lift off it. */
-          sunk: '#F4F7F8',
-          /** Secondary surface — the faintest teal, for grouped rows and callouts. */
-          tint: '#E9F6F9',
-          /** Inputs: a shade down from the ground so a field reads as recessed. */
-          field: '#EEF3F5',
+          /** The app ground: a near-white, so white cards lift off it. */
+          sunk: '#F7F9FA',
+          /** The faintest teal — active pills, grouped rows, callouts. */
+          tint: '#E7F8FA',
+          /** Inputs and quiet chips: one step down from the ground. */
+          field: '#F1F4F5',
           raised: '#ffffff',
         },
+        /**
+         * The one border colour. A single hairline everywhere is what stops the
+         * interface reading as a grid of boxes — see the note on `.card`.
+         */
+        line: { DEFAULT: '#E3E8EA', soft: '#EDF1F3' },
         brand: {
-          50: '#E9F6F9',
-          100: '#CBEDF4',
-          200: '#9FDFEB',
-          /** The logo teal. Fill only — 2.53:1, so no text on it and no focus rings. */
-          400: '#07B3CA',
-          500: '#0A8296',
-          /** Surface and text. 6.15:1 with white — labels pass AA at any size. */
-          600: '#0A6B7D',
-          700: '#064E5D',
+          50: '#E7F8FA',
+          100: '#D2F1F6',
+          200: '#A5E3EC',
+          /** Decorative fill — 2.12:1. Bars and dots, never a glyph that matters. */
+          400: '#20C4D3',
+          /** The brand accent — 2.84:1. Fills and indicators. Not text. */
+          500: '#0FA9B8',
+          /** Interactive. 4.75:1 with white — labels and icons pass AA. */
+          600: '#087F8C',
+          700: '#056470',
         },
         /*
          * The logo teal, sampled from the artwork. Now the same value as
@@ -107,22 +119,26 @@ export default {
       },
       borderRadius: {
         // One card radius, used everywhere, so nothing looks borrowed.
-        card: '20px',
+        card: '22px',
         field: '14px',
-        sheet: '24px',
+        sheet: '26px',
+        /** Nav pills, chips, small tappable surfaces. */
+        pill: '16px',
       },
       boxShadow: {
         /*
-         * Two-layer and low-alpha: a tight shadow for the edge and a wide, very
-         * soft one for lift. A single heavy shadow is what makes a card look
-         * stuck on rather than resting on the page.
+         * Wide, soft and very low alpha. Two layers: a barely-there contact
+         * shadow and a broad diffuse one for lift. The failure mode being
+         * avoided is a tight dark shadow, which makes a card look stuck onto the
+         * page rather than resting on it — and stacked up the screen, reads as a
+         * dashboard of widgets.
          */
-        card: '0 1px 2px rgba(17,24,39,0.04), 0 6px 16px -8px rgba(17,24,39,0.10)',
-        raise: '0 1px 2px rgba(17,24,39,0.05), 0 8px 20px -10px rgba(17,24,39,0.14)',
-        float: '0 2px 6px rgba(17,24,39,0.06), 0 16px 32px -12px rgba(17,24,39,0.22)',
-        sheet: '0 -8px 30px rgba(17,24,39,0.14)',
-        /** Bottom nav: a hairline lift, not a drop shadow. */
-        nav: '0 -1px 0 rgba(17,24,39,0.06), 0 -8px 24px -16px rgba(17,24,39,0.18)',
+        card: '0 1px 2px rgba(15,23,42,0.03), 0 4px 16px rgba(15,23,42,0.06)',
+        raise: '0 2px 4px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.08)',
+        float: '0 4px 10px rgba(15,23,42,0.06), 0 16px 32px rgba(15,23,42,0.10)',
+        sheet: '0 -6px 28px rgba(15,23,42,0.12)',
+        /** Bottom nav: a hairline, not a drop shadow. */
+        nav: '0 -1px 0 rgba(15,23,42,0.05)',
       },
       fontSize: {
         // Bumped baseline: outdoor sunlight legibility.

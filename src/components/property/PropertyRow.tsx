@@ -59,7 +59,7 @@ export function PropertyRow({
         color: '#0A6B7D',
         onAction: () => nav(`/property/${property.id}?start=1`),
       }}
-      className="border-b border-ink/[0.06] last:border-0"
+      className="border-b border-line-soft last:border-0"
     >
       <button
         onClick={() =>
@@ -70,24 +70,28 @@ export function PropertyRow({
           active ? 'bg-brand-50' : ''
         }`}
       >
+        {/* A 3px rail, not 6. The stage is already stated in words on the pill
+            below; this only has to be findable while scanning, and at 6px thirty
+            rows of it read as a stacked bar chart down the left edge. */}
         <span
-          className="h-12 w-1.5 shrink-0 rounded-full"
+          className="h-11 w-[3px] shrink-0 rounded-full"
           style={{ backgroundColor: STATUS_COLOR[property.status] }}
           aria-hidden
         />
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline gap-2">
-            <span className="truncate text-[15px] font-semibold">{property.address1}</span>
+            <span className="truncate text-[15px] font-medium">{property.address1}</span>
             {showDistance && dist != null && (
-              <span className="nums shrink-0 text-[12.5px] font-semibold text-ink-mute">
+              <span className="nums shrink-0 text-[12.5px] font-medium text-ink-mute">
                 {formatDistance(dist)}
               </span>
             )}
           </span>
           <span className="mt-1 flex items-center gap-2 text-[13px] text-ink-mute">
             <span className="truncate">{contact?.name ?? 'No contact on file'}</span>
+            {/* Green is reserved for won. An open opportunity is a number. */}
             {property.opportunityValue && (
-              <span className="nums shrink-0 font-semibold text-good">
+              <span className="nums shrink-0 font-medium text-ink-soft">
                 {money(property.opportunityValue)}
               </span>
             )}

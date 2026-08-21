@@ -132,7 +132,7 @@ export function MapScreen() {
           selected={filter === f.key}
           onClick={() => setFilter(f.key)}
           className={
-            filter === f.key ? 'shadow-float' : 'bg-surface/95 shadow-raise backdrop-blur'
+            filter === f.key ? 'shadow-card' : 'bg-surface/95 shadow-card backdrop-blur'
           }
         >
           {f.label}
@@ -178,15 +178,27 @@ export function MapScreen() {
       <div
         role="group"
         aria-label="View"
-        className="ml-auto flex overflow-hidden rounded-full bg-surface/95 shadow-raise ring-1 ring-ink/[0.06] backdrop-blur"
+        /*
+          A segmented control, not two buttons. The selected half is a teal pill
+          inside a white track with a hairline — the same two-state vocabulary as
+          the nav bar, so the one control that floats over the map does not
+          introduce a third way of showing "selected".
+        */
+        className="ml-auto flex overflow-hidden rounded-full border border-line bg-surface/95 p-0.5 shadow-card backdrop-blur"
       >
         {(['map', 'list'] as const).map((v) => (
           <button
             key={v}
             onClick={() => setView(v)}
             aria-pressed={view === v}
-            className={`focusable min-h-tap px-3.5 text-[12.5px] font-semibold capitalize ${
-              view === v ? 'bg-brand-600 text-white' : 'text-ink-soft'
+            /*
+              44px, not 40. The pill sits inside a 2px track, so the inner button
+              is what a thumb actually lands on — sizing the *track* to the tap
+              floor left the target 4px short, which `verify:routelist` measures
+              directly and caught.
+            */
+            className={`focusable min-h-[44px] rounded-full px-3.5 text-[12.5px] font-semibold capitalize transition-colors ${
+              view === v ? 'bg-brand-600 text-white' : 'text-ink-mute'
             }`}
           >
             {v}
@@ -245,7 +257,7 @@ export function MapScreen() {
           {mapError && (
             <div
               role="status"
-              className="pointer-events-auto mx-3 mt-2 rounded-field bg-warn-bg px-3 py-2 text-[12.5px] text-warn shadow-raise"
+              className="pointer-events-auto mx-3 mt-2 rounded-field bg-warn-bg px-3 py-2 text-[12.5px] text-warn shadow-card"
             >
               {/*
                 Connectivity gets a rep's sentence; everything else keeps the
@@ -277,7 +289,7 @@ export function MapScreen() {
               mapHandle.current?.flyTo(p.lat, p.lng, 18)
               setSelectedId(nearest.id)
             }}
-            className="press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-field bg-surface px-4 text-[14px] font-semibold text-brand-600 shadow-float ring-1 ring-ink/[0.06]"
+            className="press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-pill border border-line bg-surface px-4 text-[14px] font-semibold text-brand-600 shadow-card"
             style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
           >
             Nearest door
@@ -299,7 +311,7 @@ export function MapScreen() {
         map, because there is no room for two panes and the map *is* the screen.
       */}
       {isWide && (
-        <aside className="hidden w-[320px] shrink-0 flex-col border-r border-ink/10 bg-surface md:flex lg:w-[380px]">
+        <aside className="hidden w-[320px] shrink-0 flex-col border-r border-line bg-surface md:flex lg:w-[380px]">
           {selected ? (
             <div className="scroll-pane p-4">
               <button
@@ -316,7 +328,7 @@ export function MapScreen() {
             </div>
           ) : (
             <>
-              <div className="border-b border-ink/[0.06] px-4 py-3">
+              <div className="border-b border-line-soft px-4 py-3">
                 <p className="eyebrow">{shown.length} properties</p>
               </div>
               <ul className="scroll-pane">
@@ -327,7 +339,7 @@ export function MapScreen() {
                         setSelectedId(p.id)
                         mapHandle.current?.flyTo(p.lat, p.lng)
                       }}
-                      className="flex min-h-[66px] w-full items-center gap-3 border-b border-ink/[0.06] px-4 text-left active:bg-surface-field"
+                      className="flex min-h-[66px] w-full items-center gap-3 border-b border-line-soft px-4 text-left active:bg-surface-field"
                     >
                       <span
                         className="h-9 w-1.5 shrink-0 rounded-full"
@@ -363,7 +375,7 @@ export function MapScreen() {
           instead of controls floating over imagery that isn't there.
         */
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col bg-surface">
-          <div className="pad-top w-full min-w-0 shrink-0 border-b border-ink/[0.06] bg-surface">
+          <div className="pad-top w-full min-w-0 shrink-0 border-b border-line-soft bg-surface">
             <div className="flex items-center gap-2 px-3 pb-2 pt-2">{chips}</div>
             <div className="pb-2">{statusRow}</div>
           </div>

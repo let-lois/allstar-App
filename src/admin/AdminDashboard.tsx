@@ -96,7 +96,7 @@ export function AdminDashboard() {
         />
       </div>
 
-      <section className="mt-4 rounded-card border border-ink/10 bg-surface p-5">
+      <section className="mt-4 rounded-card border border-line bg-surface p-5">
         <h2 className="text-sm font-bold">Doors and conversations</h2>
         <p className="mb-3 text-xs text-ink-mute">
           Same unit, one axis — volume and the conversations it produced.
@@ -105,7 +105,7 @@ export function AdminDashboard() {
       </section>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <section className="rounded-card border border-ink/10 bg-surface p-5">
+        <section className="rounded-card border border-line bg-surface p-5">
           <div className="mb-1 flex items-baseline justify-between">
             <h2 className="text-sm font-bold">Open pipeline</h2>
             <span className="nums text-xs font-semibold text-good">
@@ -118,7 +118,7 @@ export function AdminDashboard() {
           <Bars data={funnelData} variant="funnel" showConversion />
         </section>
 
-        <section className="rounded-card border border-ink/10 bg-surface p-5">
+        <section className="rounded-card border border-line bg-surface p-5">
           <h2 className="text-sm font-bold">Today’s outcomes</h2>
           <p className="mb-3 text-xs text-ink-mute">
             What every knock logged today actually resulted in.
@@ -127,12 +127,12 @@ export function AdminDashboard() {
         </section>
       </div>
 
-      <section className="mt-4 overflow-hidden rounded-card border border-ink/10 bg-surface">
+      <section className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
         <div className="flex items-baseline justify-between px-5 pb-2 pt-4">
           <h2 className="text-sm font-bold">Rep performance</h2>
           <button
             onClick={() => nav('/admin/reports')}
-            className="focusable min-h-[32px] rounded-lg px-2 text-xs font-semibold text-brand-600 hover:bg-brand-50"
+            className="focusable min-h-[44px] rounded-lg px-2 text-xs font-semibold text-brand-600 hover:bg-brand-50 lg:min-h-[32px]"
           >
             Full report
           </button>
@@ -152,7 +152,7 @@ export function AdminDashboard() {
           </thead>
           <tbody>
             {reps.map((r) => (
-              <tr key={r.id} className="border-t border-ink/[0.06] hover:bg-surface-field">
+              <tr key={r.id} className="border-t border-line-soft hover:bg-surface-field">
                 <td className="px-5 py-2.5">
                   <span className="flex items-center gap-2.5">
                     <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-50 text-[11px] font-bold text-brand-600">
@@ -176,7 +176,7 @@ export function AdminDashboard() {
         </table>
       </section>
 
-      <section className="mt-4 overflow-hidden rounded-card border border-ink/10 bg-surface">
+      <section className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
         <h2 className="px-5 pb-2 pt-4 text-sm font-bold">Live activity</h2>
         <ul className="max-h-72 overflow-y-auto">
           {activity.slice(0, 30).map((ev) => {
@@ -185,7 +185,7 @@ export function AdminDashboard() {
             return (
               <li
                 key={ev.id}
-                className="flex items-center gap-3 border-t border-ink/[0.06] px-5 py-2 text-sm"
+                className="flex items-center gap-3 border-t border-line-soft px-5 py-2 text-sm"
               >
                 <span className="w-5 shrink-0 text-center" aria-hidden>
                   {def?.glyph ?? '·'}

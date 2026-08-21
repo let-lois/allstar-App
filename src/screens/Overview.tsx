@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { SyncBadge } from '../components/sync/SyncBadge'
 import { PullToRefresh } from '../components/ui/PullToRefresh'
-import { Card, SectionHeader } from '../components/ui/Card'
+import { SectionHeader } from '../components/ui/Card'
 import { KpiCard } from '../components/ui/KpiCard'
 import { ProgressBar } from '../components/ui/ProgressBar'
-import { StatusBadge } from '../components/ui/StatusBadge'
 import { Avatar } from '../components/ui/Avatar'
 import { useAppStore } from '../store/useAppStore'
 import { PIPELINE_STAGES, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
@@ -46,15 +45,14 @@ export function Overview({ role }: { role: Role }) {
     const rows = Object.values(properties)
     const open = rows.filter((p) => !['won', 'lost', 'dnc'].includes(p.status))
     const openValue = open.reduce((s, p) => s + (p.opportunityValue ?? 0), 0)
-    const wonValue = rows
-      .filter((p) => p.status === 'won')
-      .reduce((s, p) => s + (p.opportunityValue ?? 0), 0)
+    const won = rows.filter((p) => p.status === 'won')
+    const wonValue = won.reduce((s, p) => s + (p.opportunityValue ?? 0), 0)
     const conversations = todayVisits.filter(
       (v) =>
         v.outcome &&
         ['interested', 'appointment', 'quote_requested', 'sold'].includes(v.outcome),
     ).length
-    return { conversations, openValue, wonValue, openCount: open.length }
+    return { conversations, openValue, wonValue, openCount: open.length, wonCount: won.length }
   }, [properties, todayVisits])
 
   const stageCounts = useMemo(() => {
@@ -99,38 +97,60 @@ export function Overview({ role }: { role: Role }) {
       >
         <div className="content-col page anim-rise">
           {/*
-            Headline numbers.
-            Two columns, and deliberately not four identically-coloured tiles:
-            conversations carry the accent because that is the number a manager
-            is actually watching, money won carries green, and volume stays
-            neutral. Colouring everything is the same as colouring nothing.
+            Two sections, not one grid of four.
+
+            Four tiles of equal size and weight are four things to compare and no
+            answer — which is exactly how a dashboard reads and exactly what this
+            screen is not for. Today's effort is a pair of small counts; the money
+            is one large number with its supporting figures beside it. A manager
+            opening this on a phone gets the answer to "is today going the way it
+            should" from the top third of the screen.
           */}
-          <div className="grid grid-cols-2 gap-3">
-            <KpiCard label="Doors today" value={totals.knocks} />
-            <KpiCard
-              label="Conversations"
-              value={totals.conversations}
-              sub={`${totals.contactRate}% contact rate`}
-              tone="brand"
-            />
+          <section className="section">
+            <SectionHeader title="Today" standalone />
+            <div className="grid grid-cols-2 gap-3">
+              <KpiCard label="Doors" value={totals.knocks} />
+              <KpiCard
+                label="Conversations"
+                value={totals.conversations}
+                sub={`${totals.contactRate}% contact rate`}
+                tone="brand"
+              />
+            </div>
+          </section>
+
+          <section className="section">
+            <SectionHeader title="Pipeline" standalone />
+            {/*
+              The lead metric. It is the number the business is run on, so it gets
+              the width and the size rather than a quarter of a grid — and `Won`
+              sits under it as context rather than beside it as a rival.
+            */}
             <KpiCard
               label="Open pipeline"
               value={money(stats.openValue)}
               sub={`${stats.openCount} leads`}
+              size="lead"
+              onClick={() => nav('/pipeline')}
             />
-            <KpiCard label="Won" value={money(stats.wonValue)} tone="good" />
-          </div>
+            <div className="grid grid-cols-2 gap-3">
+              <KpiCard label="Won" value={money(stats.wonValue)} tone="good" />
+              {/* The count beside the value, because one large deal and ten small
+                  ones are the same number here and very different weeks. */}
+              <KpiCard label="Deals won" value={stats.wonCount} />
+            </div>
+          </section>
 
           {isSuper && (
-            <Card padded={false}>
-              <SectionHeader title="Clients" className="px-4 pb-3 pt-4" />
-              <ul className="row-group">
+            <section className="section">
+              <SectionHeader title="Clients" standalone />
+              <ul className="plate row-group -mx-4 sm:mx-0 sm:rounded-card sm:border">
                 {[
                   { name: 'Summit Exteriors', reps: 12, status: 'Healthy' },
                   { name: 'Bright Path Solar', reps: 28, status: 'Healthy' },
                   { name: 'Redline Roofing', reps: 7, status: 'Low activity' },
                 ].map((c) => (
-                  <li key={c.name} className="flex min-h-[60px] items-center gap-3 px-4 py-2.5">
+                  <li key={c.name} className="flex min-h-[64px] items-center gap-3 px-4 py-3">
                     <Avatar
                       initials={c.name
                         .split(' ')
@@ -140,39 +160,57 @@ export function Overview({ role }: { role: Role }) {
                       name={c.name}
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-semibold">{c.name}</span>
-                      <span className="nums block text-[13px] text-ink-mute">{c.reps} reps</span>
+                      <span className="block truncate text-[15px] font-medium">{c.name}</span>
+                      {/*
+                        The count and the state on one quiet line rather than a
+                        filled pill on the right. A status badge per row turns a
+                        list into a table of labels; a dot and two words is the
+                        same information at a fraction of the volume.
+                      */}
+                      <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-ink-mute">
+                        <span className="nums">{c.reps} reps</span>
+                        <span aria-hidden>·</span>
+                        <span
+                          aria-hidden
+                          className={`h-[6px] w-[6px] shrink-0 rounded-full ${
+                            c.status === 'Healthy' ? 'bg-good' : 'bg-warn'
+                          }`}
+                        />
+                        <span>{c.status}</span>
+                      </span>
                     </span>
-                    <StatusBadge tone={c.status === 'Healthy' ? 'good' : 'warn'}>
-                      {c.status}
-                    </StatusBadge>
+                    <span className="shrink-0 text-ink-faint">
+                      <IconChevron />
+                    </span>
                   </li>
                 ))}
               </ul>
-              <p className="px-4 pb-4 pt-3 text-[13px] leading-snug text-ink-mute">
+              <p className="text-[13px] leading-snug text-ink-mute">
                 Full administration, analytics and audit logs are on desktop.
               </p>
-            </Card>
+            </section>
           )}
 
           {/* --- team ----------------------------------------------------- */}
-          <Card padded={false} className="overflow-hidden">
+          <section className="section">
             <SectionHeader
               title="Team today"
-              className="px-4 pb-2.5 pt-4"
+              standalone
               action="All"
               onAction={() => nav('/team')}
             />
-            <ul className="row-group">
+            <ul className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
               {teamStats.map((rep) => (
                 <li key={rep.id}>
                   <button
                     onClick={() => nav('/team')}
-                    className="flex min-h-[72px] w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-field"
+                    className="flex min-h-[68px] w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-field"
                   >
                     <Avatar initials={rep.initials} name={rep.name} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-semibold">{rep.name}</span>
+                      {/* Medium, not bold. A list where every name is bold has no
+                          emphasis left for the thing that actually matters. */}
+                      <span className="block truncate text-[15px] font-medium">{rep.name}</span>
                       {/*
                         Never wrapped, and never truncated mid-word either.
 
@@ -197,7 +235,7 @@ export function Overview({ role }: { role: Role }) {
                       manager the thing they opened the screen to find out is
                       fine when it isn't.
                     */}
-                    <span className="nums shrink-0 text-[15px] font-bold text-ink">
+                    <span className="nums shrink-0 text-[15px] font-semibold text-ink">
                       {rep.contactRate}%
                     </span>
                     <span className="shrink-0 text-ink-faint">
@@ -207,12 +245,12 @@ export function Overview({ role }: { role: Role }) {
                 </li>
               ))}
             </ul>
-          </Card>
+          </section>
 
           {/* --- pipeline snapshot ---------------------------------------- */}
-          <Card>
-            <SectionHeader title="Pipeline" className="mb-3.5" />
-            <ul className="space-y-3">
+          <section className="section">
+            <SectionHeader title="By stage" standalone />
+            <ul className="card space-y-3.5 p-4">
               {PIPELINE_STAGES.map((s) => {
                 const count = stageCounts.get(s) ?? 0
                 return (
@@ -227,34 +265,30 @@ export function Overview({ role }: { role: Role }) {
                       label={`${STATUS_LABEL[s]}: ${count}`}
                       className="flex-1"
                     />
-                    <span className="nums w-7 shrink-0 text-right text-[13px] font-bold">
+                    <span className="nums w-7 shrink-0 text-right text-[13px] font-semibold">
                       {count}
                     </span>
                   </li>
                 )
               })}
             </ul>
-          </Card>
+          </section>
 
           {/* --- upcoming ------------------------------------------------- */}
           {upcoming.length > 0 && (
-            <Card padded={false} className="overflow-hidden">
-              <SectionHeader
-                title="Upcoming appointments"
-                count={upcoming.length}
-                className="px-4 pb-2.5 pt-4"
-              />
-              <ul className="row-group">
+            <section className="section">
+              <SectionHeader title="Upcoming" count={upcoming.length} standalone />
+              <ul className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
                 {upcoming.map((a) => {
                   const p = properties[a.propertyId]
                   return (
                     <li key={a.id}>
                       <button
                         onClick={() => p && nav(`/property/${p.id}`)}
-                        className="flex min-h-[60px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-surface-field"
+                        className="flex min-h-[64px] w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-field"
                       >
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[15px] font-semibold">
+                          <span className="block truncate text-[15px] font-medium">
                             {a.title}
                           </span>
                           <span className="block truncate text-[13px] text-ink-mute">
@@ -269,13 +303,13 @@ export function Overview({ role }: { role: Role }) {
                   )
                 })}
               </ul>
-            </Card>
+            </section>
           )}
 
           {/* --- recent activity ------------------------------------------ */}
-          <Card padded={false} className="overflow-hidden">
-            <SectionHeader title="Live activity" className="px-4 pb-2.5 pt-4" />
-            <ul className="row-group">
+          <section className="section">
+            <SectionHeader title="Live activity" standalone />
+            <ul className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
               {activity.slice(0, 10).map((ev) => {
                 const def = outcomeByCode(ev.outcome)
                 return (
@@ -296,9 +330,9 @@ export function Overview({ role }: { role: Role }) {
                 )
               })}
             </ul>
-          </Card>
+          </section>
 
-          <p className="px-4 pb-1 pt-1 text-center text-[13px] leading-relaxed text-ink-mute">
+          <p className="px-2 pb-1 pt-2 text-center text-[13px] leading-relaxed text-ink-mute">
             Open Allstar on a larger screen for user management, territories, imports and
             full reporting.
           </p>

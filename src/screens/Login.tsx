@@ -90,7 +90,7 @@ export function Login() {
                 height={184}
                 className="h-auto w-[204px] max-w-full"
               />
-              <h1 className="mt-4 text-[23px] font-extrabold leading-tight tracking-[-0.02em] [text-shadow:0_1px_2px_rgba(0,0,0,0.55)]">
+              <h1 className="mt-4 text-[23px] font-semibold leading-tight tracking-[-0.02em] [text-shadow:0_1px_2px_rgba(0,0,0,0.55)]">
                 Field sales, built for the phone.
               </h1>
             </div>
@@ -108,7 +108,7 @@ export function Login() {
 
           <form onSubmit={submit} noValidate>
             <label className="block">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+              <span className="text-[13px] font-medium text-white/70">
                 Email
               </span>
               <input
@@ -130,7 +130,7 @@ export function Login() {
             </label>
 
             <label className="mt-3.5 block">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+              <span className="text-[13px] font-medium text-white/70">
                 Password
               </span>
               <span className="relative mt-1.5 block">
@@ -147,7 +147,7 @@ export function Login() {
                   type="button"
                   onClick={() => setReveal((v) => !v)}
                   aria-pressed={reveal}
-                  className="glass-dark focusable absolute right-1.5 top-1.5 grid h-11 w-[64px] place-items-center rounded-field text-xs font-bold uppercase tracking-wide text-white"
+                  className="glass-dark focusable absolute right-1.5 top-1.5 grid h-11 w-[64px] place-items-center rounded-field text-xs font-semibold uppercase tracking-wide text-white"
                 >
                   {reveal ? 'Hide' : 'Show'}
                 </button>
@@ -161,15 +161,23 @@ export function Login() {
             )}
 
             {/*
-              Light gradient, near-black label — the same inversion the nav
-              badges use, and for the same reason: the gloss overlay lifts the
-              top of the face, and white on a lifted teal fails. #111827 over
-              this ramp measures 8.38:1 across the band the label occupies.
+              Flat brand teal with a near-black label.
+
+              `brand-500` rather than the darker `brand-600` a primary button
+              uses on white: on this near-black ground the deeper teal reads as
+              disabled. Near-black on #0FA9B8 measures 6.24:1 — the same
+              inversion, without the gradient it used to need to justify itself.
+
+              This was the one thing the flattening pass actually broke. The
+              button carried the gradient rule's class, and with that rule gone it
+              had no background at all — so the primary action on the first screen
+              of the product was invisible white text on navy. `verify:classes`
+              exists because of this button.
             */}
             <button
               type="submit"
               disabled={busy}
-              className="btn-3d press focusable mt-5 grid h-14 w-full place-items-center rounded-field text-[17px] font-bold text-ink [--btn-bottom:#07B3CA] [--btn-top:#7FE0EF] disabled:opacity-60"
+              className="press focusable mt-5 grid h-14 w-full place-items-center rounded-field bg-brand-500 text-[17px] font-semibold text-ink transition-colors active:bg-brand-400 disabled:opacity-60"
             >
               {busy ? 'Signing in…' : 'Sign in'}
             </button>
@@ -178,7 +186,7 @@ export function Login() {
           {/* --- the demo, kept alongside rather than behind a flag --------- */}
           <div className="mt-8 flex items-center gap-3">
             <span className="h-px flex-1 bg-white/10" />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            <span className="text-[12px] font-medium uppercase tracking-[0.08em] text-white/50">
               or
             </span>
             <span className="h-px flex-1 bg-white/10" />
@@ -194,7 +202,7 @@ export function Login() {
             </button>
           ) : (
             <>
-              <p className="mb-3 mt-5 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+              <p className="mb-3 mt-5 text-[13px] font-medium text-white/60">
                 Demo — sample data, no account
               </p>
               <ul className="space-y-2.5">
@@ -204,14 +212,7 @@ export function Login() {
                       onClick={() => void signInDemo(u.id)}
                       className="glass-dark press focusable flex min-h-[68px] w-full items-center gap-3 rounded-card px-4 text-left"
                     >
-                      <span
-                        className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-bold text-ink"
-                        style={{
-                          background: 'linear-gradient(180deg, #BCEFF7, #4CD3E6)',
-                          boxShadow:
-                            'inset 0 2px 3px rgba(255,255,255,0.65), inset 0 -2px 3px rgba(0,0,0,0.25), 0 2px 5px rgba(0,0,0,0.35)',
-                        }}
-                      >
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-200 text-sm font-semibold text-brand-700">
                         {u.avatarInitials}
                       </span>
                       <span className="min-w-0 flex-1">
@@ -221,7 +222,7 @@ export function Login() {
                         </span>
                       </span>
                       {u.role === 'field_rep' && (
-                        <span className="shrink-0 rounded-full bg-brand-400/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.06em] text-brand-200">
+                        <span className="shrink-0 rounded-full bg-brand-400/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-brand-200">
                           Field
                         </span>
                       )}

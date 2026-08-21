@@ -88,37 +88,43 @@
   /*
    * The card.
    *
-   * One radius, one shadow, one background, used everywhere — a hairline ring
-   * instead of a border so the edge is defined at the top where the shadow is
-   * weakest, without the boxed-in look a real border gives.
-   */
-  /*
-   * The card, embossed.
+   * White, one hairline, one soft shadow, one radius. It replaces an embossed
+   * treatment — gradient face, white top lip, dark bottom bevel — that made
+   * every card read as a dashboard widget stamped onto the page. On a phone,
+   * stacked five deep, that is the single thing that makes an app look like a
+   * desktop admin panel shrunk down.
    *
-   * Four layers doing four jobs: a white top edge that reads as light catching a
-   * lifted lip, a soft dark bottom inset for the bevel, a hairline so the shape
-   * is defined against the warm page, and a wide low shadow for the lift.
-   *
-   * The face gradient stops at #F7F9FA. That is not a taste call — it is the
-   * darkest bottom stop where every text tone still clears AA on it. One step
-   * further (#F4F7F9) drops ink-mute to 4.42:1, and ink-mute carries most of the
-   * secondary text in the app.
+   * The border does the work the shadow used to. A hairline at 1.24:1 against
+   * white is enough to define an edge where the shadow is weakest (the top),
+   * which is what lets the shadow itself stay wide and almost invisible.
    *
    * Written as raw box-shadow rather than @apply ring + shadow: Tailwind composes
-   * both into one box-shadow property, so a ring utility on any card would
-   * silently erase these insets.
+   * both into one property, so a ring utility on any card would silently erase
+   * the elevation.
    */
   .card {
-    @apply rounded-card;
-    background: linear-gradient(180deg, #ffffff, #f7f9fa);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2px 3px rgba(17, 24, 39, 0.05),
-      0 0 0 1px rgba(17, 24, 39, 0.06),
-      0 4px 10px -2px rgba(17, 24, 39, 0.12);
+    @apply rounded-card border border-line bg-surface;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 4px 16px rgba(15, 23, 42, 0.06);
   }
 
-  /** A card whose whole surface is tappable — pressed, it sinks into the page. */
+  /**
+   * A group of rows that reads as one surface, with no card around it.
+   *
+   * The brief for this interface is to use cards *selectively* — so lists of
+   * settings, clients and people are plain white sections with dividers instead
+   * of five stacked rectangles.
+   */
+  .plate {
+    @apply border-y border-line bg-surface;
+  }
+
+  /**
+   * A card whose whole surface is tappable.
+   *
+   * Pressed, it settles: the lift comes off and it scales a hair. That is the
+   * flat-design equivalent of the old "sinks into the page" inset, and it is
+   * legible without the bevel that made it look like a physical button.
+   */
   .card-tap {
     @apply card press;
     transition:
@@ -127,14 +133,12 @@
   }
 
   .card-tap:active {
-    box-shadow:
-      inset 0 2px 4px rgba(17, 24, 39, 0.12),
-      0 0 0 1px rgba(17, 24, 39, 0.07);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
   }
 
-  /** Grouped rows inside one card — dividers rather than a stack of cards. */
+  /** Grouped rows inside one surface — dividers rather than a stack of cards. */
   .row-group > * + * {
-    @apply border-t border-ink/[0.06];
+    @apply border-t border-line-soft;
   }
 
   /*
@@ -145,16 +149,40 @@
    * and 14px between cards is the difference between cramped and composed.
    */
   .page {
-    @apply flex flex-col gap-3.5 px-4 py-4;
+    @apply flex flex-col gap-4 px-4 py-4;
+  }
+
+  /**
+   * A titled section: the heading on the page ground, its content under it.
+   *
+   * Tighter inside than `.page` is between sections, which is what makes a
+   * heading read as belonging to the thing below it rather than floating between
+   * two groups. That relationship — not a border, not a card — is what carries
+   * the structure of these screens.
+   */
+  .section {
+    @apply flex flex-col gap-2.5;
   }
 
   .section-gap {
-    @apply flex flex-col gap-3.5;
+    @apply flex flex-col gap-4;
   }
 
-  /* 8 top + 70 row + 2 bottom + room for the selected badge's scale and shadow. */
+  /*
+   * Clearance for everything fixed to the bottom of the screen.
+   *
+   * The bar itself is 6 top + 58 row + 4 bottom = 68px. The number here is
+   * larger because a rep's screens also carry the quick-action button, which
+   * floats 76px up and stands 56px tall — so the last row of a list has to clear
+   * 132px, not 68, or it sits under the button. That was visible on Today: the
+   * third follow-up was permanently behind a teal circle.
+   *
+   * One value for every screen rather than two, because the cost of the extra
+   * space on the screens with no button is a little air at the end of a scroll,
+   * and the cost of getting it wrong is an unreachable row.
+   */
   .pad-nav {
-    padding-bottom: calc(94px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
   }
 
   /*
@@ -185,20 +213,27 @@
     @apply outline-none ring-2 ring-brand-600 ring-offset-2;
   }
 
+
   /*
    * Input focus. An orange ring with a warm halo instead of the browser's blue,
    * which is the single most obvious sign of an un-designed form.
    */
   .field {
-    @apply w-full rounded-field border border-ink/10 bg-surface px-3.5 text-base text-ink;
+    @apply w-full rounded-field border border-line bg-surface px-4 text-base text-ink;
     @apply placeholder:text-ink-faint;
     transition:
       border-color 150ms ease,
       box-shadow 150ms ease;
   }
+
+  /*
+   * Focus: the border goes teal and a soft halo appears behind it. Deliberately
+   * subtle — a thick bright outline is the other way this kind of interface
+   * announces itself, and the halo alone is enough to find the field you are in.
+   */
   .field:focus {
     @apply border-brand-500 outline-none;
-    box-shadow: 0 0 0 3px rgba(7, 179, 202, 0.3);
+    box-shadow: 0 0 0 3px rgba(15, 169, 184, 0.16);
   }
 
   /*
@@ -209,188 +244,114 @@
     @apply transition-transform duration-100 active:scale-[0.98];
   }
 
-  /** Section label above a group of cards. */
+  /**
+   * Section label above a group of cards.
+   *
+   * No longer uppercase with letterspacing. Small-caps labels are what give an
+   * interface its enterprise-reporting accent, and five of them down a phone
+   * screen is a spreadsheet. Hierarchy here comes from size and weight instead.
+   */
   .eyebrow {
-    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-mute;
+    @apply text-[13px] font-semibold text-ink-soft;
+  }
+
+  /** The quiet line under a metric or a name. */
+  .sub {
+    @apply text-[13px] text-ink-mute;
   }
 
   /*
-   * Embossed badge.
+   * The nav pill.
    *
-   * Every colour is a custom property so an accent can be swapped per item
-   * without touching this rule — see NAV_ACCENTS in components/nav/accents.ts.
+   * This replaces a glossy embossed badge — gradient face, glass reflection,
+   * drop shadow, five per bar — which was the loudest thing on screen and the
+   * single clearest tell that the interface was styled rather than designed. A
+   * navigation bar is a place a thumb goes, not the product's centrepiece.
    *
-   * The palette is deliberately light-gradient-with-dark-glyph rather than the
-   * saturated-gradient-with-white-glyph the reference uses. That is measured,
-   * not taste: the gloss overlay lightens the top of the badge, and a white
-   * glyph over a lightened saturated fill measures 1.6-2.5:1, which fails the
-   * 3:1 WCAG 1.4.11 floor for a meaningful graphic at every candidate colour
-   * tried. Inverted, the worst badge measures 4.26:1 and four of five clear
-   * 4.5:1, while keeping the glass look.
+   * Inactive is nothing at all: the icon sits on the white bar in mid grey. The
+   * selected item gets a soft teal pill behind its icon, and the icon goes to
+   * `brand-600` — 4.34:1 against that pill, so the state is carried by colour
+   * *and* by the shape, and neither depends on the other. Nothing scales, and
+   * nothing casts a shadow.
    *
-   * Green and red are absent on purpose. Both already carry meaning everywhere
-   * else in this app — won, and do-not-contact — and a nav item wearing one
-   * would be the only place they meant nothing.
+   * The whole treatment is two properties. That is the point.
    */
-  .badge-3d {
-    position: relative;
-    isolation: isolate;
-    border-radius: 15px;
-    color: var(--badge-ink);
-    background: linear-gradient(180deg, var(--badge-top), var(--badge-bottom));
-    box-shadow:
-      inset 0 2px 4px rgba(255, 255, 255, 0.6),
-      inset 0 -2px 3px rgba(0, 0, 0, 0.25),
-      0 0 0 1px var(--badge-ring),
-      0 4px 8px rgba(17, 24, 39, 0.25);
+  .nav-pill {
+    @apply grid place-items-center rounded-pill text-ink-mute;
+    height: 38px;
+    width: 46px;
     transition:
-      transform 160ms cubic-bezier(0.22, 0.8, 0.3, 1),
-      box-shadow 160ms ease;
+      background-color 160ms ease,
+      color 160ms ease;
   }
 
-  /* The glass reflection: a highlight over the top 40%, inset so it follows the
-     badge's radius instead of squaring off its corners. */
-  .badge-3d::after {
-    content: '';
-    position: absolute;
-    inset: 2px 2px auto 2px;
-    height: 42%;
-    border-radius: 13px 13px 10px 10px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0));
-    pointer-events: none;
-    z-index: -1;
-  }
-
-  /*
-   * Selected: pressed into the bar, lifted slightly, and ringed.
-   *
-   * Three signals rather than one, because a rep glances at this in sunlight —
-   * and because the scale alone is invisible to anyone who has asked the OS to
-   * reduce motion, at which point the ring and the inversion still read.
-   */
-  .badge-3d[data-active='true'] {
-    transform: scale(1.06);
-    box-shadow:
-      inset 0 3px 6px rgba(0, 0, 0, 0.3),
-      inset 0 -1px 2px rgba(255, 255, 255, 0.5),
-      0 0 0 2px var(--badge-glow),
-      0 2px 5px rgba(17, 24, 39, 0.2);
-  }
-
-  .badge-3d[data-active='true']::after {
-    opacity: 0.45;
+  .nav-pill[data-active='true'] {
+    @apply bg-brand-50 text-brand-600;
   }
 
   /** Counter anchored to the badge corner. Red here is a real alert, not decor. */
+  /** Counter on the pill's corner. Red here is a real alert, not decoration. */
   .badge-pip {
-    @apply absolute -right-1.5 -top-1.5 z-10 grid min-w-[20px] place-items-center rounded-full px-1;
-    @apply text-[11px] font-bold leading-[18px] text-white;
-    background: linear-gradient(180deg, #ef4444, #b91c1c);
-    box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.45),
-      0 1px 3px rgba(17, 24, 39, 0.35);
-    border: 1.5px solid #fff;
+    @apply absolute -right-0.5 -top-1 z-10 grid min-w-[18px] place-items-center rounded-full px-1;
+    @apply bg-bad text-[11px] font-semibold leading-[16px] text-white;
+    border: 2px solid #fff;
   }
 
   /*
-   * Embossed button face, sharing the badge's vocabulary so a primary action and
-   * a nav badge look like the same material.
+   * The filled button.
    *
-   * Applied only to the filled variants. A secondary button is a quiet, recessive
-   * control by design — giving it a gloss and a drop shadow would make every
-   * button on a screen compete, which is the failure mode this treatment invites.
+   * Flat `brand-600`, one radius, no gradient, no bevel, no gloss. The white
+   * label measures 4.75:1 on it, which is why the fill is 600 and not the
+   * brighter 500 the accent uses — a primary action that cannot be read in
+   * sunlight is not a primary action.
+   *
+   * Pressed, it darkens rather than deforming. The scale comes from `.press`.
    */
-  .btn-3d {
-    position: relative;
-    isolation: isolate;
-    background: linear-gradient(180deg, var(--btn-top), var(--btn-bottom));
-    box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.45),
-      inset 0 -2px 3px rgba(0, 0, 0, 0.22),
-      0 4px 8px rgba(17, 24, 39, 0.25);
+  .btn-fill {
+    @apply bg-brand-600 text-white;
+    transition: background-color 140ms ease;
   }
 
-  .btn-3d::after {
-    content: '';
-    position: absolute;
-    inset: 1px 1px auto 1px;
-    height: 44%;
-    border-radius: inherit;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0));
-    pointer-events: none;
-    z-index: -1;
+  .btn-fill:active {
+    @apply bg-brand-700;
   }
 
-  /* Pressed reads as pushed into the surface: the lift goes, the inset deepens. */
-  .btn-3d:active {
-    box-shadow:
-      inset 0 3px 6px rgba(0, 0, 0, 0.3),
-      0 1px 2px rgba(17, 24, 39, 0.2);
-  }
-
-  .btn-3d:disabled {
-    box-shadow: none;
+  .btn-fill:disabled {
+    @apply bg-ink-faint;
   }
 
   /*
-   * Glass on a dark surface — the login's counterpart to .btn-3d.
+   * A raised surface on the dark login.
    *
-   * The bevel has to invert: on a near-black ground a white top highlight reads
-   * as light catching a raised edge, but the *lift* has to come from a darker
-   * bottom inset rather than a drop shadow, because a drop shadow on near-black
-   * is invisible. The hairline is folded into the same box-shadow rather than
-   * left to a ring utility, which would otherwise overwrite these insets — ring
-   * and shadow share one box-shadow property in Tailwind.
+   * The counterpart to `.btn-fill`, and flat for the same reason. On a near-black
+   * ground a drop shadow is invisible, so the elevation is carried entirely by a
+   * translucent white fill and a hairline — which is all it needs to read as
+   * being in front of the background.
    */
   .glass-dark {
-    position: relative;
-    isolation: isolate;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.24),
-      inset 0 -2px 4px rgba(0, 0, 0, 0.4),
-      0 0 0 1px rgba(255, 255, 255, 0.1),
-      0 4px 10px rgba(0, 0, 0, 0.35);
-    transition: box-shadow 150ms ease;
-  }
-
-  .glass-dark::after {
-    content: '';
-    position: absolute;
-    inset: 1px 1px auto 1px;
-    height: 45%;
-    border-radius: inherit;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0));
-    pointer-events: none;
-    z-index: -1;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+    transition: background-color 150ms ease;
   }
 
   .glass-dark:active {
-    box-shadow:
-      inset 0 3px 7px rgba(0, 0, 0, 0.5),
-      0 0 0 1px rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.14);
   }
 
   /*
-   * A field is the one control that should look pushed *into* the surface —
-   * which is what makes the raised buttons beside it read as raised. Without
-   * this the login's inputs and its buttons sit on the same visual plane and
-   * the emboss stops meaning anything.
+   * The dark form's input. Recessed by being darker than its surroundings rather
+   * than by an inset bevel — on the login the fields and the buttons need to sit
+   * on different planes, and fill is enough to say so.
    */
   .field-sunk {
-    background: rgba(0, 0, 0, 0.28);
-    box-shadow:
-      inset 0 2px 5px rgba(0, 0, 0, 0.45),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.07),
-      0 0 0 1px rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.24);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
     transition: box-shadow 150ms ease;
   }
 
   .field-sunk:focus {
     outline: none;
-    box-shadow:
-      inset 0 2px 5px rgba(0, 0, 0, 0.45),
-      0 0 0 2px var(--brand-focus, #07b3ca);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 0 0 2px var(--brand-focus, #20c4d3);
   }
 
   /*
@@ -472,34 +433,17 @@
    * than as depth, so this is one hairline, one highlight and a short shadow.
    * Background-agnostic, so it composes over any tint.
    */
+  /**
+   * A small raised chip — avatars, glyph tiles, anything that needs to read as
+   * an object rather than a patch of colour. One hairline, no bevel.
+   */
   .emboss {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.75),
-      inset 0 -1px 1px rgba(17, 24, 39, 0.1),
-      0 0 0 1px rgba(17, 24, 39, 0.06),
-      0 1px 2px rgba(17, 24, 39, 0.14);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
   }
 
-  /** Recessed, for anything that should read as a channel: progress tracks. */
+  /** A track for something to fill: progress bars, meters. Tinted, not carved. */
   .sunk {
-    box-shadow:
-      inset 0 1px 2px rgba(17, 24, 39, 0.16),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.7);
-  }
-
-  /** A filled bar, lit from the top so it sits in its channel. */
-  .fill-gloss {
-    position: relative;
-    overflow: hidden;
-  }
-
-  .fill-gloss::after {
-    content: '';
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 50%;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0));
-    pointer-events: none;
+    @apply bg-line-soft;
   }
 
   .hide-scrollbar::-webkit-scrollbar {
@@ -603,43 +547,4 @@
   animation: bar-grow 420ms cubic-bezier(0.22, 0.8, 0.3, 1) both;
 }
 
-/*
- * Tap bounce. Down past the resting size, overshoot, settle.
- *
- * Applied by class from a pointerdown handler rather than :active, because an
- * animation on :active restarts unpredictably when a press turns into a scroll —
- * and because the selected badge holds its own transform, which :active would
- * fight. The reduced-motion rule in the base layer neutralises this globally.
- */
-@keyframes badge-pop {
-  0% {
-    transform: scale(0.9);
-  }
-  55% {
-    transform: scale(1.05);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
 
-.anim-pop {
-  animation: badge-pop 200ms ease-out;
-}
-
-/* The selected badge pops from, and returns to, its enlarged resting size. */
-.badge-3d[data-active='true'].anim-pop {
-  animation: badge-pop-active 200ms ease-out;
-}
-
-@keyframes badge-pop-active {
-  0% {
-    transform: scale(0.95);
-  }
-  55% {
-    transform: scale(1.11);
-  }
-  100% {
-    transform: scale(1.06);
-  }
-}
