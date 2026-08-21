@@ -86,8 +86,8 @@ export function Pipeline() {
                     <button
                       onClick={() => setStage(s)}
                       aria-pressed={selected}
-                      className={`focusable w-full rounded-field px-3 py-2.5 text-left transition-colors ${
-                        selected ? 'bg-brand-50' : 'active:bg-surface-field'
+                      className={`metal-row focusable w-full rounded-field px-3 py-2.5 text-left ${
+                        selected ? 'metal-row-brand' : ''
                       }`}
                     >
                       <span className="flex items-baseline justify-between gap-2">
