@@ -403,7 +403,7 @@ export function Navigate() {
             target="_blank"
             rel="noreferrer"
             onClick={() => haptic('tap')}
-            className="press focusable flex min-h-tap flex-1 items-center justify-center rounded-field bg-brand-50 text-[14px] font-semibold text-brand-600 ring-1 ring-brand-200"
+            className="metal metal-quiet press focusable flex min-h-tap flex-1 items-center justify-center rounded-field text-[14px] font-semibold !text-brand-700"
           >
             Google Maps
           </a>

@@ -82,7 +82,7 @@ export function Login() {
               made of, so the screen reads as one material instead of a logo
               dropped onto a dark rectangle.
             */}
-            <div className="glass-dark rounded-card px-5 py-5">
+            <div className="metal metal-dark rounded-card px-5 py-5">
               <img
                 src="/logo-light.png"
                 alt="Allstar Home Solutions"
@@ -147,7 +147,7 @@ export function Login() {
                   type="button"
                   onClick={() => setReveal((v) => !v)}
                   aria-pressed={reveal}
-                  className="glass-dark focusable absolute right-1.5 top-1.5 grid h-11 w-[64px] place-items-center rounded-field text-xs font-semibold uppercase tracking-wide text-white"
+                  className="metal metal-dark focusable absolute right-1.5 top-1.5 grid h-11 w-[64px] place-items-center rounded-field text-xs font-semibold uppercase tracking-wide"
                 >
                   {reveal ? 'Hide' : 'Show'}
                 </button>
@@ -177,7 +177,7 @@ export function Login() {
             <button
               type="submit"
               disabled={busy}
-              className="press focusable mt-5 grid h-14 w-full place-items-center rounded-field bg-brand-500 text-[17px] font-semibold text-ink transition-colors active:bg-brand-400 disabled:opacity-60"
+              className="metal metal-brand press focusable mt-5 grid h-14 w-full place-items-center rounded-field text-[17px] font-semibold disabled:opacity-60"
             >
               {busy ? 'Signing in…' : 'Sign in'}
             </button>
@@ -196,7 +196,7 @@ export function Login() {
             <button
               type="button"
               onClick={() => setShowDemo(true)}
-              className="glass-dark press focusable mt-4 grid h-14 w-full place-items-center rounded-field text-[16px] font-semibold text-white"
+              className="metal metal-dark press focusable mt-4 grid h-14 w-full place-items-center rounded-field text-[16px] font-semibold"
             >
               Try the demo
             </button>
@@ -210,7 +210,7 @@ export function Login() {
                   <li key={u.id}>
                     <button
                       onClick={() => void signInDemo(u.id)}
-                      className="glass-dark press focusable flex min-h-[68px] w-full items-center gap-3 rounded-card px-4 text-left"
+                      className="metal metal-dark press focusable flex min-h-[68px] w-full items-center gap-3 rounded-card px-4 text-left"
                     >
                       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-200 text-sm font-semibold text-brand-700">
                         {u.avatarInitials}

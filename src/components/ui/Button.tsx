@@ -14,27 +14,26 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 /*
- * Filled variants are flat colour. No gradient, no gloss, no bevel.
+ * Every filled variant wears `.metal` — see the note on that rule in index.css
+ * for why the teal face is light and its label near-black, and why red and green
+ * keep white ones.
  *
- * Which shade is a measured decision rather than a taste one. White on the brand
- * accent #0FA9B8 is 2.84:1 and fails at every text size; `brand-600` #087F8C is
- * 4.75:1 and still reads unmistakably teal. The brighter shades are for fills —
- * bars, dots, active indicators — where nothing has to be legible on top.
- *
- * Pressed states darken by one step instead of deforming, which is what the
- * emboss used to do with an inset shadow.
+ * `ghost` deliberately does not. It is the one variant whose job is to *not*
+ * look like a button: a text control beside a heading, or a tertiary action in a
+ * row. Giving it the material would mean a screen of equal-weight controls and
+ * no obvious next step, which is the failure mode a tactile treatment invites.
  */
 const variants: Record<Variant, string> = {
-  primary: 'btn-fill',
-  secondary: 'bg-surface text-ink border border-line active:bg-surface-field',
+  primary: 'metal metal-brand',
+  secondary: 'metal metal-quiet',
   ghost: 'bg-transparent text-ink-mute active:bg-ink/[0.04]',
-  danger: 'bg-bad text-white active:bg-[#8F1616]',
-  success: 'bg-good text-white active:bg-[#0F4A26]',
+  danger: 'metal metal-danger',
+  success: 'metal metal-success',
   // For dark/saturated backgrounds (the visit-complete screen). This exists as a
   // variant rather than a `className` override because competing Tailwind
   // utilities resolve by stylesheet order, not by the order they're written —
   // overriding here produced a white button with white text.
-  inverse: 'bg-white text-good active:bg-surface-field shadow-card',
+  inverse: 'metal metal-quiet !text-good',
 }
 
 /*

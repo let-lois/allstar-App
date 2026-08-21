@@ -164,7 +164,7 @@ export function RouteScreen() {
                         <Link
                           to={`/navigate/${p.id}`}
                           aria-label={`Navigate to ${p.address1}`}
-                          className="press focusable grid h-11 w-11 place-items-center rounded-field bg-surface text-ink-soft ring-1 ring-line"
+                          className="metal metal-quiet press focusable grid h-11 w-11 place-items-center rounded-field !text-ink-soft"
                         >
                           <IconNavigate />
                         </Link>

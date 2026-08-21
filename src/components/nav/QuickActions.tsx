@@ -76,7 +76,7 @@ export function QuickActions() {
           setOpen(true)
         }}
         aria-label="Quick actions"
-        className="press focusable fixed right-4 z-30 grid h-14 w-14 place-items-center rounded-full bg-brand-600 text-white shadow-float md:hidden"
+        className="metal metal-brand press focusable fixed right-4 z-30 grid h-14 w-14 place-items-center rounded-full md:hidden"
         style={{ bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
       >
         <IconPlus />
@@ -91,7 +91,7 @@ export function QuickActions() {
                   setOpen(false)
                   a.run()
                 }}
-                className="press focusable flex min-h-[64px] w-full items-center gap-3 rounded-card border border-line px-4 text-left active:bg-surface-field"
+                className="metal metal-quiet press focusable flex min-h-[64px] w-full items-center gap-3 rounded-card px-4 text-left"
               >
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-field bg-brand-50 text-brand-600">
                   {a.icon}
