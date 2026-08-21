@@ -158,6 +158,40 @@ async function toLead(opts = {}) {
   await ctx.close()
 }
 
+/* --- the rep is in another state ------------------------------------------ */
+//
+// Asked directly: does the line show if the user is in another state or country?
+// It does not — there is no useful route across four hundred miles, and the
+// server refuses over 80km. The bug was that its refusal arrived here as "no
+// signal", telling somebody their connection was broken when their actual
+// problem was being nowhere near the door. The distance is now checked locally,
+// so the reason is honest and costs no request.
+{
+  const { ctx, page } = await toLead({
+    permissions: ['geolocation'],
+    // Chicago. The demo's leads are in Texas.
+    geolocation: { latitude: 41.8781, longitude: -87.6298 },
+  })
+  await page.getByRole('link', { name: /^Navigate$/ }).first().click()
+  await page.waitForTimeout(1800)
+
+  const body = await page.locator('body').innerText()
+  ok(/too far away to route/i.test(body), 'a rep in another state is told they are too far away')
+  ok(
+    !/No signal/i.test(body),
+    'and not told their connection is broken, which is what it used to say',
+  )
+  ok(
+    /direct distance/i.test(body),
+    'the straight-line distance is still offered, and labelled as such',
+  )
+  ok(
+    (await page.getByRole('button', { name: /Start visit/i }).count()) > 0,
+    'and the screen stays usable rather than becoming an error page',
+  )
+  await ctx.close()
+}
+
 /* --- every Navigate, not just the one I happened to test ------------------ */
 //
 // The bug this exists for: the lead screen was converted, Today and the route
