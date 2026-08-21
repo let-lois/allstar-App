@@ -17,6 +17,7 @@ import { VisitMode } from './screens/VisitMode'
 import { RouteScreen } from './screens/RouteScreen'
 import { More } from './screens/More'
 import { NewLead } from './screens/NewLead'
+import { Navigate as NavigateScreen } from './screens/Navigate'
 import { ScheduleNew } from './screens/ScheduleNew'
 import { Team } from './screens/Team'
 
@@ -122,6 +123,7 @@ export function App() {
             <Route path="/route" element={<RouteScreen />} />
             <Route path="/property/:propertyId" element={<PropertyDetail />} />
             <Route path="/lead/new" element={<NewLead />} />
+            <Route path="/navigate/:id" element={<NavigateScreen />} />
             <Route path="/schedule/new" element={<ScheduleNew />} />
             <Route path="/team" element={<Team />} />
             <Route path="/more" element={<More />} />
