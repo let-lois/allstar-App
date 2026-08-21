@@ -45,6 +45,7 @@ import {
 import { applyMutations } from './mutations'
 import { readSettings, writeSettings } from './settings'
 import { checkLoginRate, clearFailures, recordFailure } from './ratelimit'
+import { directions } from './directions'
 import { invitePage, setupPage } from './pages'
 import { bootstrap } from './read'
 import type { Env, Mutation, Role, SessionUser } from './types'
@@ -418,6 +419,18 @@ export default {
 
       if (path === '/api/bootstrap' && req.method === 'GET') {
         return json(await bootstrap(env, user), 200, cors)
+      }
+
+      /* --- one walking route --------------------------------------------- */
+      //
+      // On the Worker rather than in the browser because the browser key is
+      // restricted to Maps JS, Places and Street View — a leak of the key in the
+      // bundle cannot spend routing quota. This costs one hop to keep that true.
+      if (path === '/api/directions' && req.method === 'POST') {
+        const result = await directions(env, await req.json().catch(() => ({})))
+        return result.ok
+          ? json({ leg: result.leg }, 200, cors)
+          : json({ error: result.error }, result.status, cors)
       }
 
       /* --- invitations ---------------------------------------------------- */
