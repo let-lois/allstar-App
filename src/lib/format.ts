@@ -97,3 +97,25 @@ export function mailHref(email?: string, subject?: string): string | undefined {
   if (!email) return undefined
   return subject ? `mailto:${email}?subject=${encodeURIComponent(subject)}` : `mailto:${email}`
 }
+
+/**
+ * "Round Rock, TX 78664" — from whichever of those three parts exist.
+ *
+ * Needed because a lead added from the field may have none of them. The add-lead
+ * screen used to stamp a hardcoded city, state and ZIP on every lead, which was
+ * wrong the moment a second territory existed; it now stores blank rather than
+ * guessing. Blank is the honest value and the office can fix it — but three
+ * screens interpolated `{city}, {state} {zip}` directly, so an unknown town
+ * rendered as a bare comma and read as a bug.
+ *
+ * Returns an empty string when nothing is known, so a caller can drop the line
+ * entirely rather than print punctuation.
+ */
+export function cityLine(place: {
+  city?: string
+  state?: string
+  zip?: string
+}): string {
+  const town = [place.city?.trim(), place.state?.trim()].filter(Boolean).join(', ')
+  return [town, place.zip?.trim()].filter(Boolean).join(' ')
+}

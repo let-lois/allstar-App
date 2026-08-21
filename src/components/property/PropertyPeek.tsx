@@ -4,7 +4,7 @@ import { OutcomePill, ScoreBar, StatusPill } from '../ui/StatusPill'
 import { CommActions } from './CommActions'
 import { Button } from '../ui/Button'
 import { distanceMiles, formatDistance, walkMinutes, type Position } from '../../lib/geo'
-import { moneyFull, relativeLower } from '../../lib/format'
+import { moneyFull, relativeLower, cityLine } from '../../lib/format'
 
 /**
  * The map's property sheet — map → tap pin → this → action, in two taps.
@@ -32,7 +32,7 @@ export function PropertyPeek({
           <div className="min-w-0">
             <h3 className="truncate text-lg font-bold leading-tight">{property.address1}</h3>
             <p className="truncate text-sm text-ink-mute">
-              {property.city}, {property.state} {property.zip}
+              {cityLine(property)}
             </p>
           </div>
           <ScoreBar score={property.score} />

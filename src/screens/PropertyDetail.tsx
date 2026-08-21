@@ -12,7 +12,7 @@ import { StreetView } from '../components/property/StreetView'
 import { OutcomePill, ScoreBar, StatusPill } from '../components/ui/StatusPill'
 import { outcomeByCode } from '../data/outcomes'
 import { distanceMiles, formatDistance, walkMinutes } from '../lib/geo'
-import { moneyFull, relative, relativeLower, time } from '../lib/format'
+import { cityLine, moneyFull, relative, relativeLower, time } from '../lib/format'
 import type { NoteTag } from '../types'
 
 /**
@@ -105,7 +105,9 @@ export function PropertyDetail() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <TopBar title={property.address1} subtitle={`${property.city}, ${property.state}`} back />
+      {/* `undefined` rather than an empty string: a blank subtitle would still
+          reserve its line. */}
+      <TopBar title={property.address1} subtitle={cityLine(property) || undefined} back />
 
       <div className="scroll-pane bg-surface-sunk pb-4"><div className="content-col">
         {/* --- header: the porch questions ------------------------------- */}
@@ -114,8 +116,12 @@ export function PropertyDetail() {
             <div className="min-w-0">
               <h2 className="text-title font-extrabold">{property.address1}</h2>
               <p className="mt-1 text-[13px] text-ink-mute">
-                {property.city}, {property.state} {property.zip}
-                {dist != null && ` · ${formatDistance(dist)} · ${walkMinutes(dist)} min`}
+                {[
+                  cityLine(property),
+                  dist != null ? `${formatDistance(dist)} · ${walkMinutes(dist)} min` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </p>
             </div>
             <ScoreBar score={property.score} />
