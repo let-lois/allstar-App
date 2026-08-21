@@ -509,6 +509,41 @@ Note that this compromise buys less than it was meant to. MapTiler is now last i
 the chain rather than first (see below), so a rejected key costs almost nothing —
 which makes option 1 cheaper to justify and less urgent to fund.
 
+### The npm audit findings, assessed rather than counted
+
+`npm audit` reports 5 findings in the app and 6 in `api/`. All eleven were read.
+**None of them are reachable in production**, and every available fix is a major
+upgrade, so nothing has been bumped. Recorded here because "11 vulnerabilities" on
+a report looks like negligence unless the reasoning is written down.
+
+**The only one that ships to a browser** is `react-router-dom` — an open redirect
+via a backslash in `<Link>`/`useNavigate` (advisory range 6.0.0 – 7.17.0). It is
+**unreachable in this codebase**: every navigation target is an internal literal
+path with an app-generated id interpolated (`/property/${'{'}id{'}'}`), and there is not a
+single read of `searchParams` used to navigate. The vulnerability needs a target
+influenced by outside input and there is none.
+
+The fix is 7.x, a semver major on the library the whole app navigates through, for
+a bug our code cannot reach. **Revisit the moment any feature adds a redirect
+parameter, a deep link from an email, or navigation to a stored URL** — that is
+what would make it reachable, and it is the sort of thing that arrives quietly.
+
+**Everything else is a development tool and does not reach the deployed app:**
+
+| Finding | Where it bites | Why it is not shipped |
+| --- | --- | --- |
+| `vite`, `esbuild` | the dev server | Path traversal and cross-origin requests against `npm run dev`, on a developer's machine. The fix is Vite 8, a major bump to the build. |
+| `playwright` | the test runner | Downloads browsers without verifying them. This project never downloads one — `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`, with a pinned local binary. |
+| `wrangler` and its tree (`sharp`, `undici`, `ws`, `esbuild`, `miniflare`) | `wrangler dev` and the build container | None of it is bundled into the Worker; the deployed script is this repo's code. The fix is Wrangler 4, a major bump to a working deploy pipeline. |
+
+One habit worth keeping while these stand: **do not run `npm run dev` or `wrangler
+dev` in a browser session that is also visiting untrusted sites.** That is the
+whole exposure of the dev-server findings, and it costs nothing to avoid.
+
+What would change this assessment: a critical or a runtime-reachable finding, or
+any of these fixes becoming non-major. Worth re-running `npm audit` at that point
+rather than on a schedule.
+
 ### Pins are block-level, not rooftop
 
 Every lead's pin is interpolated along a street, not placed on a building. A rep
@@ -546,6 +581,35 @@ raw provider response, and takes `language`, `types`, `limit`, `autocomplete`,
 `fuzzyMatch`, `proximity` and `bbox` off the query string so a hypothesis costs a
 page reload rather than a deploy. Use a verified address with it — a synthetic one
 cannot answer a coverage question.
+
+### A photo of the house, and the trap under it
+
+`StreetView` answers a porch question no amount of address text does: *is this
+the right house?* Missing kerb numbers, shared driveways, a flag lot behind
+another property — a rep twenty feet away has an address and a pin and no way to
+recognise the door.
+
+A still image, not the interactive panorama. The panorama is a WebGL canvas that
+loads and initialises, on a screen a rep opens dozens of times a day, to answer
+what one photo answers instantly. Tapping the photo hands off to Google Maps for
+a proper look around, which is free and better than the embedded version.
+
+**The trap:** asked for a location it has no coverage for, the Street View Static
+API does not fail. It returns a grey placeholder image, status 200, reading "Sorry,
+we have no imagery here". Rendered blindly, a rural lead shows a photo of nothing
+and looks like a bug. So the free metadata endpoint is consulted first and the
+image is only requested when there is something to see — which also means an
+uncovered lead costs no image request at all.
+
+With no signal there is no photo and no message. Everything else on that screen
+works offline, and an apology for a missing nice-to-have would be noise at a door.
+
+`npm run verify:streetview` drives all three cases by stubbing the metadata
+endpoint: coverage, no coverage, no network. Writing it surfaced a Playwright
+subtlety worth knowing — in a URL **glob**, `?` matches any single character, so
+`streetview?*` also matches `streetview/metadata?…`. The image stub was answering
+the coverage check with a PNG, and the test blamed the component for behaving
+correctly. The stubs use regexes now.
 
 ### The map screen searches leads before it searches Google
 

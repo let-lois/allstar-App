@@ -138,9 +138,20 @@ const ctxOpts = {
   // The map used to show nothing at all here.
   await page.goto(`${BASE}/map`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(1000)
+  /*
+    The count moved out of its own pill and into the search field's placeholder
+    when search took that space — so it is read as an attribute now rather than
+    as page text. The assertion is unchanged in substance: this was written after
+    a real bug where a new rep's map showed nothing at all, and "does not say
+    zero" is the part that must keep holding.
+  */
   const mapText = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
-  ok(!mapText.includes('0 properties'), 'the map does not claim zero properties when five are assigned')
-  ok(/5 properties/.test(mapText), `the map shows the assigned leads (${mapText.match(/\d+ propert\w+/)?.[0]})`)
+  const hint =
+    (await page
+      .getByRole('searchbox', { name: /Search leads and addresses/i })
+      .getAttribute('placeholder')) ?? ''
+  ok(!/Search 0 leads/.test(hint), 'the map does not claim zero leads when five are assigned')
+  ok(/Search 5 leads/.test(hint), `the map shows the assigned leads ("${hint}")`)
   ok(!mapText.includes('My route'), 'the "My route" filter is hidden while there is no route')
 
   /* ---- plan the day ---------------------------------------------------- */
