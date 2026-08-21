@@ -24,7 +24,10 @@ import { STATUS_COLOR, STATUS_LABEL } from '../../data/outcomes'
  *     to nearest-first only happens when there is no route to follow.
  *   - **Distance to the next door, not just from the rep.** "0.1 mi away" tells a
  *     rep whether to drive; "then 240 ft to #4" tells them whether to walk. The
- *     second is the one that gets used.
+ *     second is the one that gets used — but only where a route exists to make
+ *     "next" mean something. Filtered without a route the list has no order, the
+ *     badge says so with a dot instead of a number, and claiming a distance to
+ *     the following row would be inventing a plan.
  *   - **Done stops stay visible, struck through.** Hiding them loses the rep's
  *     sense of progress, which is the thing that gets someone through door forty.
  *
@@ -120,7 +123,15 @@ export function RouteList({
                 <span className="block truncate text-[13px] text-ink-mute">
                   {p.contacts[0]?.name ?? 'No contact'} · {STATUS_LABEL[p.status]}
                 </span>
-                {next && (
+                {/*
+                  Only when there is a real route. Without one this list has no
+                  sequence — the badge shows a dot rather than a number for
+                  exactly that reason — and "then 13 mi to ..." between two rows
+                  that merely happen to be adjacent is a claim about a walk
+                  nobody planned. It read as a terrible route when it was in fact
+                  no route at all.
+                */}
+                {stop && next && (
                   <span className="nums block truncate text-[12px] text-ink-faint">
                     then {formatDistance(distanceMiles(p, next))} to {next.address1}
                   </span>
