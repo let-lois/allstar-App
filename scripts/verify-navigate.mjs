@@ -185,6 +185,64 @@ async function toLead(opts = {}) {
     /direct distance/i.test(body),
     'the straight-line distance is still offered, and labelled as such',
   )
+  /*
+    The number, and the number it must not be beside. A walking time was quoted
+    unconditionally, so a lead opened from another state read "963 mi · 18,639
+    min" — arithmetic wearing the clothes of a plan. Three digits of minutes is
+    the signature of that bug, and no distance anybody walks produces it.
+  */
+  ok(
+    /\d{3,} mi|\d,\d{3} mi/.test(body),
+    'the distance is shown in hundreds or thousands of miles',
+  )
+  ok(
+    !/\d{3,}\s*min/.test(body),
+    'and no walking time is invented for a distance nobody walks',
+  )
+  ok(
+    !/along the roads/i.test(body),
+    'nor a road distance claimed where there is no road route',
+  )
+
+  /*
+    The arc itself, asserted — and this is the interesting part, because it needs
+    no key. Maps JS is blocked in this gate, so what is on screen is the
+    self-rendered map, which now takes the same `path` prop and frames it. The
+    first version of this feature was Google-only: the offline renderer could not
+    zoom out past a neighbourhood, so a rep on the wrong continent with no signal
+    got a map of the door and nothing else. Two renderers that disagree about
+    what they can show is exactly what the shared prop contract exists to stop.
+  */
+  const arc = page.locator('svg path[data-line="flight"]')
+  ok(await arc.count() > 0, 'the direct line is drawn with no Google map at all')
+  const d = (await arc.first().getAttribute('d')) ?? ''
+  const vertices = (d.match(/[ML]/g) ?? []).length
+  ok(
+    vertices > 20,
+    `it is a sampled arc rather than a two-point line (${vertices} vertices)`,
+  )
+  /*
+    Both ends on screen. A line whose far end is off the edge is not a line
+    anybody can read, and this is the assertion that would catch the view being
+    left at street zoom — the failure the old minimum zoom guaranteed.
+  */
+  const lineBox = await arc.first().boundingBox()
+  ok(
+    lineBox != null && lineBox.width > 390 * 0.3 && lineBox.x > -40,
+    `and it is framed rather than left at street zoom (${Math.round(lineBox?.width ?? 0)}px across a 390px screen, from x=${Math.round(lineBox?.x ?? 0)})`,
+  )
+  ok(
+    (await page.locator('[data-plane="flight"]').count()) > 0,
+    'with the plane on it, which is what says this is not a walk',
+  )
+
+  // Not an error state, and not described as one.
+  ok(/dashed line/i.test(body), 'the sentence points at the line that is actually there')
+  ok(/Direct line/i.test(body), 'and the screen is titled for what it is showing')
+  ok(
+    !/not configured|No signal/i.test(body),
+    'without blaming configuration or the connection for a fact about geography',
+  )
   ok(
     (await page.getByRole('button', { name: /Start visit/i }).count()) > 0,
     'and the screen stays usable rather than becoming an error page',

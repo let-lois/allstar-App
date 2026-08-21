@@ -32,8 +32,33 @@ const SELECTED_PIN = '#0A8296'
  */
 
 const TILE = 256
-const MIN_ZOOM = 12
+/**
+ * How far out this map can go.
+ *
+ * Was 12 — a neighbourhood — which was right while the only thing this map ever
+ * showed was a territory. It is wrong the moment the screen has to show a rep in
+ * one country and a door in another: at zoom 12 the two are thousands of
+ * kilometres off opposite edges, so the line between them could not be drawn and
+ * the far-away case had to be handed to the other renderer. Two renderers that
+ * disagree about what they can show is the thing the shared prop contract exists
+ * to prevent.
+ */
+const MIN_ZOOM = 1
 const MAX_ZOOM = 19
+/**
+ * Below this the drawn street grid stops being a plausible street grid.
+ *
+ * It is a synthetic lattice at roughly block spacing — real spatial texture at
+ * the zooms a rep works at, and nonsense at continental scale, where it would
+ * also mean tens of thousands of SVG lines. Below this zoom the basemap draws the
+ * true graticule instead: fewer lines, no invention, and it gives scale.
+ */
+const STREET_GRID_FROM_ZOOM = 12
+/**
+ * Graticule spacings, coarse to fine. The first one that puts no more than a
+ * dozen lines across the viewport wins.
+ */
+const GRATICULE_STEPS = [30, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02]
 /** Below this, nearby pins merge into counts so the map stays readable. */
 const CLUSTER_UNTIL_ZOOM = 17
 const CLUSTER_CELL_PX = 58
@@ -61,6 +86,21 @@ interface Props {
    */
   disableClustering?: boolean
   handleRef?: React.MutableRefObject<MapHandle | null>
+  /**
+   * An arbitrary path to draw, matching `GoogleFieldMap`'s prop of the same name
+   * so the navigate screen can hand either renderer the same line.
+   *
+   * Supplying one also frames it: the view fits the whole path once, and stops
+   * following the rep, because a line whose far end is off screen is not a line
+   * anybody can read.
+   */
+  path?: { lat: number; lng: number }[]
+  /**
+   * `route` is a way to get there. `flight` is the direct line to somewhere no
+   * route reaches — dashed, with a plane on it, because a solid line between two
+   * continents reads as a route and there is none.
+   */
+  pathKind?: 'route' | 'flight'
 }
 
 interface View {
@@ -81,6 +121,8 @@ export function FieldMap({
   initialZoom,
   disableClustering,
   handleRef,
+  path,
+  pathKind = 'route',
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -134,12 +176,20 @@ export function FieldMap({
   const toScreen = useCallback(
     (lat: number, lng: number) => {
       const w = project(lat, lng)
+      /*
+        Longitude as a wrapped offset from the centre rather than an absolute
+        world coordinate. For anything inside one hemisphere this is the same
+        arithmetic — which is every other use of this map — but it is what lets a
+        line from Manila to Texas cross the antimeridian instead of being drawn
+        the long way back across Asia. The tiles agree, because they are only
+        fetched for the viewport and fold their own x into range.
+      */
       return {
-        x: (w.x - centerWorld.x) * scale + size.w / 2,
+        x: (wrapDegrees(lng - view.lng) / 360) * scale + size.w / 2,
         y: (w.y - centerWorld.y) * scale + size.h / 2,
       }
     },
-    [centerWorld, scale, size.w, size.h],
+    [view.lng, centerWorld, scale, size.w, size.h],
   )
 
   const flyTo = useCallback((lat: number, lng: number, zoom?: number) => {
@@ -255,31 +305,43 @@ export function FieldMap({
   /* --- basemap ----------------------------------------------------------- */
 
   // A street grid derived from the projection itself. It gives real spatial
-  // context (blocks, arterials) with zero network cost.
+  // context (blocks, arterials) with zero network cost — and below the zooms
+  // where streets exist, the true graticule instead. Same drawing code, two
+  // spacings: one invented and plausible, one real and coarse.
   const grid = useMemo(() => {
-    if (!size.w || !size.h) return { minor: [] as string[], major: [] as string[] }
+    if (!size.w || !size.h)
+      return { minor: [] as string[], major: [] as string[], streets: true }
     const tl = screenToLatLng(0, 0)
     const br = screenToLatLng(size.w, size.h)
-    const latStep = 0.0022
-    const lngStep = 0.00255
+    const streets = view.zoom >= STREET_GRID_FROM_ZOOM
+    /*
+      At block spacing a continental view would be fifty thousand lines, which is
+      a frozen phone rather than a slow one — so the spacing is chosen from the
+      span, and the loops below are bounded regardless.
+    */
+    const span = Math.max(Math.abs(tl.lat - br.lat), Math.abs(wrapDegrees(br.lng - tl.lng)))
+    const coarse = GRATICULE_STEPS.find((s) => span / s <= 12) ?? 0.02
+    const latStep = streets ? 0.0022 : coarse
+    const lngStep = streets ? 0.00255 : coarse
     const minor: string[] = []
     const major: string[] = []
 
     const latStart = Math.floor(br.lat / latStep) * latStep
-    for (let lat = latStart; lat <= tl.lat + latStep; lat += latStep) {
+    const limit = 240
+    for (let lat = latStart, n = 0; lat <= tl.lat + latStep && n < limit; lat += latStep, n++) {
       const y = toScreen(lat, tl.lng).y
       if (y < -20 || y > size.h + 20) continue
       const line = `M0 ${y.toFixed(1)} H${size.w}`
       ;(Math.round(lat / latStep) % 4 === 0 ? major : minor).push(line)
     }
     const lngStart = Math.floor(tl.lng / lngStep) * lngStep
-    for (let lng = lngStart; lng <= br.lng + lngStep; lng += lngStep) {
+    for (let lng = lngStart, n = 0; lng <= br.lng + lngStep && n < limit; lng += lngStep, n++) {
       const x = toScreen(tl.lat, lng).x
       if (x < -20 || x > size.w + 20) continue
       const line = `M${x.toFixed(1)} 0 V${size.h}`
       ;(Math.round(lng / lngStep) % 5 === 0 ? major : minor).push(line)
     }
-    return { minor, major }
+    return { minor, major, streets }
 
     function screenToLatLng(px: number, py: number) {
       return unproject(
@@ -287,7 +349,7 @@ export function FieldMap({
         centerWorld.y + (py - size.h / 2) / scale,
       )
     }
-  }, [size.w, size.h, centerWorld, scale, toScreen])
+  }, [size.w, size.h, centerWorld, scale, toScreen, view.zoom])
 
   /* --- markers + clustering ---------------------------------------------- */
 
@@ -355,6 +417,49 @@ export function FieldMap({
     return { done: done.join(' '), todo: todo.join(' ') }
   }, [route, properties, toScreen, size.w])
 
+  /*
+    Frame a supplied path once.
+
+    Once, not on every render: a rep is allowed to pinch and pan afterwards, and
+    a view that snaps back to the whole line is the most annoying possible bug on
+    a map. Following the rep is switched off for the same reason — the two
+    endpoints are the subject, and one of them being centred puts the other off
+    screen by a continent.
+  */
+  const fitted = useRef(false)
+  useEffect(() => {
+    if (!path || path.length < 2 || !size.w || !size.h || fitted.current) return
+    fitted.current = true
+    setFollowMe(false)
+    setView({
+      ...fitCenter(path),
+      /*
+        Generous padding, and it is not decoration. The plane glyph and both end
+        markers stick out past the line itself, and the zoom controls sit over
+        the right edge — at 0.3 the door pin landed underneath them.
+      */
+      zoom: fitZoom(path, size.w, size.h, 0.45),
+    })
+  }, [path, size.w, size.h])
+
+  /* --- an explicitly supplied path --------------------------------------- */
+  const drawnPath = useMemo(() => {
+    if (!path || path.length < 2 || !size.w) return null
+    const pts = path.map((p) => toScreen(p.lat, p.lng))
+    const d = pts
+      .map((pt, i) => `${i ? 'L' : 'M'}${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`)
+      .join(' ')
+    // The plane sits halfway along the samples, which on a great circle is
+    // nowhere near halfway between the endpoints on screen.
+    const i = Math.floor(pts.length / 2)
+    const a = pts[i]
+    const b = pts[Math.min(i + 1, pts.length - 1)]
+    // Screen-space heading: the glyph points along the line as drawn, which is
+    // what a rep is looking at, rather than along the true bearing.
+    const angle = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI + 90
+    return { d, plane: { x: a.x, y: a.y, angle } }
+  }, [path, toScreen, size.w])
+
   const me = position ? toScreen(position.lat, position.lng) : null
   // Accuracy circle drawn to true scale — a 40m fix should *look* uncertain.
   const accuracyPx = position
@@ -378,9 +483,24 @@ export function FieldMap({
             background, so the map reads as part of the product rather than an
             embedded widget from somewhere else. */}
         <rect width={size.w} height={size.h} fill="#EDF1F3" />
-        <path d={grid.minor.join(' ')} stroke="#ffffff" strokeWidth={7} fill="none" />
-        <path d={grid.major.join(' ')} stroke="#ffffff" strokeWidth={13} fill="none" />
-        <path d={grid.major.join(' ')} stroke="#DCE3E7" strokeWidth={1} fill="none" />
+        {/*
+          Roads at street zooms, a graticule below them. The widths are the
+          difference between the two claims: fat white ribbons read as streets,
+          and drawing the world's meridians that way would be inventing a road
+          network across the Pacific.
+        */}
+        {grid.streets ? (
+          <>
+            <path d={grid.minor.join(' ')} stroke="#ffffff" strokeWidth={7} fill="none" />
+            <path d={grid.major.join(' ')} stroke="#ffffff" strokeWidth={13} fill="none" />
+            <path d={grid.major.join(' ')} stroke="#DCE3E7" strokeWidth={1} fill="none" />
+          </>
+        ) : (
+          <>
+            <path d={grid.minor.join(' ')} stroke="#D7DEE3" strokeWidth={1} fill="none" />
+            <path d={grid.major.join(' ')} stroke="#C3CDD4" strokeWidth={1.5} fill="none" />
+          </>
+        )}
 
         {/*
           Imagery, over the drawn grid rather than instead of it.
@@ -423,6 +543,52 @@ export function FieldMap({
               opacity={0.7}
             />
           </>
+        )}
+
+        {/*
+          An explicitly supplied path — the walk to a door, or the direct line to
+          one too far to route. Drawn under the markers so the two endpoints stay
+          on top of it.
+        */}
+        {drawnPath && (
+          <g>
+            <path
+              /* A stable hook for the gate: the alternative is asserting on a
+                 stroke pattern, which is styling and will move. */
+              data-line={pathKind}
+              d={drawnPath.d}
+              stroke={SELECTED_PIN}
+              strokeWidth={pathKind === 'flight' ? 3 : 5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={pathKind === 'flight' ? '7 9' : undefined}
+              fill="none"
+              opacity={0.9}
+            />
+            {pathKind === 'flight' && (
+              /*
+                The glyph is what says *this is not a walk* at a glance, which is
+                the whole message when a rep opens a lead from the wrong
+                continent. Rotated to the line as drawn, so it points the way the
+                journey goes.
+              */
+              <g
+                data-plane="flight"
+                transform={`translate(${drawnPath.plane.x.toFixed(1)} ${drawnPath.plane.y.toFixed(
+                  1,
+                )})`}
+              >
+                <circle r={17} fill="#fff" opacity={0.95} />
+                <g transform={`rotate(${drawnPath.plane.angle.toFixed(0)}) translate(-9.5 -9.5)`}>
+                  <path
+                    d="M21 16v-2l-8-5V3.5C13 2.67 12.33 2 11.5 2S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"
+                    fill={SELECTED_PIN}
+                    transform="scale(0.79)"
+                  />
+                </g>
+              </g>
+            )}
+          </g>
         )}
 
         {/* current location */}
@@ -619,22 +785,67 @@ export function fitZoom(
   padding = 0.15,
 ): number {
   if (points.length < 2) return 16
-  let minX = 1
+  const b = spanOf(points)
+  const spanX = Math.max(b.maxX - b.minX, 1e-9) * (1 + padding)
+  const spanY = Math.max(b.maxY - b.minY, 1e-9) * (1 + padding)
+  const zx = Math.log2(width / (TILE * spanX))
+  const zy = Math.log2(height / (TILE * spanY))
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.min(zx, zy)))
+}
+
+/**
+ * The centre of the same box `fitZoom` measures.
+ *
+ * Latitude is averaged in *projected* space, not in degrees: Mercator stretches
+ * the poles, so the midpoint of 14°N and 52°N on screen is not 33°N.
+ */
+export function fitCenter(points: { lat: number; lng: number }[]): {
+  lat: number
+  lng: number
+} {
+  if (!points.length) return { lat: 30.5083, lng: -97.6789 }
+  const b = spanOf(points)
+  const mid = unproject(0.5, (b.minY + b.maxY) / 2)
+  return {
+    lat: mid.lat,
+    lng: wrapDegrees(points[0].lng + ((b.minX + b.maxX) / 2) * 360),
+  }
+}
+
+/**
+ * The bounding box of a set of points, in projected units, with longitude taken
+ * *relative to the first point*.
+ *
+ * That relative part is the antimeridian fix. Measured absolutely, Manila to
+ * Texas spans 218° — the long way, back across Asia and Europe — and both the
+ * zoom and the centre come out describing the wrong two thirds of the planet.
+ * Relative longitudes wrap to the short way, and every use inside one hemisphere
+ * is unaffected.
+ */
+function spanOf(points: { lat: number; lng: number }[]) {
+  let minX = 0
   let maxX = 0
   let minY = 1
   let maxY = 0
   for (const p of points) {
-    const w = project(p.lat, p.lng)
-    minX = Math.min(minX, w.x)
-    maxX = Math.max(maxX, w.x)
-    minY = Math.min(minY, w.y)
-    maxY = Math.max(maxY, w.y)
+    const dx = wrapDegrees(p.lng - points[0].lng) / 360
+    minX = Math.min(minX, dx)
+    maxX = Math.max(maxX, dx)
+    const y = project(p.lat, p.lng).y
+    minY = Math.min(minY, y)
+    maxY = Math.max(maxY, y)
   }
-  const spanX = Math.max(maxX - minX, 1e-9) * (1 + padding)
-  const spanY = Math.max(maxY - minY, 1e-9) * (1 + padding)
-  const zx = Math.log2(width / (TILE * spanX))
-  const zy = Math.log2(height / (TILE * spanY))
-  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.min(zx, zy)))
+  return { minX, maxX, minY, maxY }
+}
+
+/**
+ * A longitude difference folded into ±180°.
+ *
+ * The whole antimeridian problem in one line: 263° east and 97° west are the same
+ * direction, and only one of them is the short way round.
+ */
+function wrapDegrees(deg: number) {
+  return (((deg % 360) + 540) % 360) - 180
 }
 
 function metersPerPixel(lat: number, zoom: number) {

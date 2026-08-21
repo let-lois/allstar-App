@@ -62,15 +62,37 @@ async function toMap(page) {
     serviceWorkers: 'block',
   })
   const page = await ctx.newPage()
-  await page.route('**://maps.googleapis.com/**', (r) => r.abort())
+  let attempted = 0
+  await page.route('**://maps.googleapis.com/**', (r) => {
+    attempted += 1
+    return r.abort()
+  })
   await toMap(page)
 
-  const note = page.getByRole('status').filter({ hasText: /Map unavailable/ })
+  /*
+    With no key in the build, Rollup strips the Google renderer entirely and
+    nothing is ever requested — the correct behaviour for a deployment that does
+    not use it, and not something to report as a failure. Detected from the
+    absence of any request rather than by inspecting the bundle, matching the
+    Street View gate.
+  */
+  if (attempted === 0) {
+    ok(
+      (await page.locator('svg').count()) > 0,
+      'no key configured: the self-rendered map carries the screen and nothing is requested',
+    )
+    await ctx.close()
+    await browser.close()
+    console.log('\n=== google map OK (not configured) ===')
+    process.exit(fails.length ? 1 : 0)
+  }
+
+  const note = page.getByRole('status').filter({ hasText: /saved map/ })
   await note.waitFor({ timeout: 20_000 }).catch(() => {})
   ok(await note.isVisible(), 'an unreachable map is reported rather than left grey')
   const text = await note.innerText()
   ok(
-    /No connection for map imagery/.test(text),
+    /No signal for live map imagery/.test(text),
     `the reason names connectivity, not a stack trace (${text.replace(/\s+/g, ' ').slice(0, 70)})`,
   )
   ok(
@@ -78,14 +100,28 @@ async function toMap(page) {
     'and tells the rep their logged work is safe, which is the thing they will worry about',
   )
 
-  const list = page.getByRole('list', { name: 'Route stops' })
-  ok(await list.isVisible(), 'the route falls back to a list automatically')
-  ok((await list.getByRole('button').count()) > 0, 'with the stops still in it')
-
-  // The rep must not be stranded in the fallback once signal returns.
+  /*
+    A map, not a list. This is the assertion the old design got wrong: falling
+    back to the list meant the saved tiles were never used in production, where
+    Google is always configured.
+  */
   ok(
-    await page.getByRole('button', { name: /^map$/i }).isVisible(),
-    'and the map view is still offered rather than hidden',
+    (await page.locator('svg').count()) > 0,
+    'the offline map takes over so saved imagery is actually used',
+  )
+  ok(
+    (await page.getByRole('list', { name: 'Route stops' }).count()) === 0,
+    'and the list is not forced on the rep',
+  )
+  ok(
+    await page.getByRole('button', { name: 'Zoom in' }).isVisible(),
+    'with working map controls rather than a static picture',
+  )
+
+  // Still one tap away for a rep who prefers it.
+  ok(
+    await page.getByRole('button', { name: /^list$/i }).isVisible(),
+    'the list remains a choice',
   )
   await ctx.close()
 }
@@ -116,7 +152,7 @@ async function toMap(page) {
   )
   await toMap(page)
 
-  const note = page.getByRole('status').filter({ hasText: /Map unavailable/ })
+  const note = page.getByRole('status').filter({ hasText: /Live map unavailable/ })
   await note.waitFor({ timeout: 20_000 }).catch(() => {})
   ok(await note.isVisible(), 'a rejected key is surfaced instead of showing an empty map')
   const text = await note.innerText()
@@ -125,13 +161,13 @@ async function toMap(page) {
     `and the message points at the actual fix (${text.replace(/\s+/g, ' ').slice(0, 80)})`,
   )
   ok(
-    !/No connection/.test(text),
+    !/No signal/.test(text),
     'a rejected key is not misreported as being offline — different problem, different fix',
   )
 
   ok(
-    await page.getByRole('list', { name: 'Route stops' }).isVisible(),
-    'and the rep still gets their route',
+    (await page.locator('svg').count()) > 0,
+    'and the rep still gets a map, drawn locally',
   )
   await ctx.close()
 }
@@ -154,7 +190,7 @@ async function toMap(page) {
     return r.abort()
   })
   await toMap(page)
-  await page.getByRole('status').filter({ hasText: /Map unavailable/ }).waitFor({ timeout: 20_000 })
+  await page.getByRole('status').filter({ hasText: /saved map/ }).waitFor({ timeout: 20_000 })
   const first = attempts
 
   // Leave the screen and come back, as a rep does all day.

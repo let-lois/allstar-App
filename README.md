@@ -613,6 +613,90 @@ needs a real key: that Navigate no longer opens a tab, that a rep with no locati
 gets both fixes and *no* route panel offering controls for a route that does not
 exist, and that the demo labels its straight-line distance honestly.
 
+### Too far to route, and the line that still shows
+
+Asked directly: what does a rep see when they are in another state, or another
+country? Nothing was routable and nothing was drawn, which was honest and
+useless. Now the direct path is drawn — a dashed arc with a plane on it, from the
+rep to the door — and the distance reads "8,397 mi · direct distance".
+
+**It costs nothing.** `greatCirclePath` in `src/lib/geo.ts` is arithmetic on the
+device, so no request, no key, no signal needed. Maps JS bills per *map load*;
+polylines, markers and `fitBounds` are free inside a load already paid for. And
+no Routes call happens at these distances at all — `Navigate` refuses over 49
+miles and `api/src/directions.ts` refuses over 80 km, both before any request.
+
+**Why it is an arc and not a line.** A straight line on a Mercator map is not the
+direct path. Manila to Austin looks like it should cross the middle of the
+Pacific; the shortest path actually passes north of Japan and clips the
+Aleutians, about 22 degrees of latitude above either end. Drawing the chord would
+be a picture of a route nobody flies — and it comes out 13,951 miles when the
+real answer is 8,397, because linear interpolation goes the wrong way round the
+world. The path is sampled at 64 segments, which also means any renderer joins
+consecutive points the short way and the antimeridian needs no special case.
+
+**Dashed, with a plane, on purpose.** A solid line between two continents reads
+as a route. Same geometry, different promise, and the promise is the part a rep
+acts on — so `pathKind: 'flight'` draws it dashed and puts a plane at the arc's
+midpoint, rotated to the bearing.
+
+No walking time is quoted beyond the walk limit: that number used to be
+unconditional, so a lead opened from abroad read "8,397 mi · 162,533 min",
+arithmetic wearing the clothes of a plan.
+
+**It is a state the screen succeeds in, not a failure.** Internally this was
+`failed: 'too-far'` at first, and modelling it that way is what made everything
+downstream treat a rep in another country as a broken app — the renderer was
+dropped, the reason competed with "no signal", and the screen apologised for a
+fact about geography. It is now `direct`, carrying its own path and distance,
+with `failed` left to mean only the three cases where we could not find out:
+no signal, the demo account, and a deployment with no routing configured. (The
+app-wide online state never came into it either way — that is `navigator.onLine`
+in `src/lib/api.ts` and nothing on this screen touches it.)
+
+**Both renderers draw it.** `FieldMap` used to stop at zoom 12, a neighbourhood,
+so the far-away case had to be Google-only — and a rep on the wrong continent
+with no signal got a map of the door and nothing else. Two renderers that
+disagree about what they can show is exactly what the shared prop contract exists
+to prevent, so the floor is now zoom 1 and `FieldMap` takes the same `path` and
+`pathKind` props. Three things had to change with it:
+
+- **The projection wraps.** `toScreen` takes longitude as a `wrapDegrees` offset
+  from the centre rather than an absolute world coordinate. Identical arithmetic
+  inside one hemisphere, and it is what stops a Manila-to-Texas line being drawn
+  the long way back across Asia. `fitZoom` and the new `fitCenter` measure the
+  same way — measured absolutely, that pair spans 218° and both the zoom and the
+  centre come out describing the wrong two thirds of the planet.
+- **The basemap changes with the zoom.** The drawn grid is a synthetic lattice at
+  block spacing: real spatial texture where a rep works, and at continental scale
+  both a lie and roughly fifty thousand SVG lines. Below zoom 12 it draws the
+  true graticule instead — coarse, thin, spacing picked from the visible span.
+- **The view fits the line once.** Not on every render, or a rep could never pan;
+  and following the rep is switched off, because centring one endpoint puts the
+  other off screen by a continent.
+
+This also fixed the renderer choice, which hung off *any* routing failure — so
+the far-away case was being handed to the one renderer that cannot show two
+continents. Only the map failing takes the map away now. Doing that reintroduced
+a bug in passing: the map's own failure wrote "No signal" over the top of the
+real reason, which is exactly the wrong-reason bug this screen was fixed for
+once before. `verify:navigate` caught it, which is the whole argument for having
+written that assertion.
+
+`npm run verify:flightline` is the one gate here that runs no browser, because
+what can be wrong is arithmetic. Node imports `src/lib/geo.ts` directly — type
+stripping, no build step — so it tests the real function: that the drawn line's
+own length equals the great-circle distance, that the arc bows north of both
+endpoints, and that it crosses the antimeridian. Swapping in linear
+interpolation fails four of those assertions, which is how they were checked.
+
+And because the offline renderer draws the arc, `verify:navigate` can assert the
+line itself with **no key at all** — Maps JS is blocked in that gate, so what is
+measured is the self-rendered map: 65 vertices rather than two, both ends on
+screen, the plane present. Putting the zoom floor back to 12 reports a line
+29,251px wide starting at x=−14,430, which is the failure that assertion is
+for.
+
 ### A photo of the house, and the trap under it
 
 `StreetView` answers a porch question no amount of address text does: *is this
@@ -705,49 +789,63 @@ IndexedDB rather than trusting the form — the offline write is the thing that
 matters. The suggestion list itself is not covered, for the same reason as the map:
 it needs a real key on an allowed origin.
 
-### The map has two renderers
+### The map has two renderers: Google online, MapTiler offline
 
-`FieldMap` draws its own basemap and layers MapTiler tiles over it. `GoogleFieldMap`
-uses the Google Maps JavaScript API. They are not variants of one map — they are
-two maps behind one prop contract, chosen at runtime, and both are kept.
+`GoogleFieldMap` uses the Google Maps JavaScript API. `FieldMap` draws its own
+basemap and layers cached MapTiler tiles over it. They share one prop contract, and
+the screen picks between them by whether Google is currently drawable.
 
-Which one runs:
-
-| `VITE_GOOGLE_MAPS_KEY` + `VITE_GOOGLE_MAP_ID` | Online | Offline |
+| | Online | Offline / Google failed |
 | --- | --- | --- |
-| Both set | Google map | Route list, with the reason named |
-| Either missing | `FieldMap` | `FieldMap` — it works offline |
+| Both Google vars set | Google map | `FieldMap` with whatever tiles are saved |
+| Either missing | `FieldMap` | `FieldMap` |
+
+The route list is a **choice**, reached from the map/list switch — not a fallback.
+
+That last part was wrong for a while and worth recording, because the failure was
+silent. A failed Google load used to jump straight to the list, which meant that in
+production — where Google is always configured — `FieldMap` never rendered, and the
+MapTiler tiles a rep downloaded through **Offline maps** were never drawn. The
+territory download had become unreachable: the one moment it exists for was the
+one moment the screen stopped using it. Imagery now comes first, and the gate that
+asserted the old behaviour has been rewritten, because it was defending the bug.
 
 The self-rendered map is not legacy code waiting to be deleted. It is the only
-renderer that works with no signal, no key and no billing account, and removing it
-because a paid map exists would be a downgrade dressed as an upgrade. With the
-vars unset, Rollup proves the Google branch dead and strips the entire renderer
-and its clusterer from the bundle — a deployment that does not use Google pays
-nothing for it. With them set, the whole Google path costs about 6 kB raw, 2 kB
-gzipped.
+renderer that works with no signal, no key and no billing account. With the Google
+vars unset, Rollup proves that branch dead and strips the renderer and its
+clusterer from the bundle — a deployment that does not use Google pays nothing for
+it. With them set, the whole Google path costs about 6 kB raw, 2 kB gzipped.
 
 **Connectivity is never checked directly.** Offline, a rejected key, a blocked
 script and a stalled connection all arrive as one thing: a named load failure. All
-four have the same correct response — show the route as a list and say which one
-happened. A separate `online` check would be a second source of truth for the same
-question, and the two would disagree on exactly the flaky connection this screen
-exists for.
+of them want the same response — draw the offline map and say which one happened.
+A separate `online` check would be a second source of truth that disagrees with
+the first on exactly the flaky connection this screen exists for.
+
+The notice over the fallback map splits on purpose. Connectivity gets a rep's
+sentence; everything else keeps the provider's own words. A rejected key is the
+most likely thing to break on a new deployment and the least guessable, so
+collapsing it into "map unavailable" would throw away the one message that tells
+whoever deployed it what to fix.
 
 Advanced markers are why the Map ID is required rather than optional. They render
-as real DOM, so the status colours and selected state already in this product
-carry over instead of becoming Google teardrops, and they are focusable, which
-sprite markers are not. Without a Map ID they silently do not appear — so a key
-with no Map ID is treated as unconfigured, and says so in the console rather than
-leaving someone to wonder where their leads went.
+as real DOM, so the status colours and selected state already in this product carry
+over instead of becoming Google teardrops, and they are focusable, which sprite
+markers are not. Without a Map ID they silently do not appear — so a key with no
+Map ID is treated as unconfigured, and says so in the console.
 
-`npm run verify:googlemap` covers what a real key cannot be tested for in CI: the
-three ways this fails. It needs a build with placeholder values, because with the
-vars unset the code under test is not in the bundle at all:
+Two gates need a build with placeholder Google values, because with the vars unset
+the code under test is not in the bundle. Both skip cleanly rather than failing,
+detected from the absence of any request:
 
 ```bash
 VITE_GOOGLE_MAPS_KEY=dummy VITE_GOOGLE_MAP_ID=DEMO_MAP_ID npm run build
-npm run verify:googlemap
+npm run verify:googlemap && npm run verify:streetview
 ```
+
+`verify:maptiles` does the opposite — it blocks Google, because `FieldMap` is now
+the offline renderer and would otherwise never appear on screen to be tested. That
+is also the condition a rep is in when those tiles matter.
 
 ### Google's terms and the offline map are in direct conflict
 
