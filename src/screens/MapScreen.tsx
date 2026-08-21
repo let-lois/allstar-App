@@ -115,7 +115,16 @@ export function MapScreen() {
   }, [shown, position])
 
   const chips = (
-    <div className="snap-x-row flex-1 pr-1">
+    /*
+      `min-w-0` is load-bearing. This is a horizontal scroller inside a flex row,
+      and a flex item without it takes its min-content width as a floor — here
+      the sum of every chip, about 527px. Over the map that was invisible,
+      because the overlay is `absolute inset-x-0` and pinned to the viewport. In
+      the list view the same row sits in normal flow, so the floor stretched the
+      whole column to 551px inside a 390px screen and pushed the map/list switch
+      off the right edge with no way to scroll to it.
+    */
+    <div className="snap-x-row min-w-0 flex-1 pr-1">
       {FILTERS.filter((f) => f.key !== 'route' || hasRoute).map((f) => (
         <Chip
           key={f.key}
@@ -312,8 +321,8 @@ export function MapScreen() {
           A real screen rather than a degraded map, so it gets a solid header
           instead of controls floating over imagery that isn't there.
         */
-        <div className="flex min-h-0 flex-1 flex-col bg-surface">
-          <div className="pad-top shrink-0 border-b border-ink/[0.06] bg-surface">
+        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col bg-surface">
+          <div className="pad-top w-full min-w-0 shrink-0 border-b border-ink/[0.06] bg-surface">
             <div className="flex items-center gap-2 px-3 pb-2 pt-2">{chips}</div>
             <div className="pb-2">{statusRow}</div>
           </div>

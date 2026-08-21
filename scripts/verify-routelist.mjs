@@ -66,6 +66,22 @@ for (const width of [320, 390, 768]) {
   const scrollW = await page.evaluate(() => document.documentElement.scrollWidth)
   ok(scrollW <= width + 1, `[${width}] no horizontal overflow (${scrollW} <= ${width})`)
 
+  /*
+    Reachability, not page overflow. The check this replaces asserted
+    `document.scrollWidth <= viewport`, which passed while the switch sat off the
+    right edge unreachable: the page did not scroll, so nothing looked wrong, and
+    a rep in list view could not get back to the map. What matters is whether a
+    thumb can land on the control, so that is what is measured.
+  */
+  for (const name of ['map', 'list']) {
+    const b = await page.getByRole('button', { name: new RegExp(`^${name}$`, 'i') }).boundingBox()
+    ok(
+      b != null && b.x >= -1 && b.x + b.width <= width + 1,
+      `[${width}] the "${name}" switch is inside the screen (right edge ${Math.round((b?.x ?? 0) + (b?.width ?? 0))} of ${width})`,
+    )
+  }
+
+
   // Tap target height.
   const box = await list.getByRole('button').first().boundingBox()
   ok((box?.height ?? 0) >= 44, `[${width}] rows clear the 44px tap floor (${Math.round(box?.height ?? 0)}px)`)
