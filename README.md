@@ -547,6 +547,33 @@ raw provider response, and takes `language`, `types`, `limit`, `autocomplete`,
 page reload rather than a deploy. Use a verified address with it — a synthetic one
 cannot answer a coverage question.
 
+### The map screen searches leads before it searches Google
+
+`MapSearch` sits where the property-count pill used to be — the count moved into
+its placeholder rather than taking a third band of chrome over a full-bleed map.
+
+Typing searches **the leads already on the device**: house number, street, town and
+contact name, nearest first when the rep's position is known. Instant, free, and it
+works in a dead zone. Only when nothing local matches does it offer the text as an
+address to move the map to, and those results are labelled *"Not a lead"* so a
+found address is never mistaken for a found lead.
+
+That ordering is not politeness. The local search is free and offline and usually
+the right answer; the address lookup is billed per session and needs signal. A
+query that already matched a lead never reaches Google at all.
+
+`npm run verify:mapsearch` covers the lead half at 320/390/1024 with Google
+unreachable, because that half needs no key to be true. Two real bugs came out of
+writing it, and both are the kind that only a browser finds:
+
+- The invisible full-screen backdrop that dismisses the results sat **above** the
+  clear button, so tapping ✕ with results open hit the backdrop and appeared to do
+  nothing. The second time an unpainted overlay has quietly eaten taps here — the
+  first was the map's peek sheet.
+- The pill measured 44px but the `<input>` inside it measured 36px, and tapping the
+  pill's padding focuses nothing. The field *looked* like a thumb target while the
+  part that takes a tap was smaller than one.
+
 ### Address entry suggests, and never depends on suggesting
 
 `AddressAutocomplete` offers Google Places suggestions as a rep types, and is a
