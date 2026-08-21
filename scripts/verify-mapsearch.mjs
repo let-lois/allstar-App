@@ -71,6 +71,22 @@ for (const width of [320, 390, 1024]) {
     `[${width}] the map/list switch still fits beside it`,
   )
 
+  /*
+    Reachability, not page overflow. The check this replaces asserted
+    `document.scrollWidth <= viewport`, which passed while the switch sat off the
+    right edge unreachable: the page did not scroll, so nothing looked wrong, and
+    a rep in list view could not get back to the map. What matters is whether a
+    thumb can land on the control, so that is what is measured.
+  */
+  for (const name of ['map', 'list']) {
+    const b = await page.getByRole('button', { name: new RegExp(`^${name}$`, 'i') }).boundingBox()
+    ok(
+      b != null && b.x >= -1 && b.x + b.width <= width + 1,
+      `[${width}] the "${name}" switch is inside the screen (right edge ${Math.round((b?.x ?? 0) + (b?.width ?? 0))} of ${width})`,
+    )
+  }
+
+
   /* --- searching leads, with Google unreachable -------------------------- */
   // Taken from the address of a lead the demo always has.
   const firstAddress = await page
