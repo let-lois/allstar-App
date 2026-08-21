@@ -62,6 +62,32 @@ for (const width of [320, 390, 768]) {
   ok(numbered, `[${width}] stops are numbered in walking order`)
   ok(/then .* to /.test(firstThree[0] ?? ''), `[${width}] each row names the distance to the next door`)
 
+  /*
+    And only then. Filtered to something other than the route there is no order —
+    the badge says so with a dot instead of a number — so a "then 13 mi to ..."
+    line between two rows that merely happen to be adjacent is a claim about a
+    walk nobody planned. Reported from a phone as a terrible route, when in fact
+    it was no route at all.
+  */
+  await page.getByRole('button', { name: /^Open leads$/ }).click()
+  await page.waitForTimeout(800)
+  const unordered = await page
+    .getByRole('list', { name: 'Route stops' })
+    .getByRole('button')
+    .allInnerTexts()
+  ok(
+    unordered.length > 0 && unordered.every((t) => !/then .* to /.test(t)),
+    `[${width}] with no route, no row claims a distance to the next one`,
+  )
+  ok(
+    unordered.slice(0, 3).every((t) => !/^\s*\d/.test(t.trim())),
+    `[${width}] and the badges are unnumbered, which is what says there is no order`,
+  )
+
+  // Back to the route so the assertions below are about a real sequence again.
+  await page.getByRole('button', { name: /^My route$/ }).click()
+  await page.waitForTimeout(800)
+
   // No horizontal overflow — the rule the whole app is held to.
   const scrollW = await page.evaluate(() => document.documentElement.scrollWidth)
   ok(scrollW <= width + 1, `[${width}] no horizontal overflow (${scrollW} <= ${width})`)
