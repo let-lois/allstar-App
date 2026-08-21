@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
 import { GoogleFieldMap } from '../components/map/GoogleFieldMap'
+import { FieldMap } from '../components/map/FieldMap'
 import { useAppStore } from '../store/useAppStore'
 import { gmapsConfigured, loadGmaps } from '../lib/gmaps'
 import { apiDirections } from '../lib/http'
@@ -31,6 +32,13 @@ import { haptic } from '../lib/haptics'
  * Every degraded state is a real one and each says what it is rather than
  * showing an empty map: no location permission, no signal, no route between the
  * two points, and the demo account, which has no server to ask.
+ *
+ * **The map is always drawn.** The first version of this screen gated the whole
+ * map on knowing where the rep was, so a browser with location denied got a
+ * paragraph of text and a link that left the app — which is the exact thing this
+ * screen exists to stop. Only the *line* needs the rep's position. The door's
+ * coordinates are already on the device, so the map has something to show
+ * regardless, and it falls back to the self-rendered one if Google cannot load.
  */
 
 type Line =
@@ -115,54 +123,44 @@ export function Navigate() {
     label: property.address1,
   })
 
+  /*
+    Google when it is available, the self-rendered map when it is not. Same
+    contract, and the fallback works with no signal — so this screen has a map in
+    a dead zone too, which is where a rep most needs to see which way the door
+    is.
+  */
+  const useGoogle = gmapsConfigured() && line.state !== 'failed'
+
+  const mapProps = {
+    className: 'min-h-0 flex-1',
+    properties: [property],
+    position: position ?? null,
+    selectedId: property.id,
+    onSelect: () => {},
+    disableClustering: true,
+    initialCenter: { lat: property.lat, lng: property.lng },
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <TopBar title={property.address1} subtitle="Walking route" back />
 
-      {!position ? (
-        /*
-          No position, so there is nothing to draw a line from. Both fixes are
-          named — the first needs no permission at all — because "enable
-          location" alone leaves a rep who has already denied it with nowhere to
-          go.
-        */
-        <div className="scroll-pane p-4">
-          <div className="card p-4">
-            <p className="text-[15px] font-semibold">We don’t know where you are yet</p>
-            <p className="mt-1.5 text-[13.5px] text-ink-soft">
-              A walking route needs your location. Turn it on for this site in your browser
-              settings — the padlock next to the address — or use Google Maps instead, which asks
-              for its own.
-            </p>
-            <a
-              href={external}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => haptic('tap')}
-              className="press focusable mt-3.5 flex min-h-tap items-center justify-center rounded-field bg-brand-50 font-semibold text-brand-600 ring-1 ring-brand-200"
-            >
-              Open in Google Maps
-            </a>
-          </div>
-        </div>
+      {useGoogle ? (
+        <GoogleFieldMap
+          {...mapProps}
+          path={line.state === 'ready' ? line.path : undefined}
+          onUnavailable={() => setLine({ state: 'failed', why: 'offline' })}
+        />
       ) : (
-        <>
-          <GoogleFieldMap
-            className="min-h-0 flex-1"
-            properties={[property]}
-            position={position}
-            selectedId={property.id}
-            onSelect={() => {}}
-            disableClustering
-            path={line.state === 'ready' ? line.path : undefined}
-            initialCenter={{ lat: property.lat, lng: property.lng }}
-            onUnavailable={() => setLine({ state: 'failed', why: 'offline' })}
-          />
+        <FieldMap {...mapProps} />
+      )}
 
-          <div
-            className="shrink-0 bg-surface px-4 pt-3 shadow-nav"
-            style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
-          >
+      <div
+        className="shrink-0 bg-surface px-4 pt-3 shadow-nav"
+        style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
+      >
+        {position ? (
+          <>
             <div className="flex items-baseline justify-between gap-3">
               <p className="nums text-[15px] font-bold">
                 {line.state === 'ready'
@@ -196,27 +194,35 @@ export function Navigate() {
                       : 'No signal for the route — showing the straight-line distance.'}
               </p>
             )}
+          </>
+        ) : (
+          /*
+            One line, under a map that is drawn anyway. Both fixes named, and the
+            first needs no permission from us — because "enable location" alone
+            leaves a rep who has already denied it with nowhere to go.
+          */
+          <p role="status" className="text-[12.5px] text-ink-soft">
+            <span className="font-semibold text-ink">Showing the door, not the walk.</span>{' '}
+            A route needs your location — turn it on for this site with the padlock next to the
+            address, or use Google Maps, which asks for its own.
+          </p>
+        )}
 
-            <div className="mt-3 flex gap-2">
-              <a
-                href={external}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => haptic('tap')}
-                className="press focusable flex min-h-tap flex-1 items-center justify-center rounded-field bg-brand-50 text-[14px] font-semibold text-brand-600 ring-1 ring-brand-200"
-              >
-                Google Maps
-              </a>
-              <Button
-                className="flex-1"
-                onClick={() => nav(`/property/${property.id}?start=1`)}
-              >
-                Start visit
-              </Button>
-            </div>
-          </div>
-        </>
-      )}
+        <div className="mt-3 flex gap-2">
+          <a
+            href={external}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => haptic('tap')}
+            className="press focusable flex min-h-tap flex-1 items-center justify-center rounded-field bg-brand-50 text-[14px] font-semibold text-brand-600 ring-1 ring-brand-200"
+          >
+            Google Maps
+          </a>
+          <Button className="flex-1" onClick={() => nav(`/property/${property.id}?start=1`)}>
+            Start visit
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

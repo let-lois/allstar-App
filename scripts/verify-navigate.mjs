@@ -98,9 +98,16 @@ async function toLead(opts = {}) {
 
   // The demo account has no server to ask; inventing a path would be the one
   // dishonest thing this screen could do.
+  /*
+    Which reason appears depends on the build: with placeholder Google values the
+    demo account has no server to ask, and with none at all the feature is simply
+    not configured. Both are honest and both are the point — the screen must say
+    the number is not a road distance. Asserting only one made this gate depend
+    on which build it happened to run against.
+  */
   ok(
-    /demo shows the straight-line distance|straight-line/i.test(body),
-    'the demo says its distance is straight-line rather than implying a road route',
+    /straight-line|not configured/i.test(body),
+    'the number is labelled as not being a road distance',
   )
   ok(/direct distance/i.test(body), 'and the number on screen is labelled')
   await ctx.close()
@@ -114,27 +121,39 @@ async function toLead(opts = {}) {
 
   const body = await page.locator('body').innerText()
   ok(
-    /don’t know where you are|do not know where you are/i.test(body),
-    'a rep with no location is told so plainly',
-  )
-  ok(
-    /padlock|browser settings/i.test(body),
-    'and told where the switch is, not just that one exists',
+    /padlock/i.test(body),
+    'a rep with no location is told where the switch is, not just that one exists',
   )
   ok(
     /Google Maps/i.test(body),
     'plus the fix that needs no permission from us at all',
   )
-  // A real assertion, not a tautology: with no position there is no map, no
-  // line and no distance, so the whole route panel — Start visit included — must
-  // be absent rather than showing controls for a route that does not exist.
+  /*
+    The map is still drawn. Reported from a real browser with location denied:
+    the screen showed a paragraph and a link that left the app, which is exactly
+    what it exists to prevent. Only the *line* needs a position; the door's
+    coordinates are already on the device.
+
+    This assertion replaces one that said the opposite — that with no position
+    the whole panel should be absent — which was me encoding a design mistake as
+    a requirement.
+  */
   ok(
-    (await page.getByRole('button', { name: /Start visit/i }).count()) === 0,
-    'the route panel is absent rather than offering controls for a route it has not got',
+    (await page.getByRole('application', { name: /Map of your leads/i }).count()) > 0 ||
+      (await page.locator('svg').count()) > 0,
+    'a map is drawn even with no location permission',
   )
   ok(
-    !/direct distance|along the roads/i.test(body),
-    'and no distance is claimed at all',
+    /Showing the door, not the walk/i.test(body),
+    'and it says plainly that this is the door rather than the walk',
+  )
+  ok(
+    !/along the roads/i.test(body),
+    'without claiming a road distance it does not have',
+  )
+  ok(
+    (await page.getByRole('button', { name: /Start visit/i }).count()) > 0,
+    'the visit is still one tap away, which is the point of not leaving the app',
   )
   await ctx.close()
 }
