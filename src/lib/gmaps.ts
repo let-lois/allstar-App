@@ -144,11 +144,14 @@ export function loadGmaps(): Promise<void> {
 
     const s = document.createElement('script')
     // `loading=async` is Google's own recommendation and silences its console
-    // warning; `marker` is the library advanced markers live in.
+    // warning. `marker` is where advanced markers live; `places` is address
+    // autocomplete. Both are named here rather than imported on demand because
+    // the alternative is a second network round trip at the moment a rep starts
+    // typing an address, standing outside a house.
     s.src =
       'https://maps.googleapis.com/maps/api/js' +
       `?key=${encodeURIComponent(KEY)}` +
-      `&libraries=marker&loading=async&callback=${cb}`
+      `&libraries=marker,places&loading=async&callback=${cb}`
     s.async = true
     s.onerror = () =>
       done(new GmapsError('unreachable', 'The map could not be reached. You may be offline.'))
