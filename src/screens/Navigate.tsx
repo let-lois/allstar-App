@@ -41,14 +41,41 @@ import { haptic } from '../lib/haptics'
  * regardless, and it falls back to the self-rendered one if Google cannot load.
  */
 
+type Mode = 'WALK' | 'DRIVE'
+
 type Line =
   | { state: 'idle' }
   | { state: 'loading' }
-  | { state: 'ready'; path: { lat: number; lng: number }[]; meters: number; seconds: number }
+  | {
+      state: 'ready'
+      path: { lat: number; lng: number }[]
+      meters: number
+      seconds: number
+      mode: Mode
+    }
   /** Named, because each of these wants a different sentence on screen. */
-  | { state: 'failed'; why: 'offline' | 'no-route' | 'demo' | 'unconfigured' }
+  | { state: 'failed'; why: 'offline' | 'no-route' | 'demo' | 'unconfigured' | 'too-far' }
 
 const minutes = (seconds: number) => Math.max(1, Math.round(seconds / 60))
+
+/**
+ * Beyond this, ask for a driving route instead of a walking one.
+ *
+ * Three miles is about an hour on foot. A rep covering more ground than that is
+ * in a truck, and a walking route for a distance nobody walks is a wrong answer
+ * delivered confidently.
+ */
+const WALK_LIMIT_MILES = 3
+
+/**
+ * Beyond this there is no route at all.
+ *
+ * Matches `MAX_KM` in api/src/directions.ts — 80 km — and is checked here as
+ * well so a rep in another state is told the truth without spending a request to
+ * find it out. The server keeps its own check; this one exists to give an honest
+ * reason rather than to save the round trip.
+ */
+const ROUTE_LIMIT_MILES = 49
 
 export function Navigate() {
   const { id } = useParams()
@@ -64,6 +91,22 @@ export function Navigate() {
 
   useEffect(() => {
     if (!property || !position) return
+
+    /*
+      Checked before anything else because it is a fact about the world rather
+      than about this deployment: a rep in another state is too far for a route
+      whatever the configuration says. The server refuses this too, and its
+      refusal used to arrive here as "no signal" — telling somebody their
+      connection was broken when their actual problem was being four hundred
+      miles away.
+    */
+    const miles = distanceMiles(position, property)
+    if (miles > ROUTE_LIMIT_MILES) {
+      setLine({ state: 'failed', why: 'too-far' })
+      return
+    }
+    const mode: Mode = miles > WALK_LIMIT_MILES ? 'DRIVE' : 'WALK'
+
     const token = liveToken()
     if (!gmapsConfigured()) {
       setLine({ state: 'failed', why: 'unconfigured' })
@@ -81,7 +124,7 @@ export function Navigate() {
     void (async () => {
       try {
         const [{ leg }] = await Promise.all([
-          apiDirections(token, position, { lat: property.lat, lng: property.lng }, 'WALK'),
+          apiDirections(token, position, { lat: property.lat, lng: property.lng }, mode),
           loadGmaps(),
         ])
         if (cancelled) return
@@ -93,13 +136,27 @@ export function Navigate() {
           .decodePath(leg.polyline)
           .map((p) => ({ lat: p.lat(), lng: p.lng() }))
         if (cancelled) return
-        setLine({ state: 'ready', path, meters: leg.distanceMeters, seconds: leg.seconds })
+        setLine({
+          state: 'ready',
+          path,
+          meters: leg.distanceMeters,
+          seconds: leg.seconds,
+          mode,
+        })
       } catch (err) {
         if (cancelled) return
         // A 404 from the endpoint means there is genuinely no walkable path —
         // different from having no signal, and worth saying differently.
-        const noRoute = err instanceof Error && /not.?found|no route/i.test(err.message)
-        setLine({ state: 'failed', why: noRoute ? 'no-route' : 'offline' })
+        // The server's own reasons, mapped rather than collapsed. Falling back
+        // to "offline" for everything is what produced "no signal" for a
+        // distance problem.
+        const msg = err instanceof Error ? err.message : ''
+        const why = /too far apart/i.test(msg)
+          ? 'too-far'
+          : /not.?found|no route/i.test(msg)
+            ? 'no-route'
+            : 'offline'
+        setLine({ state: 'failed', why })
       }
     })()
 
@@ -143,7 +200,22 @@ export function Navigate() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <TopBar title={property.address1} subtitle="Walking route" back />
+      {/*
+        Named only once it is known. Claiming "Walking route" for a twenty-mile
+        drive, or for a door we cannot route to at all, is the same class of
+        small lie as the distance label.
+      */}
+      <TopBar
+        title={property.address1}
+        subtitle={
+          line.state === 'ready'
+            ? line.mode === 'DRIVE'
+              ? 'Driving route'
+              : 'Walking route'
+            : 'Route'
+        }
+        back
+      />
 
       {useGoogle ? (
         <GoogleFieldMap
@@ -164,7 +236,9 @@ export function Navigate() {
             <div className="flex items-baseline justify-between gap-3">
               <p className="nums text-[15px] font-bold">
                 {line.state === 'ready'
-                  ? `${formatDistance(line.meters / 1609.34)} · ${minutes(line.seconds)} min walk`
+                  ? `${formatDistance(line.meters / 1609.34)} · ${minutes(line.seconds)} min ${
+                      line.mode === 'DRIVE' ? 'drive' : 'walk'
+                    }`
                   : direct != null
                     ? `${formatDistance(direct)} · ${walkMinutes(direct)} min`
                     : '—'}
@@ -185,8 +259,10 @@ export function Navigate() {
 
             {line.state === 'failed' && (
               <p role="status" className="mt-1.5 text-[12.5px] text-ink-mute">
-                {line.why === 'no-route'
-                  ? 'No walking route between here and there — the straight-line distance is shown.'
+                {line.why === 'too-far'
+                  ? 'You’re too far away to route to this door — the straight-line distance is shown.'
+                  : line.why === 'no-route'
+                  ? 'No route between here and there — the straight-line distance is shown.'
                   : line.why === 'demo'
                     ? 'Walking routes need a live account; the demo shows the straight-line distance.'
                     : line.why === 'unconfigured'
