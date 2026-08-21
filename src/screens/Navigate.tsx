@@ -73,8 +73,19 @@ type Line =
       seconds: number
       mode: Mode
     }
+  /**
+   * Not a failure. There is no route, and the direct line *is* the answer — so
+   * this is a state the screen succeeds in, drawn and labelled, rather than an
+   * error with a consolation number attached.
+   *
+   * It used to be `failed: 'too-far'`, and modelling it that way is what made
+   * everything downstream treat a rep in another country as a broken app: the
+   * renderer was dropped, the reason competed with "no signal", and the screen
+   * apologised for a fact about geography.
+   */
+  | { state: 'direct'; path: { lat: number; lng: number }[]; miles: number; why: 'too-far' | 'no-route' }
   /** Named, because each of these wants a different sentence on screen. */
-  | { state: 'failed'; why: 'offline' | 'no-route' | 'demo' | 'unconfigured' | 'too-far' }
+  | { state: 'failed'; why: 'offline' | 'demo' | 'unconfigured' }
 
 const minutes = (seconds: number) => Math.max(1, Math.round(seconds / 60))
 
@@ -116,20 +127,6 @@ export function Navigate() {
     [position, property],
   )
 
-  /*
-    The direct line, for the distances no route covers. Sampled locally, so it is
-    available in the same breath as the refusal — no request, no waiting, and it
-    works with no signal. `too-far` is the case this was asked for; `no-route`
-    gets it too, because "there is no way through" and "you are on the wrong
-    continent" both leave a rep looking at a door they cannot be routed to.
-  */
-  const flightPath = useMemo(() => {
-    if (!position || !property) return undefined
-    if (line.state !== 'failed') return undefined
-    if (line.why !== 'too-far' && line.why !== 'no-route') return undefined
-    return greatCirclePath(position, { lat: property.lat, lng: property.lng })
-  }, [position, property, line])
-
   useEffect(() => {
     if (!property || !position) return
 
@@ -143,7 +140,18 @@ export function Navigate() {
     */
     const miles = distanceMiles(position, property)
     if (miles > ROUTE_LIMIT_MILES) {
-      setLine({ state: 'failed', why: 'too-far' })
+      /*
+        Answered here and now: the line is arithmetic on the device, so there is
+        nothing to wait for and nothing to ask. No request is made at this
+        distance either — the Worker refuses over 80 km — so this costs a
+        millisecond and no quota.
+      */
+      setLine({
+        state: 'direct',
+        path: greatCirclePath(position, { lat: property.lat, lng: property.lng }),
+        miles,
+        why: 'too-far',
+      })
       return
     }
     const mode: Mode = miles > WALK_LIMIT_MILES ? 'DRIVE' : 'WALK'
@@ -192,12 +200,19 @@ export function Navigate() {
         // to "offline" for everything is what produced "no signal" for a
         // distance problem.
         const msg = err instanceof Error ? err.message : ''
-        const why = /too far apart/i.test(msg)
-          ? 'too-far'
-          : /not.?found|no route/i.test(msg)
-            ? 'no-route'
-            : 'offline'
-        setLine({ state: 'failed', why })
+        // Both of the server's substantive refusals mean the same thing to a
+        // rep: there is no route, and the direct line is what is left. Only a
+        // failure to *ask* is a failure.
+        if (/too far apart/i.test(msg) || /not.?found|no route/i.test(msg)) {
+          setLine({
+            state: 'direct',
+            path: greatCirclePath(position, { lat: property.lat, lng: property.lng }),
+            miles,
+            why: /too far apart/i.test(msg) ? 'too-far' : 'no-route',
+          })
+          return
+        }
+        setLine({ state: 'failed', why: 'offline' })
       }
     })()
 
@@ -230,13 +245,18 @@ export function Navigate() {
   const useGoogle = gmapsConfigured() && !mapDead
 
   /*
-    Whether the line is actually on screen, which decides what the sentence below
-    is allowed to say. The self-rendered map cannot zoom out past a
-    neighbourhood, so on that renderer there is no arc to point at — and a
-    sentence describing a dashed line that is not drawn is worse than the plain
-    one, because it sends a rep looking for it.
+    The line, and which of the two maps draws it — either, now. The self-rendered
+    map could not zoom out past a neighbourhood, which is why this case used to be
+    Google-only and why the sentence had to hedge about whether there was a line
+    to look at. Both renderers take the same `path` prop and both frame it, so
+    the arc is there with no key, no billing account and no signal.
   */
-  const drawingFlight = useGoogle && !!flightPath
+  const flightPath = line.state === 'direct' ? line.path : undefined
+
+  const drawn =
+    line.state === 'ready'
+      ? { path: line.path, pathKind: 'route' as const }
+      : { path: flightPath, pathKind: 'flight' as const }
 
   const mapProps = {
     className: 'min-h-0 flex-1',
@@ -262,7 +282,11 @@ export function Navigate() {
             ? line.mode === 'DRIVE'
               ? 'Driving route'
               : 'Walking route'
-            : 'Route'
+            : // Named for what it is. Calling the intercontinental case "Route"
+              // was the same small lie as the walking time underneath it.
+              line.state === 'direct'
+              ? 'Direct line'
+              : 'Route'
         }
         back
       />
@@ -270,24 +294,29 @@ export function Navigate() {
       {useGoogle ? (
         <GoogleFieldMap
           {...mapProps}
-          path={line.state === 'ready' ? line.path : flightPath}
-          pathKind={line.state === 'ready' ? 'route' : 'flight'}
+          {...drawn}
           onUnavailable={() => {
             setMapDead(true)
             /*
-              Never over the top of a reason we already have. A map that cannot
-              draw says nothing about why there is no route, and writing
+              Never over the top of an answer we already have. A map that
+              cannot draw says nothing about why there is no route, and writing
               'offline' here unconditionally put "No signal" back on the screen
               for the rep in another state and the demo account — the exact
               wrong-reason bug this screen was fixed for once already. Caught by
-              the gate that was written for it, which is the whole argument for
-              having written it.
+              the gate written for it, which is the whole argument for having
+              written it. `direct` is protected for the same reason: the line is
+              already computed and drawn, and the map falling back to the
+              self-rendered one changes nothing about it.
             */
-            setLine((l) => (l.state === 'failed' ? l : { state: 'failed', why: 'offline' }))
+            setLine((l) =>
+              l.state === 'failed' || l.state === 'direct'
+                ? l
+                : { state: 'failed', why: 'offline' },
+            )
           }}
         />
       ) : (
-        <FieldMap {...mapProps} />
+        <FieldMap {...mapProps} {...drawn} />
       )}
 
       <div
@@ -330,21 +359,28 @@ export function Navigate() {
               </p>
             </div>
 
-            {line.state === 'failed' && (
+            {/*
+              A statement, not an apology. Nothing is broken when a rep opens a
+              lead from another state — there is simply no route to draw, and the
+              dashed line is the answer rather than a substitute for one. The
+              screen can promise the line unconditionally now, because both
+              renderers draw it.
+            */}
+            {line.state === 'direct' && (
               <p role="status" className="mt-1.5 text-[12.5px] text-ink-mute">
                 {line.why === 'too-far'
-                  ? drawingFlight
-                    ? 'You’re too far away to route to this door — the dashed line is the direct distance, not a way to get there.'
-                    : 'You’re too far away to route to this door — the direct distance is shown.'
-                  : line.why === 'no-route'
-                  ? drawingFlight
-                    ? 'No route between here and there — the dashed line is the direct distance.'
-                    : 'No route between here and there — the direct distance is shown.'
-                  : line.why === 'demo'
-                    ? 'Walking routes need a live account; the demo shows the straight-line distance.'
-                    : line.why === 'unconfigured'
-                      ? 'Walking routes are not configured on this deployment.'
-                      : 'No signal for the route — showing the straight-line distance.'}
+                  ? 'This door is too far away to route to — the dashed line is the direct distance, not a way to get there.'
+                  : 'No road route between here and there — the dashed line is the direct distance.'}
+              </p>
+            )}
+
+            {line.state === 'failed' && (
+              <p role="status" className="mt-1.5 text-[12.5px] text-ink-mute">
+                {line.why === 'demo'
+                  ? 'Walking routes need a live account; the demo shows the straight-line distance.'
+                  : line.why === 'unconfigured'
+                    ? 'Walking routes are not configured on this deployment.'
+                    : 'No signal for the route — showing the straight-line distance.'}
               </p>
             )}
           </>

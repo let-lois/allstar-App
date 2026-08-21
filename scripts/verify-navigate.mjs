@@ -203,17 +203,45 @@ async function toLead(opts = {}) {
     !/along the roads/i.test(body),
     'nor a road distance claimed where there is no road route',
   )
+
   /*
-    The dashed arc itself is not asserted here, for the same reason the map is
-    not: drawing it needs Maps JS with a real key on an allowed origin, and this
-    gate blocks Maps JS on purpose. What *is* asserted is the honest half — with
-    no map to draw on, the sentence does not promise a line that is not there.
-    That conditional is the one part of this feature that can be got wrong
-    silently, because the wrong version reads perfectly well.
+    The arc itself, asserted — and this is the interesting part, because it needs
+    no key. Maps JS is blocked in this gate, so what is on screen is the
+    self-rendered map, which now takes the same `path` prop and frames it. The
+    first version of this feature was Google-only: the offline renderer could not
+    zoom out past a neighbourhood, so a rep on the wrong continent with no signal
+    got a map of the door and nothing else. Two renderers that disagree about
+    what they can show is exactly what the shared prop contract exists to stop.
   */
+  const arc = page.locator('svg path[data-line="flight"]')
+  ok(await arc.count() > 0, 'the direct line is drawn with no Google map at all')
+  const d = (await arc.first().getAttribute('d')) ?? ''
+  const vertices = (d.match(/[ML]/g) ?? []).length
   ok(
-    !/dashed line/i.test(body),
-    'and with no Google map to draw on, no dashed line is promised',
+    vertices > 20,
+    `it is a sampled arc rather than a two-point line (${vertices} vertices)`,
+  )
+  /*
+    Both ends on screen. A line whose far end is off the edge is not a line
+    anybody can read, and this is the assertion that would catch the view being
+    left at street zoom — the failure the old minimum zoom guaranteed.
+  */
+  const lineBox = await arc.first().boundingBox()
+  ok(
+    lineBox != null && lineBox.width > 390 * 0.3 && lineBox.x > -40,
+    `and it is framed rather than left at street zoom (${Math.round(lineBox?.width ?? 0)}px across a 390px screen, from x=${Math.round(lineBox?.x ?? 0)})`,
+  )
+  ok(
+    (await page.locator('[data-plane="flight"]').count()) > 0,
+    'with the plane on it, which is what says this is not a walk',
+  )
+
+  // Not an error state, and not described as one.
+  ok(/dashed line/i.test(body), 'the sentence points at the line that is actually there')
+  ok(/Direct line/i.test(body), 'and the screen is titled for what it is showing')
+  ok(
+    !/not configured|No signal/i.test(body),
+    'without blaming configuration or the connection for a fact about geography',
   )
   ok(
     (await page.getByRole('button', { name: /Start visit/i }).count()) > 0,

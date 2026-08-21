@@ -160,6 +160,9 @@ function clusterElement(count: number): HTMLElement {
  */
 function planeElement(headingDeg: number): HTMLElement {
   const el = document.createElement('div')
+  // The same hook the self-rendered map puts on its own plane, so one selector
+  // finds it whichever renderer drew it.
+  el.dataset.plane = 'flight'
   el.style.cssText = [
     'width:34px',
     'height:34px',

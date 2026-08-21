@@ -640,12 +640,40 @@ as a route. Same geometry, different promise, and the promise is the part a rep
 acts on — so `pathKind: 'flight'` draws it dashed and puts a plane at the arc's
 midpoint, rotated to the bearing.
 
-Two honest limits. The self-rendered map cannot zoom out past a neighbourhood, so
-with Google unavailable there is no arc — and the sentence changes to match,
-because describing a dashed line that is not on screen sends a rep looking for
-it. And no walking time is quoted beyond the walk limit: that number used to be
+No walking time is quoted beyond the walk limit: that number used to be
 unconditional, so a lead opened from abroad read "8,397 mi · 162,533 min",
 arithmetic wearing the clothes of a plan.
+
+**It is a state the screen succeeds in, not a failure.** Internally this was
+`failed: 'too-far'` at first, and modelling it that way is what made everything
+downstream treat a rep in another country as a broken app — the renderer was
+dropped, the reason competed with "no signal", and the screen apologised for a
+fact about geography. It is now `direct`, carrying its own path and distance,
+with `failed` left to mean only the three cases where we could not find out:
+no signal, the demo account, and a deployment with no routing configured. (The
+app-wide online state never came into it either way — that is `navigator.onLine`
+in `src/lib/api.ts` and nothing on this screen touches it.)
+
+**Both renderers draw it.** `FieldMap` used to stop at zoom 12, a neighbourhood,
+so the far-away case had to be Google-only — and a rep on the wrong continent
+with no signal got a map of the door and nothing else. Two renderers that
+disagree about what they can show is exactly what the shared prop contract exists
+to prevent, so the floor is now zoom 1 and `FieldMap` takes the same `path` and
+`pathKind` props. Three things had to change with it:
+
+- **The projection wraps.** `toScreen` takes longitude as a `wrapDegrees` offset
+  from the centre rather than an absolute world coordinate. Identical arithmetic
+  inside one hemisphere, and it is what stops a Manila-to-Texas line being drawn
+  the long way back across Asia. `fitZoom` and the new `fitCenter` measure the
+  same way — measured absolutely, that pair spans 218° and both the zoom and the
+  centre come out describing the wrong two thirds of the planet.
+- **The basemap changes with the zoom.** The drawn grid is a synthetic lattice at
+  block spacing: real spatial texture where a rep works, and at continental scale
+  both a lie and roughly fifty thousand SVG lines. Below zoom 12 it draws the
+  true graticule instead — coarse, thin, spacing picked from the visible span.
+- **The view fits the line once.** Not on every render, or a rep could never pan;
+  and following the rep is switched off, because centring one endpoint puts the
+  other off screen by a continent.
 
 This also fixed the renderer choice, which hung off *any* routing failure — so
 the far-away case was being handed to the one renderer that cannot show two
@@ -661,6 +689,13 @@ stripping, no build step — so it tests the real function: that the drawn line'
 own length equals the great-circle distance, that the arc bows north of both
 endpoints, and that it crosses the antimeridian. Swapping in linear
 interpolation fails four of those assertions, which is how they were checked.
+
+And because the offline renderer draws the arc, `verify:navigate` can assert the
+line itself with **no key at all** — Maps JS is blocked in that gate, so what is
+measured is the self-rendered map: 65 vertices rather than two, both ends on
+screen, the plane present. Putting the zoom floor back to 12 reports a line
+29,251px wide starting at x=−14,430, which is the failure that assertion is
+for.
 
 ### A photo of the house, and the trap under it
 
