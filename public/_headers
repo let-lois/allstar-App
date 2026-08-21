@@ -51,6 +51,11 @@
 #   www.gstatic.com         a *different host* from maps.gstatic.com, and easy to
 #                           miss: the map fetches its style set from
 #                           /maps/res/CompactLegendSdk-... at load.
+#   places.googleapis.com   address autocomplete. The Places *New* library talks
+#                           to its own host rather than routing through
+#                           maps.googleapis.com, and being blocked here does not
+#                           look like a CSP problem from the outside — the field
+#                           just quietly stops suggesting and lets you type.
 #   *.ggpht.com and
 #   *.googleusercontent.com Street View imagery is served from these.
 #   worker-src blob:        vector maps run their rendering in a worker created
@@ -77,7 +82,7 @@
 # ID to a *raster* map, which needs no WebAssembly at all and therefore none of
 # this. Slower and less pretty; no CSP relaxation whatsoever.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://api.maptiler.com https://maps.googleapis.com https://maps.gstatic.com https://www.gstatic.com https://*.ggpht.com https://*.googleusercontent.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' data: blob: https://allstar-api.josh-af6.workers.dev https://api.maptiler.com https://maps.googleapis.com https://maps.gstatic.com https://www.gstatic.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://api.maptiler.com https://maps.googleapis.com https://maps.gstatic.com https://www.gstatic.com https://*.ggpht.com https://*.googleusercontent.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' data: blob: https://allstar-api.josh-af6.workers.dev https://api.maptiler.com https://maps.googleapis.com https://places.googleapis.com https://maps.gstatic.com https://www.gstatic.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(self), camera=(self), microphone=(self), payment=(), usb=()

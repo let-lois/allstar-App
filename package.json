@@ -20,6 +20,7 @@
     "verify:import": "node scripts/verify-import-ui.mjs",
     "verify:route": "node scripts/verify-route.mjs",
     "verify:maptiles": "node scripts/verify-map-tiles.mjs",
+    "verify:newlead": "node scripts/verify-newlead.mjs",
     "verify:googlemap": "node scripts/verify-googlemap.mjs",
     "verify:routelist": "node scripts/verify-routelist.mjs",
     "verify:offlinemaps": "node scripts/verify-offline-maps.mjs",

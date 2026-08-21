@@ -547,6 +547,42 @@ raw provider response, and takes `language`, `types`, `limit`, `autocomplete`,
 page reload rather than a deploy. Use a verified address with it — a synthetic one
 cannot answer a coverage question.
 
+### Address entry suggests, and never depends on suggesting
+
+`AddressAutocomplete` offers Google Places suggestions as a rep types, and is a
+plain text input the rest of the time. With no key, no signal or a rejected key it
+behaves exactly as the field did before suggestions existed — type it, save it, no
+complaint. That is the whole design constraint: this screen is used outdoors, and
+a billed convenience must never become a dependency.
+
+Google's own `PlaceAutocompleteElement` was not used. It brings its own markup and
+its own row heights, and this app has spent real effort on 44px tap targets and
+one-handed reach; a widget that ignores both on the one screen a rep uses in gloves
+is not a saving. The data API plus our own list costs about forty lines.
+
+A picked address is worth more than the typing it saves, because it carries
+coordinates and a **structured** address. That fixed two existing faults:
+
+- The screen wrote a hardcoded `Round Rock, TX 78664` onto every lead added from
+  the field, whatever town the rep was in. Invisible with one territory, wrong the
+  moment there are two. A typed address now stores its city, state and ZIP
+  **blank** — the office can see blank and fix it; it cannot see a confidently
+  wrong town.
+- Adding a lead needed GPS, so a rep whose browser had blocked location found Save
+  dead with nothing explaining why. A picked address sets the pin without any
+  permission at all, and when there is neither pin nor pick the screen now names
+  both fixes instead of just refusing.
+
+Billing discipline, since Places charges per session: requests wait for a pause in
+typing, need three characters, are limited to US street addresses, and share one
+session token until a pick ends it. Typing an address is one billable session, not
+fifteen.
+
+`npm run verify:newlead` asserts the degraded path and reads the saved row out of
+IndexedDB rather than trusting the form — the offline write is the thing that
+matters. The suggestion list itself is not covered, for the same reason as the map:
+it needs a real key on an allowed origin.
+
 ### The map has two renderers
 
 `FieldMap` draws its own basemap and layers MapTiler tiles over it. `GoogleFieldMap`
