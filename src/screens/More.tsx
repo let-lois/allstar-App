@@ -228,7 +228,10 @@ export function More() {
 
           <section className="section">
             <SectionHeader title="Go to" standalone />
-            <nav className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+            {/* No `row-group`: the rows are machined faces now, and each one's
+                bright top lip against the bevel above it *is* the divider. The
+                border on top of that drew the seam twice. */}
+            <nav className="plate -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
               <MoreLink label="Today's route" onClick={() => nav('/route')} />
               <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
               <MoreLink label="Schedule an appointment" onClick={() => nav('/schedule/new')} />
@@ -328,7 +331,7 @@ function MoreLink({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex min-h-[56px] w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-medium active:bg-surface-field"
+      className="metal-row flex min-h-[56px] w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-medium"
     >
       {label}
       <span className="shrink-0 text-ink-faint">
