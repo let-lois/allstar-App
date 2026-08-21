@@ -9,6 +9,13 @@ import { chromium } from 'playwright'
  * correct per layer. With no key it asserts the opposite — that nothing is
  * fetched from the tile host at all and the drawn basemap carries the screen.
  *
+ * Google is blocked throughout, deliberately. `FieldMap` is now the *offline*
+ * renderer — Google draws while it can and this takes over when it cannot — so
+ * with Google reachable this screen would show Google's map and there would be
+ * no MapTiler tiles to assert anything about. Blocking it is what puts the
+ * component under test on screen, and it is also the condition a rep is in when
+ * these tiles matter: no signal, saved imagery.
+ *
  * Both modes end by killing the connection: the map has to survive it, because
  * that is the condition it is used in.
  */
@@ -25,6 +32,8 @@ const ctx = await browser.newContext({
   geolocation: { latitude: 30.5115, longitude: -97.6755 },
 })
 const page = await ctx.newPage()
+// See the header: Google must be absent for the offline renderer to appear.
+await page.route(/maps\.googleapis\.com/, (r) => r.abort())
 const reqs = []
 page.on('request', (r) => {
   if (r.url().includes('maptiler')) reqs.push(r.url())

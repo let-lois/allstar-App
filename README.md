@@ -705,49 +705,63 @@ IndexedDB rather than trusting the form — the offline write is the thing that
 matters. The suggestion list itself is not covered, for the same reason as the map:
 it needs a real key on an allowed origin.
 
-### The map has two renderers
+### The map has two renderers: Google online, MapTiler offline
 
-`FieldMap` draws its own basemap and layers MapTiler tiles over it. `GoogleFieldMap`
-uses the Google Maps JavaScript API. They are not variants of one map — they are
-two maps behind one prop contract, chosen at runtime, and both are kept.
+`GoogleFieldMap` uses the Google Maps JavaScript API. `FieldMap` draws its own
+basemap and layers cached MapTiler tiles over it. They share one prop contract, and
+the screen picks between them by whether Google is currently drawable.
 
-Which one runs:
-
-| `VITE_GOOGLE_MAPS_KEY` + `VITE_GOOGLE_MAP_ID` | Online | Offline |
+| | Online | Offline / Google failed |
 | --- | --- | --- |
-| Both set | Google map | Route list, with the reason named |
-| Either missing | `FieldMap` | `FieldMap` — it works offline |
+| Both Google vars set | Google map | `FieldMap` with whatever tiles are saved |
+| Either missing | `FieldMap` | `FieldMap` |
+
+The route list is a **choice**, reached from the map/list switch — not a fallback.
+
+That last part was wrong for a while and worth recording, because the failure was
+silent. A failed Google load used to jump straight to the list, which meant that in
+production — where Google is always configured — `FieldMap` never rendered, and the
+MapTiler tiles a rep downloaded through **Offline maps** were never drawn. The
+territory download had become unreachable: the one moment it exists for was the
+one moment the screen stopped using it. Imagery now comes first, and the gate that
+asserted the old behaviour has been rewritten, because it was defending the bug.
 
 The self-rendered map is not legacy code waiting to be deleted. It is the only
-renderer that works with no signal, no key and no billing account, and removing it
-because a paid map exists would be a downgrade dressed as an upgrade. With the
-vars unset, Rollup proves the Google branch dead and strips the entire renderer
-and its clusterer from the bundle — a deployment that does not use Google pays
-nothing for it. With them set, the whole Google path costs about 6 kB raw, 2 kB
-gzipped.
+renderer that works with no signal, no key and no billing account. With the Google
+vars unset, Rollup proves that branch dead and strips the renderer and its
+clusterer from the bundle — a deployment that does not use Google pays nothing for
+it. With them set, the whole Google path costs about 6 kB raw, 2 kB gzipped.
 
 **Connectivity is never checked directly.** Offline, a rejected key, a blocked
 script and a stalled connection all arrive as one thing: a named load failure. All
-four have the same correct response — show the route as a list and say which one
-happened. A separate `online` check would be a second source of truth for the same
-question, and the two would disagree on exactly the flaky connection this screen
-exists for.
+of them want the same response — draw the offline map and say which one happened.
+A separate `online` check would be a second source of truth that disagrees with
+the first on exactly the flaky connection this screen exists for.
+
+The notice over the fallback map splits on purpose. Connectivity gets a rep's
+sentence; everything else keeps the provider's own words. A rejected key is the
+most likely thing to break on a new deployment and the least guessable, so
+collapsing it into "map unavailable" would throw away the one message that tells
+whoever deployed it what to fix.
 
 Advanced markers are why the Map ID is required rather than optional. They render
-as real DOM, so the status colours and selected state already in this product
-carry over instead of becoming Google teardrops, and they are focusable, which
-sprite markers are not. Without a Map ID they silently do not appear — so a key
-with no Map ID is treated as unconfigured, and says so in the console rather than
-leaving someone to wonder where their leads went.
+as real DOM, so the status colours and selected state already in this product carry
+over instead of becoming Google teardrops, and they are focusable, which sprite
+markers are not. Without a Map ID they silently do not appear — so a key with no
+Map ID is treated as unconfigured, and says so in the console.
 
-`npm run verify:googlemap` covers what a real key cannot be tested for in CI: the
-three ways this fails. It needs a build with placeholder values, because with the
-vars unset the code under test is not in the bundle at all:
+Two gates need a build with placeholder Google values, because with the vars unset
+the code under test is not in the bundle. Both skip cleanly rather than failing,
+detected from the absence of any request:
 
 ```bash
 VITE_GOOGLE_MAPS_KEY=dummy VITE_GOOGLE_MAP_ID=DEMO_MAP_ID npm run build
-npm run verify:googlemap
+npm run verify:googlemap && npm run verify:streetview
 ```
+
+`verify:maptiles` does the opposite — it blocks Google, because `FieldMap` is now
+the offline renderer and would otherwise never appear on screen to be tested. That
+is also the condition a rep is in when those tiles matter.
 
 ### Google's terms and the offline map are in direct conflict
 

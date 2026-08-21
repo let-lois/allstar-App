@@ -197,13 +197,22 @@ export function MapScreen() {
   )
 
   /*
-    Which renderer, and when the list stands in for it.
+    Google online, the self-rendered map offline, and the list only when a rep
+    asks for it.
 
-    With no Google key this is unchanged from before: the self-rendered map, which
-    works with no signal and is not going anywhere — deleting a working offline
-    map because a paid one exists would be a downgrade dressed as an upgrade.
+    This used to send a failed Google load straight to the list — which meant
+    that in production, where Google *is* configured, the MapTiler tiles a rep
+    downloads through "Offline maps" were never drawn at all. The territory
+    download had become unreachable: the one moment it exists for was the one
+    moment the screen stopped using it.
+
+    So the order is now imagery first. Google draws while it can; when it cannot,
+    `FieldMap` takes over with whatever tiles are already on the device and its
+    own drawn basemap underneath them. The list remains a choice rather than a
+    consolation.
   */
-  const showList = view === 'list' || (googleMap && !!mapError)
+  const showList = view === 'list'
+  const useGoogle = googleMap && !mapError
 
   /*
     One prop bundle for both renderers. They are not variants of one map — they
@@ -226,6 +235,38 @@ export function MapScreen() {
         <div className="pad-top pointer-events-none absolute inset-x-0 top-0">
           <div className="pointer-events-auto flex items-center gap-2 px-3 pb-2 pt-2">{chips}</div>
           {statusRow}
+
+          {/*
+            Said over the map rather than instead of it. A rep who has fallen back
+            to saved imagery needs to know two things — which map they are looking
+            at, and that their work is still being recorded — and neither is worth
+            taking the map away for.
+          */}
+          {mapError && (
+            <div
+              role="status"
+              className="pointer-events-auto mx-3 mt-2 rounded-field bg-warn-bg px-3 py-2 text-[12.5px] text-warn shadow-raise"
+            >
+              {/*
+                Connectivity gets a rep's sentence; everything else keeps the
+                provider's own words. A rejected key is the most likely thing to
+                break on a new deployment and the least guessable, so collapsing
+                it into "map unavailable" would throw away the one message that
+                tells whoever deployed it what to go and fix.
+              */}
+              {mapError.reason === 'unreachable' ? (
+                <>
+                  <span className="font-semibold">No signal for live map imagery.</span> Showing
+                  your saved map. Visits are still being saved on this phone.
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold">Live map unavailable.</span> {mapError.message}{' '}
+                  Showing your saved map.
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Nearest-door shortcut, bottom-left, opposite the zoom controls. */}
@@ -311,7 +352,7 @@ export function MapScreen() {
       )}
 
       {!showList ? (
-        googleMap ? (
+        useGoogle ? (
           <GoogleFieldMap {...mapProps} onUnavailable={setMapError} />
         ) : (
           <FieldMap {...mapProps} />
