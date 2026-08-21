@@ -582,6 +582,37 @@ raw provider response, and takes `language`, `types`, `limit`, `autocomplete`,
 page reload rather than a deploy. Use a verified address with it — a synthetic one
 cannot answer a coverage question.
 
+### Navigate stays in the app
+
+Tapping Navigate used to open Google Maps in another tab. That had a real cost:
+the visit gets logged in *this* app, so a rep who left to look at a map had to
+find their way back before anything was recorded.
+
+`/navigate/:id` draws the walking route instead — the actual path along the roads
+from where the rep is standing to the door, with the real distance and time. The
+polyline comes from `POST /api/directions` on the Worker, because the browser key
+is restricted to Maps JS, Places and Street View and cannot spend routing quota;
+Routes API is on the Worker's key. One extra hop to keep that split intact.
+
+**It is not turn-by-turn navigation and does not pretend to be.** A web app cannot
+speak directions or keep running in a pocket, so "Google Maps" stays one tap away
+for driving between neighbourhoods. This screen is for the last two hundred
+metres, on foot, which is most of a rep's day.
+
+Four degraded states, each saying which one it is rather than showing an empty
+map: no location permission (both fixes named, including the one needing no
+permission from us), no signal, no walkable route between the two points, and the
+demo account, which has no server to ask and will not invent a path.
+
+**Which number is on screen is always labelled** — "along the roads" or "direct
+distance". A road distance and a straight line can differ by a factor of three, and
+a rep planning around the wrong one walks into a fence.
+
+`npm run verify:navigate` covers the states rather than the line, since the line
+needs a real key: that Navigate no longer opens a tab, that a rep with no location
+gets both fixes and *no* route panel offering controls for a route that does not
+exist, and that the demo labels its straight-line distance honestly.
+
 ### A photo of the house, and the trap under it
 
 `StreetView` answers a porch question no amount of address text does: *is this

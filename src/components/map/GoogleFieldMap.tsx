@@ -83,6 +83,16 @@ interface Props {
   disableClustering?: boolean
   handleRef?: React.MutableRefObject<MapHandle | null>
   /**
+   * An arbitrary path to draw, in addition to any route line.
+   *
+   * Used by the navigate screen for the walking route from the rep to a door.
+   * Kept as plain coordinates rather than an encoded polyline so this component
+   * stays ignorant of where the path came from — decoding belongs with the
+   * caller that asked for it. Not `Position`: a vertex on a route is not a GPS
+   * fix and has no accuracy or timestamp to report.
+   */
+  path?: { lat: number; lng: number }[]
+  /**
    * Called when the map cannot be shown, with the reason. The parent decides
    * what to do about it — this component never renders its own dead state,
    * because "grey rectangle" is not information.
@@ -140,6 +150,7 @@ export function GoogleFieldMap({
   initialZoom,
   disableClustering,
   handleRef,
+  path,
   onUnavailable,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
@@ -148,6 +159,7 @@ export function GoogleFieldMap({
   const clustererRef = useRef<MarkerClusterer | null>(null)
   const meRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
   const lineRef = useRef<google.maps.Polyline | null>(null)
+  const pathRef = useRef<google.maps.Polyline | null>(null)
   const [ready, setReady] = useState(false)
   const [satellite, setSatellite] = useState(false)
 
@@ -359,6 +371,28 @@ export function GoogleFieldMap({
       strokeWeight: 3,
     })
   }, [ready, route, properties])
+
+  /* --- an explicitly supplied path --------------------------------------- */
+  useEffect(() => {
+    if (!ready || !mapRef.current) return
+    pathRef.current?.setMap(null)
+    pathRef.current = null
+    if (!path || path.length < 2) return
+
+    pathRef.current = new google.maps.Polyline({
+      map: mapRef.current,
+      path: path.map((p) => ({ lat: p.lat, lng: p.lng })),
+      strokeColor: SELECTED_PIN,
+      strokeOpacity: 0.9,
+      // Heavier than the route line: this is the one thing the rep is following.
+      strokeWeight: 5,
+    })
+
+    // Frame the whole walk rather than leaving the rep to pinch out and find it.
+    const bounds = new google.maps.LatLngBounds()
+    for (const p of path) bounds.extend({ lat: p.lat, lng: p.lng })
+    mapRef.current.fitBounds(bounds, 56)
+  }, [ready, path])
 
   /* --- the imperative handle the screen uses ----------------------------- */
   const flyTo = useCallback((lat: number, lng: number, zoom?: number) => {

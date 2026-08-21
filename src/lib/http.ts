@@ -376,3 +376,31 @@ export function apiSaveSettings(token: string, settings: unknown) {
     token,
   })
 }
+
+export interface LegDTO {
+  distanceMeters: number
+  seconds: number
+  /** Google's encoded polyline. Decode with `google.maps.geometry.encoding`. */
+  polyline: string
+}
+
+/**
+ * One route from where the rep is to a door.
+ *
+ * Short timeout on purpose. This is a nicety on a screen that is already useful
+ * without it — a rep standing outside a house should not watch a spinner for
+ * thirty seconds to be shown a line they can live without.
+ */
+export function apiDirections(
+  token: string,
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+  mode: 'WALK' | 'DRIVE' = 'WALK',
+) {
+  return request<{ leg: LegDTO }>('/api/directions', {
+    method: 'POST',
+    body: { from, to, mode },
+    token,
+    timeoutMs: 9_000,
+  })
+}

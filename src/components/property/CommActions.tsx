@@ -1,8 +1,9 @@
 import type { Contact, Property } from '../../types'
 import { mailHref, smsHref, telHref } from '../../lib/format'
-import { navigationUrl } from '../../lib/geo'
+
 import { useAppStore } from '../../store/useAppStore'
 import { haptic } from '../../lib/haptics'
+import { Link } from 'react-router-dom'
 import { IconMessage, IconNavigate, IconPhone } from '../nav/icons'
 
 /**
@@ -84,16 +85,20 @@ export function CommActions({
           Email
         </a>
       )}
-      <a
-        href={navigationUrl({ lat: property.lat, lng: property.lng, label: property.address1 })}
-        target="_blank"
-        rel="noreferrer"
+      {/*
+        Stays in the app rather than opening a tab. The visit gets logged here,
+        and a rep who left to look at a map had to find their way back before
+        anything was recorded. The Google Maps hand-off is still one tap away on
+        that screen, for driving between neighbourhoods.
+      */}
+      <Link
+        to={`/navigate/${property.id}`}
         onClick={() => haptic('tap')}
         className={`press focusable flex items-center justify-center rounded-field bg-brand-50 font-semibold text-brand-600 ring-1 ring-brand-200 active:bg-brand-100 ${cls}`}
       >
         <IconNavigate />
         Navigate
-      </a>
+      </Link>
     </div>
   )
 }

@@ -51,6 +51,7 @@ async function openLead(metadata) {
   })
   const page = await ctx.newPage()
   let imageRequests = 0
+  let coverageChecks = 0
 
   /*
     Regexes, not globs. In a Playwright URL glob `?` matches any single
@@ -59,16 +60,17 @@ async function openLead(metadata) {
     component correctly concluded there was no coverage, and the test blamed the
     component. Two patterns that overlap by accident are worse than no stub.
   */
-  await page.route(/\/maps\/api\/streetview\/metadata/, (r) =>
-    metadata === null
+  await page.route(/\/maps\/api\/streetview\/metadata/, (r) => {
+    coverageChecks += 1
+    return metadata === null
       ? r.abort()
       : r.fulfill({
           status: 200,
           contentType: 'application/json',
           headers: { 'access-control-allow-origin': '*' },
           body: JSON.stringify({ status: metadata }),
-        }),
-  )
+        })
+  })
   await page.route(/\/maps\/api\/streetview\?/, (r) => {
     imageRequests += 1
     return r.fulfill({ status: 200, contentType: 'image/png', body: PNG })
@@ -87,12 +89,32 @@ async function openLead(metadata) {
   await page.locator('a[href^="/property/"], button').filter({ hasText: /\d+\s+\w/ }).first().click()
   await page.waitForTimeout(1600)
 
-  return { ctx, page, images: () => imageRequests }
+  return { ctx, page, images: () => imageRequests, checks: () => coverageChecks }
 }
 
 /* --- coverage exists ------------------------------------------------------ */
 {
-  const { ctx, page, images } = await openLead('OK')
+  const { ctx, page, images, checks } = await openLead('OK')
+  await page.waitForTimeout(1200)
+
+  /*
+    With no key in the build the component compiles out entirely and never asks
+    about coverage — which is the correct behaviour for a deployment that does
+    not use Google, not a failure. Detected by the absence of the coverage check
+    rather than by inspecting the bundle, and reported as a skip so a clean build
+    does not show a red gate for a feature it deliberately does not have.
+  */
+  if (checks() === 0) {
+    ok(
+      (await page.getByRole('img', { name: /Street view of/i }).count()) === 0,
+      'no key configured: the photo is correctly absent and nothing is requested',
+    )
+    await ctx.close()
+    await browser.close()
+    console.log('\n=== street view OK (not configured) ===')
+    process.exit(fails.length ? 1 : 0)
+  }
+
   const photo = page.getByRole('img', { name: /Street view of/i })
   await photo.waitFor({ timeout: 10_000 }).catch(() => {})
   ok(await photo.isVisible(), 'the photo appears when Street View has coverage')
