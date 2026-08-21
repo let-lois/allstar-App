@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
 import { ProgressBar } from '../components/ui/ProgressBar'
 import { SwipeRow } from '../components/ui/SwipeRow'
 import { OutcomePill } from '../components/ui/StatusPill'
 import { useAppStore, useRouteProgress } from '../store/useAppStore'
-import { distanceMiles, formatDistance, navigationUrl } from '../lib/geo'
+import { distanceMiles, formatDistance } from '../lib/geo'
 import { time } from '../lib/format'
 import { IconNavigate } from '../components/nav/icons'
 import { DEFAULT_ROUTE_SIZE, routableLeads } from '../lib/route'
@@ -161,15 +161,13 @@ export function RouteScreen() {
 
                     {isActive && (
                       <div className="flex shrink-0 gap-1.5">
-                        <a
-                          href={navigationUrl({ lat: p.lat, lng: p.lng })}
-                          target="_blank"
-                          rel="noreferrer"
+                        <Link
+                          to={`/navigate/${p.id}`}
                           aria-label={`Navigate to ${p.address1}`}
                           className="press focusable grid h-11 w-11 place-items-center rounded-field bg-surface text-ink-soft ring-1 ring-ink/10"
                         >
                           <IconNavigate />
-                        </a>
+                        </Link>
                         <Button size="sm" buzz onClick={() => nav(`/property/${p.id}?start=1`)}>
                           Start
                         </Button>

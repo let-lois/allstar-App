@@ -16,6 +16,13 @@ import { chromium } from 'playwright'
  * distance can differ by a factor of three, so a screen that shows one and
  * implies the other sends a rep round a fence. Which number is on screen is
  * always stated.
+ *
+ * **Every** Navigate is checked, not one of them. The first version of this gate
+ * asserted the button on the lead screen and generalised — while Today and the
+ * route screen carried their own copies that still opened a tab. The same button
+ * doing two different things depending on where you found it is worse than it
+ * doing the wrong thing everywhere, so the invariant is now stated as one: no
+ * screen may offer a Navigate that leaves the app.
  */
 
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:4173'
@@ -129,6 +136,51 @@ async function toLead(opts = {}) {
     !/direct distance|along the roads/i.test(body),
     'and no distance is claimed at all',
   )
+  await ctx.close()
+}
+
+/* --- every Navigate, not just the one I happened to test ------------------ */
+//
+// The bug this exists for: the lead screen was converted, Today and the route
+// screen were not, and Today is the first screen a rep opens each morning.
+{
+  const { ctx, page } = await toLead({
+    permissions: ['geolocation'],
+    geolocation: { latitude: 30.5083, longitude: -97.6789 },
+  })
+
+  for (const path of ['/today', '/route']) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(1600)
+
+    // A Navigate anywhere must be an in-app link.
+    const navs = page.getByRole('link', { name: /Navigate/i })
+    const count = await navs.count()
+    for (let i = 0; i < count; i++) {
+      const href = await navs.nth(i).getAttribute('href')
+      const target = await navs.nth(i).getAttribute('target')
+      ok(
+        /^\/navigate\//.test(href ?? ''),
+        `${path}: Navigate points in-app (${href})`,
+      )
+      ok(target === null, `${path}: and does not open a tab`)
+    }
+
+    /*
+      And the invariant, which does not depend on finding the right control: no
+      screen may contain a link that leaves for a maps site. Stated this way it
+      catches the next copy of this button too, wherever somebody adds it.
+    */
+    const escapes = await page.evaluate(() =>
+      [...document.querySelectorAll('a[target="_blank"]')]
+        .map((a) => a.getAttribute('href') ?? '')
+        .filter((h) => /google\.[a-z.]+\/maps|maps\.apple\.com|geo:/.test(h)),
+    )
+    ok(
+      escapes.length === 0,
+      `${path}: nothing on this screen escapes to an external map (${escapes.length ? escapes[0] : 'none'})`,
+    )
+  }
   await ctx.close()
 }
 

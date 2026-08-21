@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import {
   useAppStore,
   useMyActivity,
@@ -15,7 +15,7 @@ import { Button } from '../components/ui/Button'
 import { Card, SectionHeader } from '../components/ui/Card'
 import { ProgressBar } from '../components/ui/ProgressBar'
 import { OutcomePill } from '../components/ui/StatusPill'
-import { distanceMiles, formatDistance, navigationUrl, walkMinutes } from '../lib/geo'
+import { distanceMiles, formatDistance, walkMinutes } from '../lib/geo'
 import { money, relative, relativeLower, time } from '../lib/format'
 import { drain } from '../lib/sync'
 import { outcomeByCode } from '../data/outcomes'
@@ -195,15 +195,21 @@ export function Today() {
               </button>
 
               <div className="flex gap-2.5 px-4 pb-4 pt-1">
-                <a
-                  href={navigationUrl({ lat: nextStop.lat, lng: nextStop.lng })}
-                  target="_blank"
-                  rel="noreferrer"
+                {/*
+                  In-app, like every other Navigate. This is the first screen a
+                  rep sees each morning, so it is the one most likely to be
+                  tapped — and it kept opening a tab after the lead screen
+                  stopped doing so, which is worse than either behaviour on its
+                  own: the same button did two different things depending on
+                  where you found it.
+                */}
+                <Link
+                  to={`/navigate/${nextStop.id}`}
                   className="press focusable flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-[16px] bg-surface text-[15px] font-semibold ring-1 ring-ink/10 active:bg-surface-field"
                 >
                   <IconNavigate />
                   Navigate
-                </a>
+                </Link>
                 <Button
                   size="lg"
                   buzz
