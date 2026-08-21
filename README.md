@@ -613,6 +613,55 @@ needs a real key: that Navigate no longer opens a tab, that a rep with no locati
 gets both fixes and *no* route panel offering controls for a route that does not
 exist, and that the demo labels its straight-line distance honestly.
 
+### Too far to route, and the line that still shows
+
+Asked directly: what does a rep see when they are in another state, or another
+country? Nothing was routable and nothing was drawn, which was honest and
+useless. Now the direct path is drawn — a dashed arc with a plane on it, from the
+rep to the door — and the distance reads "8,397 mi · direct distance".
+
+**It costs nothing.** `greatCirclePath` in `src/lib/geo.ts` is arithmetic on the
+device, so no request, no key, no signal needed. Maps JS bills per *map load*;
+polylines, markers and `fitBounds` are free inside a load already paid for. And
+no Routes call happens at these distances at all — `Navigate` refuses over 49
+miles and `api/src/directions.ts` refuses over 80 km, both before any request.
+
+**Why it is an arc and not a line.** A straight line on a Mercator map is not the
+direct path. Manila to Austin looks like it should cross the middle of the
+Pacific; the shortest path actually passes north of Japan and clips the
+Aleutians, about 22 degrees of latitude above either end. Drawing the chord would
+be a picture of a route nobody flies — and it comes out 13,951 miles when the
+real answer is 8,397, because linear interpolation goes the wrong way round the
+world. The path is sampled at 64 segments, which also means any renderer joins
+consecutive points the short way and the antimeridian needs no special case.
+
+**Dashed, with a plane, on purpose.** A solid line between two continents reads
+as a route. Same geometry, different promise, and the promise is the part a rep
+acts on — so `pathKind: 'flight'` draws it dashed and puts a plane at the arc's
+midpoint, rotated to the bearing.
+
+Two honest limits. The self-rendered map cannot zoom out past a neighbourhood, so
+with Google unavailable there is no arc — and the sentence changes to match,
+because describing a dashed line that is not on screen sends a rep looking for
+it. And no walking time is quoted beyond the walk limit: that number used to be
+unconditional, so a lead opened from abroad read "8,397 mi · 162,533 min",
+arithmetic wearing the clothes of a plan.
+
+This also fixed the renderer choice, which hung off *any* routing failure — so
+the far-away case was being handed to the one renderer that cannot show two
+continents. Only the map failing takes the map away now. Doing that reintroduced
+a bug in passing: the map's own failure wrote "No signal" over the top of the
+real reason, which is exactly the wrong-reason bug this screen was fixed for
+once before. `verify:navigate` caught it, which is the whole argument for having
+written that assertion.
+
+`npm run verify:flightline` is the one gate here that runs no browser, because
+what can be wrong is arithmetic. Node imports `src/lib/geo.ts` directly — type
+stripping, no build step — so it tests the real function: that the drawn line's
+own length equals the great-circle distance, that the arc bows north of both
+endpoints, and that it crosses the antimeridian. Swapping in linear
+interpolation fails four of those assertions, which is how they were checked.
+
 ### A photo of the house, and the trap under it
 
 `StreetView` answers a porch question no amount of address text does: *is this

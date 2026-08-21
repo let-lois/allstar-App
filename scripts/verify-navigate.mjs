@@ -185,6 +185,36 @@ async function toLead(opts = {}) {
     /direct distance/i.test(body),
     'the straight-line distance is still offered, and labelled as such',
   )
+  /*
+    The number, and the number it must not be beside. A walking time was quoted
+    unconditionally, so a lead opened from another state read "963 mi · 18,639
+    min" — arithmetic wearing the clothes of a plan. Three digits of minutes is
+    the signature of that bug, and no distance anybody walks produces it.
+  */
+  ok(
+    /\d{3,} mi|\d,\d{3} mi/.test(body),
+    'the distance is shown in hundreds or thousands of miles',
+  )
+  ok(
+    !/\d{3,}\s*min/.test(body),
+    'and no walking time is invented for a distance nobody walks',
+  )
+  ok(
+    !/along the roads/i.test(body),
+    'nor a road distance claimed where there is no road route',
+  )
+  /*
+    The dashed arc itself is not asserted here, for the same reason the map is
+    not: drawing it needs Maps JS with a real key on an allowed origin, and this
+    gate blocks Maps JS on purpose. What *is* asserted is the honest half — with
+    no map to draw on, the sentence does not promise a line that is not there.
+    That conditional is the one part of this feature that can be got wrong
+    silently, because the wrong version reads perfectly well.
+  */
+  ok(
+    !/dashed line/i.test(body),
+    'and with no Google map to draw on, no dashed line is promised',
+  )
   ok(
     (await page.getByRole('button', { name: /Start visit/i }).count()) > 0,
     'and the screen stays usable rather than becoming an error page',

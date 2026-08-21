@@ -21,6 +21,7 @@
     "verify:route": "node scripts/verify-route.mjs",
     "verify:maptiles": "node scripts/verify-map-tiles.mjs",
     "verify:navigate": "node scripts/verify-navigate.mjs",
+    "verify:flightline": "node scripts/verify-flightline.mjs",
     "verify:streetview": "node scripts/verify-streetview.mjs",
     "verify:mapsearch": "node scripts/verify-mapsearch.mjs",
     "verify:newlead": "node scripts/verify-newlead.mjs",

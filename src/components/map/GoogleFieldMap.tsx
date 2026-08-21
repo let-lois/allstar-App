@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer'
 import type { Property, Route } from '../../types'
+import { bearing } from '../../lib/geo'
 import type { Position } from '../../lib/geo'
 import { STATUS_COLOR } from '../../data/outcomes'
 import { GmapsError, gmapId, loadGmaps } from '../../lib/gmaps'
@@ -93,6 +94,16 @@ interface Props {
    */
   path?: { lat: number; lng: number }[]
   /**
+   * What kind of claim `path` is making, which decides how it is drawn.
+   *
+   * `route` is a way to get there: solid, heavy, the thing to follow.
+   * `flight` is the direct line to somewhere unreachable on foot or by road —
+   * drawn dashed, with a plane on it, because a solid line between two
+   * continents reads as a route and there is no route. Same geometry, different
+   * promise, and the promise is the part a rep acts on.
+   */
+  pathKind?: 'route' | 'flight'
+  /**
    * Called when the map cannot be shown, with the reason. The parent decides
    * what to do about it — this component never renders its own dead state,
    * because "grey rectangle" is not information.
@@ -138,6 +149,47 @@ function clusterElement(count: number): HTMLElement {
   return el
 }
 
+/**
+ * The plane on the flight line, pointing the way the path leaves.
+ *
+ * A dashed line alone reads as "route, but dotted". The glyph is what says *this
+ * is not a walk* at a glance, which is the whole message when a rep opens a lead
+ * from the wrong continent. Rotated to the bearing so it points along the arc
+ * rather than sitting there decoratively — the direction is real information,
+ * and it is the one thing the line and the number cannot say between them.
+ */
+function planeElement(headingDeg: number): HTMLElement {
+  const el = document.createElement('div')
+  el.style.cssText = [
+    'width:34px',
+    'height:34px',
+    'border-radius:50%',
+    'background:#fff',
+    'display:grid',
+    'place-items:center',
+    'box-shadow:0 1px 5px rgba(17,24,39,.35)',
+  ].join(';')
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('width', '19')
+  svg.setAttribute('height', '19')
+  svg.setAttribute('aria-hidden', 'true')
+  // Built as nodes rather than assigned as markup: this element is created on a
+  // code path that draws user data, and `innerHTML` on that path is a habit
+  // worth not having even where the input is a number.
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  path.setAttribute(
+    'd',
+    'M21 16v-2l-8-5V3.5C13 2.67 12.33 2 11.5 2S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z',
+  )
+  path.setAttribute('fill', SELECTED_PIN)
+  svg.appendChild(path)
+  // The glyph is drawn nose-up, so the bearing is the rotation directly.
+  svg.style.transform = `rotate(${Math.round(headingDeg)}deg)`
+  el.appendChild(svg)
+  return el
+}
+
 export function GoogleFieldMap({
   properties,
   position,
@@ -151,6 +203,7 @@ export function GoogleFieldMap({
   disableClustering,
   handleRef,
   path,
+  pathKind = 'route',
   onUnavailable,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
@@ -160,6 +213,7 @@ export function GoogleFieldMap({
   const meRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
   const lineRef = useRef<google.maps.Polyline | null>(null)
   const pathRef = useRef<google.maps.Polyline | null>(null)
+  const planeRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
   const [ready, setReady] = useState(false)
   const [satellite, setSatellite] = useState(false)
 
@@ -377,22 +431,78 @@ export function GoogleFieldMap({
     if (!ready || !mapRef.current) return
     pathRef.current?.setMap(null)
     pathRef.current = null
+    if (planeRef.current) {
+      planeRef.current.map = null
+      planeRef.current = null
+    }
     if (!path || path.length < 2) return
+    const map = mapRef.current
+    const flight = pathKind === 'flight'
+    const coords = path.map((p) => ({ lat: p.lat, lng: p.lng }))
 
     pathRef.current = new google.maps.Polyline({
-      map: mapRef.current,
-      path: path.map((p) => ({ lat: p.lat, lng: p.lng })),
+      map,
+      path: coords,
       strokeColor: SELECTED_PIN,
-      strokeOpacity: 0.9,
+      /*
+        Dashed, for a flight. Maps JS has no dash property — a repeating symbol
+        along an invisible line is how it is done, so the stroke goes to zero
+        opacity and the dashes are the symbol. Getting this wrong leaves a solid
+        line, which is exactly the claim this is trying not to make.
+      */
+      strokeOpacity: flight ? 0 : 0.9,
       // Heavier than the route line: this is the one thing the rep is following.
-      strokeWeight: 5,
+      strokeWeight: flight ? 3 : 5,
+      icons: flight
+        ? [
+            {
+              icon: {
+                path: 'M 0,-1 0,1',
+                strokeColor: SELECTED_PIN,
+                strokeOpacity: 0.85,
+                strokeWeight: 3,
+                scale: 3,
+              },
+              offset: '0',
+              repeat: '15px',
+            },
+          ]
+        : undefined,
     })
 
     // Frame the whole walk rather than leaving the rep to pinch out and find it.
+    // Every sample is extended, not just the two ends: the arc leaves the box
+    // its endpoints describe, so fitting the endpoints alone crops the middle of
+    // the line off the top of the screen.
     const bounds = new google.maps.LatLngBounds()
-    for (const p of path) bounds.extend({ lat: p.lat, lng: p.lng })
-    mapRef.current.fitBounds(bounds, 56)
-  }, [ready, path])
+    for (const p of coords) bounds.extend(p)
+    map.fitBounds(bounds, flight ? 40 : 56)
+
+    if (!flight) return
+    let cancelled = false
+    void (async () => {
+      const { AdvancedMarkerElement } = (await google.maps.importLibrary(
+        'marker',
+      )) as google.maps.MarkerLibrary
+      if (cancelled || !mapRef.current) return
+      // Halfway along, which on a great circle is nowhere near halfway between
+      // the endpoints on screen — the reason to take it from the samples rather
+      // than average the two ends.
+      const i = Math.floor(coords.length / 2)
+      const at = coords[i]
+      const next = coords[Math.min(i + 1, coords.length - 1)]
+      planeRef.current = new AdvancedMarkerElement({
+        map: mapRef.current,
+        position: at,
+        content: planeElement(bearing(at, next)),
+        title: 'Direct line — too far to route',
+        zIndex: 1150,
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [ready, path, pathKind])
 
   /* --- the imperative handle the screen uses ----------------------------- */
   const flyTo = useCallback((lat: number, lng: number, zoom?: number) => {
