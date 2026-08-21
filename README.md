@@ -547,6 +547,35 @@ raw provider response, and takes `language`, `types`, `limit`, `autocomplete`,
 page reload rather than a deploy. Use a verified address with it — a synthetic one
 cannot answer a coverage question.
 
+### A photo of the house, and the trap under it
+
+`StreetView` answers a porch question no amount of address text does: *is this
+the right house?* Missing kerb numbers, shared driveways, a flag lot behind
+another property — a rep twenty feet away has an address and a pin and no way to
+recognise the door.
+
+A still image, not the interactive panorama. The panorama is a WebGL canvas that
+loads and initialises, on a screen a rep opens dozens of times a day, to answer
+what one photo answers instantly. Tapping the photo hands off to Google Maps for
+a proper look around, which is free and better than the embedded version.
+
+**The trap:** asked for a location it has no coverage for, the Street View Static
+API does not fail. It returns a grey placeholder image, status 200, reading "Sorry,
+we have no imagery here". Rendered blindly, a rural lead shows a photo of nothing
+and looks like a bug. So the free metadata endpoint is consulted first and the
+image is only requested when there is something to see — which also means an
+uncovered lead costs no image request at all.
+
+With no signal there is no photo and no message. Everything else on that screen
+works offline, and an apology for a missing nice-to-have would be noise at a door.
+
+`npm run verify:streetview` drives all three cases by stubbing the metadata
+endpoint: coverage, no coverage, no network. Writing it surfaced a Playwright
+subtlety worth knowing — in a URL **glob**, `?` matches any single character, so
+`streetview?*` also matches `streetview/metadata?…`. The image stub was answering
+the coverage check with a PNG, and the test blamed the component for behaving
+correctly. The stubs use regexes now.
+
 ### The map screen searches leads before it searches Google
 
 `MapSearch` sits where the property-count pill used to be — the count moved into

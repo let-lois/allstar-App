@@ -8,6 +8,7 @@ import { BottomSheet } from '../components/ui/BottomSheet'
 import { NoteComposer } from '../components/visit/NoteComposer'
 import { PhotoStrip } from '../components/visit/PhotoStrip'
 import { CommActions } from '../components/property/CommActions'
+import { StreetView } from '../components/property/StreetView'
 import { OutcomePill, ScoreBar, StatusPill } from '../components/ui/StatusPill'
 import { outcomeByCode } from '../data/outcomes'
 import { distanceMiles, formatDistance, walkMinutes } from '../lib/geo'
@@ -119,6 +120,13 @@ export function PropertyDetail() {
             </div>
             <ScoreBar score={property.score} />
           </div>
+
+          {/*
+            Directly under the address, because "is this the right house" is a
+            porch question and belongs with the others rather than below the fold.
+            Renders nothing at all when there is no coverage or no signal.
+          */}
+          <StreetView lat={property.lat} lng={property.lng} address={property.address1} />
 
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
             <StatusPill status={property.status} />
