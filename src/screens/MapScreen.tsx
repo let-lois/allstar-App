@@ -184,7 +184,7 @@ export function MapScreen() {
           the nav bar, so the one control that floats over the map does not
           introduce a third way of showing "selected".
         */
-        className="ml-auto flex overflow-hidden rounded-full border border-line bg-surface/95 p-0.5 shadow-card backdrop-blur"
+        className="metal metal-quiet ml-auto flex overflow-hidden rounded-full p-0.5"
       >
         {(['map', 'list'] as const).map((v) => (
           <button
@@ -198,7 +198,7 @@ export function MapScreen() {
               directly and caught.
             */
             className={`focusable min-h-[44px] rounded-full px-3.5 text-[12.5px] font-semibold capitalize transition-colors ${
-              view === v ? 'bg-brand-600 text-white' : 'text-ink-mute'
+              view === v ? 'metal metal-brand' : 'text-ink-mute'
             }`}
           >
             {v}
@@ -289,7 +289,7 @@ export function MapScreen() {
               mapHandle.current?.flyTo(p.lat, p.lng, 18)
               setSelectedId(nearest.id)
             }}
-            className="press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-pill border border-line bg-surface px-4 text-[14px] font-semibold text-brand-600 shadow-card"
+            className="metal metal-quiet press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-pill px-4 text-[14px] font-semibold !text-brand-700"
             style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
           >
             Nearest door

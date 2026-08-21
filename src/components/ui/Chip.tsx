@@ -46,12 +46,11 @@ export function Chip({ children, color, selected, onClick, size = 'md', classNam
       className={[
         'press focusable inline-flex shrink-0 items-center gap-1.5 border font-medium',
         tapBase,
-        // Selected is a filled teal; unselected is a white chip with a hairline.
-        // Both keep the same border width so the row does not shift by a pixel
-        // when a filter is tapped.
-        selected
-          ? 'border-brand-600 bg-brand-600 text-white'
-          : 'border-line bg-surface text-ink-mute active:bg-surface-field',
+        // Both states wear `.metal` — a filter row is a row of controls, and a
+        // flat chip beside a raised button reads as a label rather than a thing
+        // to press. Selected takes the teal face, unselected the nickel one, and
+        // the material is what makes the pair read as one control.
+        selected ? 'metal metal-brand' : 'metal metal-quiet !text-ink-mute',
         className,
       ].join(' ')}
     >

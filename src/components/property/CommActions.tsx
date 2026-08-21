@@ -44,7 +44,7 @@ export function CommActions({
           logComm(property.id, 'call', primary?.name)
         }}
         aria-disabled={!tel}
-        className={`press focusable flex items-center justify-center rounded-field ring-1 ring-line font-semibold ${cls} ${
+        className={`metal metal-quiet press focusable flex items-center justify-center rounded-field font-semibold ${cls} ${
           tel ? 'text-ink-soft active:bg-surface-field' : 'pointer-events-none opacity-40'
         }`}
       >
@@ -59,7 +59,7 @@ export function CommActions({
           logComm(property.id, 'sms', primary?.name)
         }}
         aria-disabled={!sms}
-        className={`press focusable flex items-center justify-center rounded-field ring-1 ring-line font-semibold ${cls} ${
+        className={`metal metal-quiet press focusable flex items-center justify-center rounded-field font-semibold ${cls} ${
           sms ? 'text-ink-soft active:bg-surface-field' : 'pointer-events-none opacity-40'
         }`}
       >
@@ -74,7 +74,7 @@ export function CommActions({
             logComm(property.id, 'email', primary?.name)
           }}
           aria-disabled={!mail}
-          className={`press focusable flex items-center justify-center rounded-field ring-1 ring-line font-semibold ${cls} ${
+          className={`metal metal-quiet press focusable flex items-center justify-center rounded-field font-semibold ${cls} ${
             mail ? 'text-ink-soft active:bg-surface-field' : 'pointer-events-none opacity-40'
           }`}
         >
@@ -94,7 +94,7 @@ export function CommActions({
       <Link
         to={`/navigate/${property.id}`}
         onClick={() => haptic('tap')}
-        className={`press focusable flex items-center justify-center rounded-field bg-brand-50 font-semibold text-brand-600 ring-1 ring-brand-200 active:bg-brand-100 ${cls}`}
+        className={`metal metal-brand press focusable flex items-center justify-center rounded-field font-semibold ${cls}`}
       >
         <IconNavigate />
         Navigate

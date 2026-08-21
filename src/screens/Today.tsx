@@ -207,7 +207,7 @@ export function Today() {
                 */}
                 <Link
                   to={`/navigate/${nextStop.id}`}
-                  className="press focusable flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-[16px] bg-surface text-[15px] font-semibold ring-1 ring-line active:bg-surface-field"
+                  className="metal metal-quiet press focusable flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-[16px] text-[15px] font-semibold"
                 >
                   <IconNavigate />
                   Navigate

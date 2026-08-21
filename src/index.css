@@ -285,8 +285,20 @@
       color 160ms ease;
   }
 
+  /*
+   * Selected: the same material as a button, in its lightest teal. The glyph is
+   * `brand-700` over it, which measures 6.4:1 with the sheen composited in — the
+   * pill is small and the icon inside it is a 2px stroke, so this is the one
+   * place the extra step of contrast is worth spending.
+   */
   .nav-pill[data-active='true'] {
-    @apply bg-brand-50 text-brand-600;
+    @apply metal text-brand-700;
+    --metal-top: #f2fbfc;
+    --metal-bottom: #cdeff5;
+    --metal-ring: rgba(6, 100, 112, 0.3);
+    --metal-lip: 0.9;
+    --metal-bevel: 0.1;
+    --sheen: 0.55;
   }
 
   /** Counter anchored to the badge corner. Red here is a real alert, not decor. */
@@ -298,44 +310,136 @@
   }
 
   /*
-   * The filled button.
+   * Metal.
    *
-   * Flat `brand-600`, one radius, no gradient, no bevel, no gloss. The white
-   * label measures 4.75:1 on it, which is why the fill is 600 and not the
-   * brighter 500 the accent uses — a primary action that cannot be read in
-   * sunlight is not a primary action.
+   * The one treatment every *control* wears: a vertical gradient face, a bright
+   * top edge where light catches a lifted lip, a dark bottom inset for the
+   * bevel, a hairline to hold the shape, and a specular sheen over the top half.
+   * Content surfaces stay flat — cards, rows, plates — so the tactile material
+   * means exactly one thing: this is something you can press.
    *
-   * Pressed, it darkens rather than deforming. The scale comes from `.press`.
+   * Colours come in as custom properties, so a variant is four values and no new
+   * rule. That is the same arrangement the old badge treatment used, and it is
+   * the reason it is worth having a shared vocabulary at all.
+   *
+   * **Why the teal face is light and its label is near-black.** Measured, not
+   * chosen. A sheen lightens the top of the face — which is precisely the band a
+   * label sits in — and white text over a lightened teal fails AA at every
+   * candidate: at a visible sheen alpha the best teal manages 3.5:1 and the brand
+   * accent manages 2.2:1. Inverted, the same button measures **13.1:1**. A metal
+   * that cannot be read in sunlight is not a finish, it is a bug, and this app is
+   * used outdoors.
+   *
+   * Red and green keep white labels because they are dark enough to survive a
+   * *restrained* sheen: 6.5:1 and 5.9:1 with the highlight composited in. They
+   * get `--sheen: 0.08` rather than 0.3 for that reason, and the difference is
+   * deliberate — a destructive button should not look playful.
    */
-  .btn-fill {
-    @apply bg-brand-600 text-white;
-    transition: background-color 140ms ease;
-  }
-
-  .btn-fill:active {
-    @apply bg-brand-700;
-  }
-
-  .btn-fill:disabled {
-    @apply bg-ink-faint;
+  .metal {
+    position: relative;
+    isolation: isolate;
+    background: linear-gradient(180deg, var(--metal-top), var(--metal-bottom));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, var(--metal-lip, 0.5)),
+      inset 0 -2px 3px rgba(15, 23, 42, var(--metal-bevel, 0.18)),
+      0 0 0 1px var(--metal-ring, rgba(15, 23, 42, 0.1)),
+      0 2px 5px rgba(15, 23, 42, 0.16);
+    transition:
+      box-shadow 140ms ease,
+      filter 140ms ease;
   }
 
   /*
-   * A raised surface on the dark login.
-   *
-   * The counterpart to `.btn-fill`, and flat for the same reason. On a near-black
-   * ground a drop shadow is invisible, so the elevation is carried entirely by a
-   * translucent white fill and a hairline — which is all it needs to read as
-   * being in front of the background.
+   * The glass. Inset by a pixel so it follows the radius instead of squaring off
+   * the corners, and behind the label rather than over it — `z-index: -1` with
+   * `isolation: isolate` on the parent keeps it out of the text's way without
+   * needing a stacking context per button.
    */
-  .glass-dark {
-    background: rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
-    transition: background-color 150ms ease;
+  .metal::after {
+    content: '';
+    position: absolute;
+    inset: 1px 1px auto 1px;
+    height: 46%;
+    border-radius: inherit;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, var(--sheen, 0.3)),
+      rgba(255, 255, 255, 0)
+    );
+    pointer-events: none;
+    z-index: -1;
   }
 
-  .glass-dark:active {
-    background: rgba(255, 255, 255, 0.14);
+  /* Pressed reads as pushed in: the lift goes, the bevel inverts, the sheen dims. */
+  .metal:active {
+    box-shadow:
+      inset 0 2px 5px rgba(15, 23, 42, 0.28),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.35),
+      0 0 0 1px var(--metal-ring, rgba(15, 23, 42, 0.1));
+  }
+
+  .metal:active::after {
+    opacity: 0.4;
+  }
+
+  .metal:disabled {
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+    filter: saturate(0.25);
+  }
+
+  .metal:disabled::after {
+    opacity: 0;
+  }
+
+  /**
+   * The variants. Four values each: the two gradient stops, the ring, and how
+   * much glass. Anything that needs a fifth is not a variant.
+   */
+  .metal-brand {
+    @apply text-ink;
+    --metal-top: #7fe0ef;
+    --metal-bottom: #0fa9b8;
+    --metal-ring: rgba(6, 100, 112, 0.45);
+  }
+
+  /** White controls: the same material in nickel rather than teal. */
+  .metal-quiet {
+    @apply text-ink;
+    --metal-top: #ffffff;
+    --metal-bottom: #eef2f4;
+    --metal-ring: rgba(15, 23, 42, 0.12);
+    --metal-lip: 0.9;
+    --metal-bevel: 0.08;
+    --sheen: 0.5;
+  }
+
+  .metal-danger {
+    @apply text-white;
+    --metal-top: #a81a1a;
+    --metal-bottom: #7f1212;
+    --metal-ring: rgba(80, 10, 10, 0.5);
+    --sheen: 0.08;
+    --metal-lip: 0.28;
+  }
+
+  .metal-success {
+    @apply text-white;
+    --metal-top: #14663a;
+    --metal-bottom: #0d4526;
+    --metal-ring: rgba(8, 45, 25, 0.5);
+    --sheen: 0.08;
+    --metal-lip: 0.28;
+  }
+
+  /** Dark controls, for the login's near-black ground. */
+  .metal-dark {
+    @apply text-white;
+    --metal-top: rgba(255, 255, 255, 0.16);
+    --metal-bottom: rgba(255, 255, 255, 0.04);
+    --metal-ring: rgba(255, 255, 255, 0.16);
+    --metal-lip: 0.28;
+    --metal-bevel: 0.4;
+    --sheen: 0.12;
   }
 
   /*

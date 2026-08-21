@@ -685,7 +685,7 @@ export function FieldMap({
           className="pointer-events-auto absolute right-3 flex flex-col items-center gap-2"
           style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
         >
-          <div className="flex flex-col overflow-hidden rounded-pill border border-line bg-surface shadow-card">
+          <div className="metal metal-quiet flex flex-col overflow-hidden rounded-pill">
             <button
               onClick={() => setView((v) => ({ ...v, zoom: clamp(v.zoom + 1, MIN_ZOOM, MAX_ZOOM) }))}
               aria-label="Zoom in"
@@ -716,7 +716,7 @@ export function FieldMap({
                 saveLayer(next)
               }}
               aria-label={`Switch to ${layer === 'streets' ? 'satellite' : 'streets'} view`}
-              className="press focusable grid h-11 w-11 place-items-center rounded-pill border border-line bg-surface text-[10px] font-semibold uppercase tracking-wide text-ink-soft shadow-card"
+              className="metal metal-quiet press focusable grid h-11 w-11 place-items-center rounded-pill text-[10px] font-semibold uppercase tracking-wide !text-ink-soft"
             >
               {layer === 'streets' ? 'SAT' : 'MAP'}
             </button>
@@ -744,8 +744,8 @@ export function FieldMap({
               made the corner of the map the busiest part of the screen — and the
               filled one was the *passive* state indicator, not the action.
             */
-            className={`press focusable grid h-11 w-11 place-items-center rounded-full border border-line bg-surface shadow-card ${
-              followMe ? 'text-brand-600' : 'text-ink-soft'
+            className={`metal press focusable grid h-11 w-11 place-items-center rounded-full ${
+              followMe ? 'metal-brand !text-brand-700' : 'metal-quiet !text-ink-soft'
             }`}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

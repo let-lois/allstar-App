@@ -80,7 +80,7 @@ export function Team() {
                     <a
                       href={tel}
                       aria-label={`Call ${rep.name}`}
-                      className="press focusable grid h-12 w-12 shrink-0 place-items-center rounded-field bg-surface text-ink-soft ring-1 ring-line active:bg-surface-field"
+                      className="metal metal-quiet press focusable grid h-12 w-12 shrink-0 place-items-center rounded-field !text-ink-soft"
                     >
                       <IconPhone />
                     </a>
