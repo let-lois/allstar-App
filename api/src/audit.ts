@@ -31,6 +31,7 @@ export type AuditAction =
   | 'user.deleted'
   | 'user.role_changed'
   | 'territory.assigned'
+  | 'territory.created'
   | 'leads.imported'
   | 'settings.changed'
 

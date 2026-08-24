@@ -101,6 +101,19 @@ interface Props {
    * continents reads as a route and there is none.
    */
   pathKind?: 'route' | 'flight'
+  /**
+   * Territory drawing. When present the map is a drawing surface: a tap drops a
+   * vertex instead of selecting a pin, and the shape so far is filled in.
+   *
+   * The points live with the caller, not here. Whoever is drawing owns the undo,
+   * the name and the save; this component's job is to turn a tap into a
+   * coordinate and show what has been drawn, which is the only part that needs
+   * to know about the projection.
+   */
+  draw?: {
+    points: { lat: number; lng: number }[]
+    onAddPoint: (point: { lat: number; lng: number }) => void
+  }
 }
 
 interface View {
@@ -123,6 +136,7 @@ export function FieldMap({
   handleRef,
   path,
   pathKind = 'route',
+  draw,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -190,6 +204,22 @@ export function FieldMap({
       }
     },
     [view.lng, centerWorld, scale, size.w, size.h],
+  )
+
+  /*
+    The inverse of `toScreen`, and it has to stay the inverse — longitude is a
+    wrapped offset from the centre there, so it is an offset here too rather than
+    an absolute world coordinate.
+  */
+  const toLatLng = useCallback(
+    (px: number, py: number) => {
+      const w = unproject(centerWorld.x, centerWorld.y + (py - size.h / 2) / scale)
+      return {
+        lat: w.lat,
+        lng: wrapDegrees(view.lng + ((px - size.w / 2) / scale) * 360),
+      }
+    },
+    [centerWorld, scale, size.w, size.h, view.lng],
   )
 
   const flyTo = useCallback((lat: number, lng: number, zoom?: number) => {
@@ -279,6 +309,17 @@ export function FieldMap({
 
     const hit = downMarker.current
     downMarker.current = null
+
+    /*
+      Drawing takes the tap before anything else does. Selecting a pin mid-draw
+      would be the wrong thing twice: it loses the vertex the person meant to
+      place, and it opens a lead they were not asking about.
+    */
+    if (draw) {
+      const box = boxRef.current?.getBoundingClientRect()
+      if (box) draw.onAddPoint(toLatLng(e.clientX - box.left, e.clientY - box.top))
+      return
+    }
 
     if (!hit) {
       onSelect(null)
@@ -460,6 +501,23 @@ export function FieldMap({
     return { d, plane: { x: a.x, y: a.y, angle } }
   }, [path, toScreen, size.w])
 
+  /* --- the territory being drawn ------------------------------------------ */
+  const drawn = useMemo(() => {
+    if (!draw || !size.w) return null
+    const pts = draw.points.map((p) => toScreen(p.lat, p.lng))
+    return {
+      pts,
+      // Closed as soon as there are three, because that is when it becomes a
+      // shape — showing an open line up to that point is what tells somebody
+      // they need one more tap.
+      d:
+        pts.length === 0
+          ? ''
+          : pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ') +
+            (pts.length >= 3 ? ' Z' : ''),
+    }
+  }, [draw, toScreen, size.w])
+
   const me = position ? toScreen(position.lat, position.lng) : null
   // Accuracy circle drawn to true scale — a 40m fix should *look* uncertain.
   const accuracyPx = position
@@ -467,7 +525,18 @@ export function FieldMap({
     : 0
 
   return (
-    <div ref={boxRef} className={`relative touch-none overflow-hidden bg-[#EDF1F3] ${className}`}>
+    <div
+      ref={boxRef}
+      /*
+        Named and roled to match `GoogleFieldMap`, so the two renderers are the
+        same object to a screen reader and to anything looking for the map. It
+        went unlabelled while it was only ever a picture; now a tap on it places
+        a territory vertex, which makes it a control.
+      */
+      role="application"
+      aria-label={draw ? 'Outline a territory on the map' : 'Map of your leads'}
+      className={`relative touch-none overflow-hidden bg-[#EDF1F3] ${className}`}
+    >
       <svg
         width={size.w}
         height={size.h}
@@ -588,6 +657,35 @@ export function FieldMap({
                 </g>
               </g>
             )}
+          </g>
+        )}
+
+        {/*
+          The territory being drawn. Over the pins, because while drawing the
+          shape is the subject and the pins are the reference — and a vertex
+          handle hidden behind a lead is a vertex nobody can see they placed.
+        */}
+        {drawn && drawn.pts.length > 0 && (
+          <g data-draw="territory">
+            <path
+              d={drawn.d}
+              fill={drawn.pts.length >= 3 ? 'rgba(15,169,184,0.16)' : 'none'}
+              stroke="#087F8C"
+              strokeWidth={2.5}
+              strokeLinejoin="round"
+              strokeDasharray={drawn.pts.length >= 3 ? undefined : '6 5'}
+            />
+            {drawn.pts.map((p, i) => (
+              <circle
+                key={i}
+                cx={p.x}
+                cy={p.y}
+                r={6}
+                fill="#ffffff"
+                stroke="#087F8C"
+                strokeWidth={2.5}
+              />
+            ))}
           </g>
         )}
 

@@ -28,6 +28,21 @@ import type { Env } from './types'
 interface Migration {
   id: string
   statements: string[]
+  /**
+   * Skip the whole migration when this column already exists.
+   *
+   * `CREATE TABLE IF NOT EXISTS` is idempotent, so every migration up to now was
+   * safe to run against a database that already had the table — which is what
+   * happens on a *fresh* database, because `schema.sql` carries the current
+   * schema rather than a historical baseline.
+   *
+   * `ALTER TABLE ... ADD COLUMN` has no such guard: it errors with "duplicate
+   * column name", which would release the claim, throw, and leave the API
+   * reporting a failed migration on a database that was perfectly correct. So
+   * the guard is explicit rather than swallowing the error, because a swallowed
+   * DDL error is how a column silently never gets added.
+   */
+  skipIfColumn?: { table: string; column: string }
 }
 
 const MIGRATIONS: Migration[] = [
@@ -69,7 +84,36 @@ const MIGRATIONS: Migration[] = [
        )`,
     ],
   },
+  {
+    /*
+      The outline a manager drew, as JSON.
+
+      A column rather than a table of vertices: the shape is only ever read and
+      written whole, it is a few dozen points, and SQLite has no geometry type to
+      make the normalised version worth anything. Nullable, because every
+      territory that exists today came from an import and has no shape.
+
+      `ALTER TABLE ... ADD COLUMN` is additive, which is the rule up top, but it
+      is not idempotent the way `CREATE TABLE IF NOT EXISTS` is — it errors if the
+      column is already there. That is fine here and only here: the ledger claim
+      means this statement runs exactly once per database.
+    */
+    id: '004-territory-boundary',
+    statements: ['ALTER TABLE territories ADD COLUMN boundary TEXT'],
+    skipIfColumn: { table: 'territories', column: 'boundary' },
+  },
 ]
+
+async function hasColumn(
+  env: Env,
+  { table, column }: { table: string; column: string },
+): Promise<boolean> {
+  // PRAGMA cannot be parameterised, and the values come from the table above
+  // rather than from a request — but the assertion is cheap and this is DDL.
+  if (!/^[a-z_]+$/.test(table) || !/^[a-z_]+$/.test(column)) return false
+  const info = await env.DB.prepare(`PRAGMA table_info(${table})`).all()
+  return (info.results as { name: string }[]).some((c) => c.name === column)
+}
 
 export type MigrationState = 'pending' | 'ok' | 'failed'
 
@@ -100,6 +144,17 @@ export async function ensureSchema(env: Env): Promise<void> {
 
     for (const migration of MIGRATIONS) {
       if (done.has(migration.id)) continue
+
+      // A fresh database already has the column, because schema.sql is current.
+      // Recorded as applied so the check happens once rather than every boot.
+      if (migration.skipIfColumn && (await hasColumn(env, migration.skipIfColumn))) {
+        await env.DB.prepare(
+          'INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?1, ?2)',
+        )
+          .bind(migration.id, Date.now())
+          .run()
+        continue
+      }
 
       // Claim first. Two isolates booting at the same moment both reach this
       // line; only one insert changes a row, and only that one runs the DDL.

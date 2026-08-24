@@ -202,6 +202,13 @@ export async function bootstrap(env: Env, user: SessionUser) {
       id: t.id,
       name: t.name,
       repId: t.rep_id ?? undefined,
+      /*
+        Parsed defensively. This column arrived by migration, so old rows hold
+        null and — if anything ever wrote to it by hand — it could hold anything.
+        A territory with an unreadable outline is still a perfectly good
+        territory, so a parse failure drops the shape rather than the row.
+      */
+      boundary: parseBoundary(t.boundary),
     })),
     dailyStats: (stats.results as Record<string, unknown>[]).map((s) => ({
       id: s.id,
@@ -215,5 +222,19 @@ export async function bootstrap(env: Env, user: SessionUser) {
       pipelineValue: s.pipeline_value,
     })),
     serverTime: Date.now(),
+  }
+}
+
+function parseBoundary(raw: unknown): { lat: number; lng: number }[] | undefined {
+  if (typeof raw !== 'string' || raw.length === 0) return undefined
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed) || parsed.length < 3) return undefined
+    const points = parsed
+      .map((p) => ({ lat: Number(p?.lat), lng: Number(p?.lng) }))
+      .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+    return points.length >= 3 ? points : undefined
+  } catch {
+    return undefined
   }
 }

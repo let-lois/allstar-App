@@ -275,6 +275,25 @@ export function apiAssignTerritory(
   })
 }
 
+/**
+ * Create a territory from a drawn outline.
+ *
+ * The server decides which leads fall inside it, not the browser. The browser
+ * has already worked that out to show a count while drawing, but that count came
+ * from whatever it had cached — and the authority on which leads exist is the
+ * database. Sending the shape and letting the server match it is the difference
+ * between "the 34 leads I could see" and "the leads that are there".
+ */
+export function apiCreateTerritory(
+  token: string,
+  input: { name: string; repId: string | null; boundary: { lat: number; lng: number }[] },
+) {
+  return request<{ territory: { id: string; name: string }; assigned: number }>(
+    '/api/territories',
+    { method: 'POST', body: input, token, timeoutMs: 30_000 },
+  )
+}
+
 /** Move specific leads to a rep, rather than a whole territory. */
 export function apiAssignProperties(
   token: string,

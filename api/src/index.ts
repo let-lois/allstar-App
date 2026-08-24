@@ -22,6 +22,7 @@ import {
 import { maptilerProbe, probeOverrides } from './geocode-maptiler'
 import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
 import { assignProperties, assignTerritory } from './assign'
+import { createTerritory } from './territories'
 import { readAudit } from './audit'
 import {
   createResetLink,
@@ -640,6 +641,20 @@ export default {
         })
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 200, cors)
+      }
+
+      if (path === '/api/territories' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        // Passed through unvalidated on purpose: `createTerritory` owns the
+        // checks, because it is the thing that has to be safe when the shape
+        // arrives from somewhere other than our own console.
+        const result = await createTerritory(env, user, {
+          name: body.name,
+          repId: body.repId,
+          boundary: body.boundary,
+        })
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 201, cors)
       }
 
       if (path === '/api/import/properties' && req.method === 'POST') {
