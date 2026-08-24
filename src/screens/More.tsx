@@ -281,13 +281,21 @@ export function More() {
                 be. Without a way back it is a one-shot explanation of the app
                 aimed at the exact moment someone has least attention to give
                 it.
+
+                Everyone, not just reps. This was gated to `field_rep` back when
+                the rep tour was the only one there was; the office has had its
+                own since, and leaving the gate meant the people with the most
+                screens to learn were the ones who could not ask to see them
+                again.
+
+                First in the list on purpose. It is the one row here that is
+                worth more the less you know, so it should not be underneath
+                four things you have to already understand to skip past.
               */}
-              {user?.role === 'field_rep' && (
-                <MoreLink
-                  label="Show the tutorial again"
-                  onClick={() => void replayTour()}
-                />
-              )}
+              <MoreLink
+                label="Show the tutorial again"
+                onClick={() => void replayTour()}
+              />
               <MoreLink label="Standings" onClick={() => nav('/standings')} />
               <MoreLink label="Today's route" onClick={() => nav('/route')} />
               <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
