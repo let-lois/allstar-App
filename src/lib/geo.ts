@@ -123,6 +123,64 @@ export function greatCirclePath(
   return out
 }
 
+/**
+ * Is this point inside the polygon?
+ *
+ * Ray casting: count how many edges a ray from the point crosses. Odd means
+ * inside. It is the standard method and it is a few lines, which matters here
+ * because it runs once per lead per redraw — a manager dragging out a patch over
+ * three thousand leads wants the count under their finger to keep up.
+ *
+ * Treated as flat rather than spherical on purpose. A sales territory is a few
+ * miles across; over that distance the error from ignoring the curve is
+ * centimetres, and the alternative costs trigonometry per edge per point. The
+ * antimeridian is not handled for the same reason — a territory that spans it is
+ * not a territory anybody walks.
+ *
+ * Points exactly on an edge are not guaranteed either way. That is inherent to
+ * the method and harmless: a lead on the boundary line of a hand-drawn patch is
+ * a lead the person drawing it did not have an opinion about.
+ */
+export function pointInPolygon(
+  point: { lat: number; lng: number },
+  polygon: { lat: number; lng: number }[],
+): boolean {
+  if (polygon.length < 3) return false
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i]
+    const b = polygon[j]
+    // Does the edge straddle the point's latitude, and if so, is the crossing
+    // east of the point?
+    if (
+      a.lat > point.lat !== b.lat > point.lat &&
+      point.lng < ((b.lng - a.lng) * (point.lat - a.lat)) / (b.lat - a.lat) + a.lng
+    ) {
+      inside = !inside
+    }
+  }
+  return inside
+}
+
+/**
+ * Rough area in square miles, for telling somebody their patch is too big.
+ *
+ * The shoelace formula on degrees, scaled by the length of a degree at the
+ * polygon's own latitude. Rough is the right word and the right answer: this
+ * exists to say "that is 40 square miles, are you sure", not to bill anyone.
+ */
+export function polygonAreaSqMiles(polygon: { lat: number; lng: number }[]): number {
+  if (polygon.length < 3) return 0
+  const meanLat = polygon.reduce((s, p) => s + p.lat, 0) / polygon.length
+  const milesPerDegLat = 69.0
+  const milesPerDegLng = 69.172 * Math.cos(toRad(meanLat))
+  let sum = 0
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    sum += polygon[j].lng * polygon[i].lat - polygon[i].lng * polygon[j].lat
+  }
+  return Math.abs(sum / 2) * milesPerDegLat * milesPerDegLng
+}
+
 export function compassLabel(deg: number): string {
   const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
   return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8]

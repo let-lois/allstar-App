@@ -15,6 +15,7 @@
     "db:schema:flatten": "node -e \"const fs=require('fs');let s=fs.readFileSync('schema.sql','utf8');s=s.replace(/\\\\/\\\\*[\\\\s\\\\S]*?\\\\*\\\\//g,' ').replace(/--[^\\\\n]*/g,' ').replace(/PRAGMA[^;]*;/gi,'');s=s.replace(/\\\\s+/g,' ').trim();fs.writeFileSync('schema.min.sql',s.split(';').map(x=>x.trim()).filter(Boolean).join('; ')+';\\\\n')\"",
     "smoke:import": "node scripts/smoke-import.mjs",
     "verify:directions": "node scripts/verify-directions.mjs",
+    "verify:territories": "node scripts/verify-territories.mjs",
     "verify:geocode": "node scripts/verify-geocode.mjs",
     "smoke:users": "node scripts/smoke-users.mjs",
     "smoke:migrate": "node scripts/smoke-migrate.mjs",

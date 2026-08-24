@@ -7,6 +7,9 @@ import { DataList } from './DataList'
 import { ApiError, apiAssignTerritory } from '../lib/http'
 import { liveToken } from '../lib/session'
 import { moneyFull } from '../lib/format'
+import { pointInPolygon, polygonAreaSqMiles } from '../lib/geo'
+import { Button } from '../components/ui/Button'
+import { Field } from '../components/ui/Input'
 
 /**
  * Territory management.
@@ -28,6 +31,64 @@ export function AdminTerritories() {
   /** A territory's name if we have one; otherwise something readable. */
   const label = (id: string) =>
     id === UNASSIGNED_TERRITORY ? 'Unassigned' : (territories[id]?.name ?? id)
+
+  /* --- drawing a new territory ------------------------------------------- */
+  const createTerritory = useAppStore((s) => s.createTerritory)
+  const [draft, setDraft] = useState<{ points: { lat: number; lng: number }[] } | null>(null)
+  const [draftName, setDraftName] = useState('')
+  const [draftRep, setDraftRep] = useState('')
+  const [saving2, setSaving2] = useState(false)
+  const [drawError, setDrawError] = useState<string | null>(null)
+  const [drawDone, setDrawDone] = useState<string | null>(null)
+
+  /*
+    Counted on every tap, over every lead with coordinates. A manager dragging a
+    patch out needs the number to move under their finger — that is the whole
+    feedback loop of the feature, and it is why the point-in-polygon test is
+    plain arithmetic rather than anything cleverer.
+  */
+  const inside = useMemo(() => {
+    if (!draft || draft.points.length < 3) return []
+    return list.filter(
+      (p) =>
+        Number.isFinite(p.lat) && Number.isFinite(p.lng) && pointInPolygon(p, draft.points),
+    )
+  }, [draft, list])
+
+  const draftArea = useMemo(
+    () => (draft && draft.points.length >= 3 ? polygonAreaSqMiles(draft.points) : 0),
+    [draft],
+  )
+
+  const saveDraft = async () => {
+    if (!draft || draft.points.length < 3) return
+    const name = draftName.trim()
+    if (!name) {
+      setDrawError('Give the area a name — the reps will see it.')
+      return
+    }
+    setSaving2(true)
+    setDrawError(null)
+    try {
+      const res = await createTerritory({
+        name,
+        repId: draftRep || null,
+        boundary: draft.points,
+      })
+      setDrawDone(
+        `Created ${name} with ${res.assigned.toLocaleString()} lead${res.assigned === 1 ? '' : 's'}.`,
+      )
+      setDraft(null)
+      setDraftName('')
+      setDraftRep('')
+    } catch (err) {
+      setDrawError(
+        err instanceof ApiError ? err.message : 'Could not create the territory. Try again.',
+      )
+    } finally {
+      setSaving2(false)
+    }
+  }
 
   /*
     Sorted by the name on screen, not by the internal id. Ids are hashes, so
@@ -140,6 +201,24 @@ export function AdminTerritories() {
     <AdminPage
       title="Territories"
       description={`${rows.length} territories · ${totals.properties.toLocaleString()} properties · ${moneyFull(totals.open)} open`}
+      actions={
+        draft ? (
+          <Button variant="secondary" onClick={() => setDraft(null)}>
+            Cancel
+          </Button>
+        ) : (
+          <Button
+            onClick={() => {
+              setDraft({ points: [] })
+              setDrawDone(null)
+              setDrawError(null)
+              setSelected(null)
+            }}
+          >
+            New territory
+          </Button>
+        )
+      }
     >
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
         <>
@@ -245,11 +324,134 @@ export function AdminTerritories() {
         <div className="overflow-hidden rounded-card border border-line bg-surface">
           <div className="flex items-baseline justify-between border-b border-line-soft px-4 py-3">
             <h2 className="text-sm font-semibold">
-              {selected ? label(selected) : 'All territories'}
+              {draft ? 'Outline the area' : selected ? label(selected) : 'All territories'}
             </h2>
-            <span className="nums text-xs text-ink-mute">{shown.length} properties</span>
+            <span className="nums text-xs text-ink-mute">
+              {draft
+                ? `${draft.points.length} point${draft.points.length === 1 ? '' : 's'}`
+                : `${shown.length} properties`}
+            </span>
           </div>
-          {shown.length === 0 && (
+
+          {/*
+            --- the drawing panel -------------------------------------------
+            Above the map, not over it: on a phone the map is the thing being
+            touched, and a floating panel would sit exactly where the next vertex
+            needs to go.
+          */}
+          {draft && (
+            <div className="border-b border-line-soft px-4 py-3">
+              <p className="text-[13px] leading-relaxed text-ink-mute">
+                Tap the map to drop a point. Three or more closes the shape — every
+                lead inside it joins the territory.
+              </p>
+
+              {/*
+                Fixed height, and the area reads "—" rather than disappearing
+                before the third point.
+
+                Not cosmetic: this panel sits *above* the map, so anything that
+                changes its height moves the map under the finger that is drawing
+                on it. The second tap of a shape was landing in a different place
+                than the person aimed at, because placing the first one grew this
+                block. Caught by a gate whose cached coordinates went stale for
+                exactly that reason.
+              */}
+              <div className="mt-3 flex h-8 items-baseline gap-4">
+                <span>
+                  <span className="nums text-[22px] font-semibold leading-none tracking-[-0.02em]">
+                    {inside.length.toLocaleString()}
+                  </span>
+                  <span className="ml-1.5 text-[12.5px] text-ink-mute">
+                    lead{inside.length === 1 ? '' : 's'} inside
+                  </span>
+                </span>
+                <span className="nums text-[12.5px] text-ink-mute">
+                  {draftArea > 0
+                    ? `${draftArea < 10 ? draftArea.toFixed(1) : Math.round(draftArea)} sq mi`
+                    : '—'}
+                </span>
+              </div>
+
+              <div className="mt-3 flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={draft.points.length === 0}
+                  onClick={() =>
+                    setDraft((d) => (d ? { points: d.points.slice(0, -1) } : d))
+                  }
+                >
+                  Undo point
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={draft.points.length === 0}
+                  onClick={() => setDraft({ points: [] })}
+                >
+                  Start over
+                </Button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <Field
+                  label="Name"
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  placeholder="e.g. Cypress Ridge & Marigold"
+                />
+                <label className="block">
+                  <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">
+                    Assign to
+                  </span>
+                  <select
+                    value={draftRep}
+                    onChange={(e) => setDraftRep(e.target.value)}
+                    className="field h-[52px]"
+                  >
+                    <option value="">Nobody yet</option>
+                    {repOptions.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {/* Reserved, for the same reason: an error appearing must not push
+                  the map down while somebody is drawing on it. */}
+              <p
+                role="alert"
+                className={`mt-3 min-h-[18px] text-[13px] font-medium text-bad ${
+                  drawError ? '' : 'invisible'
+                }`}
+              >
+                {drawError ?? '\u00a0'}
+              </p>
+
+              <Button
+                full
+                className="mt-4"
+                disabled={draft.points.length < 3 || saving2}
+                onClick={() => void saveDraft()}
+              >
+                {saving2
+                  ? 'Creating…'
+                  : draft.points.length < 3
+                    ? 'Drop at least three points'
+                    : `Create with ${inside.length.toLocaleString()} lead${inside.length === 1 ? '' : 's'}`}
+              </Button>
+            </div>
+          )}
+
+          {drawDone && !draft && (
+            <p role="status" className="border-b border-line-soft px-4 py-3 text-[13px] font-medium text-good">
+              {drawDone}
+            </p>
+          )}
+          {shown.length === 0 && !draft && (
             <p className="px-4 py-6 text-sm text-ink-mute">
               No properties in this territory have coordinates yet, so there is
               nothing to place on a map.
@@ -257,7 +459,21 @@ export function AdminTerritories() {
           )}
           <FieldMap
             className="h-[520px]"
-            properties={shown}
+            /*
+              Every lead while drawing, not just the selected territory's — the
+              point of the exercise is to see what falls inside the shape, and
+              filtering first would hide exactly the leads being claimed.
+            */
+            properties={draft ? list : shown}
+            draw={
+              draft
+                ? {
+                    points: draft.points,
+                    onAddPoint: (point) =>
+                      setDraft((d) => (d ? { points: [...d.points, point] } : d)),
+                  }
+                : undefined
+            }
             // No follow-me here: an office user's own GPS is irrelevant to a
             // territory, and passing it would recenter the map off the patch.
             position={null}
@@ -271,7 +487,10 @@ export function AdminTerritories() {
             disableClustering={shown.length <= 25}
             selectedId={null}
             onSelect={() => {}}
-            key={selected ?? 'all'}
+            /* `key` forces a refit when the selection changes. While drawing it
+               is pinned, because remounting the map would throw away the pan and
+               zoom the person is drawing against. */
+            key={draft ? 'draw' : (selected ?? 'all')}
             initialCenter={view?.center}
             initialZoom={view?.zoom}
           />

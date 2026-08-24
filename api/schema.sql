@@ -45,7 +45,10 @@ CREATE TABLE IF NOT EXISTS territories (
   id         TEXT PRIMARY KEY,
   client_id  TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   name       TEXT NOT NULL,
-  rep_id     TEXT REFERENCES users(id) ON DELETE SET NULL
+  rep_id     TEXT REFERENCES users(id) ON DELETE SET NULL,
+  /* The drawn outline, as a JSON array of {lat,lng}. Null for the territories
+     that came from an import, which is all of them until somebody draws one. */
+  boundary   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS properties (

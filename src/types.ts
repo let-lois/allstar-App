@@ -188,6 +188,16 @@ export interface Territory {
   id: string
   name: string
   repId?: string
+  /**
+   * The outline a manager drew, if this territory was drawn rather than named by
+   * an import.
+   *
+   * Kept after the leads inside it have been assigned, for two reasons: it is
+   * what lets the shape be shown again next to its coverage figure, and it is
+   * what a later import can be matched against so new leads on those streets
+   * land in the right patch instead of the unassigned bucket.
+   */
+  boundary?: { lat: number; lng: number }[]
 }
 
 export interface Appointment {

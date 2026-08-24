@@ -22,7 +22,7 @@ import { enqueue, drain, initSync } from '../lib/sync'
 import { DEMO_USERS, FIELD_REPS } from '../data/seed'
 import { ensureFreshDemo, resetDemo } from '../lib/demo'
 import { fetchBootstrap } from '../lib/api'
-import { apiLogin, apiLogout, apiUsers } from '../lib/http'
+import { apiCreateTerritory, apiLogin, apiLogout, apiUsers } from '../lib/http'
 import { applyBootstrap, outboxPending, wipeCachedData } from '../lib/hydrate'
 import {
   clearSession,
@@ -36,6 +36,7 @@ import {
 } from '../lib/session'
 import { OUTCOME_TO_STATUS } from '../data/outcomes'
 import { dayKey } from '../lib/format'
+import { pointInPolygon } from '../lib/geo'
 import { getPosition, type Position } from '../lib/geo'
 import type { ClientSettings } from '../lib/settings'
 import { buildRoute } from '../lib/route'
@@ -104,6 +105,18 @@ interface AppState {
   loadTeam: () => Promise<void>
   /** Demo-only: hand the next pitch a pristine dataset. */
   resetDemoData: () => Promise<void>
+  /**
+   * Create a territory from a drawn outline and move the leads inside it.
+   *
+   * Live: the server matches the shape against the database and is the
+   * authority. Demo: the same work locally, because a feature you cannot show
+   * in the demo is a feature nobody buys.
+   */
+  createTerritory: (input: {
+    name: string
+    repId: string | null
+    boundary: { lat: number; lng: number }[]
+  }) => Promise<{ assigned: number }>
   signOut: () => Promise<void>
   refreshPosition: () => Promise<void>
   setPosition: (p: Position) => void
@@ -395,6 +408,48 @@ export const useAppStore = create<AppState>((set, get) => ({
     await resetDemo()
     const current = get().user
     await get().loadLocal(current, 'demo')
+  },
+
+  async createTerritory({ name, repId, boundary }) {
+    if (boundary.length < 3) throw new Error('An area needs at least three points.')
+    const token = liveToken()
+
+    if (token) {
+      const res = await apiCreateTerritory(token, { name, repId, boundary })
+      // The server has moved rows; pull its view back rather than patching a
+      // guess into local state and hoping the two agree.
+      await get().refreshFromServer()
+      return { assigned: res.assigned }
+    }
+
+    /*
+      Demo, or a live account with no signal: do it locally against what is on
+      the device. Written to IndexedDB first like every other write in this app,
+      so it survives a reload.
+    */
+    const id = `t_drawn_${Date.now().toString(36)}`
+    const territory: Territory = { id, name, repId: repId ?? undefined, boundary }
+    const inside = Object.values(get().properties).filter(
+      (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && pointInPolygon(p, boundary),
+    )
+    const moved = inside.map((p) => ({
+      ...p,
+      territoryId: id,
+      assignedRepId: repId ?? p.assignedRepId,
+      updatedAt: Date.now(),
+    }))
+
+    await db.put('territories', territory)
+    if (moved.length > 0) await db.putAll('properties', moved)
+
+    set((state) => ({
+      territories: { ...state.territories, [id]: territory },
+      properties: {
+        ...state.properties,
+        ...Object.fromEntries(moved.map((p) => [p.id, p])),
+      },
+    }))
+    return { assigned: moved.length }
   },
 
   async signOut() {
