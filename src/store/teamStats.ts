@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useAppStore } from './useAppStore'
+import { onBoard } from '../data/leaderboard'
 import type { ActivityEvent, Property, Route, TeamMember } from '../types'
 
 /**
@@ -100,7 +101,7 @@ function statsFor(
   }
 }
 
-/** All reps, best day first — the shape a manager actually scans. */
+/** Everyone knocking today, best day first — the shape a manager actually scans. */
 export function useTeamStats(): RepStats[] {
   const routes = useAppStore((s) => s.routes)
   const activity = useAppStore((s) => s.activity)
@@ -110,12 +111,9 @@ export function useTeamStats(): RepStats[] {
   return useMemo(() => {
     const since = new Date()
     since.setHours(0, 0, 0, 0)
-    // Only people who actually knock. An office account has no route and no
-    // door count, and padding the leaderboard with zero-rows for admins makes
-    // the team look half-idle.
-    return team
-      .filter((m) => m.role === 'field_rep' && m.active)
-      .map((m) => statsFor(m, routes, activity, properties, since.getTime()))
+    const from = since.getTime()
+    return onBoard(team, activity, from)
+      .map((m) => statsFor(m, routes, activity, properties, from))
       .sort((a, b) => b.conversations - a.conversations || b.done - a.done)
   }, [team, routes, activity, properties])
 }

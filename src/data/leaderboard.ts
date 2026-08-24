@@ -1,3 +1,4 @@
+import type { ActivityEvent, TeamMember } from '../types'
 import type { RepStats } from '../store/teamStats'
 
 /**
@@ -28,6 +29,38 @@ import type { RepStats } from '../store/teamStats'
  * suppressed until there is something to award, and ties are shown as ties
  * rather than broken silently.
  */
+
+/**
+ * Who belongs on the board.
+ *
+ * Everyone who knocks, which is not the same set as everyone titled "field rep".
+ *
+ * The rule used to be the role alone, and on a real account that produced a
+ * leaderboard with one name on it: in a company this size the owner and the
+ * managers knock doors too, and all of them were filtered out of their own
+ * board. It was reported exactly that way — "why doesn't it show the other
+ * users" — and the answer was that the app had decided, on their behalf, who
+ * counts as somebody who knocks.
+ *
+ * So field reps always appear, at zero if they have not started, because a rep
+ * missing from the board would reasonably think they had been left off it.
+ * Anybody else appears the moment they do something today and not before, which
+ * keeps the original point intact: a column of idle admin rows makes a working
+ * team look half-asleep.
+ *
+ * Exported and pure because it is a *policy*, and a policy buried in a hook is a
+ * policy nobody can test with inputs of their own choosing.
+ */
+export function onBoard(
+  team: TeamMember[],
+  activity: ActivityEvent[],
+  from: number,
+): TeamMember[] {
+  const knockedToday = new Set(
+    activity.filter((a) => a.at >= from && a.type === 'visit').map((a) => a.repId),
+  )
+  return team.filter((m) => m.active && (m.role === 'field_rep' || knockedToday.has(m.id)))
+}
 
 /**
  * What each thing is worth.

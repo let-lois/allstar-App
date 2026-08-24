@@ -1,4 +1,4 @@
-import { POINTS, awards, scoreOf, standings } from '../src/data/leaderboard.ts'
+import { POINTS, awards, onBoard, scoreOf, standings } from '../src/data/leaderboard.ts'
 
 /**
  * The rules of the board.
@@ -138,6 +138,52 @@ const rep = (name, over = {}) => ({
 {
   ok(standings([]).length === 0, 'an empty team is an empty board, not a crash')
   ok(awards([]).length === 0, 'and has no awards')
+}
+
+/* --- who gets onto the board ----------------------------------------------- */
+//
+// Reported from production: the board showed one name. The rule was the *role*
+// alone, so in a company where the owner and the managers also knock, all of them
+// were filtered out of their own leaderboard.
+{
+  const member = (id, role, active = true) => ({
+    id,
+    name: id,
+    email: '',
+    role,
+    active,
+    initials: id.slice(0, 2).toUpperCase(),
+  })
+  const NOW = 1_700_000_000_000
+  const knock = (repId, at = NOW + 1000) => ({ id: `a_${repId}_${at}`, repId, type: 'visit', at, summary: '' })
+
+  const team = [
+    member('rep_idle', 'field_rep'),
+    member('rep_busy', 'field_rep'),
+    member('owner', 'super_admin'),
+    member('manager', 'manager'),
+    member('admin_desk', 'client_admin'),
+    member('rep_gone', 'field_rep', false),
+  ]
+  // The owner and one manager knocked today; the desk admin did not.
+  const activity = [knock('rep_busy'), knock('owner'), knock('manager')]
+
+  const ids = onBoard(team, activity, NOW).map((m) => m.id)
+
+  ok(ids.includes('rep_idle'), 'a field rep who has not started is still on the board')
+  ok(ids.includes('rep_busy'), 'and so is one who has')
+  ok(ids.includes('owner'), 'an owner who knocked today is on the board')
+  ok(ids.includes('manager'), 'so is a manager who knocked')
+  ok(!ids.includes('admin_desk'), 'a desk admin who knocked nothing is not')
+  ok(!ids.includes('rep_gone'), 'and a deactivated rep is not, whatever their role')
+  ok(ids.length === 4, `four people, not one (${ids.join(', ')})`)
+
+  // Yesterday's work does not put somebody on today's board.
+  const stale = onBoard(team, [knock('owner', NOW - 86_400_000)], NOW).map((m) => m.id)
+  ok(
+    !stale.includes('owner'),
+    'an owner who knocked yesterday is not on today’s board',
+  )
 }
 
 console.log(fails.length ? `\n${fails.length} FAILED` : '\n=== leaderboard OK ===')
