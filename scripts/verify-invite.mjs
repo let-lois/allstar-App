@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * Inviting someone onto the team.
@@ -660,6 +661,7 @@ await page.waitForTimeout(300)
   await page2.goto(BASE, { waitUntil: 'networkidle' })
   await page2.getByRole('button', { name: /Try the demo/ }).click()
   await page2.getByRole('button', { name: /Nadia Petrov/ }).click()
+  await dismissTour(page2)
   await page2.waitForTimeout(1300)
   await page2.goto(`${BASE}/admin/team`, { waitUntil: 'domcontentloaded' })
   await page2.waitForTimeout(900)

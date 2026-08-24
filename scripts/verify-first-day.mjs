@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * A live rep's first morning.
@@ -112,6 +113,13 @@ async function signIn(ctx, properties, { blockMutations = false } = {}) {
   await page.locator('input[autocomplete="current-password"]').fill('a-real-password')
   await page.getByRole('button', { name: /^Sign in$/ }).click()
   await page.waitForTimeout(1600)
+  /*
+    This gate is the first day, so the first-run tour is not an intruder here —
+    it is part of the thing being tested. A rep who has never opened the app
+    meets it before they meet the route. Dismissed the way they would, so the
+    rest of the day can be checked.
+  */
+  await dismissTour(page)
   return { page, posted, server }
 }
 

@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * Adding a lead from the field.
@@ -59,6 +60,7 @@ async function signIn(page) {
   await page.waitForTimeout(1200)
   await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.getByRole('button', { name: /Dana Whitfield/ }).click()
+  await dismissTour(page)
   await page.waitForTimeout(1800)
 }
 

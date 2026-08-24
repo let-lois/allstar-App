@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * The standings, as wired up.
@@ -43,6 +44,7 @@ await page.waitForTimeout(1200)
 await page.getByRole('button', { name: /Try the demo/ }).click()
 // A rep, not a manager: the standings are for the person being ranked.
 await page.getByRole('button', { name: /Dana Whitfield/ }).click()
+await dismissTour(page)
 await page.waitForTimeout(2200)
 
 /* --- a rep can get there from the screen they start on -------------------- */

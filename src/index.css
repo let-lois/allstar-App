@@ -824,6 +824,29 @@
     animation: wordmark-glint 1200ms cubic-bezier(0.3, 0.1, 0.3, 1) 480ms both;
   }
 
+  /*
+   * The tour's spotlight.
+   *
+   * One box with a shadow spread far larger than any screen, so the "dimmer" is
+   * the shadow and the hole is the box itself. The alternatives are four
+   * rectangles around the hole — which seam visibly at the corners and animate
+   * out of step — or an SVG mask, which is a second coordinate system to keep
+   * aligned with the first.
+   *
+   * The teal ring is inside the hole rather than around it, so it survives the
+   * shadow and reads as the highlight rather than as a border on the dimmer.
+   */
+  .tour-hole {
+    box-shadow:
+      0 0 0 9999px rgba(3, 7, 16, 0.78),
+      inset 0 0 0 2px rgba(32, 196, 211, 0.9);
+    transition:
+      top 260ms cubic-bezier(0.22, 0.8, 0.3, 1),
+      left 260ms cubic-bezier(0.22, 0.8, 0.3, 1),
+      width 260ms cubic-bezier(0.22, 0.8, 0.3, 1),
+      height 260ms cubic-bezier(0.22, 0.8, 0.3, 1);
+  }
+
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
   }

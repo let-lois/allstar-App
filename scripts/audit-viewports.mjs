@@ -1,5 +1,6 @@
 import { chromium } from 'playwright'
 import fs from 'node:fs'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * Mobile-first layout audit.
@@ -54,6 +55,7 @@ for (const vp of VIEWPORTS) {
   // The demo roster now sits behind the real login screen.
   await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.getByRole('button', { name: /Dana Whitfield/ }).click()
+  await dismissTour(page)
   await page.waitForTimeout(900)
 
   const shot = async (label) => {

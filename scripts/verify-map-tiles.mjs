@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * Basemap imagery verification.
@@ -49,6 +50,7 @@ await page.goto(BASE, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1200)
 await page.getByRole('button', { name: /Try the demo/ }).click()
 await page.getByRole('button', { name: /Dana Whitfield/ }).click()
+await dismissTour(page)
 await page.waitForTimeout(1800)
 await page.getByRole('link', { name: /^Map$/ }).first().click()
 await page.waitForTimeout(2500)

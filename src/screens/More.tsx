@@ -17,6 +17,8 @@ import { liveToken } from '../lib/session'
 import type { Mutation } from '../types'
 import { IconChevron } from '../components/nav/icons'
 import { AvatarPicker, AvatarRemove } from '../components/ui/AvatarPicker'
+import * as db from '../lib/db'
+import { TOUR_KEY } from '../data/tour'
 
 const ROLE_LABEL: Record<string, string> = {
   field_rep: 'Field Rep',
@@ -27,6 +29,15 @@ const ROLE_LABEL: Record<string, string> = {
 
 export function More() {
   const nav = useNavigate()
+
+  /*
+    Clear the flag and go where the tour lives. It cannot run from this screen —
+    every step points at something on Today or at the bar underneath it.
+  */
+  const replayTour = async () => {
+    await db.metaSet(TOUR_KEY, undefined)
+    nav('/')
+  }
   const user = useAppStore((s) => s.user)
   const signOut = useAppStore((s) => s.signOut)
   const resetDemoData = useAppStore((s) => s.resetDemoData)
@@ -253,6 +264,19 @@ export function More() {
                 collapsibles directly above them, when they are the same kind of
                 thing: one tap, one destination. Same shape, same rhythm. */}
             <nav className="flex flex-col gap-2.5">
+              {/*
+                Replay, because the tour offers Skip and people take it — often
+                on the first morning, standing next to a van, with somewhere to
+                be. Without a way back it is a one-shot explanation of the app
+                aimed at the exact moment someone has least attention to give
+                it.
+              */}
+              {user?.role === 'field_rep' && (
+                <MoreLink
+                  label="Show the tutorial again"
+                  onClick={() => void replayTour()}
+                />
+              )}
               <MoreLink label="Standings" onClick={() => nav('/standings')} />
               <MoreLink label="Today's route" onClick={() => nav('/route')} />
               <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
