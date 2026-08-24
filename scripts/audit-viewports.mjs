@@ -97,9 +97,50 @@ for (const vp of VIEWPORTS) {
     if (small.length) problems.push(`${vp.name} ${label}: small targets -> ${small.join(' ; ')}`)
   }
 
+  // Control-part containment.
+  //
+  // A control's moving parts must stay inside the control. The offline
+  // simulator's knob did not: it was positioned with a `top` and no `left`, so
+  // the browser fell back to its static position inside the button's anonymous
+  // centring box and parked the knob 22px past the end of its own track. It was
+  // a white circle on a white card, so nothing looked broken — the switch just
+  // appeared to have no knob at all, in either state.
+  //
+  // Neither of the checks above can see this. There is no page overflow (the
+  // knob is 22px into a card with room to spare) and the tap target is the
+  // track, which is the right size. So: any absolutely positioned part whose
+  // containing block is a control must sit inside that control's box.
+  const auditContainment = async (label) => {
+    const escaped = await page.evaluate(() => {
+      const out = []
+      const SEL = 'button, [role="switch"], [role="button"]'
+      document.querySelectorAll('button *, [role="switch"] *, [role="button"] *').forEach((el) => {
+        if (getComputedStyle(el).position !== 'absolute') return
+        // Measure against the control, not against offsetParent. A switch is
+        // commonly a target wrapping a track wrapping a knob, so the knob's
+        // containing block is an inner span — and a check that only looked at
+        // offsetParent would skip the exact element it exists to watch.
+        const host = el.closest(SEL)
+        if (!host) return
+        const r = el.getBoundingClientRect()
+        const h = host.getBoundingClientRect()
+        if (r.width === 0 || r.height === 0) return
+        // 1px of slack for subpixel rounding; a real escape is many pixels.
+        const over = Math.max(h.left - r.left, r.right - h.right, h.top - r.top, r.bottom - h.bottom)
+        if (over > 1) {
+          const name = (host.getAttribute('aria-label') || host.textContent || '').trim().slice(0, 28)
+          out.push(`${el.tagName} escapes ${host.tagName}[${name}] by ${Math.round(over)}px`)
+        }
+      })
+      return out
+    })
+    if (escaped.length) problems.push(`${vp.name} ${label}: control parts escape -> ${escaped.join(' ; ')}`)
+  }
+
   await shot('01-today')
   await checkOverflow('today')
   await auditTargets('today')
+  await auditContainment('today')
 
   // Map
   await page.getByRole('link', { name: 'Map' }).first().click().catch(() => {})
@@ -142,6 +183,7 @@ for (const vp of VIEWPORTS) {
     await shot('06-property')
     await checkOverflow('property')
     await auditTargets('property')
+    await auditContainment('property')
 
     // Start visit -> outcome step
     const start = page.getByRole('button', { name: /^Start visit$/ })
@@ -151,6 +193,7 @@ for (const vp of VIEWPORTS) {
       await shot('07-visit-outcome')
       await checkOverflow('visit-outcome')
       await auditTargets('visit-outcome')
+      await auditContainment('visit-outcome')
 
       // Choose "Interested" -> detail step
       const interested = page.getByRole('button', { name: /Interested/ }).first()
@@ -190,6 +233,29 @@ for (const vp of VIEWPORTS) {
   await page.waitForTimeout(600)
   await shot('12-more')
   await checkOverflow('more')
+
+  // Expand every section before auditing. Collapsed, More is four headers and
+  // nothing to measure — the switch that shipped broken lives one tap down.
+  const headers = page.locator('button[aria-expanded="false"]')
+  for (let i = await headers.count(); i > 0; i--) {
+    await headers.first().click().catch(() => {})
+    await page.waitForTimeout(150)
+  }
+  await page.waitForTimeout(300)
+  await shot('13-more-open')
+  await checkOverflow('more-open')
+  await auditTargets('more-open')
+  await auditContainment('more-open')
+
+  // Both switch states: the knob travels, so only one end may be out of bounds.
+  const sw = page.locator('[role="switch"]').first()
+  if (await sw.count()) {
+    await sw.click()
+    await page.waitForTimeout(400)
+    await auditContainment('more-open-switched')
+    await sw.click()
+    await page.waitForTimeout(400)
+  }
 
   if (errors.length) problems.push(`${vp.name}: console errors -> ${errors.slice(0, 4).join(' | ')}`)
 

@@ -177,15 +177,34 @@ export function More() {
                   if (!next) void drain()
                   else window.dispatchEvent(new Event('offline'))
                 }}
-                className={`focusable relative h-8 w-[52px] shrink-0 rounded-full transition-colors ${
-                  offlineSim ? 'bg-brand-600' : 'bg-ink/15'
-                }`}
+                /*
+                  The button is the tap target, the span inside it is the
+                  track. They are separate because a 32px-tall switch is under
+                  the tap floor — fine with a mouse, a miss with a thumb on a
+                  porch — so the target gets the full 48px of height and the
+                  track keeps the 32px the design wants.
+                */
+                className="focusable flex min-h-tap w-[52px] shrink-0 items-center rounded-full"
               >
                 <span
-                  className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-card transition-transform ${
-                    offlineSim ? 'translate-x-[24px]' : 'translate-x-1'
+                  className={`relative block h-8 w-full rounded-full transition-colors ${
+                    offlineSim ? 'bg-brand-600' : 'bg-ink/15'
                   }`}
-                />
+                >
+                  {/*
+                    left-1 is load-bearing. Without a horizontal inset the knob
+                    has no containing-block origin, so the browser falls back to
+                    its static position — which parked it 30px into a 52px track,
+                    and 22px past the end of it once switched on. A white circle
+                    on a white card: the switch looked like a solid teal pill
+                    with no knob at all, in either state.
+                  */}
+                  <span
+                    className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow-card transition-transform ${
+                      offlineSim ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </span>
               </button>
             </label>
 
