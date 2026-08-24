@@ -142,9 +142,15 @@ const rep = (name, over = {}) => ({
 
 /* --- who gets onto the board ----------------------------------------------- */
 //
-// Reported from production: the board showed one name. The rule was the *role*
-// alone, so in a company where the owner and the managers also knock, all of them
-// were filtered out of their own leaderboard.
+// This assertion has been inverted once already, which is the useful part of its
+// history. It first pinned `role === 'field_rep'`, and on a real account that
+// showed a board with one name: in a company that size the owner and the
+// managers knock doors too. Then it pinned "reps plus anyone who knocked today",
+// which still left a manager unable to see themselves before they had performed.
+//
+// It is now everybody active, chosen deliberately rather than defaulted into. If
+// a larger client wants their back office off the board, this is the assertion
+// that has to change with the filter — not quietly around it.
 {
   const member = (id, role, active = true) => ({
     id,
@@ -154,8 +160,6 @@ const rep = (name, over = {}) => ({
     active,
     initials: id.slice(0, 2).toUpperCase(),
   })
-  const NOW = 1_700_000_000_000
-  const knock = (repId, at = NOW + 1000) => ({ id: `a_${repId}_${at}`, repId, type: 'visit', at, summary: '' })
 
   const team = [
     member('rep_idle', 'field_rep'),
@@ -165,25 +169,20 @@ const rep = (name, over = {}) => ({
     member('admin_desk', 'client_admin'),
     member('rep_gone', 'field_rep', false),
   ]
-  // The owner and one manager knocked today; the desk admin did not.
-  const activity = [knock('rep_busy'), knock('owner'), knock('manager')]
 
-  const ids = onBoard(team, activity, NOW).map((m) => m.id)
+  const ids = onBoard(team).map((m) => m.id)
 
-  ok(ids.includes('rep_idle'), 'a field rep who has not started is still on the board')
+  ok(ids.includes('rep_idle'), 'a field rep who has not started is on the board')
   ok(ids.includes('rep_busy'), 'and so is one who has')
-  ok(ids.includes('owner'), 'an owner who knocked today is on the board')
-  ok(ids.includes('manager'), 'so is a manager who knocked')
-  ok(!ids.includes('admin_desk'), 'a desk admin who knocked nothing is not')
-  ok(!ids.includes('rep_gone'), 'and a deactivated rep is not, whatever their role')
-  ok(ids.length === 4, `four people, not one (${ids.join(', ')})`)
-
-  // Yesterday's work does not put somebody on today's board.
-  const stale = onBoard(team, [knock('owner', NOW - 86_400_000)], NOW).map((m) => m.id)
+  ok(ids.includes('manager'), 'a manager is on the board')
+  ok(ids.includes('admin_desk'), 'so is a client admin')
+  ok(ids.includes('owner'), 'and a super admin')
   ok(
-    !stale.includes('owner'),
-    'an owner who knocked yesterday is not on today’s board',
+    !ids.includes('rep_gone'),
+    'a deactivated person is not — they are gone, not idle, and a former employee ' +
+      'sitting at zero says something untrue about them',
   )
+  ok(ids.length === 5, `five people, not one (${ids.join(', ')})`)
 }
 
 console.log(fails.length ? `\n${fails.length} FAILED` : '\n=== leaderboard OK ===')

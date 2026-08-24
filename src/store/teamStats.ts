@@ -112,7 +112,7 @@ export function useTeamStats(): RepStats[] {
     const since = new Date()
     since.setHours(0, 0, 0, 0)
     const from = since.getTime()
-    return onBoard(team, activity, from)
+    return onBoard(team)
       .map((m) => statsFor(m, routes, activity, properties, from))
       .sort((a, b) => b.conversations - a.conversations || b.done - a.done)
   }, [team, routes, activity, properties])

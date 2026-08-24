@@ -1,4 +1,4 @@
-import type { ActivityEvent, TeamMember } from '../types'
+import type { TeamMember } from '../types'
 import type { RepStats } from '../store/teamStats'
 
 /**
@@ -31,35 +31,32 @@ import type { RepStats } from '../store/teamStats'
  */
 
 /**
- * Who belongs on the board.
+ * Who belongs on the board: everybody on the account who is active.
  *
- * Everyone who knocks, which is not the same set as everyone titled "field rep".
+ * This has now been narrowed twice and widened twice, which is worth recording
+ * because each version was defensible and only one of them survived contact with
+ * a real company.
  *
- * The rule used to be the role alone, and on a real account that produced a
- * leaderboard with one name on it: in a company this size the owner and the
- * managers knock doors too, and all of them were filtered out of their own
- * board. It was reported exactly that way — "why doesn't it show the other
- * users" — and the answer was that the app had decided, on their behalf, who
- * counts as somebody who knocks.
+ * It started as `role === 'field_rep'`, on the reasoning that a column of idle
+ * admin rows makes a working team look half-asleep. On a real account that
+ * produced a leaderboard with one name on it — in a company this size the owner
+ * and the managers knock doors too, and all of them were filtered off their own
+ * board.
  *
- * So field reps always appear, at zero if they have not started, because a rep
- * missing from the board would reasonably think they had been left off it.
- * Anybody else appears the moment they do something today and not before, which
- * keeps the original point intact: a column of idle admin rows makes a working
- * team look half-asleep.
+ * Then it was "reps, plus anyone who knocked today", which fixed the symptom and
+ * kept a subtler version of the same mistake: a manager who had not started yet
+ * could not see themselves on the board they were being measured on, and a board
+ * you appear on only after you perform is not a board, it is a receipt.
  *
- * Exported and pure because it is a *policy*, and a policy buried in a hook is a
- * policy nobody can test with inputs of their own choosing.
+ * So it is now everyone active, and the roster is the roster. If a desk admin
+ * sits at zero all day, that is a true fact about the day, and it is the
+ * company's business rather than the app's. The one-line filter is the place to
+ * change it if a bigger client wants their back office off the board.
  */
-export function onBoard(
-  team: TeamMember[],
-  activity: ActivityEvent[],
-  from: number,
-): TeamMember[] {
-  const knockedToday = new Set(
-    activity.filter((a) => a.at >= from && a.type === 'visit').map((a) => a.repId),
-  )
-  return team.filter((m) => m.active && (m.role === 'field_rep' || knockedToday.has(m.id)))
+export function onBoard(team: TeamMember[]): TeamMember[] {
+  // Deactivated people are gone, not idle. Leaving a former employee on the
+  // board at zero says something about them that is not true.
+  return team.filter((m) => m.active)
 }
 
 /**
