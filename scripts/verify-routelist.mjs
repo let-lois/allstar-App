@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * The map screen's list view, and the peek sheet that sits over it.
@@ -29,6 +30,7 @@ for (const width of [320, 390, 768]) {
   await page.waitForTimeout(1200)
   await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.getByRole('button', { name: /Dana Whitfield/ }).click()
+  await dismissTour(page)
   await page.waitForTimeout(1800)
   // By href, not by label: the bottom bar is hidden at tablet width and the side
   // rail replaces it, so a name-based selector tests the wrong thing per width.

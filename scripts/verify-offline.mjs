@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * Offline-first verification.
@@ -29,6 +30,7 @@ const ok = (cond, msg) => {
 await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.getByRole('button', { name: /Try the demo/ }).click()
 await page.getByRole('button', { name: /Dana Whitfield/ }).click()
+await dismissTour(page)
 await page.waitForTimeout(1200)
 
 const syncText = () => page.locator('button[aria-label^="Sync status"]').first().innerText()

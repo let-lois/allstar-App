@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * Profile photos.
@@ -31,6 +32,7 @@ page.on('pageerror', (e) => errors.push(String(e)))
 await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.getByRole('button', { name: /Try the demo/ }).click()
 await page.getByRole('button', { name: /Dana Whitfield/ }).click()
+await dismissTour(page)
 await page.waitForTimeout(1400)
 await page.goto(`${BASE}/more`, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(900)

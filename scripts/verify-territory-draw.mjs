@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * Drawing a territory on the map.
@@ -46,6 +47,7 @@ await page.waitForTimeout(1200)
 await page.getByRole('button', { name: /Try the demo/ }).click()
 // An admin: the console is role-gated, and drawing is an office action.
 await page.getByRole('button', { name: /Nadia Petrov/ }).click()
+await dismissTour(page)
 await page.waitForTimeout(2200)
 await page.goto(`${BASE}/admin/territories`, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1600)

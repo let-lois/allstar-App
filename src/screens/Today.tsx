@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
   useAppStore,
@@ -23,6 +23,9 @@ import { DEFAULT_ROUTE_SIZE, routableLeads } from '../lib/route'
 import { IconCalendar, IconChevron, IconNavigate } from '../components/nav/icons'
 import { useTeamStats } from '../store/teamStats'
 import { standings } from '../data/leaderboard'
+import * as db from '../lib/db'
+import { TOUR_KEY } from '../data/tour'
+import { Tour } from '../components/system/Tour'
 
 /**
  * The Today screen — the rep's operational home.
@@ -36,6 +39,40 @@ import { standings } from '../data/leaderboard'
  */
 export function Today() {
   const nav = useNavigate()
+  /*
+    The first-run tour.
+    
+    Mounted here rather than in the shell because every step points at something
+    on this screen or at the bar under it, and a tour that opens on a screen
+    without its own anchors is a tour explaining somebody else's app. Office
+    roles land on Overview and never see it, which is correct: none of these six
+    things is what a manager opened the app to do.
+  */
+  const [tourOpen, setTourOpen] = useState(false)
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const seen = await db.metaGet<boolean>(TOUR_KEY)
+      /*
+        A beat after mount. The route and the next stop are rendered from
+        IndexedDB, and measuring a spotlight against a card that has not been
+        laid out yet cuts a hole in the wrong place — briefly, and exactly once,
+        on the one run where a wrong first impression costs the most.
+      */
+      if (!seen && alive) window.setTimeout(() => alive && setTourOpen(true), 450)
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const closeTour = async () => {
+    setTourOpen(false)
+    // Skipping counts. Someone who skipped chose not to see it, and showing it
+    // again tomorrow is the app overruling them.
+    await db.metaSet(TOUR_KEY, true)
+  }
+
   /*
     The standings, computed here rather than fetched: it is the same team stats
     every other screen derives, so a rep's rank costs nothing and is correct with
@@ -121,7 +158,7 @@ export function Today() {
       >
         <div className="content-col page anim-rise">
           {/* --- progress ------------------------------------------------- */}
-          <Card aria-label="Today's progress">
+          <Card aria-label="Today's progress" data-tour="progress">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="eyebrow">Route progress</p>
@@ -170,7 +207,7 @@ export function Today() {
               is the button that starts work. That is what "use the accent
               selectively" means in practice.
             */
-            <Card padded={false} className="overflow-hidden" aria-label="Next property">
+            <Card padded={false} className="overflow-hidden" aria-label="Next property" data-tour="next-stop">
               <div className="flex items-center justify-between gap-2 bg-surface-tint px-4 py-2.5">
                 <p className="text-[12.5px] font-semibold text-accent">
                   Next stop
@@ -227,6 +264,7 @@ export function Today() {
                   size="lg"
                   buzz
                   className="flex-[1.4]"
+                  data-tour="start-visit"
                   onClick={() => nav(`/property/${nextStop.id}?start=1`)}
                 >
                   Start visit
@@ -388,6 +426,8 @@ export function Today() {
       >
         <SyncDetail />
       </BottomSheet>
+
+      {tourOpen && <Tour onClose={() => void closeTour()} />}
     </div>
   )
 }

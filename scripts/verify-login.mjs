@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * Sign-in verification.
@@ -159,6 +160,7 @@ const jsonRoute = (status, body) => (route) =>
   await page.goto(BASE, { waitUntil: 'networkidle' })
   await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.getByRole('button', { name: /Dana Whitfield/ }).click()
+  await dismissTour(page)
   await page.waitForTimeout(1500)
 
   ok((await page.locator('text=/Next stop/').count()) > 0, 'demo sign-in reaches a populated Today screen')

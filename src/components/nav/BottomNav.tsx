@@ -76,6 +76,8 @@ export function BottomNav({ role }: { role: Role }) {
           <li key={to} className="flex-1">
             <NavLink
               to={to}
+              /* The tour points at these by route, so it survives a relabel. */
+              data-tour={`nav-${to.replace('/', '') || 'today'}`}
               aria-label={
                 to === '/more' && failedUploads > 0
                   ? `${label}, ${failedUploads} uploads failed`

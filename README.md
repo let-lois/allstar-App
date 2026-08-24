@@ -382,6 +382,59 @@ npm run verify:console
 ...asserts a field rep cannot reach the console even by URL, that a manager sees
 fewer sections than an admin, and that a phone gets the handoff.
 
+## The first-run tour
+
+A rep who has never opened the app gets a six-step tour of it: a spotlight on a
+real control, a card saying what it is for, Next / Back / Skip.
+
+The steps point at **live elements** via `data-tour` attributes, not at
+screenshots. A tutorial made of pictures teaches someone what the app looked
+like when the pictures were taken; these holes are cut around whatever is on
+screen at the moment they are shown, so the tour cannot quietly go out of date.
+If an anchor is missing — no route planned, so no next stop — that step is
+dropped and the counter renumbers, rather than spotlighting empty space.
+
+Six steps, and the number is the design. A tutorial is a toll gate between
+someone and the thing they downloaded the app to do, so it covers only what a
+rep cannot work out alone or cannot afford to get wrong:
+
+1. what the day is, and how much is left
+2. which door is next, and that the app chose it
+3. the one button that starts a knock
+4. **that it keeps working with no signal** — the claim nobody believes
+   unprompted, and the one that costs a day's work if they assume the opposite
+5. where the doors are
+6. that the day is scored
+
+Not in it: settings, filters, territory drawing, import, the console. Those are
+discoverable and none is load-bearing on day one.
+
+The overlay swallows taps. A tour where the highlighted control still works
+sounds friendlier and is not — the first thing anyone does is press it, the
+screen changes underneath, and the tour is left pointing at whatever now
+occupies those coordinates.
+
+Skipping counts as seen. Someone who skipped made a decision, and showing it
+again tomorrow is the app overruling them — so **More** carries "Show the
+tutorial again", because people skip on the first morning standing next to a van
+and want it back later.
+
+```bash
+npm run verify:tour
+```
+
+Proved by breaking it three ways. One assertion — *the card is fully on screen* —
+exists because of a real bug: the card centred itself with a translate and then
+ran an entrance animation that also set `transform` with fill-mode `both`. The
+centring lost, the card sat half off the right edge of a 390px phone, and Next
+could not be tapped at all. It looked perfectly fine in a screenshot of the
+spotlight.
+
+Every gate signs in on a fresh context, which is by definition a first run, so
+they call `dismissTour()` from `scripts/lib/tour.mjs` — the same Skip a person
+taps. The alternative was teaching the app to recognise automation, which would
+mean the thing being tested is not the thing that ships.
+
 ## Profile photos
 
 A rep taps their own avatar on **More**, picks a photo, and it is theirs. Camera

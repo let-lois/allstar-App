@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * Search on the map screen.
@@ -46,6 +47,7 @@ for (const width of [320, 390, 1024]) {
   await page.waitForTimeout(1200)
   await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.getByRole('button', { name: /Dana Whitfield/ }).click()
+  await dismissTour(page)
   await page.waitForTimeout(1800)
   await page.locator('a[href="/map"]:visible').first().click()
   await page.waitForTimeout(1500)

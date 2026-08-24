@@ -43,6 +43,7 @@ export function SyncBadge({ onClick }: { onClick?: () => void }) {
   return (
     <button
       onClick={onClick}
+      data-tour="sync"
       aria-label={`Sync status: ${tone.label}${count ? `, ${count} waiting` : ''}`}
       className={[
         'focusable inline-flex min-h-[44px] items-center gap-1.5 rounded-full text-[12.5px] font-medium',

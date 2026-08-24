@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * The import wizard, in a browser.
@@ -535,6 +536,7 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await page.goto(BASE, { waitUntil: 'networkidle' })
   await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.getByRole('button', { name: /Nadia Petrov/ }).click()
+  await dismissTour(page)
   await page.waitForTimeout(1300)
   await page.goto(`${BASE}/admin/import`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(800)
@@ -569,6 +571,7 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await page.goto(BASE, { waitUntil: 'networkidle' })
   await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.getByRole('button', { name: /Dana Whitfield/ }).click()
+  await dismissTour(page)
   await page.waitForTimeout(1300)
   await page.goto(`${BASE}/admin/import`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(700)

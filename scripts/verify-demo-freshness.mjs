@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * Demo-freshness check.
@@ -36,6 +37,7 @@ const page = await ctx.newPage()
 await page.goto(BASE, { waitUntil: 'networkidle' })
 await page.getByRole('button', { name: /Try the demo/ }).click()
 await page.getByRole('button', { name: /Dana Whitfield/ }).click()
+await dismissTour(page)
 await page.waitForTimeout(1200)
 
 /** Read the counters the pitch actually depends on. */

@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * Getting to the door.
@@ -54,6 +55,7 @@ async function toLead(opts = {}) {
   await page.waitForTimeout(1200)
   await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.getByRole('button', { name: /Dana Whitfield/ }).click()
+  await dismissTour(page)
   await page.waitForTimeout(1800)
   await page.locator('a[href="/leads"]:visible').first().click()
   await page.waitForTimeout(1200)
