@@ -86,7 +86,15 @@ export function Login() {
               rather than part of the logo, and it never needed to share a panel
               with it.
             */}
-            <Wordmark width={204} />
+            {/*
+              Centred, because it is the only thing on this screen narrower than
+              the column. Everything under it — the fields, the buttons, the
+              rule — runs the full width, so a left-aligned tile reads as an
+              alignment mistake rather than as a choice.
+            */}
+            <div className="flex justify-center">
+              <Wordmark width={204} animate />
+            </div>
             <h1 className="mt-5 text-[23px] font-semibold leading-tight tracking-[-0.02em]">
               Field sales, built for the phone.
             </h1>

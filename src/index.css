@@ -781,6 +781,49 @@
     @apply bg-line-soft;
   }
 
+  /*
+   * The wordmark's tile, and the one glint it gets.
+   *
+   * A white card on a near-black screen is already the brightest object in the
+   * app, so the animation has to be the quiet kind: it arrives, a teal glint
+   * crosses it once, and then it is a logo again. Anything that loops turns the
+   * sign-in screen into a slot machine, and this is a screen people are trying
+   * to get past.
+   *
+   * The glint is teal rather than white because there is nothing brighter than
+   * white to highlight white with. On this tile the brand colour reads as a
+   * reflection; a white band would be invisible.
+   */
+  .wordmark {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .wordmark-anim {
+    animation: wordmark-in 520ms cubic-bezier(0.22, 0.8, 0.3, 1) both;
+  }
+
+  .wordmark-anim::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      105deg,
+      rgba(7, 179, 202, 0) 35%,
+      rgba(7, 179, 202, 0.28) 47%,
+      rgba(7, 179, 202, 0) 60%
+    );
+    /* Starts off the left edge and ends off the right, so neither end is seen. */
+    transform: translateX(-120%);
+    /*
+       1.2s and near-linear. The first pass was 900ms on an ease-in-out, which
+       spends most of its time at the ends and crosses the tile in about 380ms —
+       technically a shine, in practice a flicker you are not sure you saw.
+    */
+    animation: wordmark-glint 1200ms cubic-bezier(0.3, 0.1, 0.3, 1) 480ms both;
+  }
+
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
   }
@@ -883,3 +926,23 @@
 }
 
 
+
+@keyframes wordmark-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes wordmark-glint {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(120%);
+  }
+}
