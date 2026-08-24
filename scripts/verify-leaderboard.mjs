@@ -1,4 +1,4 @@
-import { POINTS, awards, scoreOf, standings } from '../src/data/leaderboard.ts'
+import { POINTS, awards, onBoard, scoreOf, standings } from '../src/data/leaderboard.ts'
 
 /**
  * The rules of the board.
@@ -138,6 +138,51 @@ const rep = (name, over = {}) => ({
 {
   ok(standings([]).length === 0, 'an empty team is an empty board, not a crash')
   ok(awards([]).length === 0, 'and has no awards')
+}
+
+/* --- who gets onto the board ----------------------------------------------- */
+//
+// This assertion has been inverted once already, which is the useful part of its
+// history. It first pinned `role === 'field_rep'`, and on a real account that
+// showed a board with one name: in a company that size the owner and the
+// managers knock doors too. Then it pinned "reps plus anyone who knocked today",
+// which still left a manager unable to see themselves before they had performed.
+//
+// It is now everybody active, chosen deliberately rather than defaulted into. If
+// a larger client wants their back office off the board, this is the assertion
+// that has to change with the filter — not quietly around it.
+{
+  const member = (id, role, active = true) => ({
+    id,
+    name: id,
+    email: '',
+    role,
+    active,
+    initials: id.slice(0, 2).toUpperCase(),
+  })
+
+  const team = [
+    member('rep_idle', 'field_rep'),
+    member('rep_busy', 'field_rep'),
+    member('owner', 'super_admin'),
+    member('manager', 'manager'),
+    member('admin_desk', 'client_admin'),
+    member('rep_gone', 'field_rep', false),
+  ]
+
+  const ids = onBoard(team).map((m) => m.id)
+
+  ok(ids.includes('rep_idle'), 'a field rep who has not started is on the board')
+  ok(ids.includes('rep_busy'), 'and so is one who has')
+  ok(ids.includes('manager'), 'a manager is on the board')
+  ok(ids.includes('admin_desk'), 'so is a client admin')
+  ok(ids.includes('owner'), 'and a super admin')
+  ok(
+    !ids.includes('rep_gone'),
+    'a deactivated person is not — they are gone, not idle, and a former employee ' +
+      'sitting at zero says something untrue about them',
+  )
+  ok(ids.length === 5, `five people, not one (${ids.join(', ')})`)
 }
 
 console.log(fails.length ? `\n${fails.length} FAILED` : '\n=== leaderboard OK ===')

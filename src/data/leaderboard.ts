@@ -1,3 +1,4 @@
+import type { TeamMember } from '../types'
 import type { RepStats } from '../store/teamStats'
 
 /**
@@ -28,6 +29,35 @@ import type { RepStats } from '../store/teamStats'
  * suppressed until there is something to award, and ties are shown as ties
  * rather than broken silently.
  */
+
+/**
+ * Who belongs on the board: everybody on the account who is active.
+ *
+ * This has now been narrowed twice and widened twice, which is worth recording
+ * because each version was defensible and only one of them survived contact with
+ * a real company.
+ *
+ * It started as `role === 'field_rep'`, on the reasoning that a column of idle
+ * admin rows makes a working team look half-asleep. On a real account that
+ * produced a leaderboard with one name on it — in a company this size the owner
+ * and the managers knock doors too, and all of them were filtered off their own
+ * board.
+ *
+ * Then it was "reps, plus anyone who knocked today", which fixed the symptom and
+ * kept a subtler version of the same mistake: a manager who had not started yet
+ * could not see themselves on the board they were being measured on, and a board
+ * you appear on only after you perform is not a board, it is a receipt.
+ *
+ * So it is now everyone active, and the roster is the roster. If a desk admin
+ * sits at zero all day, that is a true fact about the day, and it is the
+ * company's business rather than the app's. The one-line filter is the place to
+ * change it if a bigger client wants their back office off the board.
+ */
+export function onBoard(team: TeamMember[]): TeamMember[] {
+  // Deactivated people are gone, not idle. Leaving a former employee on the
+  // board at zero says something about them that is not true.
+  return team.filter((m) => m.active)
+}
 
 /**
  * What each thing is worth.

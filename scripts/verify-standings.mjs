@@ -120,6 +120,21 @@ if (tied.length > 0) {
   console.log('SKIP  no tie in today’s demo data — the pure gate covers the rule')
 }
 
+/* --- who is on the board -------------------------------------------------- */
+//
+// Reported from production: the board showed one name. The membership rule is
+// tested properly in `verify:leaderboard`, where the inputs can be controlled;
+// this only checks that the screen renders more than the signed-in person, which
+// is the symptom that was reported.
+{
+  const names = await page.evaluate(() =>
+    [...document.querySelectorAll('ul.plate > li')].map(
+      (li) => (li.textContent || '').trim().split('\n')[0],
+    ),
+  )
+  ok(names.length >= 2, `the board is not a list of one (${names.length} rows)`)
+}
+
 /* --- the rules are on the screen ------------------------------------------ */
 ok(/How points work/.test(body), 'the scoring is published rather than implied')
 ok(/Door knocked/.test(body) && /Sale/.test(body), 'with every weight named')
