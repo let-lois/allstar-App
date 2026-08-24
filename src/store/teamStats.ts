@@ -21,6 +21,8 @@ export interface RepStats {
   id: string
   name: string
   initials: string
+  /** Their profile photo, when they have set one. Initials are the fallback. */
+  avatarUrl?: string
   phone: string
   routeName: string
   done: number
@@ -114,6 +116,7 @@ function statsFor(
     id: repId,
     name: meta.name,
     initials: meta.initials,
+    avatarUrl: meta.avatarUrl,
     phone: meta.phone ?? '',
     routeName: route?.name ?? '—',
     done,

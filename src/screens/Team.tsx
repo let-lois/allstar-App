@@ -68,7 +68,7 @@ export function Team() {
               <Card key={rep.id}>
                 <div className="flex items-center gap-3">
                   <span className="relative shrink-0">
-                    <Avatar initials={rep.initials} name={rep.name} size="lg" />
+                    <Avatar initials={rep.initials} name={rep.name} src={rep.avatarUrl} size="lg" />
                     {i === 0 && totals.conversations > 0 && (
                       <span
                         className="absolute -right-0.5 -top-0.5 grid h-5 w-5 place-items-center rounded-full bg-good text-[10px] text-surface-sunk ring-2 ring-surface"

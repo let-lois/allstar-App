@@ -135,6 +135,8 @@ interface AppState {
     category: PhotoCategory,
     visitId?: string,
   ) => Promise<string>
+  /** Set or clear the signed-in person's profile photo. `null` removes it. */
+  setMyAvatar: (dataUrl: string | null) => Promise<void>
   setNextAction: (
     visitId: string,
     type: Visit['nextActionType'],
@@ -275,26 +277,56 @@ export const useAppStore = create<AppState>((set, get) => ({
       ])
     const settings = (await db.metaGet<ClientSettings>('allstar.settings')) ?? {}
     /*
+      The profile photo, keyed by user id rather than folded into the session.
+
+      Demo mode has no session user to write to — its people come from a seed
+      file — so an avatar stored in the session would be a live-only feature for
+      no reason. Keyed here it survives a reload in both modes, and a shared
+      phone shows the right face for whoever is signed in.
+    */
+    /*
       The cached roster from bootstrap. Only used when the `team` store is empty,
       which is the field-rep case: the office fills that store from `/api/users`
       with e-mail and invite state, and this is the names-only version a rep gets
       so the standings can say "Dana" rather than "u_rep_2".
     */
     const roster =
-      (await db.metaGet<{ id: string; name: string; role: string; active: boolean }[]>(
-        'allstar.roster',
-      )) ?? []
+      (await db.metaGet<
+        { id: string; name: string; role: string; active: boolean; avatarUrl?: string }[]
+      >('allstar.roster')) ?? []
+
+    const localAvatar = user ? await db.metaGet<string>(`allstar.avatar.${user.id}`) : undefined
+    /*
+      Local first, roster second.
+
+      The local copy wins because it is the one just set — a photo chosen
+      offline must not be replaced by the server's older idea of it on the next
+      reload. The roster is the fallback that makes a *new* device work: sign in
+      on a replacement phone and your face arrives with everyone else's, without
+      the login endpoint having to learn about avatars at all.
+    */
+    const myAvatar =
+      localAvatar ??
+      (user
+        ? // Both, because they are different people's paths through this code:
+          // the office fills the `team` store from /api/users, a field rep only
+          // ever gets the names-only roster off bootstrap. Checking one would
+          // work perfectly for whoever wrote it and not at all for the other.
+          (team.find((m) => m.id === user.id)?.avatarUrl ??
+          roster.find((m) => m.id === user.id)?.avatarUrl)
+        : undefined)
+    const me = user && myAvatar ? { ...user, avatarUrl: myAvatar } : user
 
     // An in-flight visit survives an app kill — reps close the app mid-knock.
     const openVisit = visits.find((v) => !v.endedAt)
 
     set({
       ready: true,
-      user,
+      user: me,
       mode,
       routes,
       properties: indexById(properties),
-      route: routeFor(routes, user?.id),
+      route: routeFor(routes, me?.id),
       visits: indexById(visits),
       notes: indexById(notes),
       photos: indexById(photos),
@@ -312,6 +344,7 @@ export const useAppStore = create<AppState>((set, get) => ({
               role: m.role as TeamMember['role'],
               active: m.active,
               initials: initialsOf(m.name),
+              avatarUrl: m.avatarUrl,
             }))
           : seedTeam(mode),
       settings,
@@ -632,6 +665,53 @@ export const useAppStore = create<AppState>((set, get) => ({
     // The blob rides the queue; on a weak link this is the row that waits.
     await enqueue('photo.create', { id, propertyId, category, bytes: photo.bytes })
     return id
+  },
+
+  /**
+   * Set or clear the signed-in person's profile photo.
+   *
+   * Local first, like everything else: it is on disk and on screen before the
+   * network is consulted, so a rep can set their photo standing in a stairwell
+   * and it is simply there. The queue carries it up whenever there is signal.
+   *
+   * Demo mode writes locally and enqueues nothing. There is no account behind a
+   * demo user to attach a face to, and queueing a mutation that can never be
+   * accepted would leave a permanently stuck row in the outbox — which the More
+   * screen reports, in a number a prospect can see.
+   */
+  async setMyAvatar(dataUrl) {
+    const user = get().user
+    if (!user) return
+
+    const key = `allstar.avatar.${user.id}`
+    if (dataUrl) await db.metaSet(key, dataUrl)
+    else await db.metaSet(key, undefined)
+
+    const next = { ...user, avatarUrl: dataUrl ?? undefined }
+    set((state) => ({
+      user: next,
+      // The roster carries the same face; a stale copy there would show the old
+      // photo everywhere the person appears next to somebody else.
+      team: state.team.map((m) =>
+        m.id === user.id ? { ...m, avatarUrl: dataUrl ?? undefined } : m,
+      ),
+    }))
+
+    /*
+      Deliberately no write to the `team` store.
+
+      Caching my own roster entry there looks like the obvious way to remember
+      my face, and it quietly destroys the roster. A field rep's `team` store is
+      empty — they get the names-only roster off bootstrap, and `loadLocal` only
+      reaches for it when the store has nothing in it. One row is enough to stop
+      that, so the next load would show a team of exactly one person: me. The
+      board went from eight names to one, which is a bug this app has had once
+      already.
+
+      The meta key above is the durable copy of my own photo. Everyone else's
+      arrives with the roster, from the server, where it belongs.
+    */
+    if (get().mode === 'live') await enqueue('user.avatar', { userId: user.id, dataUrl })
   },
 
   async setNextAction(visitId, type, at) {

@@ -13,6 +13,15 @@ export interface User {
   clientId: string
   clientName: string
   avatarInitials: string
+  /**
+   * A profile photo, as a compressed data URL.
+   *
+   * Inline rather than a URL because this app is offline-first: a rep opening
+   * the team list in a basement gets faces or nothing, and "nothing" would mean
+   * a screen of grey circles exactly when the network is the reason they cannot
+   * be filled. At 256px it is ~20KB, which is the price of that.
+   */
+  avatarUrl?: string
   phone?: string
   email?: string
 }
@@ -182,6 +191,8 @@ export interface TeamMember {
   /** Invited but hasn't set a password yet. */
   pending?: boolean
   initials: string
+  /** A profile photo, as a compressed data URL. See `User.avatarUrl`. */
+  avatarUrl?: string
 }
 
 export interface Territory {
@@ -270,6 +281,7 @@ export type MutationKind =
   | 'route.create'
   | 'route.stop'
   | 'comm.log'
+  | 'user.avatar'
 
 export interface Mutation {
   id: string

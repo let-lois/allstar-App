@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash  TEXT,
   password_salt  TEXT,
   active         INTEGER NOT NULL DEFAULT 1,
+  -- Profile photo, as a compressed data URL (~20KB). Inline because every
+  -- device wants the roster's faces offline; see migration 005.
+  avatar_url     TEXT,
   created_at     INTEGER NOT NULL
 );
 -- Email is the login handle, unique per tenant rather than globally: the same

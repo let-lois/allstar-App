@@ -144,7 +144,7 @@ export function Standings() {
                         {tied ? 'T' : ''}
                         {rank}
                       </span>
-                      <Avatar initials={rep.initials} name={rep.name} size="sm" />
+                      <Avatar initials={rep.initials} name={rep.name} src={rep.avatarUrl} size="sm" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[15px] font-medium">
                           {rep.name}
