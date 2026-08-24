@@ -95,7 +95,17 @@ export function Login() {
             <div className="flex justify-center">
               <Wordmark width={204} animate />
             </div>
-            <h1 className="mt-5 text-[23px] font-semibold leading-tight tracking-[-0.02em]">
+            {/*
+              Centred under the mark. The two are one lockup — a centred logo
+              with the sentence beneath it flush left reads as two things that
+              happen to be stacked, and the eye finds the mismatch before it
+              finds the words.
+
+              The fields below stay left-aligned, and that is not the same
+              problem: a label sits on the edge of the box it names, so its
+              alignment is the box's, not this block's.
+            */}
+            <h1 className="mt-5 text-balance text-center text-[23px] font-semibold leading-tight tracking-[-0.02em]">
               Field sales, built for the phone.
             </h1>
           </div>
