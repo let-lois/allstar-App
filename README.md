@@ -437,6 +437,21 @@ It also asserts a *ceiling*: `ink-faint` must stay under 4.5:1. It is dividers
 and placeholders, and the day it passes as text is the day the distinction this
 palette rests on is gone.
 
+### The wordmark does not take the theme
+
+`<Wordmark>` puts the real artwork — black "ALLSTAR", teal star, teal "HOME
+SOLUTIONS" — on its own white tile. The mark is fixed; a brand that changes
+colour with its surroundings is not a brand, so it gets the light ground it was
+drawn for and that tile sits on the dark.
+
+Use the component rather than an `<img>`. The rule is easy to forget at the
+second call site, which is exactly what happened once: the console's rail kept
+the real artwork while the ground went dark underneath it, and the wordmark
+spent a release as a black shape on a black panel.
+
+`public/logo-light.png` is the recoloured knockout this replaced. Nothing
+references it.
+
 Two things it deliberately does not claim:
 
 - **The chart series' colour-blindness separation is inherited, not re-run.**

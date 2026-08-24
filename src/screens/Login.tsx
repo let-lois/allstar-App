@@ -4,6 +4,7 @@ import { DEMO_USERS } from '../data/seed'
 import type { Role } from '../types'
 import { ApiError, NetworkError } from '../lib/http'
 import { InAppBrowserNotice } from '../components/system/InAppBrowserNotice'
+import { Wordmark } from '../components/ui/Wordmark'
 
 const ROLE_BLURB: Record<Role, string> = {
   field_rep: 'Route, map, visits — the full field experience',
@@ -73,33 +74,22 @@ export function Login() {
         <div className="mx-auto w-full max-w-sm">
           <div className="mb-7">
             {/*
-              The knockout wordmark, not the standard one: this screen is
-              near-black and the logo's type is black. `logo-light.png` recolours
-              only the achromatic pixels, so the star and "HOME SOLUTIONS" keep
-              the brand teal rather than the whole mark flattening to a
-              silhouette.
+              The real artwork on its own light tile, not a knockout of it.
 
-              Width is capped rather than set, so the mark keeps its own
-              proportions at every viewport instead of being stretched to fill.
+              This screen used to hold the mark and the promise on one dark
+              plaque, with the type recoloured to white so it would show. That
+              read well and quietly restated the brand in a colour the brand
+              does not use. The mark now keeps black, teal and teal, and the
+              tile gives it the ground it was drawn for.
+
+              The promise moves out onto the page. It is the app's sentence
+              rather than part of the logo, and it never needed to share a panel
+              with it.
             */}
-            {/*
-              The mark and the promise sit on one raised plaque rather than
-              floating on the background — the same glass the buttons below are
-              made of, so the screen reads as one material instead of a logo
-              dropped onto a dark rectangle.
-            */}
-            <div className="metal metal-dark rounded-card px-5 py-5">
-              <img
-                src="/logo-light.png"
-                alt="Allstar Home Solutions"
-                width={720}
-                height={184}
-                className="h-auto w-[204px] max-w-full"
-              />
-              <h1 className="mt-4 text-[23px] font-semibold leading-tight tracking-[-0.02em] [text-shadow:0_1px_2px_rgba(0,0,0,0.55)]">
-                Field sales, built for the phone.
-              </h1>
-            </div>
+            <Wordmark width={204} />
+            <h1 className="mt-5 text-[23px] font-semibold leading-tight tracking-[-0.02em]">
+              Field sales, built for the phone.
+            </h1>
           </div>
 
           {sessionExpired && (

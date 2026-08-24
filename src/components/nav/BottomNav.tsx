@@ -9,6 +9,7 @@ import {
   IconPipeline,
   IconToday,
 } from './icons'
+import { Wordmark } from '../ui/Wordmark'
 
 interface Item {
   to: string
@@ -137,13 +138,8 @@ export function SideRail({ role }: { role: Role }) {
           height={192}
           className="h-9 w-9 shrink-0 rounded-field lg:hidden"
         />
-        <img
-          src="/logo.png"
-          alt="Allstar Home Solutions"
-          width={720}
-          height={184}
-          className="hidden h-auto w-[164px] lg:block"
-        />
+        {/* On its own tile: the rail is near-black and the mark's type is black. */}
+        <Wordmark width={148} className="hidden lg:inline-flex" />
       </div>
       {items.map(({ to, label, Icon }) => (
         <NavLink
