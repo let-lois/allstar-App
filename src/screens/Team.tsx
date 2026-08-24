@@ -78,12 +78,15 @@ export function Team() {
                       </span>
                     )}
                   </span>
-                  <div className="min-w-0 flex-1">
+                  <button
+                    onClick={() => nav(`/rep/${rep.id}`)}
+                    className="focusable min-w-0 flex-1 text-left"
+                  >
                     <p className="truncate text-[16px] font-semibold tracking-[-0.01em]">
                       {rep.name}
                     </p>
                     <p className="truncate text-[13px] text-ink-mute">{rep.routeName}</p>
-                  </div>
+                  </button>
                   {tel && (
                     <a
                       href={tel}

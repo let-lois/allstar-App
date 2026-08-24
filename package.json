@@ -25,6 +25,7 @@
     "verify:classes": "node scripts/verify-classes.mjs",
     "verify:leaderboard": "node scripts/verify-leaderboard.mjs",
     "verify:standings": "node scripts/verify-standings.mjs",
+    "verify:repdetail": "node scripts/verify-repdetail.mjs",
     "verify:territorydraw": "node scripts/verify-territory-draw.mjs",
     "verify:streetview": "node scripts/verify-streetview.mjs",
     "verify:mapsearch": "node scripts/verify-mapsearch.mjs",

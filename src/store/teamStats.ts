@@ -34,6 +34,8 @@ export interface RepStats {
   contactRate: number
   /** Value of opportunities touched today. */
   pipelineToday: number
+  /** Doors that said they were interested — the top of the funnel that matters. */
+  interested: number
   /** Appointments booked today. */
   appointments: number
   /** Deals closed today. */
@@ -48,6 +50,20 @@ export interface RepStats {
    */
   revenue: number
   lastActivityAt?: number
+  /** First logged door today — the start of the working window, not a clock-in. */
+  firstActivityAt?: number
+  /**
+   * The door most recently worked, if any.
+   *
+   * This is how a manager sees where somebody is working, and it is deliberately
+   * *this* rather than a device position: it is the last door they logged, which
+   * the app already records because a visit needs to know which house it was.
+   * Nothing new is collected, and it cannot report anything outside working
+   * activity — see the note on the rep screen.
+   */
+  lastPropertyId?: string
+  /** The territory most of today's doors belong to. */
+  territoryId?: string
 }
 
 const GOOD = new Set(['interested', 'appointment', 'quote_requested', 'sold'])
@@ -73,7 +89,21 @@ function statsFor(
     const p = ev.propertyId ? properties[ev.propertyId] : undefined
     return sum + (p?.opportunityValue ?? 0)
   }, 0)
+  const interested = mine.filter((a) => a.outcome === 'interested').length
   const appointments = mine.filter((a) => a.outcome === 'appointment').length
+
+  /*
+    The patch they are actually in, taken by majority of today's doors rather
+    than from their route. A rep sent to one territory who spends the afternoon
+    in another should show the one they are standing in — that difference is the
+    entire reason a manager looks at this.
+  */
+  const territoryCount = new Map<string, number>()
+  for (const ev of mine) {
+    const t = ev.propertyId ? properties[ev.propertyId]?.territoryId : undefined
+    if (t) territoryCount.set(t, (territoryCount.get(t) ?? 0) + 1)
+  }
+  const territoryId = [...territoryCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
   const sold = mine.filter((a) => a.outcome === 'sold')
   const revenue = sold.reduce((sum, ev) => {
     const p = ev.propertyId ? properties[ev.propertyId] : undefined
@@ -94,10 +124,15 @@ function statsFor(
     conversations,
     contactRate: mine.length ? Math.round((conversations / mine.length) * 100) : 0,
     pipelineToday,
+    interested,
     appointments,
     sales: sold.length,
     revenue,
+    // `activity` arrives newest-first, so the first entry is the most recent.
     lastActivityAt: mine[0]?.at,
+    firstActivityAt: mine[mine.length - 1]?.at,
+    lastPropertyId: mine.find((a) => a.propertyId)?.propertyId,
+    territoryId,
   }
 }
 

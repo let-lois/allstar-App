@@ -7,6 +7,7 @@ import { useAppStore } from '../store/useAppStore'
 import { useTeamStats } from '../store/teamStats'
 import { POINTS, awards, standings } from '../data/leaderboard'
 import { money } from '../lib/format'
+import { IconChevron } from '../components/nav/icons'
 
 /**
  * Today's standings.
@@ -120,9 +121,20 @@ export function Standings() {
                   {board.map(({ rep, rank, points, tied }) => (
                     <li
                       key={rep.id}
-                      className={`flex items-center gap-3 px-4 py-3 ${
+                      className={rank > 1 ? 'border-t border-line-soft' : ''}
+                    >
+                    {/*
+                      Tappable through to the day behind the number. A manager
+                      scanning the board wants "why is Tony at 54", and a rep
+                      wants their own breakdown — both land on the same screen,
+                      which is the point: nothing is visible to a manager that is
+                      hidden from the person it describes.
+                    */}
+                    <button
+                      onClick={() => nav(`/rep/${rep.id}`)}
+                      className={`flex w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-field ${
                         rep.id === me?.id ? 'bg-brand-50' : ''
-                      } ${rank > 1 ? 'border-t border-line-soft' : ''}`}
+                      }`}
                     >
                       <span
                         className={`nums w-7 shrink-0 text-center text-[15px] font-semibold ${
@@ -169,6 +181,10 @@ export function Standings() {
                         </span>
                         <span className="block text-[11.5px] text-ink-mute">pts</span>
                       </span>
+                      <span className="shrink-0 text-ink-faint" aria-hidden>
+                        <IconChevron />
+                      </span>
+                    </button>
                     </li>
                   ))}
                 </ul>
