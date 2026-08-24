@@ -96,12 +96,14 @@ export function Pipeline() {
                             the selected one is the only row that needs weight. */}
                         <span
                           className={`text-[14.5px] ${
-                            selected ? 'font-semibold text-brand-600' : 'font-medium text-ink-soft'
+                            selected ? 'font-semibold text-brand-700' : 'font-medium text-ink-soft'
                           }`}
                         >
                           {STATUS_LABEL[s]}
                         </span>
-                        <span className="nums text-[12.5px] text-ink-mute">
+                        {/* ink-soft: on the selected row's deeper face ink-mute
+                            measures 2.8:1. */}
+                        <span className="nums text-[12.5px] text-ink-soft">
                           {bucket.count} · {money(bucket.value)}
                         </span>
                       </span>

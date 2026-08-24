@@ -74,7 +74,7 @@ export function OfflineMaps() {
   return (
     <Collapsible
       title="Offline maps"
-      right={<span className="nums text-xs text-ink-mute">{megabytes} MB</span>}
+      right={<span className="nums text-xs text-ink-soft">{megabytes} MB</span>}
     >
       {!bounds || tileCount === 0 ? (
         <p className="text-[14px] text-ink-mute">

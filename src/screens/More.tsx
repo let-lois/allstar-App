@@ -93,7 +93,7 @@ export function More() {
             title="Saved on this phone"
             defaultOpen
             right={
-              <span className="nums text-xs text-ink-mute">
+              <span className="nums text-xs text-ink-soft">
                 {Object.keys(properties).length} properties
               </span>
             }
@@ -299,11 +299,13 @@ export function More() {
           )}
 
           <Button
-            variant="secondary"
+            variant="tint"
             full
             size="lg"
             onClick={() => void signOut()}
-            className="mt-1 text-bad"
+            /* Red label on the teal face: 5.3:1, so it stays the colour that
+               says what it does rather than blending into the group. */
+            className="mt-1 !text-bad"
           >
             Sign out
           </Button>
@@ -334,7 +336,8 @@ function MoreLink({ label, onClick }: { label: string; onClick: () => void }) {
       className="metal-row flex min-h-[56px] w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-medium"
     >
       {label}
-      <span className="shrink-0 text-ink-faint">
+      {/* brand-700, not ink-faint: 5.6:1 on the teal face, where the grey was 2.1. */}
+      <span className="shrink-0 text-brand-700">
         <IconChevron />
       </span>
     </button>
