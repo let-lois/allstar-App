@@ -421,8 +421,12 @@ occupies those coordinates.
 
 Skipping counts as seen. Someone who skipped made a decision, and showing it
 again tomorrow is the app overruling them — so **More** carries "Show the
-tutorial again", because people skip on the first morning standing next to a van
-and want it back later.
+tutorial again", first in the Go to list, because people skip on the first
+morning standing next to a van and want it back later.
+
+That row is for everyone. It was gated to field reps for one release, from back
+when the rep tour was the only one that existed — which left the people with the
+most screens to learn as the only ones who could not ask to see them again.
 
 ```bash
 npm run verify:tour

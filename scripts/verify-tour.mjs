@@ -250,6 +250,45 @@ await replay.click()
 await p2.waitForTimeout(2600)
 ok((await p2.locator('[data-tour-card]').count()) > 0, 'and asking for it brings it back')
 
+/* --- the office gets one too, and can ask for it back --------------------- */
+console.log('\n--- the office ---')
+const ctx3 = await browser.newContext({
+  viewport: { width: 390, height: 844 },
+  isMobile: true,
+  hasTouch: true,
+  permissions: ['geolocation'],
+  geolocation: { latitude: 30.5115, longitude: -97.6755 },
+})
+const p3 = await ctx3.newPage()
+p3.on('pageerror', (e) => errors.push(String(e)))
+await p3.goto(BASE, { waitUntil: 'networkidle' })
+await p3.getByRole('button', { name: /Try the demo/ }).click()
+await p3.getByRole('button', { name: /Nadia Petrov/ }).click()
+await p3.waitForTimeout(2600)
+ok((await p3.locator('[data-tour-card]').count()) > 0, 'an admin gets a tour on a first run')
+const officeFirst = await p3.locator('[data-tour-card]').innerText()
+ok(
+  /1 of (1[5-9]|2\d)/.test(officeFirst),
+  `and it is the long one, not a stub (${(officeFirst.match(/\d+ of \d+/) ?? ['?'])[0]})`,
+)
+await p3.locator('[data-tour-skip]').click()
+await p3.waitForTimeout(500)
+
+/*
+ * The replay row is for everyone.
+ *
+ * It was gated to field reps for one release, from before the office had a tour
+ * at all — which left the people with the most screens to learn as the only
+ * ones who could not ask to see them again.
+ */
+await p3.goto(`${BASE}/more`, { waitUntil: 'domcontentloaded' })
+await p3.waitForTimeout(900)
+const officeReplay = p3.getByRole('button', { name: /Show the tutorial again/i })
+ok((await officeReplay.count()) === 1, 'More offers it to the office as well')
+await officeReplay.click()
+await p3.waitForTimeout(2800)
+ok((await p3.locator('[data-tour-card]').count()) > 0, 'and it comes back for them too')
+
 ok(errors.length === 0, `no page errors${errors.length ? ` -> ${errors[0]}` : ''}`)
 
 await browser.close()
