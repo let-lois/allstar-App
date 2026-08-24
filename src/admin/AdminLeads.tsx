@@ -119,6 +119,7 @@ export default function AdminLeads() {
 
   return (
     <AdminPage
+      tour="console-leads"
       title="Leads"
       description={`${Object.keys(properties).length.toLocaleString()} in total · ${rows.length.toLocaleString()} matching`}
     >

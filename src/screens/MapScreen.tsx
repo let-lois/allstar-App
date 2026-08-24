@@ -124,7 +124,7 @@ export function MapScreen() {
       whole column to 551px inside a 390px screen and pushed the map/list switch
       off the right edge with no way to scroll to it.
     */
-    <div className="snap-x-row min-w-0 flex-1 pr-1">
+    <div className="snap-x-row min-w-0 flex-1 pr-1" data-tour="map-filters">
       {FILTERS.filter((f) => f.key !== 'route' || hasRoute).map((f) => (
         <Chip
           key={f.key}
@@ -148,7 +148,7 @@ export function MapScreen() {
     controls a rep uses at every door.
   */
   const statusRow = (
-    <div className="pointer-events-auto flex items-center gap-2 px-3">
+    <div className="pointer-events-auto flex items-center gap-2 px-3" data-tour="map-search">
       {/*
         Search takes the space the property-count pill used to hold. The count
         moved into its placeholder rather than getting a row of its own: on a

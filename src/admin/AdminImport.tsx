@@ -294,6 +294,7 @@ export default function AdminImport() {
 
   return (
     <AdminPage
+      tour="console-import"
       title="Import leads"
       description="Turn a list of addresses into properties your reps can work."
       actions={

@@ -95,6 +95,7 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await page.locator('input[autocomplete="current-password"]').fill('a-real-password')
   await page.getByRole('button', { name: /^Sign in$/ }).click()
   await page.waitForTimeout(1400)
+  await dismissTour(page)
   await page.goto(`${BASE}/admin/import`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(900)
   return page
@@ -246,6 +247,7 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await page.locator('input[autocomplete="current-password"]').fill('a-real-password')
   await page.getByRole('button', { name: /^Sign in$/ }).click()
   await page.waitForTimeout(1500)
+  await dismissTour(page)
   await page.goto(`${BASE}/admin/territories`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(1200)
 
@@ -389,6 +391,7 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await page.locator('input[autocomplete="current-password"]').fill('a-real-password')
   await page.getByRole('button', { name: /^Sign in$/ }).click()
   await page.waitForTimeout(1500)
+  await dismissTour(page)
   await page.goto(`${BASE}/admin/leads`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(1000)
 

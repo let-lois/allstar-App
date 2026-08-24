@@ -117,7 +117,7 @@ export function Standings() {
               {/* --- the board --------------------------------------------- */}
               <section className="section">
                 <SectionHeader title="The board" count={board.length} standalone />
-                <ul className="plate -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+                <ul className="plate -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border" data-tour="standings-board">
                   {board.map(({ rep, rank, points, tied }) => (
                     <li
                       key={rep.id}

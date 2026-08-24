@@ -15,6 +15,15 @@ interface Props {
   /** Revealed by swiping left. */
   right?: SwipeAction
   className?: string
+  /**
+   * A `data-tour` anchor for the walkthrough.
+   *
+   * Explicit rather than a props spread: TypeScript does not check hyphenated
+   * JSX attributes on a component, so `data-tour` passed from outside compiles
+   * cleanly and then goes nowhere — the anchor is simply absent, the tour skips
+   * the step, and nothing anywhere says why.
+   */
+  'data-tour'?: string
 }
 
 const REVEAL = 84
@@ -28,7 +37,13 @@ const COMMIT = 132
  * commit threshold the row fires without needing an accurate release, so it
  * works one-handed while walking.
  */
-export function SwipeRow({ children, left, right, className = '' }: Props) {
+export function SwipeRow({
+  children,
+  left,
+  right,
+  className = '',
+  'data-tour': tour,
+}: Props) {
   const [dx, setDx] = useState(0)
   const startX = useRef(0)
   const startY = useRef(0)
@@ -84,7 +99,7 @@ export function SwipeRow({ children, left, right, className = '' }: Props) {
   const progress = Math.min(1, Math.abs(dx) / COMMIT)
 
   return (
-    <div className={`relative overflow-hidden ${className}`}>
+    <div className={`relative overflow-hidden ${className}`} data-tour={tour}>
       {revealed && (
         <div
           className="absolute inset-y-0 flex items-center px-5 text-white"

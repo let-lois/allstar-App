@@ -103,7 +103,7 @@ export function AdminLayout() {
             <p className="truncate text-[12.5px] leading-tight text-ink-mute">Console</p>
           </div>
         </div>
-        <div className="snap-x-row px-2 pb-2">
+        <div className="snap-x-row px-2 pb-2" data-tour="console-tabs">
           {items.map((i) => (
             <NavLink
               key={i.to}
@@ -175,15 +175,19 @@ export function AdminPage({
   title,
   description,
   actions,
+  tour,
   children,
 }: {
   title: string
   description?: string
   actions?: React.ReactNode
+  /** A `data-tour` anchor, so the walkthrough can point at a console screen. */
+  tour?: string
   children: React.ReactNode
 }) {
   return (
     <div
+      data-tour={tour}
       className="mx-auto max-w-[1200px] px-4 py-4 md:p-6 xl:p-8"
       /* The field app's bottom bar is absent in here, but a phone still has a
          home indicator to clear at the end of a scroll. */

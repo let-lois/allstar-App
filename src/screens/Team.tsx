@@ -48,7 +48,7 @@ export function Team() {
       />
 
       <div className="scroll-pane pad-nav bg-surface-sunk">
-        <div className="content-col page anim-rise">
+        <div className="content-col page anim-rise" data-tour="team-list">
           {/* Company roll-up first — the "how is today going" answer. */}
           <Card className="grid grid-cols-3 divide-x divide-line-soft">
             <Stat label="Doors" value={String(totals.knocks)} />

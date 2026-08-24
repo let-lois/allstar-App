@@ -199,6 +199,7 @@ export function AdminTerritories() {
 
   return (
     <AdminPage
+      tour="console-territories"
       title="Territories"
       description={`${rows.length} territories · ${totals.properties.toLocaleString()} properties · ${moneyFull(totals.open)} open`}
       actions={

@@ -196,6 +196,8 @@ const jsonRoute = (status, body) => (route) =>
   await page.waitForTimeout(1500)
 
   ok((await page.locator('input[type="email"]').count()) === 0, 'a valid credential signs in')
+  // A real sign-in is a first run, and the first run opens the tour.
+  await dismissTour(page)
 
   await page.goto(`${BASE}/leads`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(800)
@@ -306,6 +308,7 @@ const jsonRoute = (status, body) => (route) =>
   await page.locator('input[autocomplete="current-password"]').fill('correct-horse-battery')
   await page.getByRole('button', { name: /^Sign in$/ }).click()
   await page.waitForTimeout(1500)
+  await dismissTour(page)
 
   await page.goto(`${BASE}/more`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(600)

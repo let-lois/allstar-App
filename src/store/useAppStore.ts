@@ -137,6 +137,17 @@ interface AppState {
   ) => Promise<string>
   /** Set or clear the signed-in person's profile photo. `null` removes it. */
   setMyAvatar: (dataUrl: string | null) => Promise<void>
+  /**
+   * Bumped to ask for the tour.
+   *
+   * A counter rather than a boolean, because "show it again" has to work twice.
+   * The tour is mounted in the shell — it navigates, so it cannot live inside a
+   * route — and the shell reads the seen-flag once when it mounts. Clearing that
+   * flag from the More screen therefore did nothing at all: nothing remounts,
+   * so nothing re-reads it. This is the signal that was missing.
+   */
+  tourRequest: number
+  requestTour: () => void
   setNextAction: (
     visitId: string,
     type: Visit['nextActionType'],
@@ -194,6 +205,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   user: null,
   position: null,
   mode: 'demo',
+  tourRequest: 0,
   sessionExpired: false,
   refreshing: false,
   properties: {},
@@ -679,6 +691,10 @@ export const useAppStore = create<AppState>((set, get) => ({
    * accepted would leave a permanently stuck row in the outbox — which the More
    * screen reports, in a number a prospect can see.
    */
+  requestTour() {
+    set((s) => ({ tourRequest: s.tourRequest + 1 }))
+  },
+
   async setMyAvatar(dataUrl) {
     const user = get().user
     if (!user) return

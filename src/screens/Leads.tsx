@@ -108,10 +108,11 @@ export function Leads() {
                 inputMode="search"
                 enterKeyHint="search"
                 placeholder="Address or name"
+                data-tour="leads-search"
                 className="field h-[48px] pl-11 pr-3 md:max-w-md"
               />
             </label>
-            <div className="snap-x-row">
+            <div className="snap-x-row" data-tour="leads-sort">
               {SORTS.map((s) => (
                 <Chip
                   key={s.key}
@@ -144,8 +145,10 @@ export function Leads() {
             items={list}
             itemHeight={ROW_HEIGHT}
             className="pad-nav bg-surface"
-            renderItem={(p) => (
+            renderItem={(p, i) => (
               <PropertyRow
+                /* The tour points at the first row, whichever lead it is. */
+                tour={i === 0 ? 'leads-row' : undefined}
                 property={p}
                 position={position}
                 showDistance={sort === 'nearest'}

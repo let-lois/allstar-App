@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * Console access, and the console on a phone.
@@ -40,6 +41,7 @@ const signIn = async (ctx, name, url = BASE) => {
   await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.getByRole('button', { name }).click()
   await page.waitForTimeout(1200)
+  await dismissTour(page)
   if (url !== BASE) {
     await page.goto(url, { waitUntil: 'networkidle' })
     await page.waitForTimeout(1200)

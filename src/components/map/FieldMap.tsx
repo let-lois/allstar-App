@@ -535,6 +535,7 @@ export function FieldMap({
       */
       role="application"
       aria-label={draw ? 'Outline a territory on the map' : 'Map of your leads'}
+      data-tour="map-canvas"
       className={`relative touch-none overflow-hidden bg-[#EDF1F3] ${className}`}
     >
       <svg
@@ -840,6 +841,7 @@ export function FieldMap({
                 }))
             }}
             aria-label="Center on my location"
+            data-tour="map-locate"
             aria-pressed={followMe}
             /*
               White with a teal glyph when following, rather than a filled teal

@@ -115,6 +115,7 @@ export function AdminTeam() {
 
   return (
     <AdminPage
+      tour="console-team"
       title="Team"
       description={`${members.length} ${members.length === 1 ? 'person' : 'people'} · ${
         members.filter((m) => m.role === 'field_rep').length

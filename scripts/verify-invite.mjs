@@ -92,6 +92,7 @@ await page.locator('input[type="email"]').fill(ADMIN.email)
 await page.locator('input[autocomplete="current-password"]').fill('a-real-password')
 await page.getByRole('button', { name: /^Sign in$/ }).click()
 await page.waitForTimeout(1400)
+await dismissTour(page)
 await page.goto(`${BASE}/admin/team`, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1000)
 
@@ -328,6 +329,7 @@ ok(
   await superPage.locator('input[autocomplete="current-password"]').fill('a-real-password')
   await superPage.getByRole('button', { name: /^Sign in$/ }).click()
   await superPage.waitForTimeout(1500)
+  await dismissTour(superPage)
   await superPage.goto(`${BASE}/admin/team`, { waitUntil: 'domcontentloaded' })
   await superPage.waitForTimeout(900)
 
@@ -469,6 +471,7 @@ await page.waitForTimeout(300)
   await page4.locator('input[autocomplete="current-password"]').fill('a-real-password')
   await page4.getByRole('button', { name: /^Sign in$/ }).click()
   await page4.waitForTimeout(1600)
+  await dismissTour(page4)
 
   await page4.goto(`${BASE}/property/p1`, { waitUntil: 'domcontentloaded' })
   await page4.waitForTimeout(700)
@@ -531,6 +534,7 @@ await page.waitForTimeout(300)
   await page.locator('input[autocomplete="current-password"]').fill('a-real-password')
   await page.getByRole('button', { name: /^Sign in$/ }).click()
   await page.waitForTimeout(1500)
+  await dismissTour(page)
 
   const ENTRIES = [
     { id: 'a1', actorName: 'Nadia Petrov', action: 'user.deleted', targetType: 'user',
@@ -624,6 +628,7 @@ await page.waitForTimeout(300)
   await page3.locator('input[autocomplete="current-password"]').fill('a-real-password')
   await page3.getByRole('button', { name: /^Sign in$/ }).click()
   await page3.waitForTimeout(1600)
+  await dismissTour(page3)
 
   const DEMO_NAMES = /Dana Whitfield|Ray Okafor|Luis Ortega|Simone|Priya Raman/
 

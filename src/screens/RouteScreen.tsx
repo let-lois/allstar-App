@@ -99,7 +99,7 @@ export function RouteScreen() {
           </p>
         </div>
 
-        <ul>
+        <ul data-tour="route-list">
           {stops.map((stop) => {
             const p = properties[stop.propertyId]
             if (!p) return null

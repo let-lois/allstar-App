@@ -29,6 +29,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 export function More() {
   const nav = useNavigate()
+  const requestTour = useAppStore((s) => s.requestTour)
 
   /*
     Clear the flag and go where the tour lives. It cannot run from this screen —
@@ -36,7 +37,13 @@ export function More() {
   */
   const replayTour = async () => {
     await db.metaSet(TOUR_KEY, undefined)
+    /*
+      Go first, then ask. The tour's first step lives on Today, and asking
+      before navigating means it spotlights this screen for a moment before the
+      route catches up.
+    */
     nav('/')
+    requestTour()
   }
   const user = useAppStore((s) => s.user)
   const signOut = useAppStore((s) => s.signOut)
@@ -74,7 +81,7 @@ export function More() {
             in a bordered rectangle made it read as the first of six widgets
             rather than as the top of a settings screen.
           */}
-          <div className="flex items-center gap-3.5 pb-1 pt-1">
+          <div className="flex items-center gap-3.5 pb-1 pt-1" data-tour="more-avatar">
             <AvatarPicker />
             <div className="min-w-0 flex-1">
               <p className="truncate text-[19px] font-semibold tracking-[-0.01em]">{user?.name}</p>
@@ -101,6 +108,7 @@ export function More() {
           </section>
 
           {/* --- what's cached ------------------------------------------- */}
+          <div data-tour="more-sync">
           <Collapsible
             title="Saved on this phone"
             defaultOpen
@@ -131,9 +139,12 @@ export function More() {
               locally and uploaded when you reconnect.
             </p>
           </Collapsible>
+          </div>
 
           {/* --- offline maps ---------------------------------------------- */}
-          <OfflineMaps />
+          <div data-tour="more-offline-maps">
+            <OfflineMaps />
+          </div>
 
           {/* --- outbox --------------------------------------------------- */}
           <Collapsible title="Upload queue" count={outbox.length}>

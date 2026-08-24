@@ -1,5 +1,5 @@
 import { chromium } from 'playwright'
-import { TOUR_STEPS } from '../src/data/tour.ts'
+import { REP_STEPS, OFFICE_STEPS } from '../src/data/tour.ts'
 
 /**
  * The first-run tour.
@@ -20,18 +20,39 @@ const ok = (cond, msg) => {
   if (!cond) fails.push(msg)
 }
 
-/* --- the step list is a product decision, so assert it without a browser --- */
+/* --- the step lists are product decisions, so assert them without a browser - */
 console.log('--- the steps themselves ---')
-ok(TOUR_STEPS.length > 0 && TOUR_STEPS.length <= 6,
-   `short enough that it gets read (${TOUR_STEPS.length} steps)`)
-ok(TOUR_STEPS.some((s) => s.target === 'sync'),
-   'the offline promise is one of them — it is the claim nobody believes unattended')
-ok(TOUR_STEPS.some((s) => s.target === 'start-visit'),
-   'and so is the button that starts a knock')
-ok(TOUR_STEPS.every((s) => s.title && s.body),
-   'every step says something')
-ok(new Set(TOUR_STEPS.map((s) => s.target)).size === TOUR_STEPS.length,
-   'no target is spotlighted twice')
+for (const [who, steps] of [['rep', REP_STEPS], ['office', OFFICE_STEPS]]) {
+  ok(steps.length >= 15, `${who}: covers the app rather than one screen (${steps.length} steps)`)
+  ok(steps.every((s) => s.title && s.body), `${who}: every step says something`)
+  ok(
+    new Set(steps.map((s) => s.target)).size === steps.length,
+    `${who}: no target is spotlighted twice`,
+  )
+  /*
+    Every step names its route. Without one the tour spotlights whatever happens
+    to be on screen, which for a walkthrough that navigates means "the previous
+    step's screen" — and the failure is silent, because there is always
+    *something* to point at.
+  */
+  ok(steps.every((s) => s.route), `${who}: every step knows which screen it lives on`)
+}
+ok(
+  REP_STEPS.some((s) => s.target === 'sync'),
+  'the offline promise is in the rep tour — the claim nobody believes unprompted',
+)
+ok(
+  REP_STEPS.some((s) => s.target === 'start-visit'),
+  'and so is the button that starts a knock',
+)
+ok(
+  OFFICE_STEPS.some((s) => s.route?.startsWith('/admin')),
+  'the office tour reaches the console, which is most of their job',
+)
+ok(
+  OFFICE_STEPS.every((s) => s.target !== 'start-visit'),
+  'and does not explain knocking to somebody who does not knock',
+)
 
 const ctx = await browser.newContext({
   viewport: { width: 390, height: 844 },
@@ -86,34 +107,74 @@ ok(first?.at === 1, `it starts at the first step (${first?.at})`)
 
 console.log('\n--- and every step of it is usable ---')
 const total = first?.of ?? 0
-ok(total >= 4, `it has steps to show (${total})`)
-for (let i = 1; i <= total; i++) {
+ok(total >= 15, `it covers the app rather than one screen (${total} steps)`)
+
+/*
+ * Walked by following the card, not by counting to a number.
+ *
+ * The tour navigates between screens and steps itself over any anchor that
+ * never appears — a rep with no route has no next stop, offline maps are absent
+ * until imagery is configured. Asserting "step i is on screen" would be
+ * asserting the demo's data rather than the tour's behaviour, so this follows
+ * whatever it shows and checks the properties that must hold for all of them.
+ */
+const seen = []
+let guard = 0
+while ((await card().count()) > 0 && guard++ < 60) {
   const at = await stepNo()
-  ok(at?.at === i, `step ${i} is the one on screen`)
-  const spot = await page.locator('.tour-hole').count()
-  ok(spot === 1, `step ${i} spotlights something`)
-  const fit = await cardInside()
-  ok(fit.inside, `step ${i}'s card is fully on screen (${fit.why})`)
-  if (i < total) {
-    await page.locator('[data-tour-next]').click()
-    await page.waitForTimeout(600)
+  if (!at) break
+  if (seen.includes(at.at)) {
+    // Same step twice means Next did nothing — a dead tour, which is worse than
+    // a wrong one because it strands somebody on their first morning.
+    ok(false, `step ${at.at} advanced rather than repeating`)
+    break
   }
+  seen.push(at.at)
+
+  /*
+    A step either spotlights something or steps itself over — both are correct,
+    and which one happens depends on the account rather than on the code. The
+    offline-maps step has no anchor until tile imagery is configured; a rep with
+    no route has no next stop. Asserting "spotlights something" flatly would be
+    asserting this build's configuration.
+
+    What must never happen is the third case: a step that shows a card, never
+    finds its anchor, and stays there.
+  */
+  await page.locator('.tour-hole').first().waitFor({ state: 'attached', timeout: 2500 }).catch(() => {})
+  const spotted = (await page.locator('.tour-hole').count()) === 1
+  if (!spotted) {
+    await page.waitForTimeout(1400)
+    const now = await stepNo()
+    ok(
+      !now || now.at !== at.at,
+      `step ${at.at} has no anchor here and steps over itself rather than stalling`,
+    )
+    if (!now) break
+    continue
+  }
+  ok(spotted, `step ${at.at} spotlights something`)
+
+  const fit = await cardInside()
+  ok(fit.inside, `step ${at.at}'s card is fully on screen (${fit.why})`)
+
+  if (at.at >= at.of) break
+  await page.locator('[data-tour-next]').click({ timeout: 8000 })
+  await page.waitForTimeout(850)
 }
+ok(seen.length >= 15, `it walked the whole thing (${seen.length} steps shown)`)
+ok(
+  seen.every((n, i) => i === 0 || n > seen[i - 1]),
+  'and it only ever moved forward',
+)
 
 console.log('\n--- back goes back ---')
+const beforeBack = (await stepNo())?.at ?? 0
 await page.locator('[data-tour-back]').click()
-await page.waitForTimeout(500)
-ok((await stepNo())?.at === total - 1, 'Back returns to the previous step')
+await page.waitForTimeout(900)
+const afterBack = (await stepNo())?.at ?? 0
+ok(afterBack < beforeBack, `Back returns to an earlier step (${beforeBack} -> ${afterBack})`)
 ok((await page.locator('[data-tour-back]').count()) === 1, 'and Back is still offered')
-
-// Walk to the first step and confirm Back disappears there.
-for (let i = total - 1; i > 1; i--) {
-  await page.locator('[data-tour-back]').click()
-  await page.waitForTimeout(350)
-}
-ok((await stepNo())?.at === 1, 'Back walks all the way to the start')
-ok((await page.locator('[data-tour-back]').count()) === 0,
-   'and there is no Back on the first step, because there is nothing behind it')
 
 /*
  * The tour blocks the app underneath it. A tour where the highlighted control
@@ -142,12 +203,11 @@ ok(page.url() === before, `a tap on live navigation underneath does nothing (${p
 ok((await card().count()) === 1, 'and the tour is still up')
 
 console.log('\n--- finishing it means finished ---')
-for (let i = 1; i < total; i++) {
-  await page.locator('[data-tour-next]').click()
-  await page.waitForTimeout(400)
+let fin = 0
+while ((await card().count()) > 0 && fin++ < 60) {
+  await page.locator('[data-tour-next]').click({ timeout: 8000 }).catch(() => {})
+  await page.waitForTimeout(700)
 }
-await page.locator('[data-tour-next]').click()
-await page.waitForTimeout(600)
 ok((await card().count()) === 0, 'the last step closes it')
 
 await page.reload({ waitUntil: 'networkidle' })

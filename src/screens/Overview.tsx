@@ -108,7 +108,7 @@ export function Overview({ role }: { role: Role }) {
           */}
           <section className="section">
             <SectionHeader title="Today" standalone />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3" data-tour="overview-kpis">
               <KpiCard label="Doors" value={totals.knocks} />
               <KpiCard
                 label="Conversations"
@@ -199,7 +199,7 @@ export function Overview({ role }: { role: Role }) {
               action="All"
               onAction={() => nav('/team')}
             />
-            <ul className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+            <ul className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border" data-tour="overview-team">
               {teamStats.map((rep) => (
                 <li key={rep.id}>
                   <button

@@ -72,7 +72,7 @@ export function AdminDashboard() {
         </span>
       </FilterBar>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4" data-tour="console-kpis">
         <StatTile
           label="Doors knocked"
           value={totals.knocks.toLocaleString()}

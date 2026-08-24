@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
   useAppStore,
@@ -23,9 +23,6 @@ import { DEFAULT_ROUTE_SIZE, routableLeads } from '../lib/route'
 import { IconCalendar, IconChevron, IconNavigate } from '../components/nav/icons'
 import { useTeamStats } from '../store/teamStats'
 import { standings } from '../data/leaderboard'
-import * as db from '../lib/db'
-import { TOUR_KEY } from '../data/tour'
-import { Tour } from '../components/system/Tour'
 
 /**
  * The Today screen — the rep's operational home.
@@ -39,39 +36,6 @@ import { Tour } from '../components/system/Tour'
  */
 export function Today() {
   const nav = useNavigate()
-  /*
-    The first-run tour.
-    
-    Mounted here rather than in the shell because every step points at something
-    on this screen or at the bar under it, and a tour that opens on a screen
-    without its own anchors is a tour explaining somebody else's app. Office
-    roles land on Overview and never see it, which is correct: none of these six
-    things is what a manager opened the app to do.
-  */
-  const [tourOpen, setTourOpen] = useState(false)
-  useEffect(() => {
-    let alive = true
-    void (async () => {
-      const seen = await db.metaGet<boolean>(TOUR_KEY)
-      /*
-        A beat after mount. The route and the next stop are rendered from
-        IndexedDB, and measuring a spotlight against a card that has not been
-        laid out yet cuts a hole in the wrong place — briefly, and exactly once,
-        on the one run where a wrong first impression costs the most.
-      */
-      if (!seen && alive) window.setTimeout(() => alive && setTourOpen(true), 450)
-    })()
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  const closeTour = async () => {
-    setTourOpen(false)
-    // Skipping counts. Someone who skipped chose not to see it, and showing it
-    // again tomorrow is the app overruling them.
-    await db.metaSet(TOUR_KEY, true)
-  }
 
   /*
     The standings, computed here rather than fetched: it is the same team stats
@@ -173,7 +137,7 @@ export function Today() {
               </div>
               {/* The right column is the outcome, not the effort — so it gets
                   green, and the doors number stays neutral. */}
-              <div className="shrink-0 text-right">
+              <div className="shrink-0 text-right" data-tour="conversations">
                 <p className="eyebrow">Conversations</p>
                 <p className="nums mt-1 text-[28px] font-semibold leading-none tracking-[-0.02em] text-accent">
                   {wins}
@@ -255,6 +219,7 @@ export function Today() {
                 */}
                 <Link
                   to={`/navigate/${nextStop.id}`}
+                  data-tour="navigate"
                   className="metal metal-quiet press focusable flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-[16px] text-[15px] font-semibold"
                 >
                   <IconNavigate />
@@ -332,7 +297,7 @@ export function Today() {
 
           {/* --- appointments --------------------------------------------- */}
           {todaysAppointments.length > 0 && (
-            <Section title="Appointments" count={todaysAppointments.length}>
+            <Section title="Appointments" count={todaysAppointments.length} tour="appointments">
               <ul className="row-group">
                 {todaysAppointments.map((a) => {
                   const p = properties[a.propertyId]
@@ -371,7 +336,7 @@ export function Today() {
 
           {/* --- follow-ups / tasks --------------------------------------- */}
           {openTasks.length > 0 && (
-            <Section title="Follow-ups" count={openTasks.length}>
+            <Section title="Follow-ups" count={openTasks.length} tour="followups">
               <ul className="row-group">
                 {openTasks.slice(0, 6).map((t) => (
                   <TaskRow key={t.id} id={t.id} />
@@ -426,8 +391,6 @@ export function Today() {
       >
         <SyncDetail />
       </BottomSheet>
-
-      {tourOpen && <Tour onClose={() => void closeTour()} />}
     </div>
   )
 }
@@ -435,14 +398,17 @@ export function Today() {
 function Section({
   title,
   count,
+  tour,
   children,
 }: {
   title: string
   count?: number
+  /** A `data-tour` anchor, so the walkthrough can point at a whole section. */
+  tour?: string
   children: React.ReactNode
 }) {
   return (
-    <section className="section">
+    <section className="section" data-tour={tour}>
       <SectionHeader title={title} count={count} standalone />
       {/*
         Full-bleed on a phone, and a card once there is room for a margin. A
