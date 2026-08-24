@@ -33,6 +33,19 @@ export interface RepStats {
   contactRate: number
   /** Value of opportunities touched today. */
   pipelineToday: number
+  /** Appointments booked today. */
+  appointments: number
+  /** Deals closed today. */
+  sales: number
+  /**
+   * Value of what was *sold* today — not what was quoted.
+   *
+   * Deliberately narrower than `pipelineToday`, which counts quotes as well.
+   * Both are useful and they are not the same claim: one is money committed, the
+   * other is money in play, and a leaderboard column headed "revenue" has to
+   * mean the first one.
+   */
+  revenue: number
   lastActivityAt?: number
 }
 
@@ -59,6 +72,12 @@ function statsFor(
     const p = ev.propertyId ? properties[ev.propertyId] : undefined
     return sum + (p?.opportunityValue ?? 0)
   }, 0)
+  const appointments = mine.filter((a) => a.outcome === 'appointment').length
+  const sold = mine.filter((a) => a.outcome === 'sold')
+  const revenue = sold.reduce((sum, ev) => {
+    const p = ev.propertyId ? properties[ev.propertyId] : undefined
+    return sum + (p?.opportunityValue ?? 0)
+  }, 0)
 
   return {
     id: repId,
@@ -74,6 +93,9 @@ function statsFor(
     conversations,
     contactRate: mine.length ? Math.round((conversations / mine.length) * 100) : 0,
     pipelineToday,
+    appointments,
+    sales: sold.length,
+    revenue,
     lastActivityAt: mine[0]?.at,
   }
 }

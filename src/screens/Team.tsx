@@ -37,6 +37,14 @@ export function Team() {
       <TopBar
         title="Team"
         subtitle={`${totals.reps} reps · ${totals.knocks} doors · ${totals.conversations} conversations`}
+        right={
+          <button
+            onClick={() => nav('/standings')}
+            className="focusable min-h-[44px] rounded-lg px-2 text-[13px] font-semibold text-brand-700"
+          >
+            Standings
+          </button>
+        }
       />
 
       <div className="scroll-pane pad-nav bg-surface-sunk">

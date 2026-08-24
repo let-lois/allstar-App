@@ -30,8 +30,18 @@ export async function bootstrap(env: Env, user: SessionUser) {
   const scope = isRep(user) ? 'AND assigned_rep_id = ?2' : ''
   const bind = (base: unknown[]) => (isRep(user) ? [...base, user.id] : base)
 
-  const [properties, contacts, routes, stops, appointments, tasks, activity, stats, territories] =
-    await Promise.all([
+  const [
+    properties,
+    contacts,
+    routes,
+    stops,
+    appointments,
+    tasks,
+    activity,
+    stats,
+    territories,
+    roster,
+  ] = await Promise.all([
       env.DB.prepare(
         `SELECT * FROM properties WHERE client_id = ?1 ${scope} ORDER BY address1`,
       )
@@ -96,6 +106,25 @@ export async function bootstrap(env: Env, user: SessionUser) {
       // Not scoped to the rep: a territory is a label on properties they already
       // have, and hiding the name would only show them a hash.
       env.DB.prepare(`SELECT * FROM territories WHERE client_id = ?1 ORDER BY name`)
+        .bind(user.clientId)
+        .all(),
+
+      /*
+        The roster, for everybody — names and initials only.
+
+        A rep could already see the whole team's daily numbers (`daily_stats` is
+        not rep-scoped, deliberately, because the standings are the point of the
+        thing), but they had no way to turn a `rep_id` into a person: the roster
+        comes from `/api/users`, which 403s for a field rep. So a rep's
+        leaderboard would have been a list of hashes.
+
+        Deliberately narrower than `/api/users`. Teammates' names are not
+        sensitive — they work together every day. E-mail addresses and phone
+        numbers are, and those stay behind the office-only endpoint.
+      */
+      env.DB.prepare(
+        `SELECT id, name, role, active FROM users WHERE client_id = ?1 ORDER BY name`,
+      )
         .bind(user.clientId)
         .all(),
     ])
@@ -209,6 +238,12 @@ export async function bootstrap(env: Env, user: SessionUser) {
         territory, so a parse failure drops the shape rather than the row.
       */
       boundary: parseBoundary(t.boundary),
+    })),
+    team: (roster.results as Record<string, unknown>[]).map((u) => ({
+      id: u.id,
+      name: u.name,
+      role: u.role,
+      active: (u.active ?? 1) === 1,
     })),
     dailyStats: (stats.results as Record<string, unknown>[]).map((s) => ({
       id: s.id,

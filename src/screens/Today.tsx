@@ -21,6 +21,8 @@ import { drain } from '../lib/sync'
 import { outcomeByCode } from '../data/outcomes'
 import { DEFAULT_ROUTE_SIZE, routableLeads } from '../lib/route'
 import { IconCalendar, IconChevron, IconNavigate } from '../components/nav/icons'
+import { useTeamStats } from '../store/teamStats'
+import { standings } from '../data/leaderboard'
 
 /**
  * The Today screen — the rep's operational home.
@@ -34,6 +36,15 @@ import { IconCalendar, IconChevron, IconNavigate } from '../components/nav/icons
  */
 export function Today() {
   const nav = useNavigate()
+  /*
+    The standings, computed here rather than fetched: it is the same team stats
+    every other screen derives, so a rep's rank costs nothing and is correct with
+    no signal — which is where they will be looking at it.
+  */
+  const signedIn = useAppStore((s) => s.user)
+  const repStats = useTeamStats()
+  const board = useMemo(() => standings(repStats), [repStats])
+  const myStanding = board.find((r) => r.rep.id === signedIn?.id)
   const { user, properties, route, position, refreshPosition, refreshFromServer } =
     useAppStore()
   const buildTodayRoute = useAppStore((s) => s.buildTodayRoute)
@@ -246,6 +257,39 @@ export function Today() {
                 </Button>
               </div>
             </Card>
+          )}
+
+          {/*
+            --- where you stand ------------------------------------------
+            One row, under the next door rather than above it. This is the
+            motivating thing, not the working thing: it must be visible without
+            scrolling and must never sit between a rep and the address they are
+            walking to.
+
+            Hidden for a team of one, where a leaderboard is a mirror, and for
+            anyone not on the board — a manager has no row and inventing one puts
+            an admin with no route at the bottom of a table of people who knock.
+          */}
+          {myStanding && board.length > 1 && (
+            <button
+              onClick={() => nav('/standings')}
+              className="metal-row focusable -mx-4 flex min-h-[64px] items-center gap-3 px-4 text-left sm:mx-0 sm:rounded-card sm:border sm:border-line"
+            >
+              <span className="nums shrink-0 text-[20px] font-semibold tracking-[-0.02em] text-brand-700">
+                {myStanding.tied ? 'T' : ''}#{myStanding.rank}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14.5px] font-medium">
+                  {myStanding.rank === 1 ? 'Top of the board' : 'Where you stand today'}
+                </span>
+                <span className="nums block truncate text-[12.5px] text-ink-soft">
+                  {myStanding.points.toLocaleString()} points · {board.length} reps
+                </span>
+              </span>
+              <span className="shrink-0 text-brand-700">
+                <IconChevron />
+              </span>
+            </button>
           )}
 
           {/* --- appointments --------------------------------------------- */}
