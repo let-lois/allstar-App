@@ -66,6 +66,17 @@ export async function applyBootstrap(dto: BootstrapDTO, mergeOnly = false): Prom
   // same wipe rules as everything else without needing a table of one row.
   if (dto.settings) await db.metaSet('allstar.settings', dto.settings)
 
+  /*
+    The roster, same treatment and for the same reason as settings: it is one
+    small list, it has no history, and it has to be on the device.
+
+    Offline is the point. A rep checks the standings in a truck between streets,
+    which is exactly where there is no signal — and a leaderboard that degrades
+    into a column of user ids the moment the bars drop is a leaderboard nobody
+    opens twice.
+  */
+  if (dto.team) await db.metaSet('allstar.roster', dto.team)
+
   await Promise.all([
     replace('properties', dto.properties as Property[], pending),
     replace('routes', dto.routes as Route[], pending),

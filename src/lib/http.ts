@@ -384,6 +384,14 @@ export interface BootstrapDTO {
   activity: unknown[]
   dailyStats: unknown[]
   territories?: unknown[]
+  /**
+   * Names and initials for everyone on the account — enough to label a rep id.
+   *
+   * Optional because a Worker deployed before this field existed does not send
+   * it, and a client that assumes it would break against the old server for as
+   * long as the two are out of step.
+   */
+  team?: { id: string; name: string; role: string; active: boolean }[]
   settings?: Record<string, unknown>
   serverTime: number
 }

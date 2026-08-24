@@ -274,6 +274,16 @@ export const useAppStore = create<AppState>((set, get) => ({
         db.all<TeamMember>('team'),
       ])
     const settings = (await db.metaGet<ClientSettings>('allstar.settings')) ?? {}
+    /*
+      The cached roster from bootstrap. Only used when the `team` store is empty,
+      which is the field-rep case: the office fills that store from `/api/users`
+      with e-mail and invite state, and this is the names-only version a rep gets
+      so the standings can say "Dana" rather than "u_rep_2".
+    */
+    const roster =
+      (await db.metaGet<{ id: string; name: string; role: string; active: boolean }[]>(
+        'allstar.roster',
+      )) ?? []
 
     // An in-flight visit survives an app kill — reps close the app mid-knock.
     const openVisit = visits.find((v) => !v.endedAt)
@@ -292,7 +302,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       tasks: indexById(tasks),
       activity: activity.sort((a, b) => b.at - a.at),
       territories: indexById(territories),
-      team: team.length ? team : seedTeam(mode),
+      team: team.length
+        ? team
+        : roster.length
+          ? roster.map((m) => ({
+              id: m.id,
+              name: m.name,
+              email: '',
+              role: m.role as TeamMember['role'],
+              active: m.active,
+              initials: initialsOf(m.name),
+            }))
+          : seedTeam(mode),
       settings,
       activeVisitId: openVisit?.id ?? null,
     })
@@ -344,8 +365,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ team: seedTeam('demo') })
       return
     }
-    // Reps get a 403 and don't need one — asking would be a guaranteed error in
-    // the console on every boot of a field account.
+    /*
+      Reps get a 403 from `/api/users`, so they do not ask. They are not left
+      without a roster though: bootstrap carries names and initials for everyone,
+      which is what turns a `rep_id` on the standings into a person. The office
+      still calls this for the fuller version — e-mail, phone, invite state —
+      which is the part a rep has no business with.
+    */
     if (state.user?.role === 'field_rep') return
     const token = liveToken()
     if (!token) return

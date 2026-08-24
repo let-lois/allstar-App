@@ -232,6 +232,7 @@ export function More() {
                 bright top lip against the bevel above it *is* the divider. The
                 border on top of that drew the seam twice. */}
             <nav className="plate -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+              <MoreLink label="Standings" onClick={() => nav('/standings')} />
               <MoreLink label="Today's route" onClick={() => nav('/route')} />
               <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
               <MoreLink label="Schedule an appointment" onClick={() => nav('/schedule/new')} />
