@@ -80,7 +80,7 @@ export function ScheduleNew() {
               </div>
               <button
                 onClick={() => setPropertyId('')}
-                className="focusable min-h-tap shrink-0 rounded-field px-3 text-[14px] font-semibold text-brand-600"
+                className="focusable min-h-tap shrink-0 rounded-field px-3 text-[14px] font-semibold text-accent"
               >
                 Change
               </button>
@@ -137,7 +137,7 @@ export function ScheduleNew() {
                 aria-pressed={when === s.at}
                 className={`press focusable min-h-[60px] rounded-field px-2 text-[14px] font-semibold transition-colors ${
                   when === s.at
-                    ? 'bg-brand-50 text-brand-700 ring-2 ring-brand-500'
+                    ? 'bg-surface-tint text-accent-strong ring-2 ring-brand-500'
                     : 'bg-surface text-ink ring-1 ring-line active:bg-surface-field'
                 }`}
               >
@@ -172,7 +172,7 @@ export function ScheduleNew() {
                   aria-pressed={duration === m}
                   className={`press focusable min-h-[52px] flex-1 rounded-field text-[14px] font-semibold transition-colors ${
                     duration === m
-                      ? 'bg-brand-50 text-brand-700 ring-2 ring-brand-500'
+                      ? 'bg-surface-tint text-accent-strong ring-2 ring-brand-500'
                       : 'bg-surface text-ink ring-1 ring-line active:bg-surface-field'
                   }`}
                 >

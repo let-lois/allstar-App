@@ -4,7 +4,70 @@
 
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: dark;
+
+    /*
+     * The theme.
+     *
+     * Channels are space-separated so Tailwind's `<alpha-value>` still works —
+     * `bg-ink/15` has to composite against the ground, not against white.
+     *
+     * Every figure in the comments was produced by `scripts/lib/contrast.mjs`
+     * and is pinned by `npm run verify:contrast`. They are here rather than in
+     * a design file because the next person to nudge a value needs to see what
+     * it costs in the same place they change it.
+     *
+     * The ground is near-black rather than grey. A mid-grey app on a phone held
+     * at arm's length in daylight loses its card edges entirely; the deeper the
+     * ground, the less work the hairlines have to do.
+     */
+
+    /* --- text ------------------------------------------------------------ */
+    /** 15.5:1 on a card. */
+    --ink: 242 246 250;
+    /** 11.0:1. Secondary text — and the floor on any machined face. */
+    --ink-soft: 198 210 224;
+    /** 6.5:1 on a card, 5.8:1 on the teal tint. Lowest tone that may be text. */
+    --ink-mute: 147 162 184;
+    /** 3.5:1 — decorative only. Dividers, placeholders, disabled glyphs. */
+    --ink-faint: 100 116 139;
+
+    /* --- surfaces --------------------------------------------------------- */
+    /** The app ground. */
+    --surface-sunk: 13 19 32;
+    /** A card. 1.10:1 over the ground — a lift, with the hairline doing the edge. */
+    --surface: 21 29 46;
+    --surface-raised: 27 36 55;
+    /** Inputs, recessed by being darker than the card rather than by a bevel. */
+    --surface-field: 10 15 26;
+    /** The faintest teal ground — active pills, callouts, grouped rows. */
+    --surface-tint: 12 39 49;
+
+    /* --- edges ------------------------------------------------------------ */
+    --line: 42 54 82;
+    --line-soft: 33 43 65;
+
+    /* --- teal as writing --------------------------------------------------- */
+    /** 7.94:1 on a card, 5.17:1 on a machined teal row. */
+    --accent: 32 196 211;
+    /** 11.07:1 on a card, 7.21:1 on a machined row. Glyphs on a teal face. */
+    --accent-strong: 127 224 239;
+
+    /* --- status ------------------------------------------------------------ */
+    /*
+     * Not the light-ground values. #166534 green measures 2.36:1 on a dark card
+     * and #B91C1C red 2.60:1 — a status nobody can read is worse than no status,
+     * because it still occupies the space where the answer should be.
+     */
+    --good: 74 222 128;
+    --good-bg: 10 43 26;
+    --warn: 251 191 36;
+    --warn-bg: 55 38 8;
+    --bad: 248 113 113;
+    --bad-bg: 60 20 20;
+    --info: 125 166 255;
+    --info-bg: 20 32 66;
+
     /*
      * Live viewport height. 100vh is wrong on mobile Safari the moment the URL
      * bar collapses — full-screen map + bottom sheet depend on this.
@@ -104,7 +167,18 @@
    */
   .card {
     @apply rounded-card border border-line bg-surface;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 4px 16px rgba(15, 23, 42, 0.06);
+    /*
+     * On a near-black ground a drop shadow is invisible — there is nothing
+     * darker for it to be. What separates a card here is the hairline and the
+     * 1.10:1 step in fill, plus a one-pixel lit top edge: the same trick the
+     * machined controls use, at a fraction of the strength. The outer shadow
+     * stays, much deeper than before, only to keep the corners from looking
+     * pasted on.
+     */
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.045),
+      0 1px 2px rgba(0, 0, 0, 0.4),
+      0 8px 24px rgba(0, 0, 0, 0.28);
   }
 
   /**
@@ -133,7 +207,9 @@
   }
 
   .card-tap:active {
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.02),
+      0 1px 2px rgba(0, 0, 0, 0.45);
   }
 
   /** Grouped rows inside one surface — dividers rather than a stack of cards. */
@@ -210,7 +286,17 @@
    * needs it most.
    */
   .focusable:focus-visible {
-    @apply outline-none ring-2 ring-brand-600 ring-offset-2;
+    /*
+     * brand-400, not 600. A focus indicator is a UI component under WCAG 1.4.11
+     * and needs 3:1 against its surroundings: on this ground the dark teal
+     * manages 3.9:1 and the bright one 8.75:1, and the ring also has to survive
+     * being drawn over a machined face, where the dark step all but vanishes.
+     *
+     * The offset colour has to be named. `ring-offset-2` paints the gap in
+     * `--tw-ring-offset-color`, which defaults to white — a white halo around
+     * every focused control on a black screen.
+     */
+    @apply outline-none ring-2 ring-brand-400 ring-offset-2 ring-offset-surface-sunk;
   }
 
 
@@ -219,7 +305,12 @@
    * which is the single most obvious sign of an un-designed form.
    */
   .field {
-    @apply w-full rounded-field border border-line bg-surface px-4 text-base text-ink;
+    /*
+     * `bg-surface-field`, not `bg-surface`: on a dark ground an input reads as
+     * recessed by being *darker* than the card it sits on. Inverting that — a
+     * lighter fill, as on white — makes every field look like a disabled button.
+     */
+    @apply w-full rounded-field border border-line bg-surface-field px-4 text-base text-ink;
     @apply placeholder:text-ink-faint;
     transition:
       border-color 150ms ease,
@@ -232,8 +323,13 @@
    * announces itself, and the halo alone is enough to find the field you are in.
    */
   .field:focus {
-    @apply border-brand-500 outline-none;
-    box-shadow: 0 0 0 3px rgba(15, 169, 184, 0.16);
+    /*
+     * The halo is brighter than on white — 0.16 alpha teal disappears entirely
+     * against a near-black ground, and the focused field is the one thing on the
+     * screen that has to be findable without hunting.
+     */
+    @apply border-brand-400 outline-none;
+    box-shadow: 0 0 0 3px rgba(32, 196, 211, 0.3);
   }
 
   /*
@@ -292,13 +388,13 @@
    * place the extra step of contrast is worth spending.
    */
   .nav-pill[data-active='true'] {
-    @apply metal text-brand-700;
-    --metal-top: #f2fbfc;
-    --metal-bottom: #cdeff5;
-    --metal-ring: rgba(6, 100, 112, 0.3);
-    --metal-lip: 0.9;
-    --metal-bevel: 0.1;
-    --sheen: 0.55;
+    @apply metal text-accent-strong;
+    --metal-top: #173d4d;
+    --metal-bottom: #0e2833;
+    --metal-ring: rgba(127, 224, 239, 0.28);
+    --metal-lip: 0.12;
+    --metal-bevel: 0.4;
+    --sheen: 0.07;
   }
 
   /** Counter anchored to the badge corner. Red here is a real alert, not decor. */
@@ -306,7 +402,8 @@
   .badge-pip {
     @apply absolute -right-0.5 -top-1 z-10 grid min-w-[18px] place-items-center rounded-full px-1;
     @apply bg-bad text-[11px] font-semibold leading-[16px] text-white;
-    border: 2px solid #fff;
+    /* The ring reads as a gap punched around the pip, so it is the ground. */
+    border: 2px solid rgb(var(--surface-sunk));
   }
 
   /*
@@ -341,9 +438,9 @@
     background: linear-gradient(180deg, var(--metal-top), var(--metal-bottom));
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, var(--metal-lip, 0.5)),
-      inset 0 -2px 3px rgba(15, 23, 42, var(--metal-bevel, 0.18)),
-      0 0 0 1px var(--metal-ring, rgba(15, 23, 42, 0.1)),
-      0 2px 5px rgba(15, 23, 42, 0.16);
+      inset 0 -2px 3px rgba(0, 0, 0, var(--metal-bevel, 0.4)),
+      0 0 0 1px var(--metal-ring, rgba(255, 255, 255, 0.12)),
+      0 2px 6px rgba(0, 0, 0, 0.45);
     transition:
       box-shadow 140ms ease,
       filter 140ms ease;
@@ -373,9 +470,9 @@
   /* Pressed reads as pushed in: the lift goes, the bevel inverts, the sheen dims. */
   .metal:active {
     box-shadow:
-      inset 0 2px 5px rgba(15, 23, 42, 0.28),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.35),
-      0 0 0 1px var(--metal-ring, rgba(15, 23, 42, 0.1));
+      inset 0 2px 6px rgba(0, 0, 0, 0.5),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.12),
+      0 0 0 1px var(--metal-ring, rgba(255, 255, 255, 0.12));
   }
 
   .metal:active::after {
@@ -383,8 +480,8 @@
   }
 
   .metal:disabled {
-    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
-    filter: saturate(0.25);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+    filter: saturate(0.25) brightness(0.8);
   }
 
   .metal:disabled::after {
@@ -395,29 +492,55 @@
    * The variants. Four values each: the two gradient stops, the ring, and how
    * much glass. Anything that needs a fifth is not a variant.
    */
+  /*
+   * The primary button, unchanged — it is the one face that was already right
+   * on a dark ground, which is where it has been living on the login all along.
+   * Its label stays near-black on purpose: a sheen lightens the top of the face,
+   * which is exactly the band a label sits in, and white over a lightened teal
+   * fails AA at every candidate. Inverted it measures 13.2:1 at the lightest
+   * point and 6.2:1 at the darkest.
+   *
+   * `--ink-fixed` rather than `text-ink`: ink is now near-white, and this label
+   * has to stay dark regardless of the theme, because the face it sits on is
+   * literal and does not move.
+   */
   .metal-brand {
-    @apply text-ink;
+    color: #111827;
     --metal-top: #7fe0ef;
     --metal-bottom: #0fa9b8;
-    --metal-ring: rgba(6, 100, 112, 0.45);
+    --metal-ring: rgba(127, 224, 239, 0.5);
   }
 
   /** White controls: the same material in nickel rather than teal. */
+  /**
+   * The neutral control: gunmetal rather than nickel.
+   *
+   * `ink` on its lightest point — the top of the face with the sheen
+   * composited in — measures 10.4:1. The sheen is a tenth of what it was on
+   * white, because on a dark face a white highlight is the thing that makes a
+   * control look plastic rather than machined.
+   */
   .metal-quiet {
     @apply text-ink;
-    --metal-top: #ffffff;
-    --metal-bottom: #eef2f4;
-    --metal-ring: rgba(15, 23, 42, 0.12);
-    --metal-lip: 0.9;
-    --metal-bevel: 0.08;
-    --sheen: 0.5;
+    --metal-top: #232e44;
+    --metal-bottom: #161e2e;
+    --metal-ring: rgba(255, 255, 255, 0.14);
+    --metal-lip: 0.1;
+    --metal-bevel: 0.45;
+    --sheen: 0.06;
   }
 
+  /*
+   * Red and green keep white labels: 6.5:1 and 5.9:1 with the highlight
+   * composited in. The rings lightened — a darker-than-the-face ring is
+   * invisible on this ground, so the hairline now sits above the face rather
+   * than below it.
+   */
   .metal-danger {
     @apply text-white;
     --metal-top: #a81a1a;
     --metal-bottom: #7f1212;
-    --metal-ring: rgba(80, 10, 10, 0.5);
+    --metal-ring: rgba(255, 255, 255, 0.18);
     --sheen: 0.08;
     --metal-lip: 0.28;
   }
@@ -426,7 +549,7 @@
     @apply text-white;
     --metal-top: #14663a;
     --metal-bottom: #0d4526;
-    --metal-ring: rgba(8, 45, 25, 0.5);
+    --metal-ring: rgba(255, 255, 255, 0.18);
     --sheen: 0.08;
     --metal-lip: 0.28;
   }
@@ -447,20 +570,22 @@
     position: relative;
     isolation: isolate;
     /*
-       Teal glass rather than nickel. The face is light for the same reason the
-       buttons' is: a sheen brightens the top, and the label has to survive it.
-       Near-black on the darkest point of this face measures 14.4:1.
+       Teal glass rather than gunmetal, so the rows stay the warmest thing on a
+       cold screen. `ink` on its lightest point — the top of the face with the
+       sheen composited in — measures 10.1:1.
 
-       What could *not* come along: `ink-mute` lands at 3.87:1 on it and
-       `ink-faint` at 2.09:1, so the secondary text and the chevrons on these rows
-       moved to teal ink instead — see `Collapsible` and `MoreLink`. A tinted face
-       does not just change a background; it retires every low-contrast grey that
-       was resting on white.
+       What still cannot come along, exactly as on the white version and for the
+       mirror-image reason: `ink-mute` lands at 4.23:1 here, under the 4.5 floor.
+       On white the sheen lightened the face out from under a dark grey; here it
+       lightens it up towards a light one. Secondary text on these rows is
+       `ink-soft` (7.2:1) and the chevrons are `accent-strong` (7.2:1). A tinted
+       face does not just change a background — it retires every marginal tone
+       that was resting on the flat ground.
     */
-    background: linear-gradient(180deg, #f4fcfd, #cbeef5);
+    background: linear-gradient(180deg, #143240, #0e2430);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.95),
-      inset 0 -1px 2px rgba(6, 100, 112, 0.14);
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.45);
     transition: box-shadow 140ms ease;
   }
 
@@ -470,7 +595,7 @@
     inset: 0 0 auto 0;
     height: 50%;
     border-radius: inherit;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0));
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0));
     pointer-events: none;
     z-index: -1;
   }
@@ -478,8 +603,8 @@
   /* Pressed pushes the face in: the lip goes, the shading flips to the top. */
   .metal-row:active {
     box-shadow:
-      inset 0 2px 4px rgba(6, 100, 112, 0.26),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.55);
+      inset 0 2px 5px rgba(0, 0, 0, 0.55),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.07);
   }
 
   .metal-row:active::after {
@@ -489,17 +614,21 @@
   /**
    * The selected row in a stack.
    *
-   * A step deeper than the default face, because the default one is now teal too
+   * A step brighter than the default face, because the default one is teal too
    * — selection has to be a difference in the same material rather than the
-   * presence of colour. Near-black on it is 10.4:1; anything quieter than
-   * `ink-soft` is not legible here, which is why the pipeline's figures moved up
-   * a step.
+   * presence of colour. On white this row went *deeper*; here it goes up, which
+   * is the same move against the opposite ground.
+   *
+   * How far up is set by what sits on it: `accent` measures 4.93:1 on its
+   * lightest point and would fail one step further. `ink` is 9.6:1 and
+   * `ink-soft` 6.8:1; `ink-mute` is out at 4.04, which is why the pipeline's
+   * figures sit a step up.
    */
   .metal-row-brand {
-    background: linear-gradient(180deg, #cdeff5, #7fd3e2);
+    background: linear-gradient(180deg, #123846, #0b2731);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.8),
-      inset 0 -1px 2px rgba(6, 100, 112, 0.24);
+      inset 0 1px 0 rgba(255, 255, 255, 0.11),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.5);
   }
 
   /**
@@ -511,12 +640,12 @@
    */
   .metal-tint {
     @apply text-ink;
-    --metal-top: #f4fcfd;
-    --metal-bottom: #cbeef5;
-    --metal-ring: rgba(6, 100, 112, 0.28);
-    --metal-lip: 0.9;
-    --metal-bevel: 0.1;
-    --sheen: 0.5;
+    --metal-top: #143240;
+    --metal-bottom: #0e2430;
+    --metal-ring: rgba(127, 224, 239, 0.22);
+    --metal-lip: 0.1;
+    --metal-bevel: 0.45;
+    --sheen: 0.07;
   }
 
   /** Dark controls, for the login's near-black ground. */
@@ -630,7 +759,7 @@
    * an object rather than a patch of colour. One hairline, no bevel.
    */
   .emboss {
-    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09), 0 1px 2px rgba(0, 0, 0, 0.35);
   }
 
   /** A track for something to fill: progress bars, meters. Tinted, not carved. */

@@ -105,7 +105,7 @@ export function PhotoStrip({
               </span>
               {p.pending && (
                 <span
-                  className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-warn ring-2 ring-white"
+                  className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-warn ring-2 ring-surface"
                   title="Waiting to upload"
                 />
               )}

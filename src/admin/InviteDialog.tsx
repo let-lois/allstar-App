@@ -213,7 +213,7 @@ export function InviteDialog({
                   <label
                     key={r}
                     className={`flex cursor-pointer items-start gap-3 rounded-field border p-3 ${
-                      role === r ? 'border-brand-500 bg-brand-50' : 'border-line'
+                      role === r ? 'border-brand-500 bg-surface-tint' : 'border-line'
                     }`}
                   >
                     <input

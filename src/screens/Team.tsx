@@ -40,7 +40,7 @@ export function Team() {
         right={
           <button
             onClick={() => nav('/standings')}
-            className="focusable min-h-[44px] rounded-lg px-2 text-[13px] font-semibold text-brand-700"
+            className="focusable min-h-[44px] rounded-lg px-2 text-[13px] font-semibold text-accent-strong"
           >
             Standings
           </button>
@@ -52,7 +52,7 @@ export function Team() {
           {/* Company roll-up first — the "how is today going" answer. */}
           <Card className="grid grid-cols-3 divide-x divide-line-soft">
             <Stat label="Doors" value={String(totals.knocks)} />
-            <Stat label="Contact rate" value={`${totals.contactRate}%`} tone="text-brand-600" />
+            <Stat label="Contact rate" value={`${totals.contactRate}%`} tone="text-accent" />
             {/* Not green. Today's pipeline is opportunity, not revenue, and green
                 is what this product uses for money actually won. */}
             <Stat label="Pipeline" value={money(totals.pipelineToday)} />
@@ -71,7 +71,7 @@ export function Team() {
                     <Avatar initials={rep.initials} name={rep.name} size="lg" />
                     {i === 0 && totals.conversations > 0 && (
                       <span
-                        className="absolute -right-0.5 -top-0.5 grid h-5 w-5 place-items-center rounded-full bg-good text-[10px] text-white ring-2 ring-white"
+                        className="absolute -right-0.5 -top-0.5 grid h-5 w-5 place-items-center rounded-full bg-good text-[10px] text-surface-sunk ring-2 ring-surface"
                         title="Most conversations today"
                       >
                         ★

@@ -9,8 +9,13 @@ import { haptic } from '../../lib/haptics'
  * forty to eighty times a day in direct sunlight. Three of the previous selected
  * fills put white text below 4.5:1 — teal-600 at 3.74, amber-600 at 3.19,
  * sky-600 at 4.10 — so the selected state, the one that has to be unmistakable,
- * was the least legible thing on the screen. These fills are taken deep enough
- * that the white label clears AA on all eight.
+ * was the least legible thing on the screen. These fills are taken bright enough
+ * that a near-black label clears AA on all eight — 6.7:1 at the tightest.
+ *
+ * The selected label is `text-surface-sunk`, the ground colour, not `text-ink`.
+ * Ink is near-white now; the eight fills are saturated and bright; white on any
+ * of them is unreadable. This is the same inversion `.metal-brand` makes and for
+ * the same reason: a bright face takes a dark label whatever the theme is.
  *
  * The hues stay distinct rather than collapsing into the brand orange: a rep
  * learns these eight tiles by position and colour, and the accent is not a
@@ -18,24 +23,24 @@ import { haptic } from '../../lib/haptics'
  */
 const TONE_BG: Record<string, string> = {
   noanswer: 'bg-surface-field text-ink-soft border-line',
-  interested: 'bg-[#E3F2F0] text-[#0F766E] border-[#0F766E]/20',
+  interested: 'bg-[#10302E] text-[#5FD3C4] border-[#5FD3C4]/25',
   followup: 'bg-warn-bg text-warn border-warn/25',
-  appointment: 'bg-[#F1EBFC] text-[#6D28D9] border-[#6D28D9]/20',
-  quote: 'bg-[#E6F1F9] text-[#0369A1] border-[#0369A1]/20',
+  appointment: 'bg-[#241C3E] text-[#C0A6FA] border-[#C0A6FA]/25',
+  quote: 'bg-[#16283F] text-[#7DC0F5] border-[#7DC0F5]/25',
   notinterested: 'bg-surface-field text-ink-soft border-line',
   sold: 'bg-good-bg text-good border-good/25',
   dnc: 'bg-bad-bg text-bad border-bad/25',
 }
 
 const TONE_ON: Record<string, string> = {
-  noanswer: 'bg-[#475569] text-white border-[#475569]',
-  interested: 'bg-[#0F766E] text-white border-[#0F766E]',
-  followup: 'bg-warn text-white border-warn',
-  appointment: 'bg-[#6D28D9] text-white border-[#6D28D9]',
-  quote: 'bg-[#0369A1] text-white border-[#0369A1]',
-  notinterested: 'bg-ink-mute text-white border-ink-mute',
-  sold: 'bg-good text-white border-good',
-  dnc: 'bg-bad text-white border-bad',
+  noanswer: 'bg-[#94A3B8] text-surface-sunk border-[#94A3B8]',
+  interested: 'bg-[#2DD4BF] text-surface-sunk border-[#2DD4BF]',
+  followup: 'bg-warn text-surface-sunk border-warn',
+  appointment: 'bg-[#A78BFA] text-surface-sunk border-[#A78BFA]',
+  quote: 'bg-[#38A8F0] text-surface-sunk border-[#38A8F0]',
+  notinterested: 'bg-ink-mute text-surface-sunk border-ink-mute',
+  sold: 'bg-good text-surface-sunk border-good',
+  dnc: 'bg-bad text-surface-sunk border-bad',
 }
 
 /**

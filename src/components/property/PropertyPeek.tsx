@@ -88,7 +88,7 @@ export function PropertyPeek({
 
       <button
         onClick={() => (onOpenFull ? onOpenFull() : nav(`/property/${property.id}`))}
-        className="focusable min-h-tap w-full rounded-field text-sm font-semibold text-brand-600 active:bg-brand-50"
+        className="focusable min-h-tap w-full rounded-field text-sm font-semibold text-accent active:bg-surface-tint"
       >
         View full profile
       </button>

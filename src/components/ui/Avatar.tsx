@@ -7,15 +7,18 @@
  *
  * The palette is one hue. It used to reach into blues and indigos, which in a
  * list of five people read as five unrelated products; four steps of the brand
- * teal read as one set of people. Each pairing is a light tint with its own
- * darker ink, all at 4.5:1 or better, because two capital letters at 11px is
- * small text and has to be legible rather than suggestive.
+ * teal read as one set of people. Each pairing is a deep tint with its own
+ * lighter ink, all well past 4.5:1, because two capital letters at 11px is small
+ * text and has to be legible rather than suggestive.
+ *
+ * Inverted with the ground: on white these were light fills with dark ink, which
+ * is the same relationship read from the other side. Measured 7.9-10.2:1.
  */
 const TINTS = [
-  'bg-brand-50 text-brand-700',
-  'bg-brand-100 text-brand-700',
-  'bg-[#E3EDF0] text-[#0B5563]',
-  'bg-surface-field text-ink-soft',
+  'bg-surface-tint text-accent-strong',
+  'bg-[#16304A] text-[#A9C8F0]',
+  'bg-[#1E2A3D] text-ink-soft',
+  'bg-[#123227] text-[#7FE0B4]',
 ]
 
 function tintFor(seed: string): string {

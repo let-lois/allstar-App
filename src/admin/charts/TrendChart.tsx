@@ -102,7 +102,7 @@ export function TrendChart({ points, seriesNames, height = 220, format = String 
           onClick={() => setShowTable((v) => !v)}
           /* 44px on a phone, 32 at a desk. This is a real control, not a
              caption, and the console is used one-handed now. */
-          className="focusable ml-auto min-h-[44px] rounded-lg px-2 text-xs font-semibold text-brand-600 hover:bg-brand-50 lg:min-h-[32px]"
+          className="focusable ml-auto min-h-[44px] rounded-lg px-2 text-xs font-semibold text-accent hover:bg-surface-tint lg:min-h-[32px]"
         >
           {showTable ? 'Hide table' : 'Table view'}
         </button>

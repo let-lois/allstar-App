@@ -87,7 +87,7 @@ export function BottomNav({ role }: { role: Role }) {
                   // The label follows the icon: teal and semibold when selected,
                   // quiet grey otherwise. Weight carries as much of this as
                   // colour does, which is what keeps it legible in sunlight.
-                  isActive ? 'font-semibold text-brand-600' : 'font-medium text-ink-mute',
+                  isActive ? 'font-semibold text-accent' : 'font-medium text-ink-mute',
                 ].join(' ')
               }
             >
@@ -156,7 +156,7 @@ export function SideRail({ role }: { role: Role }) {
               // At rail width the pill alone is too quiet, so the whole row
               // tints — same two colours, more surface.
               isActive
-                ? 'bg-brand-50 text-brand-600'
+                ? 'bg-surface-tint text-accent'
                 : 'text-ink-mute hover:bg-surface-field',
             ].join(' ')
           }
@@ -181,7 +181,7 @@ export function SideRail({ role }: { role: Role }) {
             [
               'mt-auto flex min-h-[52px] items-center justify-center gap-3 rounded-field px-2 text-sm font-semibold lg:justify-start',
               isActive
-                ? 'bg-brand-50 text-brand-600'
+                ? 'bg-surface-tint text-accent'
                 : 'text-ink-mute hover:bg-surface-field',
             ].join(' ')
           }

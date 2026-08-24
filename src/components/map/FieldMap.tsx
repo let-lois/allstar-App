@@ -12,7 +12,7 @@ import {
 } from '../../lib/tiles'
 
 /** brand-500 — the one place on the map that is allowed to be teal by default. */
-const SELECTED_PIN = '#0A8296'
+const SELECTED_PIN = '#20C4D3'
 
 /**
  * Touch-first map renderer.
@@ -548,26 +548,28 @@ export function FieldMap({
         onWheel={onWheel}
       >
         {/* basemap */}
-        {/* Cool ground, white roads — the same off-white family as the app
-            background, so the map reads as part of the product rather than an
-            embedded widget from somewhere else. */}
-        <rect width={size.w} height={size.h} fill="#EDF1F3" />
+        {/* Deep ground, lit roads — the same navy family as the app background,
+            so the map reads as part of the product rather than an embedded
+            widget from somewhere else. The relationship is the one it always
+            was: the ground recedes and the street network sits on top of it.
+            Inverted, because everything else was. */}
+        <rect width={size.w} height={size.h} fill="#0F1828" />
         {/*
           Roads at street zooms, a graticule below them. The widths are the
-          difference between the two claims: fat white ribbons read as streets,
-          and drawing the world's meridians that way would be inventing a road
+          difference between the two claims: fat lit ribbons read as streets, and
+          drawing the world's meridians that way would be inventing a road
           network across the Pacific.
         */}
         {grid.streets ? (
           <>
-            <path d={grid.minor.join(' ')} stroke="#ffffff" strokeWidth={7} fill="none" />
-            <path d={grid.major.join(' ')} stroke="#ffffff" strokeWidth={13} fill="none" />
-            <path d={grid.major.join(' ')} stroke="#DCE3E7" strokeWidth={1} fill="none" />
+            <path d={grid.minor.join(' ')} stroke="#1E2A42" strokeWidth={7} fill="none" />
+            <path d={grid.major.join(' ')} stroke="#243250" strokeWidth={13} fill="none" />
+            <path d={grid.major.join(' ')} stroke="#33456B" strokeWidth={1} fill="none" />
           </>
         ) : (
           <>
-            <path d={grid.minor.join(' ')} stroke="#D7DEE3" strokeWidth={1} fill="none" />
-            <path d={grid.major.join(' ')} stroke="#C3CDD4" strokeWidth={1.5} fill="none" />
+            <path d={grid.minor.join(' ')} stroke="#1D2840" strokeWidth={1} fill="none" />
+            <path d={grid.major.join(' ')} stroke="#2A3A5C" strokeWidth={1.5} fill="none" />
           </>
         )}
 
@@ -596,7 +598,7 @@ export function FieldMap({
           <>
             <path
               d={routePaths.todo}
-              stroke="#0A8296"
+              stroke="#20C4D3"
               strokeWidth={5}
               strokeLinecap="round"
               strokeDasharray="2 10"
@@ -605,7 +607,7 @@ export function FieldMap({
             />
             <path
               d={routePaths.done}
-              stroke={layer === 'satellite' && hasTiles ? '#F1F5F9' : '#AEB8BE'}
+              stroke={layer === 'satellite' && hasTiles ? '#F1F5F9' : '#43587F'}
               strokeWidth={4}
               strokeLinecap="round"
               fill="none"
@@ -647,7 +649,7 @@ export function FieldMap({
                   1,
                 )})`}
               >
-                <circle r={17} fill="#fff" opacity={0.95} />
+                <circle r={17} fill="#123846" stroke="#20C4D3" strokeWidth={1.5} opacity={0.97} />
                 <g transform={`rotate(${drawnPath.plane.angle.toFixed(0)}) translate(-9.5 -9.5)`}>
                   <path
                     d="M21 16v-2l-8-5V3.5C13 2.67 12.33 2 11.5 2S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"
@@ -670,7 +672,7 @@ export function FieldMap({
             <path
               d={drawn.d}
               fill={drawn.pts.length >= 3 ? 'rgba(15,169,184,0.16)' : 'none'}
-              stroke="#087F8C"
+              stroke="#20C4D3"
               strokeWidth={2.5}
               strokeLinejoin="round"
               strokeDasharray={drawn.pts.length >= 3 ? undefined : '6 5'}
@@ -682,7 +684,7 @@ export function FieldMap({
                 cy={p.y}
                 r={6}
                 fill="#ffffff"
-                stroke="#087F8C"
+                stroke="#20C4D3"
                 strokeWidth={2.5}
               />
             ))}
@@ -696,10 +698,10 @@ export function FieldMap({
               cx={me.x}
               cy={me.y}
               r={Math.max(12, Math.min(accuracyPx, 400))}
-              fill="#2563eb"
+              fill="#60A5FA"
               opacity={0.12}
             />
-            <circle cx={me.x} cy={me.y} r={9} fill="#2563eb" stroke="#fff" strokeWidth={3} />
+            <circle cx={me.x} cy={me.y} r={9} fill="#60A5FA" stroke="#0F1828" strokeWidth={3} />
           </g>
         )}
 
@@ -715,14 +717,17 @@ export function FieldMap({
             colour and the ring is only there to hold the shape against imagery.
           */
           <g key={`c${i}`} data-marker="cluster" data-index={i} className="cursor-pointer">
-            <circle cx={c.x} cy={c.y} r={19} fill="#ffffff" opacity={0.55} />
+            <circle cx={c.x} cy={c.y} r={19} fill="#20C4D3" opacity={0.22} />
+            {/* Dark disc, bright count: 6.9:1. A white disc would need a dark
+                label, and a dark label is the one thing on this map that has
+                nothing else the same colour. */}
             <circle
               cx={c.x}
               cy={c.y}
               r={17}
-              fill="#ffffff"
-              stroke="#087F8C"
-              strokeWidth={1.25}
+              fill="#123846"
+              stroke="#20C4D3"
+              strokeWidth={1.5}
             />
             <text
               x={c.x}
@@ -731,7 +736,7 @@ export function FieldMap({
               className="nums"
               fontSize={13.5}
               fontWeight={600}
-              fill="#056470"
+              fill="#7FE0EF"
             >
               {c.members.length}
             </text>
@@ -843,7 +848,7 @@ export function FieldMap({
               filled one was the *passive* state indicator, not the action.
             */
             className={`metal press focusable grid h-11 w-11 place-items-center rounded-full ${
-              followMe ? 'metal-brand !text-brand-700' : 'metal-quiet !text-ink-soft'
+              followMe ? 'metal-brand !text-accent-strong' : 'metal-quiet !text-ink-soft'
             }`}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -862,7 +867,7 @@ export function FieldMap({
         thumb controls, not hidden behind a settings screen.
       */}
       {hasTiles && (
-        <p className="pointer-events-none absolute bottom-0 left-0 max-w-full truncate bg-white/70 px-1.5 py-0.5 text-[10px] leading-tight text-ink-soft">
+        <p className="pointer-events-none absolute bottom-0 left-0 max-w-full truncate bg-surface-sunk/80 px-1.5 py-0.5 text-[10px] leading-tight text-ink-soft">
           {LAYERS[layer].attribution}
         </p>
       )}

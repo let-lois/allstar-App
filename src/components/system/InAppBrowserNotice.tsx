@@ -60,7 +60,7 @@ export function InAppBrowserNotice({ tone = 'light' }: { tone?: 'light' | 'dark'
                 className={`focusable min-h-tap rounded-field px-3.5 font-semibold ${
                   tone === 'dark'
                     ? 'bg-warn-bg text-warn'
-                    : 'bg-warn text-white'
+                    : 'bg-warn text-surface-sunk'
                 }`}
               >
                 Open in Chrome
@@ -71,7 +71,7 @@ export function InAppBrowserNotice({ tone = 'light' }: { tone?: 'light' | 'dark'
                 className={`focusable min-h-tap rounded-field px-3.5 font-semibold ${
                   tone === 'dark'
                     ? 'bg-warn-bg text-warn'
-                    : 'bg-warn text-white'
+                    : 'bg-warn text-surface-sunk'
                 }`}
               >
                 {copied ? 'Link copied — paste in Safari' : 'Copy link'}

@@ -238,6 +238,24 @@ export function GoogleFieldMap({
 
         mapRef.current = new Map(boxRef.current, {
           mapId: gmapId(),
+          /*
+            Ask Google for the dark basemap.
+
+            Everything else in this app is themed from `index.css`, but Google's
+            tiles are rendered on their side and take none of it — left alone,
+            tapping to the real map would drop a bright white rectangle into the
+            middle of a near-black app.
+
+            Passed as the string rather than the `ColorScheme.DARK` enum so an
+            older Maps JS build ignores an option it does not know instead of
+            throwing on a missing symbol. Vector maps only; a raster fallback
+            stays light.
+
+            A Map Style attached to this Map ID in the Cloud console wins over
+            this. If the real map still comes up light, that is where to look —
+            not here.
+          */
+          colorScheme: 'DARK',
           center: initialCenter ??
             (properties[0] ? { lat: properties[0].lat, lng: properties[0].lng } : { lat: 30.5083, lng: -97.6789 }),
           zoom: initialZoom ?? DEFAULT_ZOOM,
@@ -536,7 +554,7 @@ export function GoogleFieldMap({
         <button
           onClick={() => setSatellite((s) => !s)}
           aria-label={`Switch to ${satellite ? 'streets' : 'satellite'} view`}
-          className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field metal metal-quiet text-[11px] font-semibold !text-brand-700"
+          className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field metal metal-quiet text-[11px] font-semibold !text-accent-strong"
         >
           {satellite ? 'MAP' : 'SAT'}
         </button>
@@ -558,7 +576,7 @@ export function GoogleFieldMap({
           <button
             onClick={() => flyTo(position.lat, position.lng, 18)}
             aria-label="Center on my location"
-            className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field metal metal-quiet text-base !text-brand-700"
+            className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field metal metal-quiet text-base !text-accent-strong"
           >
             ◎
           </button>

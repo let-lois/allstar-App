@@ -138,7 +138,7 @@ export function Today() {
                   green, and the doors number stays neutral. */}
               <div className="shrink-0 text-right">
                 <p className="eyebrow">Conversations</p>
-                <p className="nums mt-1 text-[28px] font-semibold leading-none tracking-[-0.02em] text-brand-600">
+                <p className="nums mt-1 text-[28px] font-semibold leading-none tracking-[-0.02em] text-accent">
                   {wins}
                 </p>
                 {pipelineToday > 0 && (
@@ -171,12 +171,12 @@ export function Today() {
               selectively" means in practice.
             */
             <Card padded={false} className="overflow-hidden" aria-label="Next property">
-              <div className="flex items-center justify-between gap-2 bg-brand-50 px-4 py-2.5">
-                <p className="text-[12.5px] font-semibold text-brand-600">
+              <div className="flex items-center justify-between gap-2 bg-surface-tint px-4 py-2.5">
+                <p className="text-[12.5px] font-semibold text-accent">
                   Next stop
                 </p>
                 {dist != null && (
-                  <p className="nums text-[12.5px] font-semibold text-brand-700">
+                  <p className="nums text-[12.5px] font-semibold text-accent-strong">
                     {formatDistance(dist)} · {walkMinutes(dist)} min
                   </p>
                 )}
@@ -275,7 +275,7 @@ export function Today() {
               onClick={() => nav('/standings')}
               className="metal-row focusable -mx-4 flex min-h-[64px] items-center gap-3 px-4 text-left sm:mx-0 sm:rounded-card sm:border sm:border-line"
             >
-              <span className="nums shrink-0 text-[20px] font-semibold tracking-[-0.02em] text-brand-700">
+              <span className="nums shrink-0 text-[20px] font-semibold tracking-[-0.02em] text-accent-strong">
                 {myStanding.tied ? 'T' : ''}#{myStanding.rank}
               </span>
               <span className="min-w-0 flex-1">
@@ -286,7 +286,7 @@ export function Today() {
                   {myStanding.points.toLocaleString()} points · {board.length} reps
                 </span>
               </span>
-              <span className="shrink-0 text-brand-700">
+              <span className="shrink-0 text-accent-strong">
                 <IconChevron />
               </span>
             </button>

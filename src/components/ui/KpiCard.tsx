@@ -35,7 +35,7 @@ export function KpiCard({
   className?: string
 }) {
   const valueTone =
-    tone === 'brand' ? 'text-brand-600' : tone === 'good' ? 'text-good' : 'text-ink'
+    tone === 'brand' ? 'text-accent' : tone === 'good' ? 'text-good' : 'text-ink'
   const lead = size === 'lead'
 
   const body = (

@@ -10,7 +10,7 @@ export function useSync(): SyncSnapshot {
 
 const TONE = {
   synced: { dot: 'bg-good', text: 'text-good', bg: 'bg-good-bg', label: 'Synced' },
-  syncing: { dot: 'bg-brand-400', text: 'text-brand-700', bg: 'bg-brand-50', label: 'Syncing' },
+  syncing: { dot: 'bg-brand-400', text: 'text-accent-strong', bg: 'bg-surface-tint', label: 'Syncing' },
   pending: { dot: 'bg-warn', text: 'text-warn', bg: 'bg-warn-bg', label: 'Pending' },
   offline: { dot: 'bg-ink-faint', text: 'text-ink-soft', bg: 'bg-surface-field', label: 'Offline' },
   error: { dot: 'bg-bad', text: 'text-bad', bg: 'bg-bad-bg', label: 'Sync failed' },

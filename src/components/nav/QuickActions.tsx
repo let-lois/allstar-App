@@ -93,7 +93,7 @@ export function QuickActions() {
                 }}
                 className="metal metal-quiet press focusable flex min-h-[64px] w-full items-center gap-3 rounded-card px-4 text-left"
               >
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-field bg-brand-50 text-brand-600">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-field bg-surface-tint text-accent">
                   {a.icon}
                 </span>
                 <span className="min-w-0">

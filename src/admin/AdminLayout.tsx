@@ -138,7 +138,7 @@ export function AdminLayout() {
             className={({ isActive }) =>
               [
                 'mb-0.5 flex min-h-[40px] items-center rounded-lg px-3 text-sm font-medium',
-                isActive ? 'bg-brand-50 text-brand-600' : 'text-ink-mute hover:bg-surface-field',
+                isActive ? 'bg-surface-tint text-accent' : 'text-ink-mute hover:bg-surface-field',
               ].join(' ')
             }
           >

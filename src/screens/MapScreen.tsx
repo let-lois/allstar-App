@@ -289,7 +289,7 @@ export function MapScreen() {
               mapHandle.current?.flyTo(p.lat, p.lng, 18)
               setSelectedId(nearest.id)
             }}
-            className="metal metal-quiet press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-pill px-4 text-[14px] font-semibold !text-brand-700"
+            className="metal metal-quiet press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-pill px-4 text-[14px] font-semibold !text-accent-strong"
             style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
           >
             Nearest door
@@ -316,7 +316,7 @@ export function MapScreen() {
             <div className="scroll-pane p-4">
               <button
                 onClick={() => setSelectedId(null)}
-                className="focusable mb-2 min-h-tap rounded-lg px-2 text-sm font-semibold text-brand-600"
+                className="focusable mb-2 min-h-tap rounded-lg px-2 text-sm font-semibold text-accent"
               >
                 ← All properties
               </button>

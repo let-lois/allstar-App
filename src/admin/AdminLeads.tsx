@@ -183,7 +183,7 @@ export default function AdminLeads() {
       {/* Only appears once something is selected — a permanently visible bulk
           bar is a permanently available way to move the wrong things. */}
       {selected.size > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-field bg-brand-50 p-3 ring-1 ring-brand-200">
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-field bg-surface-tint p-3 ring-1 ring-brand-500">
           <span className="text-sm font-semibold">
             {selected.size.toLocaleString()} selected
           </span>
