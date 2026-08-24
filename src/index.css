@@ -817,11 +817,24 @@
     /* Starts off the left edge and ends off the right, so neither end is seen. */
     transform: translateX(-120%);
     /*
-       1.2s and near-linear. The first pass was 900ms on an ease-in-out, which
-       spends most of its time at the ends and crosses the tile in about 380ms —
-       technically a shine, in practice a flicker you are not sure you saw.
+       A slow pass every 7.5 seconds, four times, and then it stops.
+
+       The 30 seconds is the whole sequence rather than one crossing: a single
+       band taking half a minute to cross 236 pixels moves about eight pixels a
+       second, which is not an animation, it is a stuck element. So the *pass*
+       slowed to 2.5s — twice its old speed, and now unmistakably a shine
+       travelling rather than a flicker — and the gap between passes carries the
+       rest of the time.
+
+       The pause lives inside the keyframes rather than in an iteration delay,
+       which CSS has no way to express: the band completes its journey in the
+       first third of each cycle and waits off-screen for the other two.
+
+       Four iterations, not infinite. Sign-in is a screen people are trying to
+       get past, and something still catching the light two minutes into a
+       forgotten password is no longer decoration.
     */
-    animation: wordmark-glint 1200ms cubic-bezier(0.3, 0.1, 0.3, 1) 480ms both;
+    animation: wordmark-glint 7500ms cubic-bezier(0.3, 0.1, 0.3, 1) 480ms 4 both;
   }
 
   /*
@@ -962,10 +975,15 @@
 }
 
 @keyframes wordmark-glint {
-  from {
+  0% {
     transform: translateX(-120%);
   }
-  to {
+  /* The crossing: 33% of 7.5s is 2.5s of travel. */
+  33% {
+    transform: translateX(120%);
+  }
+  /* And the wait, off the right edge, until the next pass. */
+  100% {
     transform: translateX(120%);
   }
 }
