@@ -194,7 +194,7 @@ export function DataList<T>({
                 onClick={onRow ? () => onRow(row) : undefined}
                 aria-selected={isSelected ? isSelected(row) : undefined}
                 className={`border-t border-line-soft ${onRow ? 'cursor-pointer' : ''} ${
-                  isSelected?.(row) ? 'bg-brand-50' : 'hover:bg-surface-field'
+                  isSelected?.(row) ? 'bg-surface-tint' : 'hover:bg-surface-field'
                 }`}
               >
                 {leading && <td className="px-3 py-3 pl-5">{leading(row)}</td>}

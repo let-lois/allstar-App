@@ -41,7 +41,7 @@ export function Collapsible({
         <span className="flex items-center gap-2 text-[15px] font-medium">
           {title}
           {count != null && (
-            <span className="nums rounded-full bg-white/70 px-2 py-0.5 text-xs text-brand-700">
+            <span className="nums rounded-full bg-ink/10 px-2 py-0.5 text-xs text-accent-strong">
               {count}
             </span>
           )}
@@ -53,7 +53,7 @@ export function Collapsible({
             height="18"
             viewBox="0 0 24 24"
             fill="none"
-            className={`shrink-0 text-brand-700 transition-transform ${open ? 'rotate-180' : ''}`}
+            className={`shrink-0 text-accent-strong transition-transform ${open ? 'rotate-180' : ''}`}
           >
             <path
               d="M6 9l6 6 6-6"

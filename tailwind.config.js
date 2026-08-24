@@ -3,29 +3,33 @@
 /*
  * Design tokens.
  *
- * White, teal and near-black, with true-grey neutrals. Every value here is a
- * token on purpose: the whole visual system is meant to be changeable from this
- * file, so nothing downstream hard-codes a hex.
+ * Teal on near-black, with cool-grey neutrals. Every value here is a token on
+ * purpose: the whole visual system is meant to be changeable from this file and
+ * `index.css`, so nothing downstream hard-codes a hex.
+ *
+ * Two kinds of colour live here, and the difference is the important part.
+ *
+ * **Semantic roles** — ink, surface, line, accent, status — are CSS variables.
+ * They describe a job ("the quietest legible text", "the ground everything
+ * stands on") and take their value from the theme in `index.css`. Moving to a
+ * dark ground is not a matter of darkening greys; it is the same roles pointing
+ * somewhere else, which is why a call site never says slate-500.
+ *
+ * **Saturated fills** — the brand ramp, the logo, outcome colours — stay
+ * literal. A filled teal button specifies both its own face and its own label,
+ * so it measures the same wherever it lands and has nothing to theme.
  *
  * The teal is split by *job*, not by shade, and the split is measured rather
- * than chosen. Three of the four brand steps cannot legally carry white text:
+ * than chosen — with `scripts/lib/contrast.mjs`, whose figures are pinned by
+ * `npm run verify:contrast`.
  *
- *   `brand-400` #20C4D3 — 2.12:1 on white. Decorative fill only: bars, dots.
- *   `brand-500` #0FA9B8 — 2.84:1. The brand accent. Fills, indicators, borders
- *                          on tinted grounds. Never a label colour, never a
- *                          focus ring — it misses even the 3:1 floor WCAG
- *                          1.4.11 sets for a meaningful graphic.
- *   `brand-600` #087F8C — 4.75:1. The *interactive* teal: filled buttons carry
- *                          white labels at AA, and it doubles as teal text and
- *                          as the active icon colour on a tinted pill (4.35:1
- *                          over brand-50).
+ *   `brand-400` #20C4D3 — decorative fill: bars, dots, map pins.
+ *   `brand-500` #0FA9B8 — the brand accent. Fills, indicators, borders.
+ *   `brand-600` #087F8C — filled interactive teal; white labels pass AA on it.
  *
- * That is why a primary button is 600 and the accent is 500. They look like one
- * colour and behave like two, which is what lets the interface be bright without
- * any of it being unreadable in sunlight.
- *
- * The neutrals are cool greys. An off-white with a warm cast under a cool accent
- * reads as a mistake rather than as a choice.
+ * Teal *writing* is a separate token, `accent`, because the readable teal
+ * inverts with the ground: dark (#087F8C) on white, bright (#20C4D3) on this.
+ * A step number cannot express that; a role can.
  */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
@@ -41,58 +45,108 @@ export default {
     },
     extend: {
       colors: {
+        /*
+         * Semantic colours are CSS variables, not hexes.
+         *
+         * The app runs on a near-black ground, and a theme is not a set of
+         * darker greys — it is the same *roles* pointing at different values.
+         * Naming the role here and the value in `index.css` is what lets
+         * `text-ink-mute` mean "the quietest legible text on whatever this
+         * screen stands on" rather than "slate 500". Every value below was
+         * measured with `scripts/lib/contrast.mjs`, not picked.
+         *
+         * The channels are space-separated so Tailwind's `<alpha-value>` still
+         * works: `bg-ink/15` composites correctly against the dark ground.
+         */
         ink: {
-          // 17.7:1 on white. Not pure black — reads warmer and less harsh.
-          DEFAULT: '#111827',
-          soft: '#334155',
-          // 4.76:1 on white, 4.51:1 on the app ground. The lightest tone that
-          // may carry text.
-          mute: '#64748B',
-          // Decorative only — 2.56:1. Dividers, disabled glyphs, placeholder
-          // rules. Never text.
-          faint: '#94A3B8',
+          /** 15.5:1 on a card. The page's primary text. */
+          DEFAULT: 'rgb(var(--ink) / <alpha-value>)',
+          /** 11.0:1. Secondary text, and the floor on any machined face. */
+          soft: 'rgb(var(--ink-soft) / <alpha-value>)',
+          /** 6.5:1 on a card. The quietest tone that may carry body text. */
+          mute: 'rgb(var(--ink-mute) / <alpha-value>)',
+          /** 3.5:1 — decorative. Dividers, placeholders, disabled glyphs. */
+          faint: 'rgb(var(--ink-faint) / <alpha-value>)',
         },
         surface: {
-          DEFAULT: '#ffffff',
-          /** The app ground: a near-white, so white cards lift off it. */
-          sunk: '#F7F9FA',
+          /** A card: one step up from the ground, so it lifts without a shadow. */
+          DEFAULT: 'rgb(var(--surface) / <alpha-value>)',
+          /** The app ground. Everything else is measured against this. */
+          sunk: 'rgb(var(--surface-sunk) / <alpha-value>)',
           /** The faintest teal — active pills, grouped rows, callouts. */
-          tint: '#E7F8FA',
-          /** Inputs and quiet chips: one step down from the ground. */
-          field: '#F1F4F5',
-          raised: '#ffffff',
+          tint: 'rgb(var(--surface-tint) / <alpha-value>)',
+          /** Inputs: recessed by being darker than the card, not by a bevel. */
+          field: 'rgb(var(--surface-field) / <alpha-value>)',
+          raised: 'rgb(var(--surface-raised) / <alpha-value>)',
         },
         /**
          * The one border colour. A single hairline everywhere is what stops the
          * interface reading as a grid of boxes — see the note on `.card`.
          */
-        line: { DEFAULT: '#E3E8EA', soft: '#EDF1F3' },
+        line: {
+          DEFAULT: 'rgb(var(--line) / <alpha-value>)',
+          soft: 'rgb(var(--line-soft) / <alpha-value>)',
+        },
+        /*
+         * Teal *as text*, which is a different problem from teal as a fill.
+         *
+         * On a white ground the readable teal is dark (#087F8C, 4.75:1); on this
+         * one it is bright (#20C4D3, 7.94:1 on a card). Same role, opposite end
+         * of the ramp — which is exactly why it cannot be a step number. Call
+         * sites that mean "teal writing" say `text-accent` and stay correct on
+         * either ground.
+         */
+        accent: {
+          DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
+          /** The brighter step, for glyphs on a machined teal face. 7.2:1 there. */
+          strong: 'rgb(var(--accent-strong) / <alpha-value>)',
+        },
         brand: {
-          50: '#E7F8FA',
-          100: '#D2F1F6',
-          200: '#A5E3EC',
-          /** Decorative fill — 2.12:1. Bars and dots, never a glyph that matters. */
+          /*
+           * The saturated ramp stays literal, because a filled teal button
+           * carries its own label: `bg-brand-600 text-white` measures 4.75:1
+           * wherever it lands, and the shape reads at 3.9:1 against the ground.
+           * A fill that specifies both of its own colours does not need a theme.
+           *
+           * The light tints moved out: what used to be `bg-brand-50` is now
+           * `bg-surface-tint`, since "the faintest teal ground" has to darken
+           * with everything else and a step called 50 cannot.
+           */
+          /** Decorative fill — bars and dots. 8.75:1 as a shape on the ground. */
           400: '#20C4D3',
-          /** The brand accent — 2.84:1. Fills and indicators. Not text. */
+          /** The brand accent. Fills, indicators, borders. */
           500: '#0FA9B8',
-          /** Interactive. 4.75:1 with white — labels and icons pass AA. */
+          /** Filled interactive teal. White labels pass AA on it. */
           600: '#087F8C',
           700: '#056470',
         },
         /*
-         * The logo teal, sampled from the artwork. Now the same value as
-         * brand-400: the mark and the interface accent were deliberately
-         * separate while the app was orange, and are deliberately the same now
-         * that it is not. Kept as its own name so anything that means "the
-         * logo's colour" — rather than "the accent" — still says so.
+         * The logo teal, sampled from the artwork. Kept as its own name so
+         * anything that means "the logo's colour" — rather than "the accent" —
+         * still says so.
          */
         logo: { DEFAULT: '#07B3CA', ink: '#0A6B7D' },
-        // Semantic, and deliberately not orange: a warning that shares the brand
-        // hue stops reading as a warning.
-        good: { DEFAULT: '#166534', bg: '#E8F5EC' },
-        warn: { DEFAULT: '#B45309', bg: '#FEF3E2' },
-        bad: { DEFAULT: '#B91C1C', bg: '#FDECEC' },
-        info: { DEFAULT: '#1D4ED8', bg: '#E8EEFD' },
+        /*
+         * Semantic status, themed for the same reason the neutrals are: the
+         * light-ground greens and reds measure 2.4-3.4:1 on a dark card, which
+         * is a status nobody can read.
+         */
+        good: {
+          DEFAULT: 'rgb(var(--good) / <alpha-value>)',
+          bg: 'rgb(var(--good-bg) / <alpha-value>)',
+        },
+        warn: {
+          DEFAULT: 'rgb(var(--warn) / <alpha-value>)',
+          bg: 'rgb(var(--warn-bg) / <alpha-value>)',
+        },
+        bad: {
+          DEFAULT: 'rgb(var(--bad) / <alpha-value>)',
+          bg: 'rgb(var(--bad-bg) / <alpha-value>)',
+        },
+        info: {
+          DEFAULT: 'rgb(var(--info) / <alpha-value>)',
+          bg: 'rgb(var(--info-bg) / <alpha-value>)',
+        },
         outcome: {
           noanswer: '#64748b',
           interested: '#0d9488',
@@ -127,18 +181,26 @@ export default {
       },
       boxShadow: {
         /*
-         * Wide, soft and very low alpha. Two layers: a barely-there contact
-         * shadow and a broad diffuse one for lift. The failure mode being
-         * avoided is a tight dark shadow, which makes a card look stuck onto the
-         * page rather than resting on it — and stacked up the screen, reads as a
-         * dashboard of widgets.
+         * Wide, soft, and much deeper than they were on white.
+         *
+         * A 6%-alpha shadow is invisible on a near-black ground — there is
+         * nothing darker for it to be — so these carry roughly five times the
+         * alpha they used to. The failure mode being avoided is unchanged: a
+         * tight dark shadow makes a card look stuck onto the page rather than
+         * resting on it, and stacked up the screen reads as a dashboard of
+         * widgets. What actually separates a card here is its hairline and its
+         * one-pixel lit top edge; these only keep the corners from looking cut
+         * out.
+         *
+         * The nav hairline inverts outright: a dark line above a dark bar is
+         * nothing, so it is now a faint light one.
          */
-        card: '0 1px 2px rgba(15,23,42,0.03), 0 4px 16px rgba(15,23,42,0.06)',
-        raise: '0 2px 4px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.08)',
-        float: '0 4px 10px rgba(15,23,42,0.06), 0 16px 32px rgba(15,23,42,0.10)',
-        sheet: '0 -6px 28px rgba(15,23,42,0.12)',
+        card: '0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.28)',
+        raise: '0 2px 6px rgba(0,0,0,0.45), 0 12px 32px rgba(0,0,0,0.35)',
+        float: '0 6px 14px rgba(0,0,0,0.5), 0 20px 44px rgba(0,0,0,0.45)',
+        sheet: '0 -8px 34px rgba(0,0,0,0.55)',
         /** Bottom nav: a hairline, not a drop shadow. */
-        nav: '0 -1px 0 rgba(15,23,42,0.05)',
+        nav: '0 -1px 0 rgba(255,255,255,0.07)',
       },
       fontSize: {
         // Bumped baseline: outdoor sunlight legibility.

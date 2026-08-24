@@ -382,6 +382,72 @@ npm run verify:console
 ...asserts a field rep cannot reach the console even by URL, that a manager sees
 fewer sections than an admin, and that a phone gets the handoff.
 
+## The theme
+
+The app runs on a near-black ground. It is not a dark *mode* — there is no
+toggle and no light variant to keep in step — it is the theme, and the login
+screen it grew out of was the only part of the product already wearing it.
+
+Colour lives in two places, and the split is the part worth understanding.
+
+**Semantic roles are CSS variables**, declared once in `src/index.css` and
+mapped to Tailwind names in `tailwind.config.js`:
+
+```
+--ink --ink-soft --ink-mute --ink-faint        text, by how quiet it may be
+--surface --surface-sunk --surface-raised      the ground and what sits on it
+--surface-field --surface-tint
+--line --line-soft                             the one hairline
+--accent --accent-strong                       teal as *writing*
+--good --warn --bad --info (+ -bg)             status
+```
+
+A role describes a job, not a shade: `text-ink-mute` means "the quietest thing
+that may still carry body text on whatever this screen stands on". That is what
+makes the ground swappable — retheming is these values, not a sweep through
+forty files.
+
+**Saturated fills stay literal.** `bg-brand-600 text-white` specifies both its
+face and its label, measures 4.75:1 wherever it lands, and has nothing to
+theme. The brand ramp, the logo teal and the outcome swatches are all in this
+category.
+
+The one thing that catches people out is that **teal writing and teal fills are
+different tokens**. The readable teal inverts with the ground — `#087F8C` on
+white, `#20C4D3` on this — so anything that means "teal text" says `text-accent`
+and stays right either way. A step number cannot express that, which is why
+`text-brand-600` no longer exists.
+
+### Contrast is measured, not chosen
+
+```bash
+npm run verify:contrast
+```
+
+82 assertions, no browser needed. It reads the real values out of `index.css`,
+`charts/tokens.ts` and `FieldMap.tsx` rather than restating them, so editing a
+variable and forgetting the consequence fails here instead of on a doorstep.
+It covers text on every surface, the machined faces measured *at their lightest
+point* (the sheen falls exactly where a label sits), the status pills, the map
+swatches against the basemap, and the chart chrome — which restates the theme as
+hexes for the SVG renderer and is therefore a second source of truth worth
+pinning.
+
+It also asserts a *ceiling*: `ink-faint` must stay under 4.5:1. It is dividers
+and placeholders, and the day it passes as text is the day the distinction this
+palette rests on is gone.
+
+Two things it deliberately does not claim:
+
+- **The chart series' colour-blindness separation is inherited, not re-run.**
+  The blue/orange pair was validated on a white surface with a palette validator
+  that is not in this repo. The hues are unchanged and both were lifted by a
+  similar step, so it should hold — but "should" is not "measured".
+- **Google's basemap is not ours to theme.** `GoogleFieldMap` now asks for
+  `colorScheme: 'DARK'`, which covers vector maps, but a Map Style attached to
+  the Map ID in the Cloud console overrides it. If the real map comes up light,
+  that is where to look.
+
 ## Mobile layout audit
 
 ```bash

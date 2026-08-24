@@ -187,7 +187,7 @@ export function AdminTeam() {
             phone: 'title',
             cell: (m) => (
               <span className="flex items-center gap-2.5">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-50 text-[11px] font-semibold text-brand-600">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-tint text-[11px] font-semibold text-accent">
                   {m.initials}
                 </span>
                 <span className="min-w-0">
@@ -265,7 +265,7 @@ export function AdminTeam() {
             cell: (m) => (
               <button
                 onClick={() => setEditing(m)}
-                className="focusable min-h-[32px] rounded-lg px-2 text-xs font-semibold text-brand-600 hover:bg-brand-50"
+                className="focusable min-h-[32px] rounded-lg px-2 text-xs font-semibold text-accent hover:bg-surface-tint"
               >
                 Manage
               </button>
@@ -324,7 +324,7 @@ function MemberDetail({
   return (
     <div className="space-y-4 pt-1">
       <div className="flex items-center gap-3">
-        <span className="grid h-12 w-12 place-items-center rounded-full bg-brand-50 font-bold text-brand-600">
+        <span className="grid h-12 w-12 place-items-center rounded-full bg-surface-tint font-bold text-accent">
           {member.initials}
         </span>
         <div>

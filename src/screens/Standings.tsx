@@ -71,7 +71,7 @@ export function Standings() {
                 <section className="card p-5">
                   <p className="text-[12.5px] font-medium text-ink-mute">You today</p>
                   <div className="mt-1 flex items-baseline gap-2.5">
-                    <span className="nums text-[38px] font-semibold leading-none tracking-[-0.02em] text-brand-600">
+                    <span className="nums text-[38px] font-semibold leading-none tracking-[-0.02em] text-accent">
                       {mine.tied ? 'T' : ''}#{mine.rank}
                     </span>
                     <span className="text-[14px] text-ink-mute">
@@ -133,12 +133,12 @@ export function Standings() {
                     <button
                       onClick={() => nav(`/rep/${rep.id}`)}
                       className={`flex w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-field ${
-                        rep.id === me?.id ? 'bg-brand-50' : ''
+                        rep.id === me?.id ? 'bg-surface-tint' : ''
                       }`}
                     >
                       <span
                         className={`nums w-7 shrink-0 text-center text-[15px] font-semibold ${
-                          rank === 1 ? 'text-brand-600' : 'text-ink-mute'
+                          rank === 1 ? 'text-accent' : 'text-ink-mute'
                         }`}
                       >
                         {tied ? 'T' : ''}
@@ -222,7 +222,7 @@ export function Standings() {
 
           <button
             onClick={() => nav('/today')}
-            className="focusable mx-auto min-h-[44px] px-3 text-[13px] font-semibold text-brand-700"
+            className="focusable mx-auto min-h-[44px] px-3 text-[13px] font-semibold text-accent-strong"
           >
             Back to today
           </button>

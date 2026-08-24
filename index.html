@@ -7,7 +7,22 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5"
     />
-    <meta name="theme-color" content="#111827" />
+    <meta name="theme-color" content="#0D1320" />
+    <style>
+      /*
+        Painted before the stylesheet arrives.
+
+        The app's ground lives in `index.css`, which is a separate request — so
+        between first paint and that file landing, the browser paints its own
+        default. On a dark app that is a white flash on every cold start, and on
+        a phone on bad signal it is not a flash, it is a second of white. This
+        one declaration is the whole fix; `--surface-sunk` is the real source and
+        `verify:contrast` fails if the two drift apart.
+      */
+      html {
+        background: #0d1320;
+      }
+    </style>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

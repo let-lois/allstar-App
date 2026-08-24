@@ -56,8 +56,14 @@ export function Login() {
     }
   }
 
+  /*
+    The login used to hard-code its own dark ground while the rest of the app was
+    white. It no longer has to: `surface-sunk` *is* that ground now, and pointing
+    this screen at the theme is what keeps the sign-in and the app behind it one
+    product rather than two that happen to share a logo.
+  */
   return (
-    <div className="app-shell bg-ink text-white">
+    <div className="app-shell bg-surface-sunk text-ink">
       {/* Entry point — the earliest possible place to catch a webview link. */}
       <div className="pad-top shrink-0">
         <InAppBrowserNotice tone="dark" />
@@ -108,7 +114,7 @@ export function Login() {
 
           <form onSubmit={submit} noValidate>
             <label className="block">
-              <span className="text-[13px] font-medium text-white/70">
+              <span className="text-[13px] font-medium text-ink-mute">
                 Email
               </span>
               <input
@@ -124,13 +130,13 @@ export function Login() {
                 /* 16px minimum: anything smaller makes iOS Safari zoom the page
                    on focus, and the rep then has to pinch back out to find the
                    password field. */
-                className="field-sunk mt-1.5 h-14 w-full rounded-field px-4 text-base text-white placeholder:text-ink-faint"
+                className="field-sunk mt-1.5 h-14 w-full rounded-field px-4 text-base text-ink placeholder:text-ink-faint"
                 placeholder="you@company.com"
               />
             </label>
 
             <label className="mt-3.5 block">
-              <span className="text-[13px] font-medium text-white/70">
+              <span className="text-[13px] font-medium text-ink-mute">
                 Password
               </span>
               <span className="relative mt-1.5 block">
@@ -140,7 +146,7 @@ export function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
                   enterKeyHint="go"
-                  className="field-sunk h-14 w-full rounded-field pl-4 pr-[76px] text-base text-white placeholder:text-ink-faint"
+                  className="field-sunk h-14 w-full rounded-field pl-4 pr-[76px] text-base text-ink placeholder:text-ink-faint"
                   placeholder="••••••••••"
                 />
                 <button
@@ -185,11 +191,11 @@ export function Login() {
 
           {/* --- the demo, kept alongside rather than behind a flag --------- */}
           <div className="mt-8 flex items-center gap-3">
-            <span className="h-px flex-1 bg-white/10" />
-            <span className="text-[12px] font-medium uppercase tracking-[0.08em] text-white/50">
+            <span className="h-px flex-1 bg-line" />
+            <span className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-mute">
               or
             </span>
-            <span className="h-px flex-1 bg-white/10" />
+            <span className="h-px flex-1 bg-line" />
           </div>
 
           {!showDemo ? (
@@ -202,7 +208,7 @@ export function Login() {
             </button>
           ) : (
             <>
-              <p className="mb-3 mt-5 text-[13px] font-medium text-white/60">
+              <p className="mb-3 mt-5 text-[13px] font-medium text-ink-mute">
                 Demo — sample data, no account
               </p>
               <ul className="space-y-2.5">
@@ -212,7 +218,7 @@ export function Login() {
                       onClick={() => void signInDemo(u.id)}
                       className="metal metal-dark press focusable flex min-h-[68px] w-full items-center gap-3 rounded-card px-4 text-left"
                     >
-                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-200 text-sm font-semibold text-brand-700">
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface-tint text-sm font-semibold text-accent-strong">
                         {u.avatarInitials}
                       </span>
                       <span className="min-w-0 flex-1">
@@ -222,7 +228,7 @@ export function Login() {
                         </span>
                       </span>
                       {u.role === 'field_rep' && (
-                        <span className="shrink-0 rounded-full bg-brand-400/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-brand-200">
+                        <span className="shrink-0 rounded-full bg-brand-400/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-accent-strong">
                           Field
                         </span>
                       )}

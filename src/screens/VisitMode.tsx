@@ -136,31 +136,37 @@ export function VisitMode() {
   /* --- completed ---------------------------------------------------------- */
 
   if (step === 'done') {
+    /*
+      The confirmation is a deep green ground with the theme's bright green on
+      it, not a bright green ground with white on it. `good` inverted when the
+      app did — it is the green that has to be *readable* on a dark screen — and
+      white over it measures 1.7:1.
+    */
     return (
-      <div className="app-shell bg-good text-white">
+      <div className="app-shell bg-good-bg text-ink">
         <div className="scroll-pane pad-top flex flex-col justify-center px-6 text-center">
           <div className="mx-auto w-full max-w-sm">
-            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-white/15 text-4xl">
+            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-good/15 text-4xl text-good">
               ✓
             </div>
             <h1 className="mt-5 text-2xl font-black">Visit recorded</h1>
-            <p className="mt-1 text-white/80">
+            <p className="mt-1 text-ink-soft">
               {property.address1} · {outcomeDef?.label}
             </p>
-            <p className="mt-1 text-sm text-white/60">
+            <p className="mt-1 text-sm text-ink-mute">
               {duration(visit.durationMs ?? elapsed)}
               {photos.length > 0 && ` · ${photos.length} photo${photos.length === 1 ? '' : 's'}`}
               {nextAt && nextType !== 'none' && ` · follow-up ${relativeLower(nextAt)}`}
             </p>
             {/* State the truth for the situation the rep is actually in. */}
-            <p className="mt-5 inline-flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-2 text-[12.5px] font-semibold">
+            <p className="mt-5 inline-flex items-center gap-2 rounded-full bg-ink/10 px-3.5 py-2 text-[12.5px] font-semibold">
               <span
                 className={`h-2 w-2 rounded-full ${
                   sync.state === 'offline'
-                    ? 'bg-white/60'
+                    ? 'bg-ink-mute'
                     : sync.state === 'synced'
-                      ? 'bg-white'
-                      : 'bg-[#FCD34D]'
+                      ? 'bg-good'
+                      : 'bg-warn'
                 }`}
               />
               {sync.state === 'offline'
@@ -198,7 +204,7 @@ export function VisitMode() {
           )}
           <button
             onClick={() => nav('/today', { replace: true })}
-            className="focusable min-h-tap w-full rounded-field text-[15px] font-semibold text-white/85 active:bg-white/10"
+            className="focusable min-h-tap w-full rounded-field text-[15px] font-semibold text-ink-soft active:bg-ink/10"
           >
             Back to Today
           </button>
@@ -214,23 +220,23 @@ export function VisitMode() {
   return (
     <div className="app-shell bg-surface-sunk">
       {/* Sticky context header: the rep must never lose track of which door. */}
-      <header className="pad-top shrink-0 bg-ink text-white">
+      <header className="pad-top shrink-0 border-b border-line bg-surface-raised text-ink">
         <div className="flex items-center gap-2 px-2 py-2">
           <button
             onClick={() => void cancel()}
             aria-label="Exit visit"
-            className="focusable grid h-11 w-11 shrink-0 place-items-center rounded-full active:bg-white/10"
+            className="focusable grid h-11 w-11 shrink-0 place-items-center rounded-full active:bg-ink/10"
           >
             <IconClose />
           </button>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] font-semibold leading-tight">{property.address1}</p>
-            <p className="truncate text-[12.5px] text-white/70">
+            <p className="truncate text-[12.5px] text-ink-mute">
               {contact?.name ?? 'No contact'}
               {dist != null && ` · ${formatDistance(dist)} away`}
             </p>
           </div>
-          <span className="nums shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-[12px] font-semibold">
+          <span className="nums shrink-0 rounded-full bg-ink/10 px-2.5 py-1 text-[12px] font-semibold">
             {duration(elapsed)}
           </span>
         </div>
@@ -242,7 +248,7 @@ export function VisitMode() {
           stated here, in the rep's terms, rather than as a status icon.
         */}
         {sync.state === 'offline' && (
-          <p className="flex items-center gap-2 bg-white/10 px-4 py-1.5 text-[11px] font-medium text-white/90">
+          <p className="flex items-center gap-2 bg-ink/10 px-4 py-1.5 text-[11px] font-medium text-ink-soft">
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#FCD34D]" />
             Offline — this visit is saving to your phone
           </p>
@@ -252,7 +258,7 @@ export function VisitMode() {
           {STEPS.map((s, i) => (
             <li key={s.key} className="flex-1">
               <div
-                className={`h-1 rounded-full ${i <= stepIndex ? 'bg-brand-400' : 'bg-white/20'}`}
+                className={`h-1 rounded-full ${i <= stepIndex ? 'bg-brand-400' : 'bg-ink/20'}`}
               />
               {/*
                 11px and white/60 rather than 10px and white/40. The old pair
@@ -262,7 +268,7 @@ export function VisitMode() {
               */}
               <span
                 className={`mt-1 block text-[11px] font-semibold ${
-                  i <= stepIndex ? 'text-white' : 'text-white/60'
+                  i <= stepIndex ? 'text-ink' : 'text-ink-mute'
                 }`}
               >
                 {s.label}
@@ -298,7 +304,7 @@ export function VisitMode() {
                 <span className="eyebrow">Outcome</span>
                 <button
                   onClick={() => setStep('outcome')}
-                  className="focusable -mr-1.5 min-h-[36px] rounded-field px-1.5 text-[13px] font-semibold text-brand-600"
+                  className="focusable -mr-1.5 min-h-[36px] rounded-field px-1.5 text-[13px] font-semibold text-accent"
                 >
                   Change
                 </button>
@@ -388,7 +394,7 @@ export function VisitMode() {
                       aria-pressed={nextAt === w.at}
                       className={`press focusable min-h-[52px] rounded-field text-[14px] font-semibold transition-colors ${
                         nextAt === w.at
-                          ? 'bg-brand-50 text-brand-700 ring-2 ring-brand-500'
+                          ? 'bg-surface-tint text-accent-strong ring-2 ring-brand-500'
                           : 'bg-surface text-ink ring-1 ring-line active:bg-surface-field'
                       }`}
                     >

@@ -61,8 +61,14 @@ export function OutcomePill({ code }: { code?: OutcomeCode }) {
  * information, none of it pretending to be a status.
  */
 export function ScoreBar({ score }: { score: number }) {
-  const tone = score >= 70 ? '#087F8C' : score >= 45 ? '#5FA9B3' : '#94A3B8'
-  const ink = score >= 70 ? '#056470' : score >= 45 ? '#41707A' : '#64748B'
+  /*
+   * Both ends brightened with the ground. The bar sits on `line` and the figure
+   * on a card, and the old values measured 2.5:1 and 2.5:1 there — the strong
+   * lead's bar was the *least* visible of the three, which inverts the one thing
+   * this control is for.
+   */
+  const tone = score >= 70 ? '#20C4D3' : score >= 45 ? '#5E9BA6' : '#7C8CA6'
+  const ink = score >= 70 ? '#7FE0EF' : score >= 45 ? '#9FC4CC' : '#93A2B8'
   return (
     <span className="inline-flex items-center gap-1.5" title={`Lead score ${score}`}>
       <span className="h-1.5 w-9 overflow-hidden rounded-full bg-line">

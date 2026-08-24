@@ -103,7 +103,7 @@ export function AdminSettings() {
             onClick={() => setTab(key)}
             className={`focusable -mb-px min-h-[40px] border-b-2 px-4 text-sm font-semibold ${
               tab === key
-                ? 'border-brand-500 text-brand-600'
+                ? 'border-brand-500 text-accent'
                 : 'border-transparent text-ink-mute hover:text-ink'
             }`}
           >

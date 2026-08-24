@@ -132,7 +132,7 @@ export function AdminDashboard() {
           <h2 className="text-sm font-bold">Rep performance</h2>
           <button
             onClick={() => nav('/admin/reports')}
-            className="focusable min-h-[44px] rounded-lg px-2 text-xs font-semibold text-brand-600 hover:bg-brand-50 lg:min-h-[32px]"
+            className="focusable min-h-[44px] rounded-lg px-2 text-xs font-semibold text-accent hover:bg-surface-tint lg:min-h-[32px]"
           >
             Full report
           </button>
@@ -155,7 +155,7 @@ export function AdminDashboard() {
               <tr key={r.id} className="border-t border-line-soft hover:bg-surface-field">
                 <td className="px-5 py-2.5">
                   <span className="flex items-center gap-2.5">
-                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-50 text-[11px] font-bold text-brand-600">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[11px] font-bold text-accent">
                       {r.initials}
                     </span>
                     <span className="font-medium">{r.name}</span>

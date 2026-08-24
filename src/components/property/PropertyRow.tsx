@@ -67,7 +67,7 @@ export function PropertyRow({
         }
         aria-current={active ? 'true' : undefined}
         className={`flex min-h-[84px] w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-field ${
-          active ? 'bg-brand-50' : ''
+          active ? 'bg-surface-tint' : ''
         }`}
       >
         {/* A 3px rail, not 6. The stage is already stated in words on the pill

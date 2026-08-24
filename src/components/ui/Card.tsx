@@ -95,7 +95,7 @@ export function SectionHeader({
       {action && (
         <button
           onClick={onAction}
-          className="focusable -mr-1 min-h-[32px] rounded-lg px-1.5 text-[13px] font-semibold text-brand-600"
+          className="focusable -mr-1 min-h-[32px] rounded-lg px-1.5 text-[13px] font-semibold text-accent"
         >
           {action}
         </button>

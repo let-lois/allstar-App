@@ -52,35 +52,47 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
   dnc: 'Do Not Contact',
 }
 
-/** Hex rather than Tailwind classes: the map renderer draws these into SVG. */
+/**
+ * Hex rather than Tailwind classes: the map renderer draws these into SVG.
+ *
+ * Brightened for the dark basemap — the old values were chosen to read as dots
+ * on pale paper and measured 1.5-2:1 on this ground. Every one now clears 3:1
+ * against it, which is the floor for a graphic that carries meaning; `lost` is
+ * closest at 3.73, and deliberately the dimmest, because it should be.
+ */
 export const STATUS_COLOR: Record<LeadStatus, string> = {
-  new: '#64748b',
-  contacted: '#0284c7',
-  working: '#0d9488',
-  appointment: '#7c3aed',
-  quoted: '#d97706',
-  won: '#15803d',
-  lost: '#94a3b8',
-  dnc: '#b91c1c',
+  new: '#94A3B8',
+  contacted: '#38A8F0',
+  working: '#2DD4BF',
+  appointment: '#A78BFA',
+  quoted: '#FBBF24',
+  won: '#4ADE80',
+  lost: '#64748B',
+  dnc: '#F87171',
 }
 
 /*
- * Status pill tones — a dark foreground on its own light tint.
+ * Status pill tones — a light foreground on its own deep tint.
  *
- * Separate from STATUS_COLOR because that value is a *swatch*: a map dot, a
- * 6px rail, a bar fill, where only hue matters. As pill text those same hues
- * land between 3:1 and 3.5:1 on their own tint, which fails WCAG 1.4.3 at pill
- * sizes. Every pair below is measured and clears 4.5:1.
+ * Separate from STATUS_COLOR because that value is a *swatch*: a map dot, a 6px
+ * rail, a bar fill, where only hue matters. As pill text a swatch hue lands
+ * around 3:1 on its own tint, which fails WCAG 1.4.3 at pill sizes. Every pair
+ * below is measured and clears 4.5:1 — 5.8 at the tightest, `dnc`.
+ *
+ * The relationship is the one this table always had, read from the other side:
+ * on white these were dark inks on pale tints. The tints are deliberately close
+ * to the card (1.05-1.19:1) — a status chip should be a wash of colour behind a
+ * word, not a second card sitting inside the first.
  */
 export const STATUS_TONE: Record<LeadStatus, { fg: string; bg: string }> = {
-  new: { fg: '#475569', bg: '#EEF1F5' },
-  contacted: { fg: '#1D4ED8', bg: '#E8EEFD' },
-  working: { fg: '#0F766E', bg: '#E3F2F0' },
-  appointment: { fg: '#6D28D9', bg: '#F1EBFC' },
-  quoted: { fg: '#B45309', bg: '#FEF3E2' },
-  won: { fg: '#166534', bg: '#E8F5EC' },
-  lost: { fg: '#475569', bg: '#F1F2F4' },
-  dnc: { fg: '#B91C1C', bg: '#FDECEC' },
+  new: { fg: '#A9B6C9', bg: '#1E2637' },
+  contacted: { fg: '#7DA6FF', bg: '#16213F' },
+  working: { fg: '#5FD3C4', bg: '#10302E' },
+  appointment: { fg: '#C0A6FA', bg: '#241C3E' },
+  quoted: { fg: '#FBBF24', bg: '#33260A' },
+  won: { fg: '#4ADE80', bg: '#0F2C1B' },
+  lost: { fg: '#9AA5B4', bg: '#1D222B' },
+  dnc: { fg: '#F87171', bg: '#3A1717' },
 }
 
 export const PIPELINE_STAGES: LeadStatus[] = [

@@ -1,32 +1,44 @@
 /**
  * Chart tokens for the office console.
  *
- * Every value here was run through the data-viz palette validator against this
- * app's actual chart surface (`#ffffff`, the card background) — not eyeballed.
- * If you change a hex, re-run the validator before shipping it.
+ * These were validated against a white chart surface. The app now runs on a dark
+ * one, so the values below were lifted to clear 3:1 on the card they actually sit
+ * on — that part is measured, with `scripts/lib/contrast.mjs`, and pinned by
+ * `npm run verify:contrast`.
  *
- *   node scripts/validate_palette.js "<hex,hex>" --mode light --surface "#ffffff"
- *   node scripts/validate_palette.js "<ramp>" --ordinal --mode light --surface "#ffffff"
+ * **What has not been re-run:** the CVD ΔE separation between the two series,
+ * and the ordinal ramp's adjacent-ΔL check. Those came from a palette validator
+ * that is not in this repo. The hues are unchanged and each pair was moved by
+ * the same kind of step, so the separation should hold — but "should" is not
+ * "measured", and the honest state of this file is that its contrast figures are
+ * current and its colour-blindness figures are inherited. Re-run before treating
+ * them as fresh:
+ *
+ *   node scripts/validate_palette.js "<hex,hex>" --mode dark --surface "#151D2E"
+ *   node scripts/validate_palette.js "<ramp>" --ordinal --mode dark --surface "#151D2E"
  */
 
 /**
  * Categorical slots, assigned in fixed order and never cycled.
- * Validated: worst adjacent CVD ΔE 24.7 (protan), normal-vision ΔE 33.6, both
- * clear of the floors; both clear 3:1 on white.
+ * On white these measured: worst adjacent CVD ΔE 24.7 (protan), normal-vision
+ * ΔE 33.6. Lightened for the dark card, where they now measure 6.73:1 and
+ * 7.41:1 — the darker originals sat at 3.81 and 5.26, over the floor but muddy.
  *
- * Kept blue/orange through the teal redesign, deliberately. Two line series have
- * to be separable by someone with protanopia, and this pair is measured to be;
- * a teal-and-something pair would have to clear the same floors and the
- * validator these numbers came from is not in this repo to re-run. A data series
- * is also not interface chrome — the redesign's ban on orange is about surfaces,
- * and this is the one place in the product where hue is carrying information
- * that nothing else carries. Revisit with a validator in hand, not by eye.
+ * Kept blue/orange through both redesigns, deliberately. Two line series have to
+ * be separable by someone with protanopia, this pair was measured to be on white,
+ * and changing the hues would throw away that result rather than carry it. A data
+ * series is also not interface chrome — the ban on orange is about surfaces, and
+ * this is the one place in the product where hue carries information that nothing
+ * else carries. Revisit with a validator in hand, not by eye.
  */
-export const SERIES = ['#2a78d6', '#eb6834'] as const
+export const SERIES = ['#6BA6F5', '#F2955E'] as const
 
 /**
- * Ordinal ramp for the funnel — one hue, light→dark, because funnel stages are
- * *ordered*, not separate identities.
+ * Ordinal ramp for the funnel — one hue, dim→bright, because funnel stages are
+ * *ordered*, not separate identities. The direction flipped with the ground: on
+ * white the ramp ran light→dark, and "further along" has to mean "further from
+ * the surface" either way. The dim end sits at 3.07:1 on the card, which is the
+ * floor, not a margin — do not darken step 0.
  *
  * Deliberately five steps: the documented blue ramp cannot fit six steps that
  * simultaneously keep adjacent ΔL ≥ 0.06 and hold the light end above 2:1 on
@@ -34,17 +46,17 @@ export const SERIES = ['#2a78d6', '#eb6834'] as const
  * the funnel covers the five *open* stages and Won is reported separately as
  * the conversion headline — which is the better read anyway.
  */
-export const FUNNEL_RAMP = ['#86b6ef', '#5598e7', '#2a78d6', '#1c5cab', '#104281'] as const
+export const FUNNEL_RAMP = ['#2A6BB0', '#3C8ADA', '#69ABEE', '#9BC9F7', '#CFE5FC'] as const
 
 /** Single-hue fill for one-measure distributions (no legend, no identity). */
-export const SINGLE = '#2a78d6'
+export const SINGLE = '#6BA6F5'
 
 /** Reserved for state, never for a series. Always paired with an icon or label. */
 export const STATUS = {
-  good: '#0ca30c',
-  warning: '#fab219',
-  serious: '#ec835a',
-  critical: '#d03b3b',
+  good: '#4ADE80',
+  warning: '#FBBF24',
+  serious: '#FB923C',
+  critical: '#F87171',
 } as const
 
 /**
@@ -53,16 +65,17 @@ export const STATUS = {
  * These are the app's own neutrals now, not the warm greys they used to be. A
  * chart is not a separate product: its axis labels and gridlines sit inside a
  * card next to the interface's own text, and a warm grey axis beside a cool grey
- * caption reads as two typefaces rather than one system. The values match
- * `ink-*` and `line-*` in tailwind.config.js exactly.
+ * caption reads as two typefaces rather than one system. The values mirror the
+ * `--ink-*` and `--line-*` theme variables in `index.css`; `verify:contrast`
+ * fails if they drift apart, because a chart cannot read a CSS variable.
  */
 export const INK = {
-  primary: '#111827',
-  secondary: '#334155',
-  muted: '#64748B',
-  grid: '#EDF1F3',
-  axis: '#E3E8EA',
-  surface: '#ffffff',
-  deltaGood: '#166534',
-  deltaBad: '#B91C1C',
+  primary: '#F2F6FA',
+  secondary: '#C6D2E0',
+  muted: '#93A2B8',
+  grid: '#212B41',
+  axis: '#2A3652',
+  surface: '#151D2E',
+  deltaGood: '#4ADE80',
+  deltaBad: '#F87171',
 } as const

@@ -424,7 +424,7 @@ export default function AdminImport() {
                   onChange={(e) =>
                     setMapping((m) => ({ ...m, [key]: e.target.value || undefined }))
                   }
-                  className="focusable mt-1 h-11 w-full rounded-lg border border-ink/15 bg-white px-2 text-sm"
+                  className="focusable mt-1 h-11 w-full rounded-lg border border-line bg-surface-field px-2 text-sm"
                 >
                   <option value="">— not imported —</option>
                   {headers.map((h) => (
@@ -492,7 +492,7 @@ export default function AdminImport() {
                 <select
                   value={assignRepId}
                   onChange={(e) => setAssignRepId(e.target.value)}
-                  className="focusable mt-1 h-11 w-full rounded-lg border border-ink/15 bg-white px-2 text-sm"
+                  className="focusable mt-1 h-11 w-full rounded-lg border border-line bg-surface-field px-2 text-sm"
                 >
                   <option value="">Nobody yet — assign later</option>
                   {reps.map((r) => (
@@ -612,7 +612,7 @@ function Steps({ stage }: { stage: Stage }) {
           <span
             className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${
               i < activeIdx
-                ? 'bg-good text-white'
+                ? 'bg-good text-surface-sunk'
                 : i === activeIdx
                   ? 'bg-ink text-white'
                   : 'bg-line text-ink-mute'

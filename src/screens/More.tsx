@@ -368,7 +368,7 @@ function MoreLink({ label, onClick }: { label: string; onClick: () => void }) {
       >
         {label}
         {/* brand-700, not ink-faint: 5.6:1 on the teal face, where the grey was 2.1. */}
-        <span className="shrink-0 text-brand-700">
+        <span className="shrink-0 text-accent-strong">
           <IconChevron />
         </span>
       </button>

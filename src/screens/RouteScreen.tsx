@@ -125,7 +125,7 @@ export function RouteScreen() {
                 >
                   <div
                     className={`flex min-h-[72px] items-center gap-3 px-4 py-3 ${
-                      isActive ? 'bg-brand-50' : ''
+                      isActive ? 'bg-surface-tint' : ''
                     }`}
                   >
                     <span
