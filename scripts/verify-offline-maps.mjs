@@ -155,6 +155,96 @@ ok(
   `rejected tiles are reported, not silently cached (${failNote})`,
 )
 
+/* --- a wide territory must not freeze the More screen -------------------- */
+//
+// The bug this exists for: `OfflineMaps` built the *full* tile URL list on mount
+// so the collapsed header could show a size. For a rep whose leads span eighty
+// miles that is 1.39 million strings and a Set to match — 2.8 seconds on a
+// desktop CPU, several times that on a phone — every single time More was
+// opened, whether or not anybody touched the section.
+//
+// So this plants one lead far from the rest, which is all it takes to blow the
+// bounding box up, and then times the screen. A count is arithmetic; if the
+// component goes back to enumerating, this goes red.
+{
+  const wide = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    serviceWorkers: 'block',
+  })
+  const page2 = await wide.newPage()
+  await page2.route('**/api.maptiler.com/**', (r) =>
+    r.fulfill({ status: 200, contentType: 'image/png', body: PNG }),
+  )
+  await page2.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await page2.waitForTimeout(1200)
+  await page2.getByRole('button', { name: /Try the demo/ }).click()
+  await page2.getByRole('button', { name: /Dana Whitfield/ }).click()
+  await page2.waitForTimeout(2500)
+
+  // One lead ~90 miles from the others, written straight into the store the app
+  // hydrates from. A single bad geocode does exactly this in the real world.
+  const planted = await page2.evaluate(async () => {
+    const db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open('allstar-field')
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+    const one = await new Promise((resolve) => {
+      const tx = db.transaction('properties', 'readonly')
+      const req = tx.objectStore('properties').getAll()
+      req.onsuccess = () => resolve(req.result[0])
+    })
+    if (!one) return false
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('properties', 'readwrite')
+      tx.objectStore('properties').put({
+        ...one,
+        id: 'p_far_away',
+        address1: '1 Far Away Rd',
+        lat: one.lat + 1.3,
+        lng: one.lng - 1.3,
+      })
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+    return true
+  })
+  ok(planted, 'a distant lead can be planted to widen the territory')
+
+  await page2.reload({ waitUntil: 'domcontentloaded' })
+  await page2.waitForTimeout(2500)
+
+  const t0 = Date.now()
+  await page2.locator('a[href="/more"]:visible').first().click()
+  await page2.getByRole('heading', { name: 'Sync & offline' }).waitFor({ timeout: 30_000 })
+  /*
+    The Offline maps header specifically, not any text ending in MB — the first
+    attempt matched the "App storage 0.1 / 1077 MB" row two sections above and
+    measured nothing. The header's size is rendered by the component that used to
+    enumerate, so waiting for *it* is what makes this a measurement.
+  */
+  const offlineHeader = page2.getByRole('button', { name: /Offline maps/ })
+  await offlineHeader.waitFor({ timeout: 30_000 })
+  const ms = Date.now() - t0
+
+  ok(ms < 1500, `More opens promptly with a wide territory (${ms}ms)`)
+
+  /*
+    And the size on offer stays inside the budget. Nothing good happens when an
+    app tries to write twelve gigabytes to a phone — it fails slowly, or it
+    succeeds and fills the device.
+  */
+  const label = (await offlineHeader.innerText()).replace(/\s+/g, ' ').trim()
+  const mb = Number((label.match(/([\d,]+)\s*MB/) ?? [])[1]?.replace(/,/g, '') ?? '0')
+  ok(
+    mb > 0 && mb <= 400,
+    `the offered download is capped rather than unbounded (${label})`,
+  )
+  await wide.close()
+}
+
 await browser.close()
 console.log(fails.length ? `\n${fails.length} FAILED` : '\n=== offline maps OK ===')
 process.exit(fails.length ? 1 : 0)

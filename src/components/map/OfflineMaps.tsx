@@ -10,8 +10,12 @@ import {
   estimateBytes,
   loadLayer,
   prefetchTiles,
+  tileCountForBounds,
   tilesAvailable,
   tilesForBounds,
+  zoomsWithinBudget,
+  PREFETCH_ZOOMS,
+  type Bounds,
   type LayerId,
   type PrefetchProgress,
 } from '../../lib/tiles'
@@ -26,20 +30,100 @@ import {
  *
  * The size is shown before anything is fetched, and the button names it. A rep
  * on a metered plan gets to decide, rather than discovering the cost afterwards.
+ *
+ * **Split in two, and that split is the point.** The outer component is
+ * arithmetic — bounds, a tile count, an estimate — and runs on every visit to
+ * More. The panel does the expensive work and only mounts when the section is
+ * actually open, because `Collapsible` renders its children lazily.
+ *
+ * It used to be one component that built the full URL list on mount. For a rep
+ * whose leads span eighty miles that is 1.39 million strings and a Set to match:
+ * 2.8 seconds on a desktop, several times that on a phone, every single time the
+ * More screen was opened — to render one number in a collapsed header. See
+ * `tileCountForBounds`.
  */
 export function OfflineMaps() {
   const properties = useScopedProperties()
   const [layer] = useState<LayerId>(() => loadLayer())
+
+  const bounds = useMemo(
+    () => boundsOf(properties.map((p) => ({ lat: p.lat, lng: p.lng }))),
+    [properties],
+  )
+
+  /*
+    Everything here is a multiplication. No URLs are built, nothing touches the
+    cache, and none of it depends on how large the territory is — which is what
+    makes opening More instant regardless of whether a rep covers two streets or
+    two counties.
+  */
+  const zooms = useMemo(
+    () => (bounds ? zoomsWithinBudget(bounds, layer) : []),
+    [bounds, layer],
+  )
+  const tileCount = useMemo(
+    () => (bounds ? tileCountForBounds(bounds, layer, zooms) : 0),
+    [bounds, layer, zooms],
+  )
+
+  if (!tilesAvailable()) return null
+
+  const megabytes = (estimateBytes(tileCount, layer) / 1_000_000).toFixed(0)
+  const trimmed = zooms.length < PREFETCH_ZOOMS.length
+
+  return (
+    <Collapsible
+      title="Offline maps"
+      right={<span className="nums text-xs text-ink-soft">{megabytes} MB</span>}
+    >
+      {!bounds || tileCount === 0 ? (
+        <p className="text-[14px] text-ink-mute">
+          Nothing is assigned to you yet, so there is no area to download.
+        </p>
+      ) : (
+        <OfflineMapsPanel
+          bounds={bounds}
+          layer={layer}
+          zooms={zooms}
+          tileCount={tileCount}
+          megabytes={megabytes}
+          trimmed={trimmed}
+        />
+      )}
+    </Collapsible>
+  )
+}
+
+/**
+ * The expensive half, mounted only when the section is open.
+ *
+ * Building the URL list and reading the tile cache both cost time proportional
+ * to the area, so they happen behind a deliberate tap rather than on the way
+ * past. Within the zoom budget the list is bounded — about 44,000 tiles at the
+ * 400 MB ceiling — so this is work a phone can do.
+ */
+function OfflineMapsPanel({
+  bounds,
+  layer,
+  zooms,
+  tileCount,
+  megabytes,
+  trimmed,
+}: {
+  bounds: Bounds
+  layer: LayerId
+  zooms: number[]
+  tileCount: number
+  megabytes: string
+  trimmed: boolean
+}) {
   const [progress, setProgress] = useState<PrefetchProgress | null>(null)
   const [already, setAlready] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const abort = useRef<AbortController | null>(null)
 
-  const urls = useMemo(() => {
-    const bounds = boundsOf(properties.map((p) => ({ lat: p.lat, lng: p.lng })))
-    return bounds ? tilesForBounds(bounds, layer) : []
-  }, [properties, layer])
+  const urls = useMemo(() => tilesForBounds(bounds, layer, zooms), [bounds, layer, zooms])
 
   const refreshCached = useCallback(() => {
     if (urls.length === 0) {
@@ -53,11 +137,6 @@ export function OfflineMaps() {
     refreshCached()
   }, [refreshCached])
 
-  // Nothing to say without a tile key — the map draws its own basemap and works
-  // offline already, so an "offline maps" control would only confuse.
-  if (!tilesAvailable()) return null
-
-  const megabytes = (estimateBytes(urls.length, layer) / 1_000_000).toFixed(0)
   const remaining = already == null ? urls.length : Math.max(0, urls.length - already)
   const remainingMb = (estimateBytes(remaining, layer) / 1_000_000).toFixed(0)
   const complete = already != null && urls.length > 0 && already >= urls.length
@@ -91,83 +170,83 @@ export function OfflineMaps() {
   }
 
   return (
-    <Collapsible
-      title="Offline maps"
-      right={
-        <span className="nums text-xs text-ink-mute">
-          {complete ? 'Saved' : `${remainingMb} MB`}
-        </span>
-      }
-    >
-      {urls.length === 0 ? (
-        <p className="text-[14px] text-ink-mute">
-          Nothing is assigned to you yet, so there is no area to download.
+    <>
+      <p className="text-[13px] leading-relaxed text-ink-mute">
+        Saves the {layer === 'satellite' ? 'satellite imagery' : 'street map'} for your
+        assigned area so it still draws with no signal. Do this on wi-fi before you head
+        out — it downloads about {megabytes} MB.
+      </p>
+
+      {/*
+        Said plainly rather than silently dropped. The deepest zoom is about three
+        quarters of any download, and for a wide territory it alone runs to
+        gigabytes — so it comes off, and the rep is told what they are getting
+        instead of discovering it at a door.
+      */}
+      {trimmed && (
+        <p className="mt-2 text-[13px] leading-relaxed text-ink-mute">
+          Your area is too large to save at full street detail, so this saves the
+          wider view of it. Zoomed right in, the map falls back to its own drawn
+          basemap — which works with no signal either.
         </p>
-      ) : (
-        <>
-          <p className="text-[13px] leading-relaxed text-ink-mute">
-            Saves the {layer === 'satellite' ? 'satellite imagery' : 'street map'} for your
-            assigned area so it still draws with no signal. Do this on wi-fi before you head
-            out — it downloads about {megabytes} MB.
-          </p>
-
-          <dl className="mt-3 grid grid-cols-2 gap-y-2 text-[14px]">
-            <dt className="text-ink-mute">Map tiles</dt>
-            <dd className="nums text-right font-semibold">{urls.length.toLocaleString()}</dd>
-            <dt className="text-ink-mute">Already saved</dt>
-            <dd className="nums text-right font-semibold">
-              {already == null ? '…' : already.toLocaleString()}
-            </dd>
-          </dl>
-
-          {busy && progress && (
-            <div className="mt-4">
-              <ProgressBar
-                value={progress.done + progress.failed}
-                max={Math.max(progress.total, 1)}
-                animate={false}
-                label={`Downloading ${progress.done} of ${progress.total}`}
-              />
-              <p className="nums mt-2 text-[13px] text-ink-mute">
-                {(progress.done + progress.failed).toLocaleString()} of{' '}
-                {progress.total.toLocaleString()}
-                {progress.failed > 0 ? ` · ${progress.failed} failed` : ''}
-              </p>
-            </div>
-          )}
-
-          {note && (
-            <p role="status" className="mt-3 text-[13px] font-medium text-ink-soft">
-              {note}
-            </p>
-          )}
-
-          <div className="mt-4 flex gap-2.5">
-            {busy ? (
-              <Button variant="secondary" full onClick={() => abort.current?.abort()}>
-                Stop
-              </Button>
-            ) : (
-              <Button full onClick={() => void start()} disabled={complete}>
-                {complete ? 'Territory saved' : `Download ${remainingMb} MB`}
-              </Button>
-            )}
-            {!busy && (already ?? 0) > 0 && (
-              <Button
-                variant="secondary"
-                onClick={async () => {
-                  if (!window.confirm('Delete saved map imagery from this device?')) return
-                  await clearTileCache()
-                  setNote(null)
-                  refreshCached()
-                }}
-              >
-                Clear
-              </Button>
-            )}
-          </div>
-        </>
       )}
-    </Collapsible>
+
+      <dl className="mt-3 grid grid-cols-2 gap-y-2 text-[14px]">
+        <dt className="text-ink-mute">Map tiles</dt>
+        <dd className="nums text-right font-semibold">{tileCount.toLocaleString()}</dd>
+        <dt className="text-ink-mute">Already saved</dt>
+        <dd className="nums text-right font-semibold">
+          {already == null ? '…' : already.toLocaleString()}
+        </dd>
+      </dl>
+
+      {busy && progress && (
+        <div className="mt-4">
+          <ProgressBar
+            value={progress.done + progress.failed}
+            max={Math.max(progress.total, 1)}
+            animate={false}
+            label={`Downloading ${progress.done} of ${progress.total}`}
+          />
+          <p className="nums mt-2 text-[13px] text-ink-mute">
+            {(progress.done + progress.failed).toLocaleString()} of{' '}
+            {progress.total.toLocaleString()}
+            {progress.failed > 0 ? ` · ${progress.failed} failed` : ''}
+          </p>
+        </div>
+      )}
+
+      {note && (
+        <p role="status" className="mt-3 text-[13px] font-medium text-ink-soft">
+          {note}
+        </p>
+      )}
+
+      <div className="mt-4 flex gap-2.5">
+        {busy ? (
+          <Button variant="secondary" full onClick={() => abort.current?.abort()}>
+            Stop
+          </Button>
+        ) : (
+          <Button full onClick={() => void start()} disabled={complete}>
+            {complete ? 'Territory saved' : `Download ${remainingMb} MB`}
+          </Button>
+        )}
+        {!busy && (already ?? 0) > 0 && (
+          <Button
+            variant="secondary"
+            onClick={async () => {
+              if (!window.confirm('Delete saved map imagery from this device?')) return
+              await clearTileCache()
+              setNote(null)
+              refreshCached()
+            }}
+          >
+            Clear
+          </Button>
+        )}
+      </div>
+    </>
   )
+
 }

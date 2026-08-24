@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { haptic } from '../../lib/haptics'
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'inverse'
+type Variant = 'primary' | 'secondary' | 'tint' | 'ghost' | 'danger' | 'success' | 'inverse'
 type Size = 'sm' | 'md' | 'lg'
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -26,6 +26,13 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 const variants: Record<Variant, string> = {
   primary: 'metal metal-brand',
   secondary: 'metal metal-quiet',
+  /*
+    The rows' light teal, for a control that belongs with them without claiming
+    to be the primary action. A real variant rather than a `className` override
+    because two `--metal-*` blocks on one element resolve by stylesheet order,
+    not by the order they are written — the same trap noted on `inverse`.
+  */
+  tint: 'metal metal-tint',
   ghost: 'bg-transparent text-ink-mute active:bg-ink/[0.04]',
   danger: 'metal metal-danger',
   success: 'metal metal-success',

@@ -252,6 +252,68 @@ export function estimateBytes(tileCount: number, layer: LayerId): number {
   return tileCount * BYTES_PER_TILE[layer]
 }
 
+/**
+ * How many tiles cover these bounds — without building any of them.
+ *
+ * The same nested loops as `tilesForBounds`, replaced by the multiplication they
+ * were performing. That difference is not a micro-optimisation: a rep whose
+ * leads span eighty miles produces 1.39 *million* tiles across these zooms, and
+ * the screen that showed the download size was building all 1.39 million URL
+ * strings — plus a Set of every key — on mount, before anybody opened the
+ * section. Measured at 2.8 seconds on a desktop CPU and several times that on a
+ * phone, which is exactly what it felt like.
+ *
+ * Counting the same tiles takes under a millisecond, because the count is
+ * arithmetic and always was.
+ */
+export function tileCountForBounds(
+  bounds: Bounds,
+  layer: LayerId,
+  zooms: number[] = PREFETCH_ZOOMS,
+): number {
+  if (!tilesAvailable()) return 0
+  const def = LAYERS[layer]
+  let total = 0
+  for (const rawZ of zooms) {
+    const z = Math.min(rawZ, def.maxZoom)
+    const n = 2 ** z
+    const nw = project(bounds.maxLat, bounds.minLng)
+    const se = project(bounds.minLat, bounds.maxLng)
+    const x0 = Math.floor(nw.x * n)
+    const x1 = Math.floor(se.x * n)
+    const y0 = Math.max(0, Math.floor(nw.y * n))
+    const y1 = Math.min(n - 1, Math.floor(se.y * n))
+    total += Math.max(0, x1 - x0 + 1) * Math.max(0, y1 - y0 + 1)
+  }
+  return total
+}
+
+/**
+ * The most detail that will fit in a sane download.
+ *
+ * Each zoom level is four times the one above it, so the deepest level is about
+ * three quarters of any download — and for a wide territory it is tens of
+ * gigabytes on its own. Nothing good happens when an app tries to write 12 GB to
+ * a phone: it fails slowly, or it succeeds and fills the device.
+ *
+ * So the deepest levels come off until the estimate fits the budget, and the
+ * screen says what was left out. That degrades the way the map itself does —
+ * less detail rather than nothing — instead of refusing outright.
+ */
+export const SAVE_BUDGET_BYTES = 400_000_000
+
+export function zoomsWithinBudget(
+  bounds: Bounds,
+  layer: LayerId,
+  budget = SAVE_BUDGET_BYTES,
+): number[] {
+  const zooms = [...PREFETCH_ZOOMS].sort((a, b) => a - b)
+  while (zooms.length > 1 && estimateBytes(tileCountForBounds(bounds, layer, zooms), layer) > budget) {
+    zooms.pop()
+  }
+  return zooms
+}
+
 export interface PrefetchProgress {
   done: number
   total: number

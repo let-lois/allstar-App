@@ -446,10 +446,21 @@
   .metal-row {
     position: relative;
     isolation: isolate;
-    background: linear-gradient(180deg, #ffffff, #eef2f4);
+    /*
+       Teal glass rather than nickel. The face is light for the same reason the
+       buttons' is: a sheen brightens the top, and the label has to survive it.
+       Near-black on the darkest point of this face measures 14.4:1.
+
+       What could *not* come along: `ink-mute` lands at 3.87:1 on it and
+       `ink-faint` at 2.09:1, so the secondary text and the chevrons on these rows
+       moved to teal ink instead — see `Collapsible` and `MoreLink`. A tinted face
+       does not just change a background; it retires every low-contrast grey that
+       was resting on white.
+    */
+    background: linear-gradient(180deg, #f4fcfd, #cbeef5);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.95),
-      inset 0 -1px 2px rgba(15, 23, 42, 0.09);
+      inset 0 -1px 2px rgba(6, 100, 112, 0.14);
     transition: box-shadow 140ms ease;
   }
 
@@ -467,20 +478,45 @@
   /* Pressed pushes the face in: the lip goes, the shading flips to the top. */
   .metal-row:active {
     box-shadow:
-      inset 0 2px 4px rgba(15, 23, 42, 0.2),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.5);
+      inset 0 2px 4px rgba(6, 100, 112, 0.26),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.55);
   }
 
   .metal-row:active::after {
     opacity: 0.3;
   }
 
-  /** The selected row in a stack — the pill's teal, in the row's flat profile. */
+  /**
+   * The selected row in a stack.
+   *
+   * A step deeper than the default face, because the default one is now teal too
+   * — selection has to be a difference in the same material rather than the
+   * presence of colour. Near-black on it is 10.4:1; anything quieter than
+   * `ink-soft` is not legible here, which is why the pipeline's figures moved up
+   * a step.
+   */
   .metal-row-brand {
-    background: linear-gradient(180deg, #f2fbfc, #cdeff5);
+    background: linear-gradient(180deg, #cdeff5, #7fd3e2);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.95),
-      inset 0 -1px 2px rgba(6, 100, 112, 0.16);
+      inset 0 1px 0 rgba(255, 255, 255, 0.8),
+      inset 0 -1px 2px rgba(6, 100, 112, 0.24);
+  }
+
+  /**
+   * A button in the rows' light teal.
+   *
+   * Same face as `.metal-row`, with the ring and lift a standalone button needs.
+   * It exists so a control can join that group visually without claiming to be
+   * the primary action, which `.metal-brand`'s saturated face would.
+   */
+  .metal-tint {
+    @apply text-ink;
+    --metal-top: #f4fcfd;
+    --metal-bottom: #cbeef5;
+    --metal-ring: rgba(6, 100, 112, 0.28);
+    --metal-lip: 0.9;
+    --metal-bevel: 0.1;
+    --sheen: 0.5;
   }
 
   /** Dark controls, for the login's near-black ground. */
