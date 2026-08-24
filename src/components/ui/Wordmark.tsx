@@ -18,15 +18,27 @@
  */
 export function Wordmark({
   width = 204,
+  animate = false,
   className = '',
 }: {
   /** Rendered width in px. The tile sizes itself to the mark. */
   width?: number
+  /**
+   * Arrive, and take one glint.
+   *
+   * Off by default and on only for the login, because the console's rail is
+   * mounted for a whole session's worth of navigation — a mark that replays its
+   * entrance every time someone opens a screen stops being a logo and becomes a
+   * notification.
+   */
+  animate?: boolean
   className?: string
 }) {
   return (
     <div
-      className={`inline-flex rounded-card bg-white px-4 py-3 shadow-card ${className}`}
+      className={`wordmark inline-flex rounded-card bg-white px-4 py-3 shadow-card ${
+        animate ? 'wordmark-anim' : ''
+      } ${className}`}
       /* The artwork carries its own margins; this is the breathing room around
          them, scaled with the mark so a small rail lockup is not swamped. */
       style={{ padding: `${Math.round(width * 0.06)}px ${Math.round(width * 0.08)}px` }}
