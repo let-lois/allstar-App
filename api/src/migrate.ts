@@ -102,6 +102,23 @@ const MIGRATIONS: Migration[] = [
     statements: ['ALTER TABLE territories ADD COLUMN boundary TEXT'],
     skipIfColumn: { table: 'territories', column: 'boundary' },
   },
+  {
+    /*
+      Profile photos.
+
+      A ~20KB data URL on the user row rather than a key into R2, which is where
+      property photos are headed. The reasoning is not that inline is better —
+      it is that an avatar is one small row per person that every device wants
+      offline anyway, while a property photo is dozens of multi-megabyte blobs a
+      day that only one screen ever opens. Different shapes, different homes.
+
+      Revisit if this ever grows a per-client asset store; until then the row is
+      the simplest thing that lets a rep see a face in a basement.
+    */
+    id: '005-user-avatar',
+    statements: ['ALTER TABLE users ADD COLUMN avatar_url TEXT'],
+    skipIfColumn: { table: 'users', column: 'avatar_url' },
+  },
 ]
 
 async function hasColumn(

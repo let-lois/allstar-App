@@ -94,10 +94,24 @@ ok(muteOnRow < AA_TEXT,
    'ink-mute is still too quiet for a metal row (the comment in index.css says so)',
    muteOnRow.toFixed(2))
 
-const metalRowBrand = face('#123846', 0.06)
+const metalRowBrand = face('#17495c', 0.07)
 at(T['ink'], metalRowBrand, AA_TEXT, 'ink on a selected metal row')
 at(T['ink-soft'], metalRowBrand, AA_TEXT, 'ink-soft on a selected metal row')
 at(T['accent-strong'], metalRowBrand, AA_TEXT, 'accent-strong on a selected metal row')
+
+/*
+ * Selection is carried by two channels. The faces differ by very little — by
+ * design, since brightening the selected one far enough to stand alone drops
+ * its own text under AA — so the teal ring is what actually finds it. Assert
+ * both: the ring against the face beside it, and that the two faces really are
+ * too close to rely on, which is the reason the ring has to exist.
+ */
+const ringVsNeighbour = ratio(T['accent'], metalRow)
+ok(ringVsNeighbour >= AA_GRAPHIC, 'the selected row\'s ring reads against the row beside it',
+   ringVsNeighbour.toFixed(2))
+const faceVsFace = ratio(metalRowBrand, metalRow)
+ok(faceVsFace < 2, 'the two row faces are close enough that the ring is load-bearing, not decoration',
+   faceVsFace.toFixed(2))
 
 const metalQuiet = face('#232e44', 0.06)
 at(T['ink'], metalQuiet, AA_TEXT, 'ink on a gunmetal control')

@@ -30,12 +30,15 @@ function tintFor(seed: string): string {
 export function Avatar({
   initials,
   name,
+  src,
   size = 'md',
   className = '',
 }: {
   initials: string
   /** Seeds the colour. Falls back to the initials when absent. */
   name?: string
+  /** A profile photo. Initials are the fallback, not the placeholder. */
+  src?: string
   size?: 'sm' | 'md' | 'lg'
   className?: string
 }) {
@@ -45,6 +48,27 @@ export function Avatar({
       : size === 'lg'
         ? 'h-12 w-12 text-[15px]'
         : 'h-10 w-10 text-[12px]'
+
+  /*
+    A photo when there is one, initials when there is not — and the initials are
+    a real fallback rather than a spinner. Most of a roster will never upload a
+    face, and a list of grey circles waiting for photos that are not coming is
+    worse than the coloured initials this has always shown.
+
+    `object-cover` because the source is already a centre-cropped square; this
+    only guards against an avatar that arrived from somewhere else.
+  */
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        aria-hidden
+        className={`shrink-0 rounded-full object-cover ${dim} ${className}`}
+      />
+    )
+  }
+
   return (
     <span
       aria-hidden

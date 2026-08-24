@@ -407,6 +407,46 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
       return
     }
 
+    case 'user.avatar': {
+      /*
+        Self only.
+
+        The payload carries a userId, and it is checked rather than trusted:
+        without this, any signed-in rep could set anyone's face — including an
+        admin's — by editing one field of a queued mutation. Changing a
+        colleague's photo is not the worst thing someone could do with that, but
+        it is impersonation, and the check costs one comparison.
+
+        Managers do not get an exception. Nobody has asked to set someone else's
+        photo, and an office role that can rewrite a rep's identity is a feature
+        that should be designed rather than inherited from a missing check.
+      */
+      const userId = str(p.userId)
+      if (userId && userId !== user.id) {
+        throw new Error('user.avatar: can only set your own photo')
+      }
+
+      const dataUrl = str(p.dataUrl)
+      if (dataUrl !== null && dataUrl !== undefined) {
+        /*
+          Bounded and typed. `avatarFromFile` produces a 256px JPEG at ~20KB;
+          64KB is generous headroom for that and still far too small to be a
+          way of storing something else in the users table.
+        */
+        if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(dataUrl)) {
+          throw new Error('user.avatar: not an image data URL')
+        }
+        if (dataUrl.length > 64_000) {
+          throw new Error('user.avatar: image too large')
+        }
+      }
+
+      await env.DB.prepare('UPDATE users SET avatar_url = ?1 WHERE id = ?2')
+        .bind(dataUrl ?? null, user.id)
+        .run()
+      return
+    }
+
     case 'property.status': {
       const id = str(p.id)
       if (!id) throw new Error('property.status: missing id')

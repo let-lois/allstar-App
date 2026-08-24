@@ -120,10 +120,17 @@ export async function bootstrap(env: Env, user: SessionUser) {
 
         Deliberately narrower than `/api/users`. Teammates' names are not
         sensitive — they work together every day. E-mail addresses and phone
-        numbers are, and those stay behind the office-only endpoint.
+        numbers are, and those stay behind the office-only endpoint. A profile
+        photo sits with the names: it is the face of someone a rep works beside,
+        and it is the whole reason a standings row reads as a person.
+
+        It is also the widest column here — ~20KB per teammate — so it rides
+        bootstrap rather than being fetched per row. On a ten-person crew that
+        is 200KB once, against ten requests a rep on one bar would watch fail
+        one at a time.
       */
       env.DB.prepare(
-        `SELECT id, name, role, active FROM users WHERE client_id = ?1 ORDER BY name`,
+        `SELECT id, name, role, active, avatar_url FROM users WHERE client_id = ?1 ORDER BY name`,
       )
         .bind(user.clientId)
         .all(),
@@ -244,6 +251,7 @@ export async function bootstrap(env: Env, user: SessionUser) {
       name: u.name,
       role: u.role,
       active: (u.active ?? 1) === 1,
+      avatarUrl: u.avatar_url ?? undefined,
     })),
     dailyStats: (stats.results as Record<string, unknown>[]).map((s) => ({
       id: s.id,

@@ -382,6 +382,55 @@ npm run verify:console
 ...asserts a field rep cannot reach the console even by URL, that a manager sees
 fewer sections than an admin, and that a phone gets the handoff.
 
+## Profile photos
+
+A rep taps their own avatar on **More**, picks a photo, and it is theirs. Camera
+or library — `capture` is deliberately not set, because most people already have
+the photo they want and forcing the selfie camera takes the library away.
+
+The photo is centre-cropped square and re-encoded to **256×256**, which is four
+times the largest place it is ever drawn and about 20KB. That number is the
+reason this does not reuse the property-photo path: a 1600px portrait would be
+~180KB of one person's face, downloaded by every teammate on the roster.
+
+Stored as a data URL rather than a key into R2, and that is a deliberate
+exception rather than a preference:
+
+- An avatar is **one small row per person that every device wants offline**. A
+  rep opening the team list in a basement gets faces or grey circles, and grey
+  circles would mean the network is the reason they can't see who's who.
+- A property photo is **dozens of multi-megabyte blobs a day that one screen
+  ever opens**. Those belong in R2, which is where they are headed.
+
+Different shapes, different homes. Revisit if this grows a per-client asset
+store.
+
+Local first, like every other write: on disk and on screen before the network is
+consulted, with `user.avatar` riding the outbox. Demo mode stores locally and
+queues nothing — there is no account behind a demo user, and a mutation that can
+never be accepted would sit in the outbox forever, in a number a prospect can
+read off the More screen.
+
+Server-side the mutation is **self-only**. The payload carries a `userId` and it
+is checked rather than trusted; without that, any signed-in rep could set an
+admin's face by editing one field of a queued mutation. Office roles get no
+exception — nobody has asked to set someone else's photo, and a role that can
+rewrite a colleague's identity should be designed, not inherited from a missing
+check. The body is also bounded and pattern-matched to an image data URL, so the
+users table cannot become a place to store something else.
+
+```bash
+npm run verify:avatar
+```
+
+Sixteen assertions over the real flow. One of them exists because of a bug this
+found: caching your own roster entry in the `team` store to remember your face
+is the obvious implementation, and it **destroys the roster**. A field rep's
+`team` store is empty — they get the names-only roster off bootstrap, and
+`loadLocal` only reaches for it when the store has nothing in it. One row is
+enough to stop that, so the next load showed a team of exactly one person. The
+board went from eight names to one, which is a bug this app has had before.
+
 ## The theme
 
 The app runs on a near-black ground. It is not a dark *mode* — there is no

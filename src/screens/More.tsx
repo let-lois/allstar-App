@@ -5,7 +5,6 @@ import { SyncDetail, useSync } from '../components/sync/SyncBadge'
 import { Button } from '../components/ui/Button'
 import { SectionHeader } from '../components/ui/Card'
 import { Field } from '../components/ui/Input'
-import { Avatar } from '../components/ui/Avatar'
 import { Collapsible } from '../components/ui/Collapsible'
 import { OfflineMaps } from '../components/map/OfflineMaps'
 import { useAppStore } from '../store/useAppStore'
@@ -17,6 +16,7 @@ import { ApiError, apiSetPassword } from '../lib/http'
 import { liveToken } from '../lib/session'
 import type { Mutation } from '../types'
 import { IconChevron } from '../components/nav/icons'
+import { AvatarPicker, AvatarRemove } from '../components/ui/AvatarPicker'
 
 const ROLE_LABEL: Record<string, string> = {
   field_rep: 'Field Rep',
@@ -64,7 +64,7 @@ export function More() {
             rather than as the top of a settings screen.
           */}
           <div className="flex items-center gap-3.5 pb-1 pt-1">
-            <Avatar initials={user?.avatarInitials ?? '?'} name={user?.name} size="lg" />
+            <AvatarPicker />
             <div className="min-w-0 flex-1">
               <p className="truncate text-[19px] font-semibold tracking-[-0.01em]">{user?.name}</p>
               <p className="truncate text-[13.5px] text-ink-mute">
@@ -79,6 +79,7 @@ export function More() {
               <p className="mt-1 truncate text-[12.5px] font-medium text-ink-faint">
                 {mode === 'live' ? 'Signed in · syncing to server' : 'Demo — sample data'}
               </p>
+              <AvatarRemove />
             </div>
           </div>
 

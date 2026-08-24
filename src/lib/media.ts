@@ -9,6 +9,20 @@
 const MAX_EDGE = 1600
 const QUALITY = 0.72
 
+/*
+ * Avatars are a different problem from property photos.
+ *
+ * They are shown at 32-48px in lists, they ride the sync queue like everything
+ * else, and — unlike a roof shot — every teammate's copy is downloaded by every
+ * other device. A 1600px portrait would be ~180KB of somebody else's face on a
+ * rep's data plan, forty times over.
+ *
+ * 256px square is four times the largest place one is drawn, which is the
+ * headroom a 3x screen needs and no more.
+ */
+const AVATAR_EDGE = 256
+const AVATAR_QUALITY = 0.82
+
 export interface CompressedImage {
   dataUrl: string
   width: number
@@ -105,4 +119,31 @@ export function openLibrary(onFiles: (files: File[]) => void) {
     { once: true },
   )
   input.click()
+}
+
+
+/**
+ * A square avatar, centre-cropped.
+ *
+ * Cropped rather than squashed, and cropped to the *centre* rather than the
+ * top: phone cameras are held portrait and a top crop of a portrait photo is a
+ * forehead. The centre is where a face is, on the shot people actually take.
+ */
+export async function avatarFromFile(file: Blob): Promise<CompressedImage> {
+  const bitmap = await loadBitmap(file)
+  const edge = Math.min(bitmap.width, bitmap.height)
+  const sx = Math.round((bitmap.width - edge) / 2)
+  const sy = Math.round((bitmap.height - edge) / 2)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = AVATAR_EDGE
+  canvas.height = AVATAR_EDGE
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas unavailable')
+  ctx.drawImage(bitmap as CanvasImageSource, sx, sy, edge, edge, 0, 0, AVATAR_EDGE, AVATAR_EDGE)
+  if ('close' in bitmap) (bitmap as ImageBitmap).close()
+
+  const dataUrl = canvas.toDataURL('image/jpeg', AVATAR_QUALITY)
+  const bytes = Math.round((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75)
+  return { dataUrl, width: AVATAR_EDGE, height: AVATAR_EDGE, bytes }
 }

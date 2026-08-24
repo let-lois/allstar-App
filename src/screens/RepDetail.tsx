@@ -131,7 +131,7 @@ export function RepDetail() {
           {/* --- who, where, and how long ------------------------------- */}
           <section className="card p-5">
             <div className="flex items-center gap-3.5">
-              <Avatar initials={rep.initials} name={rep.name} size="lg" />
+              <Avatar initials={rep.initials} name={rep.name} src={rep.avatarUrl} size="lg" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[17px] font-semibold tracking-[-0.01em]">
                   {rep.name}
