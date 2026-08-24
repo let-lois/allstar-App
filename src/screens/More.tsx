@@ -247,10 +247,11 @@ export function More() {
 
           <section className="section">
             <SectionHeader title="Go to" standalone />
-            {/* No `row-group`: the rows are machined faces now, and each one's
-                bright top lip against the bevel above it *is* the divider. The
-                border on top of that drew the seam twice. */}
-            <nav className="plate -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+            {/* Separate cards rather than one plate of rows. Full-bleed square
+                rows read as a different kind of control from the rounded
+                collapsibles directly above them, when they are the same kind of
+                thing: one tap, one destination. Same shape, same rhythm. */}
+            <nav className="flex flex-col gap-2.5">
               <MoreLink label="Standings" onClick={() => nav('/standings')} />
               <MoreLink label="Today's route" onClick={() => nav('/route')} />
               <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
@@ -349,17 +350,28 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 /** One settings row: label, chevron, 56px of thumb. */
+/**
+ * A destination on the More screen.
+ *
+ * Deliberately built out of the same parts as a `Collapsible` header — the card
+ * shell, the machined face, `min-h-tap`, `px-4 py-3`, 15px medium — because the
+ * two sit in one scroll and any difference between them reads as a difference in
+ * meaning. The chevron is the only tell, and it points the way it behaves:
+ * right for "this leaves the screen", down for "this opens in place".
+ */
 function MoreLink({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      className="metal-row flex min-h-[56px] w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-medium"
-    >
-      {label}
-      {/* brand-700, not ink-faint: 5.6:1 on the teal face, where the grey was 2.1. */}
-      <span className="shrink-0 text-brand-700">
-        <IconChevron />
-      </span>
-    </button>
+    <div className="card overflow-hidden">
+      <button
+        onClick={onClick}
+        className="metal-row focusable flex min-h-tap w-full items-center justify-between gap-3 px-4 py-3 text-left text-[15px] font-medium"
+      >
+        {label}
+        {/* brand-700, not ink-faint: 5.6:1 on the teal face, where the grey was 2.1. */}
+        <span className="shrink-0 text-brand-700">
+          <IconChevron />
+        </span>
+      </button>
+    </div>
   )
 }
