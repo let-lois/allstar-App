@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAppStore } from './store/useAppStore'
 import { BottomNav, SideRail } from './components/nav/BottomNav'
@@ -22,6 +22,9 @@ import { ScheduleNew } from './screens/ScheduleNew'
 import { Team } from './screens/Team'
 import { Standings } from './screens/Standings'
 import { RepDetail } from './screens/RepDetail'
+import * as db from './lib/db'
+import { TOUR_KEY } from './data/tour'
+import { Tour } from './components/system/Tour'
 
 /**
  * The office console is lazy-loaded.
@@ -158,7 +161,60 @@ export function App() {
       </div>
       {isRep && !inConsole && <QuickActions />}
       {!inConsole && <BottomNav role={user.role} />}
+      {/*
+        The tour lives in the shell, not on a screen.
+
+        It walks the app — map, leads, pipeline, the console — so it navigates,
+        and anything mounted inside a route unmounts itself the moment it does.
+        The first version was rendered by Today and killed itself on its own
+        fifth step.
+      */}
+      <FirstRunTour />
     </div>
+  )
+}
+
+/**
+ * Opens the tour on a device that has not seen this version of it, once.
+ *
+ * The delay is not decoration: the first step measures a card that is rendered
+ * from IndexedDB, and a spotlight cut before layout lands is a hole in the wrong
+ * place — briefly, and exactly once, on the run where a wrong first impression
+ * costs the most.
+ */
+function FirstRunTour() {
+  const [open, setOpen] = useState(false)
+  const requested = useAppStore((s) => s.tourRequest)
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const seen = await db.metaGet<boolean>(TOUR_KEY)
+      if (!seen && alive) window.setTimeout(() => alive && setOpen(true), 600)
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  /*
+    Asked for from the More screen. Skipped at 0 so this does not fire on mount
+    and race the check above into opening the tour twice.
+  */
+  useEffect(() => {
+    if (requested > 0) setOpen(true)
+  }, [requested])
+
+  if (!open) return null
+  return (
+    <Tour
+      onClose={() => {
+        setOpen(false)
+        // Skipping counts. Someone who skipped chose not to see it, and showing
+        // it again tomorrow is the app overruling them.
+        void db.metaSet(TOUR_KEY, true)
+      }}
+    />
   )
 }
 

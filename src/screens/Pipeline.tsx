@@ -73,7 +73,7 @@ export function Pipeline() {
           */}
           <section className="section">
             <SectionHeader title="Stages" standalone />
-            <ul className="card space-y-0.5 p-2">
+            <ul className="card space-y-0.5 p-2" data-tour="pipeline-stages">
               {PIPELINE_STAGES.map((s) => {
                 const bucket = byStage.get(s) ?? { count: 0, value: 0 }
                 const max = Math.max(

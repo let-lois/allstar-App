@@ -76,6 +76,7 @@ export function QuickActions() {
           setOpen(true)
         }}
         aria-label="Quick actions"
+        data-tour="quick-actions"
         className="metal metal-brand press focusable fixed right-4 z-30 grid h-14 w-14 place-items-center rounded-full md:hidden"
         style={{ bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
       >

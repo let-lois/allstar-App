@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { TOUR_STEPS, type TourStep } from '../../data/tour'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { stepsFor, type TourStep } from '../../data/tour'
 import { haptic } from '../../lib/haptics'
+import { useAppStore } from '../../store/useAppStore'
 
 /**
  * The first-run tour: a spotlight on a real control, and a card explaining it.
@@ -20,6 +22,8 @@ import { haptic } from '../../lib/haptics'
 
 const PAD = 8
 const CARD_GAP = 14
+/** Breathing room the card keeps from the edges of the screen. */
+const MARGIN = 12
 
 interface Rect {
   top: number
@@ -37,39 +41,91 @@ function rectOf(target: string): Rect | null {
 }
 
 export function Tour({ onClose }: { onClose: (completed: boolean) => void }) {
+  const nav = useNavigate()
+  const location = useLocation()
+  const role = useAppStore((s) => s.user?.role)
   const [index, setIndex] = useState(0)
   const [rect, setRect] = useState<Rect | null>(null)
   const cardRef = useRef<HTMLDivElement>(null)
 
   /*
-    Only the steps whose targets are actually on screen.
-    
-    The next-stop card is absent on a day with no route, and the sync chip is
-    absent before the first sync. Rather than show a card pointing at nothing,
-    the step is dropped and the counter renumbers — "2 of 5" is honest, "2 of 6"
-    with one panel spotlighting the void is not.
-  */
-  const [steps, setSteps] = useState<TourStep[]>([])
-  useLayoutEffect(() => {
-    setSteps(TOUR_STEPS.filter((s) => rectOf(s.target) !== null))
-  }, [])
+    The list is chosen by job, not filtered by what happens to be rendered.
 
-  const step = steps[index]
+    An earlier version filtered the whole list at mount against the DOM, which
+    on a multi-screen tour means measuring nineteen elements that are not on
+    this route yet and concluding the tour is four steps long. That is exactly
+    what it did. Steps that turn out to have no anchor are skipped when reached,
+    below, where the answer is knowable.
+  */
+  const steps = role ? stepsFor(role) : []
+  const step: TourStep | undefined = steps[index]
 
   const measure = useCallback(() => {
     if (!step) return
     setRect(rectOf(step.target))
   }, [step])
 
-  useLayoutEffect(() => {
+  /* Navigate first. The anchor cannot exist until its screen does. */
+  useEffect(() => {
+    if (!step?.route) return
+    if (location.pathname !== step.route) nav(step.route)
+  }, [step, location.pathname, nav])
+
+  /*
+    Then wait for the anchor rather than assuming it.
+
+    A route change swaps the whole pane, lazy chunks land when they land, and a
+    list renders after its data. Polling until the element exists — with a
+    ceiling, after which the step is skipped — is what keeps the spotlight off
+    empty space without pretending to know how long any of that takes.
+  */
+  const [missing, setMissing] = useState(false)
+  useEffect(() => {
     if (!step) return
-    // Bring the target into view before measuring, or the spotlight lands on a
-    // rect that is half off the bottom of a phone.
-    const el = document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`)
-    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    measure()
-    const t = window.setTimeout(measure, 320)
-    return () => window.clearTimeout(t)
+    setMissing(false)
+    let alive = true
+    let tries = 0
+    const tick = () => {
+      if (!alive) return
+      /*
+        Measured, not merely found.
+
+        An anchor can exist and still have nothing to spotlight: the offline-maps
+        wrapper renders whether or not tile imagery is configured, and when it is
+        not, the component inside returns null and the wrapper collapses to zero
+        height. Polling for existence alone found that element, stopped waiting,
+        and left the tour parked on a step it could never draw — on the last
+        step, which meant it never finished at all.
+      */
+      const el = rectOf(step.target)
+        ? document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`)
+        : null
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        measure()
+        window.setTimeout(() => alive && measure(), 320)
+        return
+      }
+      /*
+        1.2 seconds, not 2.4.
+
+        This is how long a card sits on a dimmed screen with nothing
+        highlighted before the tour gives up and moves on, and it is visible:
+        the offline-maps step has no anchor when tile imagery is unconfigured,
+        and at the old ceiling it read as the tour having broken rather than as
+        a transition. Long enough for a lazy console chunk to land, short enough
+        that a step which is never coming does not look like a hang.
+      */
+      if (++tries > 12) {
+        setMissing(true)
+        return
+      }
+      window.setTimeout(tick, 100)
+    }
+    tick()
+    return () => {
+      alive = false
+    }
   }, [step, measure])
 
   useEffect(() => {
@@ -81,14 +137,47 @@ export function Tour({ onClose }: { onClose: (completed: boolean) => void }) {
     }
   }, [measure])
 
+  /*
+    A step whose anchor never turned up is stepped over, in whichever direction
+    the person was already going. Reps with no route have no next stop; a
+    super-admin has console screens a manager does not. Rather than predict all
+    of that, the tour walks past what is not there.
+  */
+  // Held in a ref so the skip-forward effect does not re-run every time a
+  // parent re-renders and hands down a new closure.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  const dir = useRef(1)
+  useEffect(() => {
+    if (!missing) return
+    /*
+      Computed here rather than inside a `setIndex` updater.
+
+      The first version closed the tour from within the updater, which is a side
+      effect in a function React is free to call more than once and, in practice,
+      simply did not run: when the *last* step had no anchor — offline maps, on a
+      build with no tile imagery — the tour sat on it forever instead of
+      finishing. An updater returns a value; it does not do things.
+    */
+    const n = index + dir.current
+    if (n < 0) setIndex(0)
+    else if (n >= steps.length) onCloseRef.current(true)
+    else setIndex(n)
+  }, [missing, index, steps.length])
+
   const last = index >= steps.length - 1
   const next = useCallback(() => {
     haptic('tap')
+    dir.current = 1
     if (last) onClose(true)
     else setIndex((i) => i + 1)
   }, [last, onClose])
   const back = useCallback(() => {
     haptic('tap')
+    dir.current = -1
     setIndex((i) => Math.max(0, i - 1))
   }, [])
 
@@ -108,20 +197,48 @@ export function Tour({ onClose }: { onClose: (completed: boolean) => void }) {
     cardRef.current?.focus()
   }, [index])
 
+  /*
+    The card's own height, measured rather than assumed. Step bodies are two to
+    four lines depending on the phone, and a guessed height is what turns a
+    clamp into a card that is nearly on screen.
+  */
+  const [cardH, setCardH] = useState(200)
+  useEffect(() => {
+    const el = cardRef.current
+    if (!el) return
+    const read = () => setCardH(el.getBoundingClientRect().height)
+    read()
+    const ro = new ResizeObserver(read)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [index, step])
+
   if (!step || steps.length === 0) return null
 
   /*
-    Above or below the hole, whichever fits.
-    
-    `prefer` is a wish, not an instruction: the nav sits at the bottom of the
-    screen, so a card "below" it would be off-screen entirely, and the last two
-    steps would be invisible on exactly the phones this app is built for.
+    Above or below the hole, and then clamped into the viewport.
+
+    `prefer` is a wish, not an instruction, and the clamp is not a nicety
+    either. Some anchors are the whole screen — the map is a full-bleed canvas —
+    and a full-screen hole has no above and no below: the card was placed 866px
+    down an 844px phone, entirely off the bottom, and Next could not be reached.
+    The tour stopped dead on step 9 of 22.
+
+    So the position is a preference and the clamp is the rule. Measuring the
+    card first is what makes the clamp possible, which is why it runs after
+    layout rather than being computed from the step.
   */
   const vh = window.innerHeight
   const holeTop = rect ? rect.top - PAD : vh / 2
   const holeBottom = rect ? rect.top + rect.height + PAD : vh / 2
   const roomBelow = vh - holeBottom
-  const below = rect ? (step.prefer === 'above' ? roomBelow > 260 : roomBelow > 200) : true
+  const preferBelow = rect
+    ? step.prefer === 'above'
+      ? roomBelow > cardH + CARD_GAP + MARGIN
+      : roomBelow > cardH + CARD_GAP + MARGIN
+    : true
+  const wanted = preferBelow ? holeBottom + CARD_GAP : holeTop - CARD_GAP - cardH
+  const top = Math.min(Math.max(MARGIN, wanted), Math.max(MARGIN, vh - cardH - MARGIN))
 
   return (
     <div
@@ -173,7 +290,7 @@ export function Tour({ onClose }: { onClose: (completed: boolean) => void }) {
       */}
       <div
         className="absolute left-1/2 w-[min(340px,calc(100vw-32px))] -translate-x-1/2"
-        style={below ? { top: holeBottom + CARD_GAP } : { bottom: vh - holeTop + CARD_GAP }}
+        style={{ top }}
       >
         <div
           ref={cardRef}

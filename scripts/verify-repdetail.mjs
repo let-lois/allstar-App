@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { dismissTour } from './lib/tour.mjs'
 
 /**
  * One rep's day, and who is allowed to see it.
@@ -47,6 +48,7 @@ async function signIn(who) {
   await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.getByRole('button', { name: who }).click()
   await page.waitForTimeout(2200)
+  await dismissTour(page)
   return { ctx, page }
 }
 

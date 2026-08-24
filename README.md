@@ -394,20 +394,25 @@ screen at the moment they are shown, so the tour cannot quietly go out of date.
 If an anchor is missing — no route planned, so no next stop — that step is
 dropped and the counter renumbers, rather than spotlighting empty space.
 
-Six steps, and the number is the design. A tutorial is a toll gate between
-someone and the thing they downloaded the app to do, so it covers only what a
-rep cannot work out alone or cannot afford to get wrong:
+It **walks the app** rather than one screen of it: each step names the route it
+lives on and the tour navigates there before spotlighting anything. That is the
+only honest way to explain a five-tab product — a tour that stays on the home
+screen and describes the other four is a list of promises. It is mounted in the
+app shell for exactly that reason; anything rendered inside a route unmounts
+itself the moment it navigates.
 
-1. what the day is, and how much is left
-2. which door is next, and that the app chose it
-3. the one button that starts a knock
-4. **that it keeps working with no signal** — the claim nobody believes
-   unprompted, and the one that costs a day's work if they assume the opposite
-5. where the doors are
-6. that the day is scored
+Two lists, because two jobs:
 
-Not in it: settings, filters, territory drawing, import, the console. Those are
-discoverable and none is load-bearing on day one.
+- **Field rep — 22 steps.** The day, the next door, navigate, the knock, the
+  offline promise, appointments, follow-ups, the map and its filters and search,
+  leads and how to sort them, the route, the pipeline, the standings, the
+  quick-add button, the profile photo, what is cached, and offline maps.
+- **Office — 21 steps.** The company's day, who is out, the team screen, then
+  the same map/leads/pipeline/standings the reps get, and then the console:
+  its tabs, the dashboard, people, assigning work, territories and import.
+
+The overlap is shared rather than written twice, so a change to how the map is
+explained reaches everyone.
 
 The overlay swallows taps. A tour where the highlighted control still works
 sounds friendlier and is not — the first thing anyone does is press it, the
@@ -434,6 +439,14 @@ Every gate signs in on a fresh context, which is by definition a first run, so
 they call `dismissTour()` from `scripts/lib/tour.mjs` — the same Skip a person
 taps. The alternative was teaching the app to recognise automation, which would
 mean the thing being tested is not the thing that ships.
+
+Two more bugs the walk turned up once the tour spanned screens. A full-bleed
+anchor — the map is the whole viewport — has no above and no below, and the card
+was placed 866px down an 844px phone with Next unreachable; the tour stopped
+dead on step 9 of 22, so the card's position is now a preference and the clamp
+into the viewport is the rule. And moving the mount into the shell silently
+broke "Show the tutorial again": the shell reads the seen-flag once, so clearing
+it from More changed nothing until the request became an explicit signal.
 
 ## Profile photos
 
