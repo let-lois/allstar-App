@@ -21,6 +21,7 @@ import { Navigate as NavigateScreen } from './screens/Navigate'
 import { ScheduleNew } from './screens/ScheduleNew'
 import { Team } from './screens/Team'
 import { Standings } from './screens/Standings'
+import { RepDetail } from './screens/RepDetail'
 
 /**
  * The office console is lazy-loaded.
@@ -129,6 +130,8 @@ export function App() {
             <Route path="/team" element={<Team />} />
             {/* Everyone, reps included — the standings are the point of the thing. */}
             <Route path="/standings" element={<Standings />} />
+            {/* A rep's own day, or anyone's for the office. Gated inside. */}
+            <Route path="/rep/:repId" element={<RepDetail />} />
             <Route path="/more" element={<More />} />
             {/* Office console — desktop-first, role-gated inside the layout. */}
             <Route
