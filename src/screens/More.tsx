@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
-import { SyncDetail, useSync } from '../components/sync/SyncBadge'
+import { SyncDetail, usePhotoSync, useSync } from '../components/sync/SyncBadge'
 import { Button } from '../components/ui/Button'
 import { SectionHeader } from '../components/ui/Card'
 import { Field } from '../components/ui/Input'
@@ -11,6 +11,7 @@ import { useAppStore } from '../store/useAppStore'
 import { estimateStorage } from '../lib/db'
 import { isForcedOffline, setForcedOffline } from '../lib/api'
 import { drain, listOutbox, retryFailed } from '../lib/sync'
+import { drainPhotos, retryFailedPhotos } from '../lib/photos'
 import { relative } from '../lib/format'
 import { ApiError, apiSetPassword } from '../lib/http'
 import { liveToken } from '../lib/session'
@@ -68,6 +69,15 @@ export function More() {
   }, [snap.pending, snap.failed])
 
   const photoBytes = Object.values(photos).reduce((s, p) => s + p.bytes, 0)
+  const photoSnap = usePhotoSync()
+  /*
+    One number for "what has not gone up yet".
+
+    Photos and writes drain separately, but a rep opening this section is asking
+    one question, and a queue that reads "0" while forty roof shots sit on the
+    phone is the kind of wrong that only shows up after the phone is lost.
+  */
+  const queued = outbox.length + photoSnap.waiting + photoSnap.failed
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -122,6 +132,20 @@ export function More() {
               <Row label="Properties" value={String(Object.keys(properties).length)} />
               <Row label="Photos" value={`${Object.keys(photos).length}`} />
               <Row label="Photo storage" value={`${Math.round(photoBytes / 1024)} KB`} />
+              {/*
+                Named for what it means to a rep rather than for the flag: the
+                question behind it is "if I lose this phone, what goes with it".
+              */}
+              <Row
+                label="Photos uploaded"
+                value={
+                  photoSnap.localOnly > 0 && photoSnap.waiting + photoSnap.failed === 0
+                    ? 'Not enabled'
+                    : `${Object.keys(photos).length - photoSnap.waiting - photoSnap.failed} of ${
+                        Object.keys(photos).length
+                      }`
+                }
+              />
               <Row
                 label="App storage"
                 value={
@@ -147,12 +171,40 @@ export function More() {
           </div>
 
           {/* --- outbox --------------------------------------------------- */}
-          <Collapsible title="Upload queue" count={outbox.length}>
-            {outbox.length === 0 ? (
-              <p className="text-sm text-ink-mute">Everything is uploaded.</p>
+          <Collapsible title="Upload queue" count={queued}>
+            {queued === 0 ? (
+              <p className="text-sm text-ink-mute">
+                {photoSnap.localOnly > 0
+                  ? 'Everything is uploaded. Photos stay on this phone — this deployment has no photo storage.'
+                  : 'Everything is uploaded.'}
+              </p>
             ) : (
               <>
                 <ul className="space-y-2">
+                  {/*
+                    Photos first, and as one line rather than one per photo. A
+                    day of knocking is forty of them; listing each would bury
+                    the writes underneath, and there is nothing per-photo a rep
+                    can do about any of them anyway. What they need is the count
+                    and the size, because the size is what the wait costs.
+                  */}
+                  {photoSnap.waiting + photoSnap.failed > 0 && (
+                    <li className="flex min-h-[28px] items-center gap-2.5 text-[14px]">
+                      <span
+                        className={`h-2 w-2 shrink-0 rounded-full ${
+                          photoSnap.failed > 0 ? 'bg-bad' : 'bg-warn'
+                        }`}
+                      />
+                      <span className="min-w-0 flex-1 truncate">
+                        {photoSnap.waiting + photoSnap.failed} photo
+                        {photoSnap.waiting + photoSnap.failed === 1 ? '' : 's'}
+                        {photoSnap.failed > 0 ? ` · ${photoSnap.failed} failed` : ''}
+                      </span>
+                      <span className="nums shrink-0 text-xs text-ink-mute">
+                        {Math.round(photoSnap.waitingBytes / 1024)} KB
+                      </span>
+                    </li>
+                  )}
                   {outbox.slice(0, 25).map((m) => (
                     <li key={m.id} className="flex min-h-[28px] items-center gap-2.5 text-[14px]">
                       <span
@@ -168,11 +220,29 @@ export function More() {
                   ))}
                 </ul>
                 <div className="mt-4 flex gap-2.5">
-                  <Button variant="secondary" full onClick={() => void drain()}>
+                  <Button
+                    variant="secondary"
+                    full
+                    onClick={() => {
+                      void drain()
+                      // `drain` chains into the photos once the outbox is
+                      // clean, but an outbox that is already empty never gets
+                      // there — and an empty outbox with photos still owed is
+                      // exactly the state this button exists for.
+                      void drainPhotos()
+                    }}
+                  >
                     Upload now
                   </Button>
-                  {snap.failed > 0 && (
-                    <Button variant="secondary" full onClick={() => void retryFailed()}>
+                  {snap.failed + photoSnap.failed > 0 && (
+                    <Button
+                      variant="secondary"
+                      full
+                      onClick={() => {
+                        void retryFailed()
+                        void retryFailedPhotos()
+                      }}
+                    >
                       Retry failed
                     </Button>
                   )}

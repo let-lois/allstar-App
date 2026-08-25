@@ -470,7 +470,7 @@ exception rather than a preference:
   rep opening the team list in a basement gets faces or grey circles, and grey
   circles would mean the network is the reason they can't see who's who.
 - A property photo is **dozens of multi-megabyte blobs a day that one screen
-  ever opens**. Those belong in R2, which is where they are headed.
+  ever opens**. Those go to R2 — see *Property photos*, below.
 
 Different shapes, different homes. Revisit if this grows a per-client asset
 store.
@@ -500,6 +500,68 @@ is the obvious implementation, and it **destroys the roster**. A field rep's
 `loadLocal` only reaches for it when the store has nothing in it. One row is
 enough to stop that, so the next load showed a team of exactly one person. The
 board went from eight names to one, which is a bug this app has had before.
+
+## Property photos
+
+A roof shot is the one thing a rep produces that is too big to ride the mutation
+queue. That queue batches forty writes into a single request that has to succeed
+as a unit; dropping a 200KB image into it means one slow upload on one bar of
+signal can cost a rep a morning of knocks. So the bytes travel on their own.
+
+The path is two hops, deliberately:
+
+1. `photo.create` goes up with everything else — id, property, category, size,
+   where the rep was standing. That row is what proves the photo belongs to a
+   property in this tenant.
+2. The JPEG is `POST`ed to `/api/photos/:id` and lands in R2 under
+   `client/property/photo.jpg`.
+
+The order is enforced by the server, not assumed by the client: bytes for a
+photo it has no row for are refused, because there is nothing to authorize
+against. The queue reads that refusal as *not yet* rather than as a failure and
+comes back after the outbox drains.
+
+`lib/photos.ts` is the queue, and the photos **are** the queue — `Photo.pending`
+is the only state. A second store listing what to send could disagree with the
+photos themselves, and the failure mode of that disagreement is a rep whose sync
+chip never goes green with nothing to point at. One at a time, oldest first,
+with the same eight-attempt budget and backoff as the outbox.
+
+### When there is nowhere to put them
+
+R2 needs a payment method to activate, so the binding in `api/wrangler.toml` is
+**commented out** and the Worker treats it as optional. A deployment without it
+answers `503 no_photo_storage` rather than accepting bytes it would drop.
+
+That refusal is a fact about the server, not about the photo, so it is recorded
+on every photo waiting and the queue stops asking. The rep is told *kept on this
+phone* — not "failed", because nothing failed and there is nothing they could do
+about it if it had. **More → Upload queue** does not count those photos as
+outstanding.
+
+To turn it on: create the `allstar-photos` bucket, uncomment the `[[r2_buckets]]`
+block, redeploy. No code change, and `/api/health` reports `r2` either way. The
+next drain picks up everything already on the phone; **Retry failed** clears the
+local-only mark by hand if you'd rather not wait.
+
+```bash
+npm run verify:photos        # the queue, in a browser
+cd api && npm run smoke:photos   # the round trip, against a real Worker
+```
+
+The smoke test starts its own Worker, because the binding is commented out and
+uncommenting it to make a test pass would break the deploy of anyone who hasn't
+created the bucket. It generates a config into a gitignored directory, runs, and
+tears down — then starts the same Worker a *second* time without the binding,
+which is the only way to assert that a deployment with nowhere to put photos
+says so.
+
+Two things this does **not** do yet. Photos are never fetched *back*: bootstrap
+returns no photo rows, so a manager's phone cannot see what a rep shot, and a
+replaced handset starts empty. And the local copy is never evicted — forty
+photos a day at ~200KB is ~8MB a day with nothing pruning it. The order matters:
+eviction is only safe once a photo can be re-fetched on a device that never had
+it, so the download path comes first.
 
 ## The theme
 
@@ -672,6 +734,19 @@ path without leaving coverage.
 Deliberate compromises taken to keep the prototype moving. Each is fine for
 building and testing and each is a real defect at launch, so they are written
 down here rather than left in a chat log.
+
+### Photo storage is not switched on
+
+The upload path is built, gated and shipped, and the deployed Worker has no R2
+binding — so every roof shot a rep takes today lives on that phone and nowhere
+else. Lose the handset, lose the photos, and the office has never seen them.
+
+This is a billing step, not an engineering one: R2 needs a payment method on the
+Cloudflare account before a bucket can be created. Turning it on is in *Property
+photos* above and takes a redeploy.
+
+Until it is on, the app says so rather than implying otherwise — but "kept on
+this phone" is an honest description of a gap, not a substitute for closing it.
 
 ### The MapTiler key allows unknown origins
 

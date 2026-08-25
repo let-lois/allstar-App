@@ -137,7 +137,28 @@ export interface Photo {
   bytes: number
   createdAt: number
   capturedAt?: { lat: number; lng: number }
+  /**
+   * The bytes are not on the server yet.
+   *
+   * This flag *is* the upload queue. A second store listing photos to send
+   * could disagree with the photos themselves — a row for a photo that was
+   * deleted, a photo with no row — and the failure mode of that disagreement is
+   * a rep whose sync chip never goes green with nothing to point at. Reading
+   * the queue off the photos is one source of truth by construction.
+   */
   pending?: boolean
+  /** Failed upload attempts, for backoff and for giving up. */
+  attempts?: number
+  /** Why the last attempt failed, so the queue screen can say. */
+  lastError?: string
+  /** When the bytes reached the server. */
+  uploadedAt?: number
+  /**
+   * The deployment has no photo storage bound, so there is nothing to retry
+   * and nothing wrong. Distinct from a failure: the photo is fine, it simply
+   * lives here and only here.
+   */
+  localOnly?: boolean
 }
 
 export interface Visit {

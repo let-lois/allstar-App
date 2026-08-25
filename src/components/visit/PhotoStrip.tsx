@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Photo, PhotoCategory } from '../../types'
 import { usePhotoCategories } from '../../lib/useSettings'
 import { compressImage, openCamera, openLibrary } from '../../lib/media'
+import { photoState } from '../../lib/photos'
 import { useAppStore } from '../../store/useAppStore'
 import { BottomSheet } from '../ui/BottomSheet'
 import { haptic } from '../../lib/haptics'
@@ -103,24 +104,13 @@ export function PhotoStrip({
               <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-4 text-left text-[11px] font-bold text-white">
                 {cat?.label}
               </span>
-              {p.pending && (
-                <span
-                  className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-warn ring-2 ring-surface"
-                  title="Waiting to upload"
-                />
-              )}
+              <PhotoDot photo={p} />
             </button>
           )
         })}
       </div>
 
-      {photos.length > 0 && (
-        <p className="text-xs text-ink-mute">
-          {photos.length} photo{photos.length === 1 ? '' : 's'} ·{' '}
-          {Math.round(photos.reduce((s, p) => s + p.bytes, 0) / 1024)} KB stored on this
-          phone
-        </p>
-      )}
+      {photos.length > 0 && <PhotoTally photos={photos} />}
 
       {/* Categorize after the shot, in one tap. */}
       <BottomSheet
@@ -165,6 +155,68 @@ export function PhotoStrip({
         onIndex={setViewing}
       />
     </div>
+  )
+}
+
+/**
+ * The corner mark on a thumbnail.
+ *
+ * Only two states earn one. A photo already on the server needs no decoration —
+ * that is the ordinary case, and marking it would make the strip a field of
+ * dots. Neither does a photo on a deployment with nowhere to send it: nothing
+ * is wrong, nothing is pending, and a warning colour would be a lie about a
+ * setting the rep cannot change.
+ */
+function PhotoDot({ photo }: { photo: Photo }) {
+  const state = photoState(photo)
+  if (state === 'waiting') {
+    return (
+      <span
+        className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-warn ring-2 ring-surface"
+        title="Waiting to upload"
+      />
+    )
+  }
+  if (state === 'failed') {
+    return (
+      <span
+        className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-bad ring-2 ring-surface"
+        title={photo.lastError ?? 'Upload failed'}
+      />
+    )
+  }
+  return null
+}
+
+/**
+ * One line saying where these photos are.
+ *
+ * It used to say "stored on this phone" in every case, which was true of the
+ * bytes and misleading about everything else: a rep reading it after a day of
+ * knocking cannot tell whether the office has the roof shots or whether losing
+ * the phone loses them. The size is only quoted while something is still owed,
+ * because that is the only moment the number is a fact the rep can act on.
+ */
+function PhotoTally({ photos }: { photos: Photo[] }) {
+  const states = photos.map(photoState)
+  const waiting = states.filter((s) => s === 'waiting').length
+  const failed = states.filter((s) => s === 'failed').length
+  const local = states.filter((s) => s === 'local').length
+  const owedBytes = photos
+    .filter((p) => photoState(p) !== 'uploaded')
+    .reduce((sum, p) => sum + p.bytes, 0)
+
+  const count = `${photos.length} photo${photos.length === 1 ? '' : 's'}`
+  let detail: string
+  if (failed > 0) detail = `${failed} did not upload — retry from More › Upload queue`
+  else if (waiting > 0) detail = `${waiting} waiting to upload · ${Math.round(owedBytes / 1024)} KB`
+  else if (local === photos.length) detail = `kept on this phone`
+  else detail = 'uploaded'
+
+  return (
+    <p className={`text-xs ${failed > 0 ? 'text-bad' : 'text-ink-mute'}`}>
+      {count} · {detail}
+    </p>
   )
 }
 
