@@ -5,7 +5,10 @@ import {
   apiBootstrap,
   apiPushMutations,
   apiUploadPhoto,
+  apiFetchPhoto,
+  apiPropertyPhotos,
   type BootstrapDTO,
+  type PhotoDTO,
 } from './http'
 import { isDemo, liveToken, sessionKnown, signalAuthExpired } from './session'
 
@@ -190,6 +193,67 @@ function dataUrlToBlob(dataUrl: string): Blob {
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
   return new Blob([bytes], { type })
+}
+
+/**
+ * The photo rows the server holds for one property.
+ *
+ * Returns null when there is nothing to ask — no session, the demo, or no link.
+ * Null rather than an empty array on purpose: "the server says this property has
+ * no photos" and "we could not ask" have to stay distinguishable, because the
+ * first is a reason to forget local rows and the second never is.
+ */
+export async function fetchPropertyPhotos(propertyId: string): Promise<PhotoDTO[] | null> {
+  if (!sessionKnown() || isDemo()) return null
+  if (!online()) return null
+  const token = liveToken()
+  if (!token) return null
+  try {
+    const res = await apiPropertyPhotos(token, propertyId)
+    return res.photos
+  } catch (err) {
+    // A property this account cannot see, or a Worker too old to have the
+    // endpoint. Neither is worth raising to a screen; the local photos still
+    // draw and the strip simply shows what this device has.
+    if (err instanceof ApiError && (err.status === 404 || err.status === 405)) return null
+    throw translate(err)
+  }
+}
+
+/**
+ * Pull one photo's bytes and return them as a data URL.
+ *
+ * A data URL rather than a blob URL because the result is written back to
+ * IndexedDB: an object URL is a pointer into this page's memory and is dead the
+ * moment the tab is, which would mean re-downloading the same roof shot on
+ * every visit to the property — over cellular, for a photo that has not changed
+ * since it was taken.
+ */
+export async function downloadPhoto(photoId: string): Promise<string | null> {
+  if (!sessionKnown() || isDemo()) return null
+  if (!online()) throw new OfflineError()
+  const token = liveToken()
+  if (!token) throw new AuthExpiredError()
+  try {
+    const blob = await apiFetchPhoto(token, photoId)
+    return await blobToDataUrl(blob)
+  } catch (err) {
+    // Nothing stored under this key, or nowhere to store it. Both mean the
+    // bytes are not coming, and neither is an error a rep can act on.
+    if (err instanceof ApiError && (err.status === 404 || err.code === 'no_photo_storage')) {
+      return null
+    }
+    throw translate(err)
+  }
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(new Error('Could not read the downloaded photo'))
+    reader.readAsDataURL(blob)
+  })
 }
 
 export async function fetchBootstrap(): Promise<BootstrapDTO | null> {

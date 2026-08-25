@@ -665,6 +665,58 @@ export default {
         return json(result, 200, cors)
       }
 
+      /* --- a property's photos --------------------------------------------- */
+      //
+      // Metadata only, and deliberately not part of bootstrap.
+      //
+      // A rep's own photos are already on their phone — this endpoint exists for
+      // the ones a device never took: the office opening a roof shot, or a rep
+      // on a replaced handset. Fetching those needs the network by definition,
+      // so there is nothing to gain from carrying every photo row in the payload
+      // that every rep refreshes on every launch, and a lot of bytes to lose.
+      //
+      // Scoped by property rather than by role: the tenant check is the whole
+      // authorization, and it is the same one the mutations use.
+      if (/^\/api\/properties\/[^/]+\/photos$/.test(path) && req.method === 'GET') {
+        const propertyId = path.slice('/api/properties/'.length, -'/photos'.length)
+        const owner = await env.DB.prepare(
+          'SELECT 1 AS ok FROM properties WHERE id = ?1 AND client_id = ?2',
+        )
+          .bind(propertyId, user.clientId)
+          .first<{ ok: number }>()
+        if (!owner) return json({ error: 'Unknown property.' }, 404, cors)
+
+        const rows = await env.DB.prepare(
+          `SELECT id, property_id, visit_id, category, width, height, bytes,
+                  captured_lat, captured_lng, created_at
+             FROM photos WHERE property_id = ?1 AND client_id = ?2
+            ORDER BY created_at`,
+        )
+          .bind(propertyId, user.clientId)
+          .all()
+
+        return json(
+          {
+            photos: (rows.results as Record<string, unknown>[]).map((r) => ({
+              id: r.id,
+              propertyId: r.property_id,
+              visitId: r.visit_id ?? undefined,
+              category: r.category,
+              width: r.width ?? undefined,
+              height: r.height ?? undefined,
+              bytes: r.bytes ?? undefined,
+              capturedAt:
+                r.captured_lat == null || r.captured_lng == null
+                  ? undefined
+                  : { lat: r.captured_lat, lng: r.captured_lng },
+              createdAt: r.created_at,
+            })),
+          },
+          200,
+          cors,
+        )
+      }
+
       /* --- photo upload --------------------------------------------------- */
       //
       // Degrades honestly when R2 isn't bound: the client is told storage is

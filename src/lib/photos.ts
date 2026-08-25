@@ -1,5 +1,12 @@
 import type { Photo } from '../types'
-import { AuthExpiredError, OfflineError, online, uploadPhoto } from './api'
+import {
+  AuthExpiredError,
+  OfflineError,
+  downloadPhoto,
+  fetchPropertyPhotos,
+  online,
+  uploadPhoto,
+} from './api'
 import * as store from './db'
 
 /**
@@ -66,7 +73,14 @@ let snap: PhotoSyncSnapshot = {
   uploading: false,
 }
 
-const owed = (p: Photo) => !!p.pending && !p.localOnly
+/*
+  A photo owes the server its bytes only if it *has* bytes.
+
+  Since a photo can now exist here without them — the office holding a row for a
+  shot a rep took on their own phone — `dataUrl` is part of the question. Without
+  it the drain would try to upload nothing, forever, on somebody else's photo.
+*/
+const owed = (p: Photo) => !!p.pending && !p.localOnly && !!p.dataUrl
 const spent = (p: Photo) => (p.attempts ?? 0) >= MAX_ATTEMPTS
 
 /**
@@ -85,6 +99,9 @@ export type PhotoState = 'uploaded' | 'waiting' | 'failed' | 'local'
 
 export function photoState(p: Photo): PhotoState {
   if (p.localOnly) return 'local'
+  // No local bytes means this row came from the server, which is the one case
+  // where the photo is definitively *not* on this phone.
+  if (!p.dataUrl) return 'uploaded'
   if (!p.pending) return p.uploadedAt ? 'uploaded' : 'local'
   return spent(p) ? 'failed' : 'waiting'
 }
@@ -140,7 +157,7 @@ async function save(photo: Photo) {
  */
 async function reviveLocalOnly(rows?: Photo[]): Promise<number> {
   const all = rows ?? (await store.all<Photo>('photos'))
-  const stranded = all.filter((p) => p.localOnly && !p.uploadedAt)
+  const stranded = all.filter((p) => p.localOnly && !p.uploadedAt && p.dataUrl)
   for (const p of stranded) {
     await save({ ...p, pending: true, localOnly: false, attempts: undefined, lastError: undefined })
   }
@@ -193,7 +210,7 @@ export async function drainPhotos(): Promise<void> {
       const photo = queue[0]
       let outcome
       try {
-        outcome = await uploadPhoto(photo.id, photo.dataUrl)
+        outcome = await uploadPhoto(photo.id, photo.dataUrl!)
       } catch (err) {
         // Lost the link, or the session died. Neither is the photo's fault and
         // neither is fixed by burning its retry budget.
@@ -266,7 +283,7 @@ function scheduleRetry(ms: number) {
 export async function retryFailedPhotos(): Promise<void> {
   const rows = await store.all<Photo>('photos')
   for (const p of rows) {
-    if (p.uploadedAt || p.localOnly) continue
+    if (p.uploadedAt || p.localOnly || !p.dataUrl) continue
     if (!spent(p)) continue
     await save({ ...p, pending: true, localOnly: false, attempts: undefined, lastError: undefined })
   }
@@ -280,4 +297,72 @@ export async function retryFailedPhotos(): Promise<void> {
 
 export async function initPhotoSync(): Promise<void> {
   await recount()
+}
+
+/* --- coming the other way --------------------------------------------------- */
+
+/**
+ * Learn about photos this device did not take.
+ *
+ * The office opening a property, or a rep on a replaced handset, has no rows for
+ * the roof shots somebody else's phone captured. This asks the server what it
+ * holds and files the answer next to the local photos.
+ *
+ * What it deliberately does not do is delete. A row the server did not mention
+ * may be one this phone took ninety seconds ago and has not uploaded yet, and
+ * treating the server's list as complete would erase a rep's morning — the same
+ * trap `applyBootstrap` documents at length for every other store.
+ */
+export async function syncPropertyPhotos(propertyId: string): Promise<void> {
+  const remote = await fetchPropertyPhotos(propertyId).catch(() => null)
+  if (!remote) return
+
+  const known = new Set((await store.all<Photo>('photos')).map((p) => p.id))
+  let added = 0
+  for (const r of remote) {
+    if (known.has(r.id)) continue
+    await save({
+      id: r.id,
+      propertyId: r.propertyId,
+      visitId: r.visitId,
+      category: r.category as Photo['category'],
+      width: r.width ?? 0,
+      height: r.height ?? 0,
+      bytes: r.bytes ?? 0,
+      createdAt: r.createdAt,
+      capturedAt: r.capturedAt,
+      /*
+        On the server by definition — that is where this row came from. Saying
+        so matters: without it `photoState` would read a photo with no local
+        bytes as one that never left a phone, and the strip would tell the
+        office their rep's photos are stuck.
+      */
+      uploadedAt: r.createdAt,
+    })
+    added += 1
+  }
+  if (added) await recount()
+}
+
+/**
+ * The bytes for one photo, fetching them if this device has never had them.
+ *
+ * Written back to the row on success, so the second look at a property is free
+ * and works with no signal. Returns null when the bytes are not coming — no
+ * storage on the deployment, or nothing under that key — which the caller draws
+ * as a missing photo rather than a broken one.
+ */
+export async function ensureBytes(photoId: string): Promise<string | null> {
+  const row = await store.get<Photo>('photos', photoId)
+  if (row?.dataUrl) return row.dataUrl
+
+  const dataUrl = await downloadPhoto(photoId).catch(() => null)
+  if (!dataUrl) return null
+
+  // Re-read rather than reusing `row`: a fetch over cellular is seconds long,
+  // and the photo may have been changed underneath it.
+  const fresh = await store.get<Photo>('photos', photoId)
+  if (!fresh) return dataUrl
+  await save({ ...fresh, dataUrl })
+  return dataUrl
 }

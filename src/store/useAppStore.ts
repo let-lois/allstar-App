@@ -238,7 +238,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       at, is never.
     */
     onPhotoUpdated((photo) => {
-      set((s) => (s.photos[photo.id] ? { photos: { ...s.photos, [photo.id]: photo } } : s))
+      /*
+        New rows as well as changed ones. The guard that used to be here — only
+        patch a photo the store already knew about — was there to stop a deleted
+        photo reappearing, and it silently swallowed every photo arriving from
+        the server: the office would fetch a rep's roof shots, write them to
+        disk, and see an empty strip until something else forced a reload.
+      */
+      set((s) => ({ photos: { ...s.photos, [photo.id]: photo } }))
     })
 
     await initSync()

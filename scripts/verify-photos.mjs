@@ -72,7 +72,7 @@ const json = (status, body) => (route) =>
  * call is recorded, because "how many times did it ask" is the assertion for
  * two of the four states and cannot be seen any other way.
  */
-async function signIn(onUpload) {
+async function signIn(onUpload, seed = [], freezeBootstrap = false) {
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 },
     isMobile: true,
@@ -81,9 +81,31 @@ async function signIn(onUpload) {
   const page = await ctx.newPage()
   page.on('pageerror', (e) => errors.push(String(e)))
   const uploads = []
+  const downloads = []
+  const listings = []
+  // What the server holds. Empty unless a test says otherwise — most of these
+  // are about a phone that took the photo itself.
+  const server = { photos: seed }
 
   await page.route('**/api/auth/login', json(200, { token: 'tok', user: REP }))
-  await page.route('**/api/bootstrap', json(200, {
+  let boots = 0
+  await page.route('**/api/bootstrap', async (route) => {
+    /*
+      One bootstrap, then silence.
+
+      A refresh re-reads every store off disk, which repopulates the photo map
+      from IndexedDB and would mask a photo that never reached the store the
+      direct way. That is not a hypothetical: with the store's update handler
+      dropping unknown rows — the bug this test exists for — the strip still
+      filled in, just late and only because something unrelated happened to
+      reload. Holding the second bootstrap open leaves exactly one path from
+      the server's listing to the screen, which is the path being tested.
+    */
+    if (freezeBootstrap && ++boots > 1) {
+      await new Promise((r) => setTimeout(r, 30_000))
+      return route.abort('connectionrefused')
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
     user: REP,
     properties: [PROPERTY],
     routes: [],
@@ -92,7 +114,8 @@ async function signIn(onUpload) {
     activity: [],
     dailyStats: [],
     serverTime: Date.now(),
-  }))
+  }) })
+  })
   await page.route('**/api/mutations', async (route) => {
     const body = JSON.parse(route.request().postData() || '{}')
     await route.fulfill({
@@ -104,9 +127,22 @@ async function signIn(onUpload) {
       }),
     })
   })
+  await page.route('**/api/properties/*/photos', async (route) => {
+    listings.push(route.request().url())
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ photos: server.photos }),
+    })
+  })
   await page.route('**/api/photos/**', async (route) => {
+    const method = route.request().method()
+    if (method === 'GET') {
+      downloads.push(route.request().url())
+      return route.fulfill({ status: 200, contentType: 'image/jpeg', body: JPEG })
+    }
     uploads.push({
-      method: route.request().method(),
+      method,
       bytes: (route.request().postDataBuffer() ?? Buffer.alloc(0)).byteLength,
     })
     await onUpload(route)
@@ -118,7 +154,7 @@ async function signIn(onUpload) {
   await page.getByRole('button', { name: /^Sign in$/ }).click()
   await page.waitForTimeout(1600)
   await dismissTour(page)
-  return { ctx, page, uploads }
+  return { ctx, page, uploads, downloads, listings, server }
 }
 
 /** Shoot a photo on the property screen and file it under Roof. */
@@ -298,6 +334,69 @@ const tally = (page) => page.locator('p', { hasText: /^\d+ photos? · / }).first
   ok(
     uploads.length - asked <= 3,
     `it backs off instead of hammering the radio (${uploads.length - asked} more tries in 5s)`,
+  )
+
+  await ctx.close()
+}
+
+/* --- 6. a device that never took the photo ---------------------------------- */
+//
+// The office, or a rep on a replaced handset. Everything up to here was about a
+// phone that shot the photo itself and already had the bytes; this is the half
+// that was missing — an upload nobody but the uploader could ever see.
+{
+  const seeded = [
+    {
+      id: 'ph_from_someone_else',
+      propertyId: PROPERTY.id,
+      category: 'roof',
+      width: 1600,
+      height: 1200,
+      bytes: 274_000,
+      createdAt: Date.now() - 86_400_000,
+    },
+  ]
+  const { ctx, page, downloads, listings } = await signIn(
+    json(200, { ok: true, key: 'k' }),
+    seeded,
+    true,
+  )
+
+  await page.goto(`${BASE}/property/${PROPERTY.id}`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(900)
+  const section = page.getByRole('button', { name: /^Photos/ })
+  if ((await section.count()) > 0 && (await section.first().getAttribute('aria-expanded')) === 'false') {
+    await section.first().click()
+  }
+  await page.waitForTimeout(2500)
+
+  ok(listings.length >= 1, 'opening a property asks the server what photos it holds')
+
+  const img = page.locator('button.press.relative img')
+  ok((await img.count()) === 1, 'a photo this device never took is on screen')
+  ok(downloads.length === 1, 'and its bytes were fetched, once')
+  const src = (await img.first().getAttribute('src')) ?? ''
+  ok(src.startsWith('data:image/'), 'stored as bytes rather than a link that dies with the tab')
+
+  const line = await tally(page).innerText()
+  ok(
+    /uploaded/i.test(line) && !/waiting|kept on this phone/i.test(line),
+    `and it is not described as stuck on a phone — "${line.trim()}"`,
+  )
+
+  // Cached, not re-fetched. A roof shot does not change, and a manager walking
+  // back into a property should not pay for it twice on cellular.
+  await page.goto(`${BASE}/leads`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(600)
+  await page.goto(`${BASE}/property/${PROPERTY.id}`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(2000)
+  ok(downloads.length === 1, 'coming back does not download it again')
+
+  // And nothing tries to upload a photo whose bytes were never ours.
+  await page.waitForTimeout(2000)
+  ok(
+    (await page.locator('[title="Waiting to upload"]').count()) === 0,
+    'somebody else\'s photo is never queued for upload',
   )
 
   await ctx.close()

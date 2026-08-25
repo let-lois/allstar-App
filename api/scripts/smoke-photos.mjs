@@ -290,6 +290,33 @@ try {
     )
   }
 
+  /* --- the office finds out the photo exists --------------------------------- */
+  //
+  // The path a device that never took the photo has to walk: ask the property
+  // what it holds, then fetch the bytes by id. Without the listing there is no
+  // id to fetch, which is why "it uploaded" was invisible to everyone but the
+  // phone that shot it.
+  {
+    const res = await call(`/api/properties/${propertyId}/photos`, {}, admin.token)
+    ok(res.status === 200, 'a property will list the photos it holds')
+    const body = await res.json()
+    ok(body.photos?.length === 1, 'and the uploaded photo is in that list')
+    const row = body.photos?.[0] ?? {}
+    ok(row.id === photoId, 'listed by the id the bytes are fetched with')
+    ok(row.category === 'roof', 'carrying the category it was filed under')
+    ok(row.bytes === JPEG.byteLength, 'and its size, so a strip can say what a fetch will cost')
+    ok(
+      row.r2Key === undefined && row.r2_key === undefined,
+      'and not the storage key — a client has no use for it and no business knowing it',
+    )
+  }
+
+  /* --- another tenant's property listing ------------------------------------- */
+  {
+    const res = await call('/api/properties/p_not_ours/photos', {}, admin.token)
+    ok(res.status === 404, 'a property outside the account lists nothing')
+  }
+
   /* --- unauthenticated ------------------------------------------------------ */
   {
     const res = await call(`/api/photos/${photoId}`)

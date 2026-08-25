@@ -130,8 +130,15 @@ export interface Photo {
   propertyId: string
   visitId?: string
   category: PhotoCategory
-  /** Compressed data URL. Kept local-first; upload happens through the sync queue. */
-  dataUrl: string
+  /**
+   * The compressed image itself.
+   *
+   * Optional, because a photo can exist on this device without its bytes: the
+   * office opening a roof shot a rep took on their own phone has the row from
+   * the server and nothing to draw yet. Present means the bytes are here and the
+   * photo works with no signal; absent means they are a fetch away.
+   */
+  dataUrl?: string
   width: number
   height: number
   bytes: number

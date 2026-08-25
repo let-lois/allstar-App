@@ -571,12 +571,35 @@ the real binding against local R2, then generates a config with the binding
 removed and starts the Worker again — the only way to reach the refusal path,
 which is what every deployment without a bucket does.
 
-Two things this does **not** do yet. Photos are never fetched *back*: bootstrap
-returns no photo rows, so a manager's phone cannot see what a rep shot, and a
-replaced handset starts empty. And the local copy is never evicted — forty
-photos a day at ~200KB is ~8MB a day with nothing pruning it. The order matters:
-eviction is only safe once a photo can be re-fetched on a device that never had
-it, so the download path comes first.
+### Coming back the other way
+
+An upload only the uploader can see is a backup, not a feature. `GET
+/api/properties/:id/photos` lists what the server holds for one property, and
+`GET /api/photos/:id` serves the bytes.
+
+Deliberately **not** part of bootstrap. A rep's own photos are already on their
+phone; this path exists for the ones a device never took — the office opening a
+roof shot, a rep on a replaced handset — and fetching those needs the network by
+definition. Carrying every photo row in the payload each rep refreshes on every
+launch would cost a lot of bytes to save a request the phone mostly does not
+make.
+
+Bytes are fetched **per thumbnail**, not per property. A strip is mostly
+off-screen: a lead with fifteen shots shows three, and pulling the other twelve
+over cellular to fill a container nobody scrolled is what makes a field app feel
+broken. Each one is written back to its row on arrival, so the second look is
+free and works with no signal — a data URL rather than an object URL for exactly
+that reason, since an object URL dies with the tab and the photo would come down
+again on every visit.
+
+Merging never deletes. A row the server did not mention may be one this phone
+took ninety seconds ago and has not uploaded yet — the same trap `applyBootstrap`
+documents at length for every other store.
+
+Still not done: the local copy is never evicted. Forty photos a day at ~270KB is
+~15MB a day with nothing pruning it, against a browser quota around 1GB. That is
+now safe to build, which it was not before this — a photo can be re-fetched on a
+device that never had it.
 
 ## The theme
 
