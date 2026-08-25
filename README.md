@@ -868,10 +868,46 @@ references it.
 
 One thing it deliberately does not claim:
 
-- **Google's basemap is not ours to theme.** `GoogleFieldMap` now asks for
-  `colorScheme: 'DARK'`, which covers vector maps, but a Map Style attached to
-  the Map ID in the Cloud console overrides it. If the real map comes up light,
-  that is where to look.
+- **Google's basemap is not ours to theme.** `GoogleFieldMap` asks for
+  `colorScheme: 'DARK'`, and two things can override that. A raster fallback
+  ignores it outright, because the dark scheme is vector-only; that half is
+  detected on `tilesloaded` via `getRenderingType()` and reported to the console.
+  A Map Style attached to the Map ID in the Cloud console also wins over it, and
+  that half is invisible from the bundle — a styled vector map reports `VECTOR`
+  like any other. The warning names both, so a light map sends the reader to the
+  right place rather than the detectable one. See *A light map, and why*.
+
+### A light map, and why
+
+A bright basemap inside a near-black app gets reported as "the map looks wrong"
+and then costs somebody an afternoon, because the two causes are unrelated and
+neither announces itself.
+
+`lib/basemap.ts` holds the decision as a pure function of the rendering type,
+and that is why it is its own module: `lib/gmaps.ts` reads `import.meta.env` at
+load and so belongs to a bundler, and a real map needs a real key — a key that
+works in CI is a key committed somewhere. A function that takes a string and
+returns a string can be tested by anybody.
+
+It reports a raster fallback, and **names the cause it cannot see**. That second
+part is the one worth keeping: a warning that says "raster" and stops there sends
+whoever reads it to check a device setting on the day the real cause was a style
+attached to the Map ID months ago. `verify:basemap` fails if the message loses
+it.
+
+It stays quiet on `UNINITIALIZED` and on an API too old to answer, because a
+warning that fires on every cold load is one nobody reads by the time it means
+something. Anything unrecognised is reported rather than assumed fine.
+
+```bash
+npm run verify:basemap
+```
+
+Also asserts the function is actually called, with Google's own answer rather
+than an assumption, and **on `tilesloaded` rather than at construction** — the
+rendering type is not settled until something has painted, so checking earlier
+reads `UNINITIALIZED` and the whole thing quietly becomes a no-op. Moving the
+call fails that assertion.
 
 ### The chart palette, measured in-repo
 

@@ -5,6 +5,7 @@ import { bearing } from '../../lib/geo'
 import type { Position } from '../../lib/geo'
 import { STATUS_COLOR } from '../../data/outcomes'
 import { GmapsError, gmapId, loadGmaps } from '../../lib/gmaps'
+import { basemapWarning } from '../../lib/basemap'
 import type { MapHandle } from './FieldMap'
 
 /**
@@ -285,9 +286,24 @@ export function GoogleFieldMap({
             new GmapsError('undrawable', 'The map loaded but could not draw on this device.'),
           )
         }, DRAW_TIMEOUT)
-        google.maps.event.addListenerOnce(mapRef.current, 'tilesloaded', () =>
-          window.clearTimeout(drawn),
-        )
+        google.maps.event.addListenerOnce(mapRef.current, 'tilesloaded', () => {
+          window.clearTimeout(drawn)
+          /*
+            The map drew. Did it draw the map we asked for?
+
+            `colorScheme: 'DARK'` is a request, and a raster fallback ignores it
+            — which puts Google's light basemap in the middle of a near-black
+            app with nothing anywhere saying why. Checked on `tilesloaded`
+            rather than at construction because the rendering type is not
+            settled until something has actually been painted.
+
+            The console, not the screen: the map works, and a rep can read it.
+            This is for whoever deployed it, the same channel and the same
+            reasoning as the half-configured warning in `lib/gmaps`.
+          */
+          const warning = basemapWarning(mapRef.current?.getRenderingType())
+          if (warning) console.warn(`[allstar] Google basemap: ${warning}`)
+        })
 
         setReady(true)
       })
