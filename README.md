@@ -186,6 +186,60 @@ To check an address resolves before uploading a list without coordinates:
 /api/selftest/geocode?address=700+W+41st+St&city=Austin&state=TX&zip=78751
 ```
 
+### Which territory a lead lands in
+
+An import used to assign a territory only if the operator typed one for the
+whole file. Everything else arrived unowned, and somebody assigned it by hand —
+which for a 500-row list is most of a morning.
+
+Now each lead's coordinates are matched against the drawn boundaries, and the
+patch's rep comes with it. The rules, in order:
+
+1. A territory named on the import screen wins for every row. An explicit choice
+   is an explicit choice; matching is skipped entirely rather than competing
+   with it.
+2. Otherwise, the lead goes to the drawn territory containing its coordinates.
+3. A rep named on the import screen wins over the patch's rep.
+4. A lead inside **no** territory stays unassigned. It is not pushed into the
+   nearest one — a lead ten miles outside every patch belongs to a person
+   deciding.
+5. A lead with no usable coordinates is not counted as unmatched. It failed to
+   geocode; that is not the territories' fault.
+
+**Overlaps resolve to the smallest patch.** A downtown territory carved out of a
+city-wide one is the normal case, not a mistake, and "the bigger one wins" would
+put every downtown lead in the city bucket. Two patches of *equal* area tie-break
+by id — rare, but without it the winner is whichever row D1 returned first, which
+is free to change between imports and would move leads between reps with nothing
+in the audit log to explain it.
+
+The result reports `territoryMatched` and `territoryUnmatched`, and the wizard
+says so, because "every lead found its patch" and "no territory has a boundary
+yet" otherwise look identical: both are a successful import, and only one of them
+leaves somebody a day of work.
+
+### The geometry is duplicated on purpose
+
+`api/src/geo.ts` copies `pointInPolygon` and `polygonAreaSqMiles` from
+`src/lib/geo.ts`. The Worker is its own package with its own tsconfig and bundle;
+reaching into the browser app's module graph to borrow forty lines would couple
+two builds for the life of the project.
+
+Copies drift, and drift here is silent and expensive: a manager draws a patch and
+the console says it holds 340 leads, while the import puts a different set in it.
+Nothing errors, and the first person to notice is a rep knocking a street that is
+not theirs.
+
+```bash
+npm run verify:geo-parity
+```
+
+Runs both copies over the same fixtures — a square, a concave notch, a
+reverse-wound ring, and a 5,000-point grid including vertices and on-edge cases —
+and fails on any disagreement. Also covers the malformed boundaries that must be
+dropped rather than repaired, since guessing what a manager meant puts real leads
+in a patch nobody drew.
+
 ## Planning a day
 
 Imported leads are a list, not a plan. **Today → Plan N doors** turns a rep's

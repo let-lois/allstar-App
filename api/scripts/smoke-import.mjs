@@ -338,6 +338,112 @@ ok(
   'an oversized selection is refused, not truncated',
 )
 
+/* --- leads land in the patch they fall inside ------------------------------ */
+//
+// The gap this closes: before it, an import assigned a territory only if the
+// operator typed one for the whole file, so every lead arrived unowned and
+// somebody assigned them by hand. The geometry itself is gated separately —
+// `npm run verify:geo-parity` at the repo root — so what is checked here is the
+// wiring: that the import consults the drawn shapes at all, who inherits the
+// rep, and what an explicit choice still overrides.
+{
+  const patchRep = roster.users.find((u) => u.email === REP.email).id
+
+  // A city-wide patch with a downtown one carved out of it. Overlap is the
+  // normal case, and the specific patch has to win.
+  /*
+    Each run gets its own corner of the map.
+
+    The first version of this reused fixed coordinates, so a second run against
+    the same database matched leads against the *previous* run's patches — the
+    counts looked right and the ids were wrong, which is exactly the kind of
+    green-but-meaningless a smoke test is supposed to avoid. Offsetting by the
+    run's stamp keeps every run's geometry disjoint from every other's.
+  */
+  const off = ((stamp / 1000) % 40) * 0.5
+
+  const created = async (body) =>
+    (await (await api('/api/territories', { method: 'POST', body: JSON.stringify(body) }, admin.token)).json())
+      .territory ?? {}
+
+  const city = await created({
+        name: `Geo City ${stamp}`,
+        repId: null,
+        boundary: [
+          { lat: 30.40, lng: -97.80 - off },
+          { lat: 30.40, lng: -97.50 - off },
+          { lat: 30.70, lng: -97.50 - off },
+          { lat: 30.70, lng: -97.80 - off },
+        ],
+  })
+  const downtown = await created({
+        name: `Geo Downtown ${stamp}`,
+        repId: patchRep,
+        boundary: [
+          { lat: 30.50, lng: -97.70 - off },
+          { lat: 30.50, lng: -97.66 - off },
+          { lat: 30.53, lng: -97.66 - off },
+          { lat: 30.53, lng: -97.70 - off },
+        ],
+  })
+  ok(!!city.id && !!downtown.id, 'two overlapping territories exist to match against')
+
+  const geoStreet = `Geo Match Way ${stamp}`
+  const geoRows = [
+    // Inside both patches — belongs to the smaller one.
+    { ref: 'G1', address1: `1 ${geoStreet}`, lat: 30.51, lng: -97.68 - off },
+    // Inside the city patch only.
+    { ref: 'G2', address1: `2 ${geoStreet}`, lat: 30.60, lng: -97.55 - off },
+    // Nowhere near either.
+    { ref: 'G3', address1: `3 ${geoStreet}`, lat: 41.88, lng: -87.63 },
+    // No coordinates at all — nothing to match, and not the territories' fault.
+    { ref: 'G4', address1: `4 ${geoStreet}` },
+  ]
+
+  const geo = await imp({ rows: geoRows })
+  ok(geo.created === 4, `all four rows imported (created=${geo.created})`)
+  ok(geo.territoryMatched === 2, `two leads found a patch (matched=${geo.territoryMatched})`)
+  ok(
+    geo.territoryUnmatched === 1,
+    `one lead with coordinates found none (unmatched=${geo.territoryUnmatched})`,
+  )
+
+  const boot = await (await api('/api/bootstrap', {}, admin.token)).json()
+  const byRef = (n) => boot.properties.find((p) => p.address1 === `${n} ${geoStreet}`)
+
+  ok(byRef(1)?.territoryId === downtown.id, 'a lead inside both patches goes to the smaller one')
+  ok(byRef(2)?.territoryId === city.id, 'a lead inside one patch goes there')
+  ok(!byRef(3)?.territoryId, 'a lead outside every patch is left unassigned, not pushed into one')
+  ok(!byRef(4)?.territoryId, 'a lead with no coordinates cannot be matched and is not guessed at')
+
+  // The part that removes the manual work: the patch's rep comes with it.
+  ok(
+    byRef(1)?.assignedRepId === patchRep,
+    'and it inherits that territory\'s rep, so the lead arrives owned',
+  )
+  ok(
+    !byRef(2)?.assignedRepId,
+    'a patch with nobody assigned still leaves the lead unowned — it does not invent an owner',
+  )
+
+  /* --- an explicit choice still wins --------------------------------------- */
+  const namedStreet = `Geo Named Way ${stamp}`
+  const named = await imp({
+    rows: [{ ref: 'N1', address1: `1 ${namedStreet}`, lat: 30.51, lng: -97.68 - off }],
+    territoryName: `Geo Explicit ${stamp}`,
+  })
+  ok(
+    named.territoryMatched === 0,
+    'naming a territory skips matching entirely rather than competing with it',
+  )
+  const boot2 = await (await api('/api/bootstrap', {}, admin.token)).json()
+  const namedLead = boot2.properties.find((p) => p.address1 === `1 ${namedStreet}`)
+  ok(
+    namedLead?.territoryId === named.territoryId && namedLead.territoryId !== downtown.id,
+    'a lead sitting inside a drawn patch still goes to the territory the operator typed',
+  )
+}
+
 /* --- authorization -------------------------------------------------------- */
 ok(
   (

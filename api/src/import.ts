@@ -1,4 +1,5 @@
 import { record } from './audit'
+import { parseBoundary, polygonAreaSqMiles, territoryFor, type TerritoryShape } from './geo'
 import type { Env, Role, SessionUser } from './types'
 
 /**
@@ -55,6 +56,17 @@ export interface ImportResult {
   updated: number
   rejected: { ref: string; reason: string }[]
   territoryId?: string
+  /**
+   * How many leads landed in a drawn territory by their coordinates.
+   *
+   * Reported because the alternative is an operator who cannot tell the
+   * difference between "every lead found its patch" and "no territory has a
+   * boundary yet" — both look like a successful import, and only one of them
+   * leaves somebody a day of manual assignment.
+   */
+  territoryMatched?: number
+  /** Leads with usable coordinates that fell inside no drawn territory. */
+  territoryUnmatched?: number
 }
 
 const IMPORT_ROLES: Role[] = ['super_admin', 'client_admin', 'manager']
@@ -164,7 +176,38 @@ export async function importProperties(
     }
   }
 
+  /*
+    The drawn territories, loaded once.
+
+    Only when the operator did not name one: an explicit choice is an explicit
+    choice, and quietly overriding it with geometry would make the field on the
+    import screen a suggestion. Skipped entirely when there are no shapes, which
+    is every account until somebody draws a patch — the query is cheap but the
+    honest reason is that `matched` should read zero because nothing was drawn,
+    not because nothing matched.
+  */
+  let shapes: TerritoryShape[] = []
+  if (!territoryId) {
+    const drawn = await env.DB.prepare(
+      'SELECT id, rep_id, boundary FROM territories WHERE client_id = ?1 AND boundary IS NOT NULL',
+    )
+      .bind(user.clientId)
+      .all()
+    for (const t of drawn.results as Record<string, unknown>[]) {
+      const boundary = parseBoundary(t.boundary)
+      if (!boundary) continue
+      shapes.push({
+        id: String(t.id),
+        repId: t.rep_id == null ? null : String(t.rep_id),
+        boundary,
+        areaSqMiles: polygonAreaSqMiles(boundary),
+      })
+    }
+  }
+
   const rejected: ImportResult['rejected'] = []
+  let territoryMatched = 0
+  let territoryUnmatched = 0
   const now = Date.now()
 
   // Prepared once and reused: D1 charges per statement, and a 500-row import is
@@ -217,6 +260,35 @@ export async function importProperties(
     const id = await propertyIdFor(user.clientId, row)
     ids.push(id)
 
+    /*
+      Which patch does this lead fall in?
+
+      Only consulted when the operator named no territory, and only for a lead
+      that actually has coordinates — a row that failed to geocode has nothing
+      to match, and counting it as unmatched would blame the territories for a
+      missing address.
+
+      The rep comes with the patch unless one was named for the whole file. This
+      is the part that matters: a territory nobody is assigned to still leaves
+      the lead unowned, but most drawn patches have a rep, and inheriting them is
+      the difference between an import that is ready to work and one that needs a
+      person to sit down with it.
+    */
+    const lat = coord(row.lat, 'lat')
+    const lng = coord(row.lng, 'lng')
+    let rowTerritoryId = territoryId ?? null
+    let rowRepId = assignRepId
+    if (!territoryId && lat != null && lng != null) {
+      const match = shapes.length ? territoryFor({ lat, lng }, shapes) : null
+      if (match) {
+        rowTerritoryId = match.id
+        if (!rowRepId) rowRepId = match.repId
+        territoryMatched += 1
+      } else {
+        territoryUnmatched += 1
+      }
+    }
+
     statements.push(
       upsert.bind(
         id,
@@ -231,8 +303,8 @@ export async function importProperties(
         Number.isFinite(row.opportunityValue as number) ? row.opportunityValue : null,
         Number.isFinite(row.roofAgeYears as number) ? row.roofAgeYears : null,
         Number.isFinite(row.squareFeet as number) ? row.squareFeet : null,
-        territoryId ?? null,
-        assignRepId,
+        rowTerritoryId,
+        rowRepId,
         now,
       ),
     )
@@ -255,7 +327,7 @@ export async function importProperties(
   }
 
   if (statements.length === 0) {
-    return { created: 0, updated: 0, rejected, territoryId }
+    return { created: 0, updated: 0, rejected, territoryId, territoryMatched, territoryUnmatched }
   }
 
   // Which ids already existed, asked *before* the write — afterwards there is no
@@ -272,6 +344,8 @@ export async function importProperties(
     updated: existingBefore,
     rejected,
     territoryId,
+    territoryMatched,
+    territoryUnmatched,
   }
 
   await record(env, user, {
@@ -284,6 +358,10 @@ export async function importProperties(
       updated: result.updated,
       rejected: rejected.length,
       assignedTo: assignRepId,
+      // In the audit log because "who owns these leads" is the question someone
+      // asks weeks later, and a territory match is an assignment nobody typed.
+      territoryMatched,
+      territoryUnmatched,
     },
   })
 
