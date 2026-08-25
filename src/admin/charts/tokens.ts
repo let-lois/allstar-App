@@ -1,55 +1,68 @@
 /**
  * Chart tokens for the office console.
  *
- * These were validated against a white chart surface. The app now runs on a dark
- * one, so the values below were lifted to clear 3:1 on the card they actually sit
- * on — that part is measured, with `scripts/lib/contrast.mjs`, and pinned by
- * `npm run verify:contrast`.
+ * Every figure quoted below is measured, and measured *here* — the contrast
+ * ratios by `scripts/lib/contrast.mjs`, the colour-vision and lightness figures
+ * by `scripts/lib/cvd.mjs`. Both are pinned by `npm run verify:charts`.
  *
- * **What has not been re-run:** the CVD ΔE separation between the two series,
- * and the ordinal ramp's adjacent-ΔL check. Those came from a palette validator
- * that is not in this repo. The hues are unchanged and each pair was moved by
- * the same kind of step, so the separation should hold — but "should" is not
- * "measured", and the honest state of this file is that its contrast figures are
- * current and its colour-blindness figures are inherited. Re-run before treating
- * them as fresh:
- *
- *   node scripts/validate_palette.js "<hex,hex>" --mode dark --surface "#151D2E"
- *   node scripts/validate_palette.js "<ramp>" --ordinal --mode dark --surface "#151D2E"
+ * That is a change worth naming. These values were once validated against a
+ * white chart surface by a tool that lived outside this repo. When the app moved
+ * to a dark ground the contrast was re-measured, because the means to do that
+ * was here; the colour-blindness figures were left inherited and honestly marked
+ * as stale, because it was not. A number nobody can re-derive rots the first time
+ * somebody edits the thing it describes, so the maths moved in.
  */
 
 /**
  * Categorical slots, assigned in fixed order and never cycled.
- * On white these measured: worst adjacent CVD ΔE 24.7 (protan), normal-vision
- * ΔE 33.6. Lightened for the dark card, where they now measure 6.73:1 and
- * 7.41:1 — the darker originals sat at 3.81 and 5.26, over the floor but muddy.
  *
- * Kept blue/orange through both redesigns, deliberately. Two line series have to
- * be separable by someone with protanopia, this pair was measured to be on white,
- * and changing the hues would throw away that result rather than carry it. A data
- * series is also not interface chrome — the ban on orange is about surfaces, and
- * this is the one place in the product where hue carries information that nothing
- * else carries. Revisit with a validator in hand, not by eye.
+ * Blue then orange, through the white redesign and this one. The hue *pair* is
+ * the colour-blindness decision — two line series have to be separable by
+ * someone with protanopia — and re-picking hues would throw away that result
+ * rather than carry it. A data series is also not interface chrome: the ban on
+ * orange is about surfaces, and this is the one place in the product where hue
+ * carries information nothing else carries.
+ *
+ * What changed is the *step*, not the hue. Lifting these by hand for the dark
+ * card overshot: at L 0.718 and 0.755 they sat above the 0.48–0.67 band a dark
+ * ground wants, which is how a mark starts to glare rather than sit on the
+ * surface. Stepped properly for the dark surface they measure:
+ *
+ *   protan/deutan ΔE 26.8 (target ≥ 8) — up from 21.6 before the re-step
+ *   normal-vision ΔE 31.8 (floor ≥ 15)
+ *   contrast on the card 4.63:1 and 4.34:1 (floor 3:1 for a mark)
+ *
+ * The contrast is lower than the 6.73 and 7.41 the hand-lifted values had, and
+ * that is the trade: both remain comfortably above the floor for a graphic, the
+ * separation a colour-blind reader depends on went *up*, and the marks stop
+ * shouting. Do not re-lighten these by eye — run the gate.
  */
-export const SERIES = ['#6BA6F5', '#F2955E'] as const
+export const SERIES = ['#3987E5', '#D95926'] as const
 
 /**
  * Ordinal ramp for the funnel — one hue, dim→bright, because funnel stages are
  * *ordered*, not separate identities. The direction flipped with the ground: on
  * white the ramp ran light→dark, and "further along" has to mean "further from
- * the surface" either way. The dim end sits at 3.07:1 on the card, which is the
- * floor, not a margin — do not darken step 0.
+ * the surface" either way.
  *
- * Deliberately five steps: the documented blue ramp cannot fit six steps that
- * simultaneously keep adjacent ΔL ≥ 0.06 and hold the light end above 2:1 on
- * white. Rather than ship a ramp whose top two stages are indistinguishable,
- * the funnel covers the five *open* stages and Won is reported separately as
- * the conversion headline — which is the better read anyway.
+ * Re-measured on the dark card and unchanged by it: monotone, adjacent ΔL from
+ * 0.09 to 0.13 against a 0.06 floor, hue spread 4°, and the dim end at 3.07:1
+ * on the card — which is the floor, not a margin. Do not darken step 0.
+ *
+ * Deliberately five steps: this ramp cannot fit six that simultaneously keep
+ * adjacent ΔL over the floor and hold the dim end above it. Rather than ship a
+ * ramp whose last two stages are indistinguishable, the funnel covers the five
+ * *open* stages and Won is reported separately as the conversion headline —
+ * which is the better read anyway.
  */
 export const FUNNEL_RAMP = ['#2A6BB0', '#3C8ADA', '#69ABEE', '#9BC9F7', '#CFE5FC'] as const
 
-/** Single-hue fill for one-measure distributions (no legend, no identity). */
-export const SINGLE = '#6BA6F5'
+/**
+ * Single-hue fill for one-measure distributions (no legend, no identity).
+ * The first categorical slot, so a one-series chart and a two-series chart do
+ * not disagree about what blue means.
+ */
+export const SINGLE = '#3987E5'
 
 /** Reserved for state, never for a series. Always paired with an icon or label. */
 export const STATUS = {
