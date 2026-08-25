@@ -47,6 +47,26 @@
     --line: 42 54 82;
     --line-soft: 33 43 65;
 
+    /*
+     * The teal every control is edged in.
+     *
+     * Two strengths, and the gap between them is the point. `--edge` is what a
+     * control at rest wears: 2.37:1 against the sunken ground, where the navy
+     * hairline it replaces managed 1.55:1 — visible in sunlight rather than
+     * merely present. `--edge-strong` is reserved for the one control in a group
+     * that is *chosen*, and sits 3.81:1 clear of `--edge` so that selection is
+     * still a difference you find rather than one you look for.
+     *
+     * That gap is load-bearing and easy to close by accident. Before these
+     * edges existed the teal ring was selection's whole signal, because the
+     * selected and unselected faces differ by only 1.33:1 — and the first
+     * attempt at that shipped a selected row nobody could pick out. Giving every
+     * control a ring spends that signal; keeping the two strengths apart is what
+     * buys it back. `verify:contrast` asserts the distance.
+     */
+    --edge: rgb(var(--accent) / 0.4);
+    --edge-strong: rgb(var(--accent-strong) / 0.8);
+
     /* --- teal as writing --------------------------------------------------- */
     /** 7.94:1 on a card, 5.17:1 on a machined teal row. */
     --accent: 32 196 211;
@@ -391,7 +411,7 @@
     @apply metal text-accent-strong;
     --metal-top: #173d4d;
     --metal-bottom: #0e2833;
-    --metal-ring: rgba(127, 224, 239, 0.28);
+    --metal-ring: var(--edge-strong);
     --metal-lip: 0.12;
     --metal-bevel: 0.4;
     --sheen: 0.07;
@@ -439,7 +459,7 @@
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, var(--metal-lip, 0.5)),
       inset 0 -2px 3px rgba(0, 0, 0, var(--metal-bevel, 0.4)),
-      0 0 0 1px var(--metal-ring, rgba(255, 255, 255, 0.12)),
+      0 0 0 1px var(--metal-ring, var(--edge)),
       0 2px 6px rgba(0, 0, 0, 0.45);
     transition:
       box-shadow 140ms ease,
@@ -472,7 +492,7 @@
     box-shadow:
       inset 0 2px 6px rgba(0, 0, 0, 0.5),
       inset 0 -1px 0 rgba(255, 255, 255, 0.12),
-      0 0 0 1px var(--metal-ring, rgba(255, 255, 255, 0.12));
+      0 0 0 1px var(--metal-ring, var(--edge));
   }
 
   .metal:active::after {
@@ -524,7 +544,7 @@
     @apply text-ink;
     --metal-top: #232e44;
     --metal-bottom: #161e2e;
-    --metal-ring: rgba(255, 255, 255, 0.14);
+    --metal-ring: var(--edge);
     --metal-lip: 0.1;
     --metal-bevel: 0.45;
     --sheen: 0.06;
@@ -584,6 +604,7 @@
     */
     background: linear-gradient(180deg, #143240, #0e2430);
     box-shadow:
+      inset 0 0 0 1px var(--edge),
       inset 0 1px 0 rgba(255, 255, 255, 0.08),
       inset 0 -1px 2px rgba(0, 0, 0, 0.45);
     transition: box-shadow 140ms ease;
@@ -601,8 +622,10 @@
   }
 
   /* Pressed pushes the face in: the lip goes, the shading flips to the top. */
+  /* Pressed pushes the face in. The edge stays: it is identity, not feedback. */
   .metal-row:active {
     box-shadow:
+      inset 0 0 0 1px var(--edge),
       inset 0 2px 5px rgba(0, 0, 0, 0.55),
       inset 0 -1px 0 rgba(255, 255, 255, 0.07);
   }
@@ -632,7 +655,7 @@
   .metal-row-brand {
     background: linear-gradient(180deg, #17495c, #0e3242);
     box-shadow:
-      inset 0 0 0 1.5px rgba(32, 196, 211, 0.6),
+      inset 0 0 0 1.5px var(--edge-strong),
       inset 0 1px 0 rgba(255, 255, 255, 0.12),
       inset 0 -1px 2px rgba(0, 0, 0, 0.5);
   }
@@ -640,7 +663,7 @@
   /* Pressed, the ring stays — it is identity, not feedback. */
   .metal-row-brand:active {
     box-shadow:
-      inset 0 0 0 1.5px rgba(32, 196, 211, 0.6),
+      inset 0 0 0 1.5px var(--edge-strong),
       inset 0 2px 5px rgba(0, 0, 0, 0.55),
       inset 0 -1px 0 rgba(255, 255, 255, 0.07);
   }
@@ -656,7 +679,7 @@
     @apply text-ink;
     --metal-top: #143240;
     --metal-bottom: #0e2430;
-    --metal-ring: rgba(127, 224, 239, 0.22);
+    --metal-ring: var(--edge);
     --metal-lip: 0.1;
     --metal-bevel: 0.45;
     --sheen: 0.07;
@@ -667,7 +690,7 @@
     @apply text-white;
     --metal-top: rgba(255, 255, 255, 0.16);
     --metal-bottom: rgba(255, 255, 255, 0.04);
-    --metal-ring: rgba(255, 255, 255, 0.16);
+    --metal-ring: var(--edge);
     --metal-lip: 0.28;
     --metal-bevel: 0.4;
     --sheen: 0.12;

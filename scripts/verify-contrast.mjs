@@ -113,6 +113,43 @@ const faceVsFace = ratio(metalRowBrand, metalRow)
 ok(faceVsFace < 2, 'the two row faces are close enough that the ring is load-bearing, not decoration',
    faceVsFace.toFixed(2))
 
+/*
+ * The two edge strengths, and the distance between them.
+ *
+ * Every control now wears a teal edge, which is what the app is meant to look
+ * like — and it costs selection the thing that used to identify it. Before this,
+ * a ring meant "chosen" because nothing else had one; now a ring means "control"
+ * and only its *strength* means chosen. With the faces 1.33:1 apart, closing
+ * that gap would put us back at a selected row nobody can pick out, which is a
+ * bug this app has already shipped once.
+ *
+ * So both ends are pinned: the resting edge has to be worth having over the
+ * hairline it replaced, and the selected ring has to stay clear of it.
+ */
+const edgeAlpha = (name) => {
+  const m = css.match(new RegExp(`--${name}:\\s*rgb\\(var\\(--([a-z-]+)\\)\\s*/\\s*([0-9.]+)\\)`))
+  if (!m) throw new Error(`--${name} is not an rgb(var(--token) / alpha) edge in index.css`)
+  return { token: m[1], alpha: Number(m[2]) }
+}
+const rest = edgeAlpha('edge')
+const strong = edgeAlpha('edge-strong')
+const restOnGround = over(T[rest.token], rest.alpha, T['surface-sunk'])
+const strongOnFace = over(T[strong.token], strong.alpha, metalRowBrand)
+const hairline = T['line']
+
+const edgeVsGround = ratio(restOnGround, T['surface-sunk'])
+ok(edgeVsGround >= 2, 'the resting edge is visible on the ground it sits on', edgeVsGround.toFixed(2))
+
+const edgeVsHairline = ratio(restOnGround, hairline)
+ok(edgeVsHairline > 1.2,
+   'and is a real step up from the hairline it replaced, not a repaint of it',
+   edgeVsHairline.toFixed(2))
+
+const selectedVsResting = ratio(strongOnFace, restOnGround)
+ok(selectedVsResting >= AA_GRAPHIC,
+   'a selected control still reads against a control merely at rest',
+   selectedVsResting.toFixed(2))
+
 const metalQuiet = face('#232e44', 0.06)
 at(T['ink'], metalQuiet, AA_TEXT, 'ink on a gunmetal control')
 

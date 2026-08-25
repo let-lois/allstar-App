@@ -114,7 +114,7 @@ export function AdminLayout() {
                   'focusable flex min-h-[40px] shrink-0 items-center whitespace-nowrap rounded-full border px-3.5 text-[13px] font-medium',
                   isActive
                     ? 'border-brand-600 bg-brand-600 text-white'
-                    : 'border-line bg-surface text-ink-mute active:bg-surface-field',
+                    : 'border-accent/40 bg-surface text-ink-mute active:bg-surface-field',
                 ].join(' ')
               }
             >
