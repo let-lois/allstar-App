@@ -7,6 +7,7 @@ import { Button } from '../components/ui/Button'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { NoteComposer } from '../components/visit/NoteComposer'
 import { PhotoStrip } from '../components/visit/PhotoStrip'
+import { syncPropertyPhotos } from '../lib/photos'
 import { CommActions } from '../components/property/CommActions'
 import { StreetView } from '../components/property/StreetView'
 import { OutcomePill, ScoreBar, StatusPill } from '../components/ui/StatusPill'
@@ -56,6 +57,23 @@ export function PropertyDetail() {
         .sort((a, b) => b.createdAt - a.createdAt),
     [allPhotos, propertyId],
   )
+
+  /*
+    Ask the server what photos it holds for this property.
+
+    Here rather than in bootstrap because this is the only screen that shows
+    them, and because the photos a device did not take are the whole point: a
+    rep's own are already on their phone. Metadata only — the bytes come down
+    per thumbnail, and only for the ones actually drawn.
+
+    Failures are deliberately silent. Not being able to reach the server means
+    the strip shows what this device has, which is exactly what it showed
+    before this existed.
+  */
+  useEffect(() => {
+    if (!propertyId) return
+    void syncPropertyPhotos(propertyId)
+  }, [propertyId])
   const visits = useMemo(
     () =>
       Object.values(allVisits)

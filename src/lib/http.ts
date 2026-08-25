@@ -158,6 +158,62 @@ export function apiUploadPhoto(token: string, photoId: string, blob: Blob) {
   })
 }
 
+export interface PhotoDTO {
+  id: string
+  propertyId: string
+  visitId?: string
+  category: string
+  width?: number
+  height?: number
+  bytes?: number
+  capturedAt?: { lat: number; lng: number }
+  createdAt: number
+}
+
+export function apiPropertyPhotos(token: string, propertyId: string) {
+  return request<{ photos: PhotoDTO[] }>(
+    `/api/properties/${encodeURIComponent(propertyId)}/photos`,
+    { token },
+  )
+}
+
+/**
+ * Pull one photo's bytes down.
+ *
+ * Its own function rather than a flag on `request`, because the response is not
+ * JSON and the error path still is: a 404 or a 503 comes back as an object with
+ * a `code` the queue reasons about, and losing that by reading every response as
+ * a blob would turn "this deployment has no photo storage" into a corrupt image.
+ */
+export async function apiFetchPhoto(token: string, photoId: string): Promise<Blob> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 45_000)
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}/api/photos/${encodeURIComponent(photoId)}`, {
+      headers: { authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    })
+  } catch (err) {
+    throw new NetworkError(err)
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!res.ok) {
+    let message = `Request failed (${res.status})`
+    let code: string | undefined
+    try {
+      const body = (await res.json()) as { error?: string; code?: string }
+      if (body?.error) message = body.error
+      code = body?.code
+    } catch {
+      /* the refusals are JSON; a body that isn't keeps the status message */
+    }
+    throw new ApiError(res.status, message, code)
+  }
+  return await res.blob()
+}
+
 export interface TeamUserDTO {
   id: string
   name: string

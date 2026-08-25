@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Photo, PhotoCategory } from '../../types'
 import { usePhotoCategories } from '../../lib/useSettings'
 import { compressImage, openCamera, openLibrary } from '../../lib/media'
-import { photoState } from '../../lib/photos'
+import { ensureBytes, photoState } from '../../lib/photos'
 import { useAppStore } from '../../store/useAppStore'
 import { BottomSheet } from '../ui/BottomSheet'
 import { haptic } from '../../lib/haptics'
@@ -94,11 +94,9 @@ export function PhotoStrip({
               onClick={() => setViewing(i)}
               className="press relative h-24 w-24 shrink-0 overflow-hidden rounded-card bg-line"
             >
-              <img
-                src={p.dataUrl}
+              <PhotoImage
+                photo={p}
                 alt={`${cat?.label ?? 'Photo'} of property`}
-                loading="lazy"
-                decoding="async"
                 className="h-full w-full object-cover"
               />
               <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-4 text-left text-[11px] font-bold text-white">
@@ -155,6 +153,75 @@ export function PhotoStrip({
         onIndex={setViewing}
       />
     </div>
+  )
+}
+
+/**
+ * A photo, whether or not its bytes are on this device.
+ *
+ * They are not, for anything this phone did not shoot: the office opening a
+ * property has the row and nothing to draw. So the bytes are fetched on first
+ * sight and written back to the row, which means the second look is free and
+ * works with no signal.
+ *
+ * Per photo rather than per property, because a strip is mostly off-screen: a
+ * rep with fifteen shots on a lead sees three, and pulling the other twelve over
+ * cellular to fill a scroll container nobody scrolled is exactly the kind of
+ * thing that makes a field app feel broken.
+ */
+function PhotoImage({
+  photo,
+  alt,
+  className,
+}: {
+  photo: Photo
+  alt: string
+  className: string
+}) {
+  const [src, setSrc] = useState<string | undefined>(photo.dataUrl)
+  const [gone, setGone] = useState(false)
+
+  useEffect(() => {
+    if (photo.dataUrl) {
+      setSrc(photo.dataUrl)
+      return
+    }
+    let alive = true
+    setSrc(undefined)
+    setGone(false)
+    void ensureBytes(photo.id).then((bytes) => {
+      if (!alive) return
+      if (bytes) setSrc(bytes)
+      else setGone(true)
+    })
+    return () => {
+      alive = false
+    }
+  }, [photo.id, photo.dataUrl])
+
+  if (src) {
+    return <img src={src} alt={alt} loading="lazy" decoding="async" className={className} />
+  }
+
+  /*
+    Two different absences, drawn differently on purpose. A photo still coming
+    down is a placeholder that will fill; one the server cannot produce is a
+    dash, because a spinner that never stops is worse than an answer.
+  */
+  return (
+    <span
+      role="img"
+      aria-label={gone ? 'Photo unavailable' : 'Photo loading'}
+      className={`${className} grid place-items-center bg-surface-field text-ink-faint`}
+    >
+      {gone ? (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M5 12h14" strokeLinecap="round" />
+        </svg>
+      ) : (
+        <span className="h-4 w-4 animate-pulse rounded-full bg-ink/20" />
+      )}
+    </span>
   )
 }
 
@@ -272,7 +339,7 @@ function PhotoViewer({
       >
         {photos.map((p) => (
           <div key={p.id} className="flex w-full shrink-0 snap-center items-center justify-center p-3">
-            <img src={p.dataUrl} alt="" className="max-h-full max-w-full object-contain" />
+            <PhotoImage photo={p} alt="" className="max-h-full max-w-full object-contain" />
           </div>
         ))}
       </div>
