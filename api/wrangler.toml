@@ -15,15 +15,18 @@ database_name = "allstar-db"
 database_id = "3adac120-500e-404d-8a37-571ce3654bc0"
 
 # Photos are the one thing too big for a database row — but R2 requires a
-# payment method to activate, which a prototype shouldn't need. The Worker
-# treats this binding as optional: without it every other endpoint works
-# normally and photos stay cached on the phone, exactly as they do today.
+# payment method to activate, so the Worker still treats this binding as
+# optional: without it every other endpoint works normally, uploads are refused
+# with `no_photo_storage`, and photos stay cached on the phone. That path is not
+# dead code — it is what every deployment without this bucket does, and it is
+# gated (`cd api && npm run smoke:photos`).
 #
-# To enable uploads later: create the `allstar-photos` bucket, uncomment this,
-# and redeploy. No code change.
-# [[r2_buckets]]
-# binding = "PHOTOS"
-# bucket_name = "allstar-photos"
+# The bucket must exist in the account being deployed to, under exactly this
+# name, or `wrangler deploy` fails. It failing is the good outcome: the
+# alternative is a Worker that accepts photos and drops them.
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "allstar-photos"
 
 [vars]
 # Comma-separated. The console and the field app are the same origin today, but

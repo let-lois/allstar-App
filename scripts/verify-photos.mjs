@@ -234,7 +234,51 @@ const tally = (page) => page.locator('p', { hasText: /^\d+ photos? · / }).first
   await ctx.close()
 }
 
-/* --- 4. the server is broken ------------------------------------------------ */
+/* --- 4. photo storage is switched on later ---------------------------------- */
+//
+// The deploy-day case, and the one that strands photos silently.
+//
+// A photo marked local is not owed, so it is not in the queue, not in the
+// count, and there is no failure for anyone to retry. Without a re-ask, turning
+// storage on leaves every photo taken before the deploy on the phone forever —
+// and the only symptom is a rep saying the office never got their roof shots.
+{
+  let storage = false
+  const { ctx, page, uploads } = await signIn(async (route) =>
+    storage
+      ? route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true,"key":"k"}' })
+      : route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'no storage', code: 'no_photo_storage' }),
+        }),
+  )
+
+  await shoot(page)
+  await page.waitForTimeout(2500)
+  ok(
+    /kept on this phone/i.test(await tally(page).innerText()),
+    'a photo taken before storage exists is kept on the phone',
+  )
+
+  // The deploy. Nothing changes on the phone; the server simply starts saying
+  // yes — and the app is reloaded, which is what a rep opening it tomorrow does.
+  storage = true
+  const asked = uploads.length
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(4000)
+
+  ok(uploads.length > asked, 'the next launch asks again rather than giving up forever')
+
+  await page.goto(`${BASE}/property/${PROPERTY.id}`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1200)
+  const line = await tally(page).innerText()
+  ok(/uploaded/i.test(line), `and the photo goes up on its own — "${line.trim()}"`)
+
+  await ctx.close()
+}
+
+/* --- 5. the server is broken ------------------------------------------------ */
 {
   const { ctx, page, uploads } = await signIn(json(500, { error: 'Something went wrong.' }))
   await shoot(page)
