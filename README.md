@@ -75,6 +75,41 @@ npm run verify:offline
 with no connection, still see their work, and have it upload by itself on
 reconnect.
 
+### Asking the browser to keep it
+
+All of the above is worth nothing if the browser throws it away, and by default
+it may. Script-writable storage is *best-effort* unless a site asks otherwise: a
+browser short of disk can evict it, and iOS Safari clears it after seven days of
+not opening a site that is not installed to the home screen.
+
+For a field app that is a rep back from a week off finding an app that looks
+freshly installed. Leads re-download; anything still in the outbox does not,
+because the server never heard of it.
+
+So `requestPersistence()` runs at every launch — fire-and-forget, since nothing
+on screen depends on it and a permission check has no business delaying first
+paint. Every launch because it is idempotent once granted, and because browsers
+weigh engagement: a request refused the day someone installed the app is often
+granted a week later, and asking again is the only way to find out.
+
+It is **granted, not requested**. Browsers decide, mostly on whether the site is
+installed. So the answer is reported rather than assumed — More → Saved on this
+phone shows *Kept* or *May be cleared*, and the second comes with the one thing
+that actually fixes it (add it to the home screen) and an honest limit on the
+worry (whatever already reached the server is safe either way).
+
+```bash
+npm run verify:persistence
+```
+
+Stubs `navigator.storage` rather than driving a real browser's answer, which is
+a property of the harness and not of this code. What it asserts is our side: that
+the app asks, asks **once** rather than on every navigation, does not re-ask a
+browser that already agreed — `persist()` can prompt — survives a refusal, and
+reports the answer it got rather than the one it wanted. A storage manager that
+throws instead of answering, as some engines do in private browsing, counts as a
+refusal and not as a crash.
+
 ## Demo data
 
 The demo is a full company, not one rep: **five field reps** with their own

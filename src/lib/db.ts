@@ -247,6 +247,49 @@ export async function metaSet(key: string, value: unknown): Promise<void> {
 }
 
 /**
+ * Ask the browser not to throw this app's data away.
+ *
+ * Without it, everything here is "best-effort" storage: a browser short of disk
+ * may evict it, and iOS Safari clears script-writable storage after seven days
+ * of not opening a site that is not installed to the home screen. For a field
+ * app that means a rep back from a week off finds an app that looks freshly
+ * installed — leads re-download, but anything still in the outbox does not come
+ * back, because the server never heard of it.
+ *
+ * Granted, not requested: browsers decide, mostly on whether the site is
+ * installed or well used. Chrome grants it to an installed PWA and usually
+ * refuses a tab someone opened once. That is why the answer is reported rather
+ * than assumed — "we asked" is not the same fact as "it is safe", and the More
+ * screen should not claim the second when it only knows the first.
+ *
+ * Idempotent and cheap: a browser that has already granted it returns true
+ * without prompting anyone.
+ */
+export async function requestPersistence(): Promise<boolean> {
+  if (!navigator.storage?.persist) return false
+  try {
+    // Ask only when it is not already granted. `persist()` can prompt in some
+    // browsers, and a prompt on every launch would be its own bug.
+    if (await navigator.storage.persisted?.()) return true
+    return await navigator.storage.persist()
+  } catch {
+    // Some engines throw in private browsing rather than answering. Not being
+    // able to ask is the same outcome as being told no.
+    return false
+  }
+}
+
+/** Whether the browser has already promised to keep this app's data. */
+export async function storageIsPersisted(): Promise<boolean> {
+  if (!navigator.storage?.persisted) return false
+  try {
+    return await navigator.storage.persisted()
+  } catch {
+    return false
+  }
+}
+
+/**
  * How much room this device has left, or null where the browser won't say.
  *
  * Reporting only. An earlier version of this comment described dropping the
