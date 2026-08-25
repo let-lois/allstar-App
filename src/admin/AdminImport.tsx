@@ -265,6 +265,19 @@ export default function AdminImport() {
         totals.updated += res.updated
         totals.rejected.push(...res.rejected)
         totals.territoryId ??= res.territoryId
+        /*
+          Summed across chunks, and left undefined when the server never sent it.
+          A Worker predating territory matching returns nothing here, and adding
+          zero to zero would report "0 leads matched a territory" — which reads
+          as every lead missing its patch rather than as a server that has never
+          heard of the question.
+        */
+        if (res.territoryMatched != null) {
+          totals.territoryMatched = (totals.territoryMatched ?? 0) + res.territoryMatched
+        }
+        if (res.territoryUnmatched != null) {
+          totals.territoryUnmatched = (totals.territoryUnmatched ?? 0) + res.territoryUnmatched
+        }
         setProgress({ done: Math.min(i + CHUNK, importable.length), total: importable.length })
       }
       setResult(totals)
@@ -557,6 +570,30 @@ export default function AdminImport() {
               tone={result.rejected.length + unplaced.length + noAddress.length ? 'warn' : 'muted'}
             />
           </div>
+
+          {result.territoryMatched != null &&
+            result.territoryMatched + (result.territoryUnmatched ?? 0) > 0 && (
+              <p className="mt-4 text-sm leading-relaxed text-ink-mute">
+                {result.territoryMatched > 0 ? (
+                  <>
+                    <strong className="text-ink">
+                      {result.territoryMatched.toLocaleString()} lead
+                      {result.territoryMatched === 1 ? '' : 's'}
+                    </strong>{' '}
+                    landed inside a territory you have drawn and{' '}
+                    {result.territoryMatched === 1 ? 'was' : 'were'} assigned to whoever works
+                    it.{' '}
+                  </>
+                ) : null}
+                {result.territoryUnmatched ? (
+                  <>
+                    {result.territoryUnmatched.toLocaleString()} fell outside every drawn
+                    territory and {result.territoryUnmatched === 1 ? 'is' : 'are'} waiting to be
+                    assigned — draw a patch around them on the map and they will be picked up.
+                  </>
+                ) : null}
+              </p>
+            )}
 
           {result.updated > 0 && (
             <p className="mt-4 text-sm leading-relaxed text-ink-mute">

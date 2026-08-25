@@ -416,6 +416,16 @@ export interface ImportResultDTO {
   updated: number
   rejected: { ref: string; reason: string }[]
   territoryId?: string
+  /**
+   * Leads that landed in a drawn territory by their coordinates.
+   *
+   * Optional because a Worker deployed before territory matching existed does
+   * not send it, and a console that assumed it would show "0 matched" against
+   * the old server — which reads as a failure rather than as a field the server
+   * has never heard of.
+   */
+  territoryMatched?: number
+  territoryUnmatched?: number
 }
 
 export function apiImport(
