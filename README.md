@@ -540,9 +540,21 @@ about it if it had. **More → Upload queue** does not count those photos as
 outstanding.
 
 To turn it on: create the `allstar-photos` bucket, uncomment the `[[r2_buckets]]`
-block, redeploy. No code change, and `/api/health` reports `r2` either way. The
-next drain picks up everything already on the phone; **Retry failed** clears the
-local-only mark by hand if you'd rather not wait.
+block, redeploy. No code change, and `/api/health` reports `r2` either way.
+
+Photos already marked local-only recover on their own. The first drain of each
+app launch re-asks the server once when there is nothing else owed, and the
+first upload that lands puts every remaining local-only photo back in the queue,
+because a photo marked local on the strength of a refusal that no longer happens
+is simply wrong. Once per launch and no more — on a deployment where the answer
+really is no, re-asking every drain would be a guaranteed 503 every few seconds
+forever.
+
+That re-ask is the whole reason those photos are not stranded, and it is easy to
+leave out: a local-only photo is not owed, so it is not in the queue, not in the
+count, and there is no failure for anyone to retry. Turning storage on would
+leave everything shot before the deploy on the phone permanently, and the only
+symptom would be a rep saying the office never got their roof shots.
 
 ```bash
 npm run verify:photos        # the queue, in a browser

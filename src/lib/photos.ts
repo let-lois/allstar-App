@@ -45,6 +45,17 @@ const backoffMs = (attempts: number) => Math.min(60_000, 1000 * 2 ** Math.min(at
 
 let listeners: Listener[] = []
 let updated: ((photo: Photo) => void) | null = null
+/**
+ * Whether this app session has already re-asked a server that once had no
+ * photo storage.
+ *
+ * Once per launch, not once ever: turning R2 on is a deploy, and a rep whose
+ * photos were marked local last week must not have to know that in order to
+ * get them off their phone. Once per launch is also the ceiling — re-probing on
+ * every drain would mean a guaranteed 503 every few seconds, forever, on the
+ * deployments where the answer really is no.
+ */
+let reprobed = false
 let uploading = false
 let retryTimer: number | undefined
 let snap: PhotoSyncSnapshot = {
@@ -121,6 +132,22 @@ async function save(photo: Photo) {
 }
 
 /**
+ * Put every local-only photo back in the queue.
+ *
+ * Called when something *did* upload, because that is proof the server has
+ * somewhere to put photos after all — and a photo marked local on the strength
+ * of a 503 that no longer happens is simply wrong.
+ */
+async function reviveLocalOnly(rows?: Photo[]): Promise<number> {
+  const all = rows ?? (await store.all<Photo>('photos'))
+  const stranded = all.filter((p) => p.localOnly && !p.uploadedAt)
+  for (const p of stranded) {
+    await save({ ...p, pending: true, localOnly: false, attempts: undefined, lastError: undefined })
+  }
+  return stranded.length
+}
+
+/**
  * Send whatever is owed, oldest first.
  *
  * Returns when the queue is empty or when it hits something waiting will not
@@ -136,9 +163,31 @@ export async function drainPhotos(): Promise<void> {
   try {
     for (;;) {
       if (!online()) break
-      const queue = (await store.all<Photo>('photos'))
+      const rows = await store.all<Photo>('photos')
+      let queue = rows
         .filter((p) => owed(p) && !spent(p))
         .sort((a, b) => a.createdAt - b.createdAt)
+
+      /*
+        Nothing owed, but photos sitting here marked local. Ask once.
+
+        Without this they are stranded: a photo marked local is not owed, so it
+        is not in the queue, not in the count, and there is no failure for a
+        person to retry. Turning photo storage on would leave every photo taken
+        before the deploy on the phone forever, and the only sign of it would be
+        a rep saying the office never got their roof shots.
+      */
+      if (queue.length === 0 && !reprobed) {
+        reprobed = true
+        const stranded = rows
+          .filter((p) => p.localOnly && !p.uploadedAt)
+          .sort((a, b) => a.createdAt - b.createdAt)
+        if (stranded.length > 0) {
+          const probe = { ...stranded[0], pending: true, localOnly: false }
+          await save(probe)
+          queue = [probe]
+        }
+      }
       if (queue.length === 0) break
 
       const photo = queue[0]
@@ -167,6 +216,10 @@ export async function drainPhotos(): Promise<void> {
           attempts: undefined,
           lastError: undefined,
         })
+        // An upload landing is proof the server has somewhere to put photos, so
+        // anything still marked local on the strength of an older refusal is
+        // wrong and goes back in the queue.
+        await reviveLocalOnly()
         continue
       }
 
@@ -213,10 +266,14 @@ function scheduleRetry(ms: number) {
 export async function retryFailedPhotos(): Promise<void> {
   const rows = await store.all<Photo>('photos')
   for (const p of rows) {
-    if (!spent(p) && !p.localOnly) continue
-    if (p.uploadedAt) continue
+    if (p.uploadedAt || p.localOnly) continue
+    if (!spent(p)) continue
     await save({ ...p, pending: true, localOnly: false, attempts: undefined, lastError: undefined })
   }
+  await reviveLocalOnly(rows)
+  // Asking by hand is also a reason to ask the server again, whatever it said
+  // last time this session.
+  reprobed = false
   await recount()
   void drainPhotos()
 }
