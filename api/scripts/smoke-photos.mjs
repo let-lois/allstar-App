@@ -7,16 +7,15 @@ import { fileURLToPath } from 'node:url'
  * Photo storage, end to end, against a real Worker.
  *
  * The reason this one starts its own server instead of assuming `wrangler dev`
- * like the other smokes: the R2 binding is commented out in wrangler.toml on
- * purpose, because R2 needs a payment method to activate and every merge to
- * main deploys. Uncommenting it to make a test pass would break the deploy of
- * anyone who hasn't created the bucket. So the config is generated here, into
- * a gitignored directory, and torn down after.
+ * like the other smokes: it needs to run the same Worker under two different
+ * configurations, and only one of them is what wrangler.toml says.
  *
- * That also buys the assertion that matters most and is otherwise unreachable:
- * the same Worker is started a second time *without* the binding, to prove that
- * a deployment with nowhere to put photos says so plainly instead of accepting
- * bytes it is quietly dropping.
+ * The R2 binding is live now, so the interesting case is the *other* one. A
+ * deployment whose account has no `allstar-photos` bucket — a fork, a second
+ * environment, a customer's own account before someone adds a payment method —
+ * still has to refuse photos plainly rather than accept bytes it drops. That
+ * path is unreachable from a config file that binds the bucket, so this
+ * generates one that doesn't, into a gitignored directory, and tears it down.
  */
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -43,20 +42,20 @@ setGlobalDispatcher(new Agent({}))
 
 /* --- config generation ---------------------------------------------------- */
 
-const R2_COMMENTED = '# [[r2_buckets]]\n# binding = "PHOTOS"\n# bucket_name = "allstar-photos"'
 const R2_LIVE = '[[r2_buckets]]\nbinding = "PHOTOS"\nbucket_name = "allstar-photos"'
+const R2_REMOVED = '# no photo storage on this deployment'
 
 function writeConfig(name, withR2) {
   const source = readFileSync(resolve(api, 'wrangler.toml'), 'utf8')
-  if (!source.includes(R2_COMMENTED)) {
-    // Worth failing loudly rather than silently testing the wrong thing: if the
-    // block has been uncommented for real, this script's whole premise is stale.
-    throw new Error('wrangler.toml no longer contains the commented R2 block this script edits')
+  if (!source.includes(R2_LIVE)) {
+    // Loud rather than silently testing the wrong thing. If the binding has been
+    // removed or renamed, the first half of this script is asserting nothing.
+    throw new Error('wrangler.toml no longer binds PHOTOS to allstar-photos')
   }
   const body = source
     // The config lands one directory down, and `main` resolves relative to it.
     .replace('main = "src/index.ts"', 'main = "../src/index.ts"')
-    .replace(R2_COMMENTED, withR2 ? R2_LIVE : R2_COMMENTED)
+    .replace(R2_LIVE, withR2 ? R2_LIVE : R2_REMOVED)
   const path = resolve(api, '.wrangler', name)
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, body)
@@ -349,8 +348,8 @@ try {
 
   /* --- without photo storage bound -------------------------------------------- */
   //
-  // The deployment this app actually runs on today. The client marks these
-  // photos local and stops asking; what it must never be told is "stored".
+  // Any deployment whose account has no bucket. The client marks these photos
+  // local and stops asking; what it must never be told is "stored".
   {
     const withoutR2 = writeConfig('photos-nostorage.toml', false)
     const h = await start(withoutR2)

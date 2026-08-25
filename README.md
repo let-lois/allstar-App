@@ -529,9 +529,12 @@ with the same eight-attempt budget and backoff as the outbox.
 
 ### When there is nowhere to put them
 
-R2 needs a payment method to activate, so the binding in `api/wrangler.toml` is
-**commented out** and the Worker treats it as optional. A deployment without it
-answers `503 no_photo_storage` rather than accepting bytes it would drop.
+The binding is live in `api/wrangler.toml` and the `allstar-photos` bucket
+exists, but the Worker still treats R2 as **optional** — a fork, a second
+environment, or a customer's own account before someone adds a payment method
+has no bucket, and `wrangler deploy` refuses to deploy a binding to a bucket
+that isn't there. A deployment without it answers `503 no_photo_storage` rather
+than accepting bytes it would drop.
 
 That refusal is a fact about the server, not about the photo, so it is recorded
 on every photo waiting and the queue stops asking. The rep is told *kept on this
@@ -539,8 +542,9 @@ phone* — not "failed", because nothing failed and there is nothing they could 
 about it if it had. **More → Upload queue** does not count those photos as
 outstanding.
 
-To turn it on: create the `allstar-photos` bucket, uncomment the `[[r2_buckets]]`
-block, redeploy. No code change, and `/api/health` reports `r2` either way.
+To turn it on in a new account: create an `allstar-photos` bucket — exactly that
+name — and deploy. `/api/health` reports `r2` either way, which is the fastest
+way to tell which kind of deployment you are looking at.
 
 Photos already marked local-only recover on their own. The first drain of each
 app launch re-asks the server once when there is nothing else owed, and the
@@ -561,12 +565,11 @@ npm run verify:photos        # the queue, in a browser
 cd api && npm run smoke:photos   # the round trip, against a real Worker
 ```
 
-The smoke test starts its own Worker, because the binding is commented out and
-uncommenting it to make a test pass would break the deploy of anyone who hasn't
-created the bucket. It generates a config into a gitignored directory, runs, and
-tears down — then starts the same Worker a *second* time without the binding,
-which is the only way to assert that a deployment with nowhere to put photos
-says so.
+The smoke test starts its own Worker, because it has to run the same code under
+two configurations and only one of them is what `wrangler.toml` says. It runs
+the real binding against local R2, then generates a config with the binding
+removed and starts the Worker again — the only way to reach the refusal path,
+which is what every deployment without a bucket does.
 
 Two things this does **not** do yet. Photos are never fetched *back*: bootstrap
 returns no photo rows, so a manager's phone cannot see what a rep shot, and a
@@ -746,19 +749,6 @@ path without leaving coverage.
 Deliberate compromises taken to keep the prototype moving. Each is fine for
 building and testing and each is a real defect at launch, so they are written
 down here rather than left in a chat log.
-
-### Photo storage is not switched on
-
-The upload path is built, gated and shipped, and the deployed Worker has no R2
-binding — so every roof shot a rep takes today lives on that phone and nowhere
-else. Lose the handset, lose the photos, and the office has never seen them.
-
-This is a billing step, not an engineering one: R2 needs a payment method on the
-Cloudflare account before a bucket can be created. Turning it on is in *Property
-photos* above and takes a redeploy.
-
-Until it is on, the app says so rather than implying otherwise — but "kept on
-this phone" is an honest description of a gap, not a substitute for closing it.
 
 ### The MapTiler key allows unknown origins
 
