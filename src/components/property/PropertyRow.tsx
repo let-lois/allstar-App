@@ -20,13 +20,10 @@ export function PropertyRow({
   showDistance = true,
   onPreview,
   active,
-  tour,
 }: {
   property: Property
   position: Position | null
   showDistance?: boolean
-  /** A `data-tour` anchor, so the walkthrough can point at one row. */
-  tour?: string
   /**
    * Wide layouts pass this to show the row in an adjacent pane instead of
    * navigating. On a phone it's omitted and the row pushes a detail screen —
@@ -63,7 +60,6 @@ export function PropertyRow({
         onAction: () => nav(`/property/${property.id}?start=1`),
       }}
       className="border-b border-line-soft last:border-0"
-      data-tour={tour}
     >
       <button
         onClick={() =>

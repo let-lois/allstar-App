@@ -544,7 +544,23 @@ export function GoogleFieldMap({
 
   return (
     <div className={`relative ${className}`}>
-      <div ref={boxRef} className="absolute inset-0" aria-label="Map of your leads" role="application" />
+      {/*
+        The tour's anchors live on both renderers, deliberately.
+
+        Which map is on screen depends on whether Google is configured, which is
+        an environment fact rather than a code path anyone reading this file
+        would think about. With the anchors only on the schematic map, every
+        deployment that actually had Google keys — which is every real one —
+        silently dropped the map steps out of the tutorial and renumbered around
+        them.
+      */}
+      <div
+        ref={boxRef}
+        className="absolute inset-0"
+        aria-label="Map of your leads"
+        role="application"
+        data-tour="map-canvas"
+      />
 
       {/* Thumb-sized controls, bottom-right, matching the self-rendered map. */}
       <div
@@ -576,6 +592,7 @@ export function GoogleFieldMap({
           <button
             onClick={() => flyTo(position.lat, position.lng, 18)}
             aria-label="Center on my location"
+            data-tour="map-locate"
             className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field metal metal-quiet text-base !text-accent-strong"
           >
             ◎

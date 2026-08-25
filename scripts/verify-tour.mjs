@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import { execSync } from 'node:child_process'
 import { chromium } from 'playwright'
 import { REP_STEPS, OFFICE_STEPS } from '../src/data/tour.ts'
 
@@ -53,6 +55,39 @@ ok(
   OFFICE_STEPS.every((s) => s.target !== 'start-visit'),
   'and does not explain knocking to somebody who does not knock',
 )
+
+/* -------------------------------------------------------------------------
+ * Anchors, checked against the source.
+ *
+ * The browser walk below can only see the app as *this* build configures it,
+ * and the bug that lost five steps in production was invisible for exactly that
+ * reason: with no Google key the schematic map renders and its anchors are
+ * present, so a local run is green while every real deployment — which has
+ * keys, and therefore the other renderer — quietly drops the map steps.
+ *
+ * Reading the source catches what no single environment can.
+ * ---------------------------------------------------------------------- */
+console.log('\n--- every step has an anchor somewhere in the source ---')
+const SRC = execSync('grep -rhoE "(data-)?tour=[\\"{\x27][^\\"}\x27]*" src/ || true').toString()
+const declared = new Set([...SRC.matchAll(/tour=[\"{\x27]\s*'?([a-z-]+)'?/g)].map((m) => m[1]))
+// Built from the route rather than written out, so they cannot be grepped.
+for (const n of ['nav-today', 'nav-map', 'nav-leads', 'nav-pipeline', 'nav-more']) declared.add(n)
+const allTargets = [...new Set([...REP_STEPS, ...OFFICE_STEPS].map((x) => x.target))]
+const orphans = allTargets.filter((t) => !declared.has(t))
+ok(orphans.length === 0, `no step points at an anchor that does not exist${orphans.length ? ` — ${orphans.join(', ')}` : ''}`)
+
+/*
+ * And the map's anchors exist on *both* renderers. Which one is on screen is an
+ * environment fact — whether Google is configured — not something the tour or
+ * anyone reading it can see.
+ */
+const mapAnchors = ['map-canvas', 'map-locate']
+for (const file of ['src/components/map/FieldMap.tsx', 'src/components/map/GoogleFieldMap.tsx']) {
+  const body = fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8')
+  for (const a of mapAnchors) {
+    ok(body.includes(`data-tour="${a}"`), `${file.split('/').pop()} carries ${a}`)
+  }
+}
 
 const ctx = await browser.newContext({
   viewport: { width: 390, height: 844 },
@@ -166,6 +201,30 @@ ok(seen.length >= 15, `it walked the whole thing (${seen.length} steps shown)`)
 ok(
   seen.every((n, i) => i === 0 || n > seen[i - 1]),
   'and it only ever moved forward',
+)
+
+/*
+ * Nothing was skipped.
+ *
+ * This is the assertion that was missing, and its absence is why the tutorial
+ * could lose five of its steps in production without anything going red. The
+ * tour is *designed* to step over an anchor it cannot find — which is right,
+ * because a card pointing at nothing is worse — but that graceful degradation
+ * is also perfect camouflage. The counter renumbers, every step that does show
+ * looks correct, and the only visible symptom is that the numbers jump.
+ *
+ * Three real causes hid behind exactly that: the Google renderer carried no
+ * anchors at all, the leads anchor lived inside a virtual list's render window,
+ * and the console's lazily-loaded chunks outlasted the wait on any connection
+ * slower than localhost.
+ *
+ * Skipping stays in the product. It just is not allowed to be silent here.
+ */
+const skipped = []
+for (let n = 1; n <= (seen[seen.length - 1] ?? 0); n++) if (!seen.includes(n)) skipped.push(n)
+ok(
+  skipped.length === 0,
+  `every step found its anchor${skipped.length ? ` — skipped ${skipped.join(', ')}` : ''}`,
 )
 
 console.log('\n--- back goes back ---')

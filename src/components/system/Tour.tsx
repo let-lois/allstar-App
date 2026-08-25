@@ -82,6 +82,9 @@ export function Tour({ onClose }: { onClose: (completed: boolean) => void }) {
   const [missing, setMissing] = useState(false)
   useEffect(() => {
     if (!step) return
+    /* The console is the code-split part of the app; everything else is in the
+       main bundle and already present. */
+    const lazyRoute = step.route?.startsWith('/admin') ?? false
     setMissing(false)
     let alive = true
     let tries = 0
@@ -107,16 +110,21 @@ export function Tour({ onClose }: { onClose: (completed: boolean) => void }) {
         return
       }
       /*
-        1.2 seconds, not 2.4.
+        How long to wait before giving up on an anchor, and it is two numbers
+        because the two cases are not alike.
 
-        This is how long a card sits on a dimmed screen with nothing
-        highlighted before the tour gives up and moves on, and it is visible:
-        the offline-maps step has no anchor when tile imagery is unconfigured,
-        and at the old ceiling it read as the tour having broken rather than as
-        a transition. Long enough for a lazy console chunk to land, short enough
-        that a step which is never coming does not look like a hang.
+        A step on a screen that is already mounted either has its anchor or
+        never will, so waiting is just a stall — 1.2s.
+
+        A step on a *lazily loaded* screen is a different question entirely. The
+        console is code-split, so reaching it means fetching a chunk over
+        whatever connection the person has; on a phone on cellular that is
+        routinely over a second before React even begins to render. The old
+        single ceiling of 1.2s was measured against a local dev server, which is
+        the one network no user is on, and the console steps were being skipped
+        in the field for no reason other than a slow download.
       */
-      if (++tries > 12) {
+      if (++tries > (lazyRoute ? 60 : 12)) {
         setMissing(true)
         return
       }

@@ -93,6 +93,14 @@ export const IconPlus = () => (
   </svg>
 )
 
+/** Upload: a sheet with an arrow going into it. Used for the CSV import. */
+export const IconUpload = () => (
+  <svg {...base}>
+    <path d="M12 15V4M8.5 7.5 12 4l3.5 3.5" />
+    <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+  </svg>
+)
+
 export const IconChevron = () => (
   <svg {...base} width={20} height={20}>
     <path d="M9 6l6 6-6 6" />

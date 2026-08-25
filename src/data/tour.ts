@@ -85,7 +85,7 @@ const LEADS: TourStep[] = [
     route: '/leads',
     target: 'leads-row',
     title: 'What a lead row tells you',
-    body: 'Distance, owner, status and the score bar — the whole picture without opening anything. Swipe a row to call or start a visit.',
+    body: 'Distance, owner, status and the score bar — the whole picture without opening a thing. Swipe any row to call the owner or start a visit.',
     prefer: 'below',
   },
 ]
@@ -201,7 +201,7 @@ export const REP_STEPS: TourStep[] = [
     route: '/today',
     target: 'quick-actions',
     title: 'Add anything, from anywhere',
-    body: 'A lead, an appointment, a follow-up. This button is on every screen so a name shouted through a door does not have to be remembered.',
+    body: 'A lead, a photo of the house, a note, an appointment. This button is on every screen, so a name shouted through a door does not have to be remembered until you find the right one.',
     prefer: 'above',
   },
   ...MORE_SHARED,
@@ -242,6 +242,13 @@ export const OFFICE_STEPS: TourStep[] = [
   ...LEADS,
   ...PIPELINE,
   ...STANDINGS,
+  {
+    route: '/today',
+    target: 'quick-actions',
+    title: 'Add from anywhere',
+    body: 'A single lead by hand, an appointment, or a whole list uploaded from a CSV. The same button follows you across every screen.',
+    prefer: 'above',
+  },
   ...MORE_SHARED,
   {
     route: '/more',
@@ -288,8 +295,8 @@ export const OFFICE_STEPS: TourStep[] = [
   {
     route: '/admin/import',
     target: 'console-import',
-    title: 'Bringing leads in',
-    body: 'Drop a CSV from any list provider. It reads the headings, shows you what it matched, and geocodes the addresses as it goes.',
+    title: 'Uploading a list of leads',
+    body: 'Drop in a CSV file from any list provider. It reads the headings itself, shows you what it matched before anything is saved, and geocodes the addresses as it goes.',
     prefer: 'below',
   },
 ]
