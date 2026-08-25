@@ -659,6 +659,44 @@ Two things it deliberately does not claim:
   the Map ID in the Cloud console overrides it. If the real map comes up light,
   that is where to look.
 
+### The teal edge
+
+Every raised control wears a teal edge, and it comes from two tokens rather than
+from each rule choosing its own:
+
+```css
+--edge:        rgb(var(--accent) / 0.4);          /* a control at rest */
+--edge-strong: rgb(var(--accent-strong) / 0.8);   /* the one that is chosen */
+```
+
+`--edge` measures 2.37:1 against the sunken ground, where the navy hairline it
+replaced managed 1.55:1 — the difference between an edge you see in sunlight and
+one that is merely present.
+
+**The gap between the two is the load-bearing part.** Before this, a teal ring
+meant *selected*, because nothing else had one. Now a ring means *control*, and
+only its strength means selected — and the selected and unselected row faces
+differ by just 1.33:1, which is not enough on its own. That is not hypothetical:
+a selected row nobody could pick out is a bug this app has already shipped once.
+`--edge-strong` sits 3.9:1 clear of `--edge`, and `verify:contrast` asserts both
+ends — that the resting edge beats the hairline it replaced, and that selection
+still reads against a control merely at rest.
+
+What deliberately does **not** get an edge:
+
+- **Fields.** An input is recessed, a control is raised; that difference is how a
+  rep can tell what they can press. `.field-sunk` and the console's inputs keep
+  the neutral hairline.
+- **Rows in a list.** A property row is separated from its neighbours by a
+  hairline and has no gap around it. Edging 160 of them would be a wall of teal
+  boxes, not a set of buttons.
+- **Red and green.** `.metal-danger` and `.metal-success` keep white rings — a
+  destructive control that looks like every other control is a control someone
+  presses by mistake.
+- **The primary button.** `.metal-brand`'s face is already the brightest teal on
+  the screen; a teal ring on it would be invisible and pointless.
+
+
 ## Mobile layout audit
 
 ```bash

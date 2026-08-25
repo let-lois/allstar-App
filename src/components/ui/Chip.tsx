@@ -44,7 +44,16 @@ export function Chip({ children, color, selected, onClick, size = 'md', classNam
       onClick={onClick}
       aria-pressed={selected}
       className={[
-        'press focusable inline-flex shrink-0 items-center gap-1.5 border font-medium',
+        /*
+          `border-transparent`, not a bare `border`.
+
+          A width with no colour falls through to Tailwind's default, which is a
+          light grey — invisible on the white ground this started life on, and a
+          pale outline on the dark one. The chip's edge comes from `.metal`'s
+          ring like every other control's; the transparent border is only here
+          to keep the 1px it was already contributing to the chip's size.
+        */
+        'press focusable inline-flex shrink-0 items-center gap-1.5 border border-transparent font-medium',
         tapBase,
         // Both states wear `.metal` — a filter row is a row of controls, and a
         // flat chip beside a raised button reads as a label rather than a thing

@@ -111,7 +111,7 @@ export function SyncDetail() {
       {(snap.pending > 0 || snap.failed > 0) && (
         <button
           onClick={() => void drain()}
-          className="focusable min-h-tap w-full rounded-field border border-line font-medium active:bg-surface-field"
+          className="focusable min-h-tap w-full rounded-field border border-accent/40 font-medium active:bg-surface-field"
         >
           Try now
         </button>

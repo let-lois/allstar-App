@@ -135,7 +135,7 @@ export function PhotoStrip({
               <button
                 key={c.key}
                 onClick={() => void commit(c.key)}
-                className="press focusable flex min-h-[64px] items-center gap-2.5 rounded-card border-2 border-line px-4 font-semibold active:bg-surface-field"
+                className="press focusable flex min-h-[64px] items-center gap-2.5 rounded-card border-2 border-accent/40 px-4 font-semibold active:bg-surface-field"
               >
                 <span className="text-xl" aria-hidden>
                   {c.glyph}

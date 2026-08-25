@@ -129,7 +129,7 @@ export function InviteDialog({
                 )}&body=${encodeURIComponent(
                   `Set your password here:\n\n${created.url}\n\nThe link expires in a week.`,
                 )}`}
-                className="press focusable inline-flex min-h-tap items-center rounded-field border border-line px-4 text-sm font-semibold"
+                className="press focusable inline-flex min-h-tap items-center rounded-field border border-accent/40 px-4 text-sm font-semibold"
               >
                 Open in email
               </a>
