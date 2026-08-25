@@ -8,7 +8,7 @@ import { Field } from '../components/ui/Input'
 import { Collapsible } from '../components/ui/Collapsible'
 import { OfflineMaps } from '../components/map/OfflineMaps'
 import { useAppStore } from '../store/useAppStore'
-import { estimateStorage } from '../lib/db'
+import { estimateStorage, storageIsPersisted } from '../lib/db'
 import { isForcedOffline, setForcedOffline } from '../lib/api'
 import { drain, listOutbox, retryFailed } from '../lib/sync'
 import { drainPhotos, retryFailedPhotos } from '../lib/photos'
@@ -54,6 +54,7 @@ export function More() {
   const photos = useAppStore((s) => s.photos)
   const snap = useSync()
 
+  const [persisted, setPersisted] = useState<boolean | null>(null)
   const [storage, setStorage] = useState<{ usedMB: number; quotaMB: number } | null>(null)
   const [outbox, setOutbox] = useState<Mutation[]>([])
   const [offlineSim, setOfflineSim] = useState(isForcedOffline())
@@ -66,6 +67,7 @@ export function More() {
   useEffect(() => {
     void estimateStorage().then(setStorage)
     void listOutbox().then(setOutbox)
+    void storageIsPersisted().then(setPersisted)
   }, [snap.pending, snap.failed])
 
   const photoBytes = Object.values(photos).reduce((s, p) => s + p.bytes, 0)
@@ -154,6 +156,17 @@ export function More() {
                     : 'Unavailable'
                 }
               />
+              {/*
+                Reported rather than assumed. The app asks every launch, and
+                browsers decide — mostly on whether the app is installed. "Kept"
+                means the browser has promised not to clear this to reclaim
+                space; "May be cleared" means it has not, which is worth knowing
+                before a week away from a phone with unsent work on it.
+              */}
+              <Row
+                label="Storage"
+                value={persisted == null ? '—' : persisted ? 'Kept' : 'May be cleared'}
+              />
               <Row label="Last sync" value={relative(snap.lastSyncedAt)} />
               <Row label="Waiting to upload" value={String(snap.pending)} />
             </dl>
@@ -162,6 +175,13 @@ export function More() {
               the app works with no signal. Visits, outcomes, notes and photos are recorded
               locally and uploaded when you reconnect.
             </p>
+            {persisted === false && (
+              <p className="mt-3 text-[13px] leading-relaxed text-warn">
+                This phone may clear the app’s saved data if it runs low on space, or after
+                a week or two without opening the app. Adding Allstar to your home screen
+                stops that. Anything already uploaded is safe either way.
+              </p>
+            )}
           </Collapsible>
           </div>
 

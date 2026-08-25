@@ -40,7 +40,8 @@
     "verify:avatar": "node scripts/verify-avatar.mjs",
     "verify:tour": "node scripts/verify-tour.mjs",
     "verify:photos": "node scripts/verify-photos.mjs",
-    "verify:geo-parity": "node scripts/verify-geo-parity.mjs"
+    "verify:geo-parity": "node scripts/verify-geo-parity.mjs",
+    "verify:persistence": "node scripts/verify-persistence.mjs"
   },
   "dependencies": {
     "@googlemaps/markerclusterer": "^2.6.2",

@@ -228,6 +228,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     // start-up, and a drain that runs without knowing who is signed in has no
     // correct destination for the writes. `pushMutations` refuses to send in
     // that state as a backstop; this ordering is what makes it never arise.
+    /*
+      Ask the browser to keep what we store, and do not wait for the answer.
+
+      Fire-and-forget because nothing on screen depends on it and a permission
+      check has no business delaying first paint. Every launch, because it is
+      idempotent once granted and because browsers weigh engagement — a request
+      refused on the day someone installed the app is often granted a week
+      later, and the only way to find out is to ask again.
+    */
+    void db.requestPersistence()
+
     const session = await loadSession()
 
     /*
