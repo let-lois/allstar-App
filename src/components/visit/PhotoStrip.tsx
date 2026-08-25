@@ -3,6 +3,7 @@ import type { Photo, PhotoCategory } from '../../types'
 import { usePhotoCategories } from '../../lib/useSettings'
 import { compressImage, openCamera, openLibrary } from '../../lib/media'
 import { ensureBytes, photoState } from '../../lib/photos'
+import { StorageFull } from '../../lib/db'
 import { useAppStore } from '../../store/useAppStore'
 import { BottomSheet } from '../ui/BottomSheet'
 import { haptic } from '../../lib/haptics'
@@ -31,6 +32,7 @@ export function PhotoStrip({
   >([])
   const [busy, setBusy] = useState(false)
   const [viewing, setViewing] = useState<number | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
 
   const handleFiles = async (files: File[]) => {
     setBusy(true)
@@ -49,8 +51,28 @@ export function PhotoStrip({
     haptic('confirm')
     const batch = pending
     setPending([])
+    setFailed(null)
     for (const img of batch) {
-      await addPhoto(propertyId, img, category, visitId)
+      try {
+        await addPhoto(propertyId, img, category, visitId)
+      } catch (err) {
+        /*
+          A photo the rep believes they took and does not have is the worst
+          outcome this screen can produce — worse than a visible failure,
+          because they walk away from the house.
+
+          Until now this threw into a click handler and vanished: the sheet
+          closed, the strip stayed empty, and nothing said why. A full phone is
+          not hypothetical now that local copies are kept for good.
+        */
+        setFailed(
+          err instanceof StorageFull
+            ? 'This phone is out of storage, so the photo was not saved. Free some space and take it again.'
+            : 'The photo could not be saved. Try taking it again.',
+        )
+        haptic('warn')
+        break
+      }
     }
   }
 
@@ -107,6 +129,15 @@ export function PhotoStrip({
           )
         })}
       </div>
+
+      {failed && (
+        <p
+          role="alert"
+          className="rounded-field border border-bad/50 bg-bad-bg px-3 py-2 text-[13px] font-medium text-bad"
+        >
+          {failed}
+        </p>
+      )}
 
       {photos.length > 0 && <PhotoTally photos={photos} />}
 

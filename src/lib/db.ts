@@ -121,6 +121,38 @@ export async function idbAvailable(): Promise<boolean> {
   return idbUsable
 }
 
+/**
+ * The device is out of room.
+ *
+ * Its own type because it is the one write failure a rep can actually do
+ * something about, and the only correct response to it is to say so. Everything
+ * else this layer can throw is a bug in us.
+ */
+export class StorageFull extends Error {
+  constructor() {
+    super('This phone is out of storage')
+    this.name = 'StorageFull'
+  }
+}
+
+/**
+ * Names a quota failure across engines.
+ *
+ * `QuotaExceededError` is the standard, Firefox has historically thrown code 22
+ * and Safari has its own wording — and getting this wrong means a full phone
+ * reads as an ordinary bug and is reported as "the app is broken".
+ */
+export function isQuotaError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const e = err as { name?: string; code?: number; message?: string }
+  return (
+    e.name === 'QuotaExceededError' ||
+    e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    e.code === 22 ||
+    /quota|storage is full|not enough space/i.test(e.message ?? '')
+  )
+}
+
 export async function putAll<T extends { id: string }>(
   store: StoreName,
   rows: T[],
@@ -130,10 +162,39 @@ export async function putAll<T extends { id: string }>(
     return
   }
   const d = await db()
-  const tx = d.transaction(store, 'readwrite')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await Promise.all(rows.map((r) => tx.store.put(r as any)))
-  await tx.done
+  try {
+    const tx = d.transaction(store, 'readwrite')
+    /*
+      `tx.done` is claimed before anything can reject.
+
+      A failing `put` aborts the transaction, which rejects `tx.done` as well —
+      and if the `Promise.all` below rejects first, nothing is awaiting `done`
+      by the time it does. That is an unhandled rejection, which on a phone is a
+      crash overlay or a silent console entry depending on the browser, for a
+      condition this function is about to report properly anyway.
+    */
+    const done = tx.done.catch((err: unknown) => {
+      if (isQuotaError(err)) throw new StorageFull()
+      throw err
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const writes = Promise.all(rows.map((r) => tx.store.put(r as any)))
+    // `allSettled` on purpose: both need to settle before this returns, and
+    // whichever failed is re-thrown below rather than racing the other.
+    const [w] = await Promise.allSettled([writes, done])
+    if (w.status === 'rejected') throw w.reason
+    await done
+  } catch (err) {
+    /*
+      A full device is the one write failure that is not our bug, and the only
+      one a rep can act on. Translated here rather than at each call site so
+      every write in the app gets the same answer — and so the caller can tell
+      "there is no room" apart from "something went wrong", which is the
+      difference between a rep clearing space and a rep filing a support ticket.
+    */
+    if (isQuotaError(err)) throw new StorageFull()
+    throw err
+  }
 }
 
 export async function put<T extends { id: string }>(store: StoreName, row: T): Promise<void> {
@@ -186,9 +247,13 @@ export async function metaSet(key: string, value: unknown): Promise<void> {
 }
 
 /**
- * Photos dominate local storage. When we're close to the quota, drop the oldest
- * already-synced photo blobs — the metadata row stays so the UI can show a
- * placeholder and re-fetch when there's Wi-Fi.
+ * How much room this device has left, or null where the browser won't say.
+ *
+ * Reporting only. An earlier version of this comment described dropping the
+ * oldest already-uploaded photos when the quota got close; no such code was ever
+ * written, and photos are now kept on the phone deliberately so a rep can open
+ * any of them with no signal. What guards against a full device is `StorageFull`
+ * below — the write fails loudly instead of the disk quietly filling.
  */
 export async function estimateStorage(): Promise<{ usedMB: number; quotaMB: number } | null> {
   if (!navigator.storage?.estimate) return null

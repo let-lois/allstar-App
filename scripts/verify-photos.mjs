@@ -402,6 +402,73 @@ const tally = (page) => page.locator('p', { hasText: /^\d+ photos? · / }).first
   await ctx.close()
 }
 
+/* --- 7. the phone is full --------------------------------------------------- */
+//
+// Local copies are kept for good by decision, so reaching the quota is a matter
+// of time rather than a maybe. What must never happen is the quiet version: the
+// sheet closes, the strip stays empty, nothing is said, and the rep walks away
+// from the house believing they have a photo of the roof.
+//
+// The failure is injected at the IndexedDB layer rather than by filling the
+// disk — a real `QuotaExceededError` from a real `put`, with no test-only
+// branch anywhere in the app.
+{
+  const { ctx, page, uploads } = await signIn(json(200, { ok: true, key: 'k' }))
+
+  await page.addInitScript(() => {
+    const open = indexedDB.open.bind(indexedDB)
+    indexedDB.open = (...args) => {
+      const req = open(...args)
+      req.addEventListener('success', () => {
+        const store = req.result.transaction.bind(req.result)
+        req.result.transaction = (...targs) => {
+          const tx = store(...targs)
+          const get = tx.objectStore.bind(tx)
+          tx.objectStore = (name) => {
+            const os = get(name)
+            if (name === 'photos') {
+              const put = os.put.bind(os)
+              os.put = (value, ...rest) => {
+                // Only the write that carries an image. Metadata-only updates —
+                // the upload drain clearing a flag — must keep working, or this
+                // would be testing a broken app rather than a full one.
+                if (value && value.dataUrl) {
+                  const e = new DOMException('quota', 'QuotaExceededError')
+                  const fake = put(value, ...rest)
+                  try { tx.abort() } catch { /* already gone */ }
+                  Object.defineProperty(fake, 'error', { get: () => e })
+                  return fake
+                }
+                return put(value, ...rest)
+              }
+            }
+            return os
+          }
+          return tx
+        }
+      })
+      return req
+    }
+  })
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1500)
+
+  await shoot(page)
+  await page.waitForTimeout(1500)
+
+  const alert = page.getByRole('alert')
+  ok((await alert.count()) > 0, 'a photo that could not be saved says so')
+  const text = (await alert.first().innerText()).trim()
+  ok(/storage|space/i.test(text), `and says why — "${text}"`)
+  ok(
+    /take it again|try/i.test(text),
+    'and what to do about it, since a rep can free space and reshoot',
+  )
+  ok(uploads.length === 0, 'nothing is uploaded for a photo that was never stored')
+
+  await ctx.close()
+}
+
 ok(errors.length === 0, `no page errors${errors.length ? ` — ${errors[0]}` : ''}`)
 
 await browser.close()
