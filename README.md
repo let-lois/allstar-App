@@ -459,10 +459,9 @@ It is **lazy-loaded**: a field rep never opens it, so its tables and charts stay
 out of the phone bundle entirely.
 
 Charts follow the `dataviz` method — one axis, categorical hues in fixed order,
-an ordinal ramp for ordered stages, a single hue for one measure, legends and
-direct labels so identity never rests on color. The palettes in
-`admin/charts/tokens.ts` were run through the validator against this app's own
-chart surface; re-run it before changing a hex.
+sequential ramps for magnitude, status colours reserved for state, legends plus
+direct labels so identity never rests on colour. The palette lives in
+`admin/charts/tokens.ts` and is measured by `npm run verify:charts`.
 
 ```bash
 npm run verify:console
@@ -779,16 +778,58 @@ spent a release as a black shape on a black panel.
 `public/logo-light.png` is the recoloured knockout this replaced. Nothing
 references it.
 
-Two things it deliberately does not claim:
+One thing it deliberately does not claim:
 
-- **The chart series' colour-blindness separation is inherited, not re-run.**
-  The blue/orange pair was validated on a white surface with a palette validator
-  that is not in this repo. The hues are unchanged and both were lifted by a
-  similar step, so it should hold — but "should" is not "measured".
 - **Google's basemap is not ours to theme.** `GoogleFieldMap` now asks for
   `colorScheme: 'DARK'`, which covers vector maps, but a Map Style attached to
   the Map ID in the Cloud console overrides it. If the real map comes up light,
   that is where to look.
+
+### The chart palette, measured in-repo
+
+The console draws two line series, a five-step funnel ramp and four status
+colours on a dark card. Colour is doing identity work there: which line is knocks
+and which is conversations is carried by hue and nothing else, and roughly one
+man in twelve cannot rely on the red-green channel to tell them apart.
+
+That used to be asserted in a comment. The figures came from a validator outside
+this repo, and when the app moved to a dark ground they quietly became claims
+about a surface that no longer existed — the file said so, which was honest, and
+left the numbers wrong, which was still wrong.
+
+So the maths moved in. `scripts/lib/cvd.mjs` carries the OKLab conversions and
+the Machado-Oliveira-Fernandes (2009) colour-vision simulation at severity 1.0 —
+named because the thresholds are calibrated to *that* model, so it is part of the
+standard rather than an implementation detail.
+
+Re-measured against the real dark card, the hand-lifted values failed one check.
+The hues were right; the *step* was not. Lifted by eye for contrast they sat at
+OKLCH L 0.718 and 0.755, above the 0.48–0.67 band a dark ground wants, which is
+where a mark starts to shout instead of sitting on the surface. Stepped properly:
+
+| | before | after |
+|---|---|---|
+| protan/deutan ΔE | 21.6 | **26.8** (target ≥ 8) |
+| normal-vision ΔE | 26.0 | **31.8** (floor ≥ 15) |
+| contrast on the card | 6.73 / 7.41 | 4.63 / 4.34 (floor 3:1) |
+| lightness band | **fails** | passes |
+
+The contrast is lower, and that is the trade: both stay comfortably above the
+floor for a graphic mark, the separation a colour-blind reader actually depends
+on went *up*, and the marks stop glaring. The hue pair — blue then orange, in
+that fixed order — is unchanged, because the pair *is* the colour-blindness
+decision and re-picking it would throw the result away rather than carry it.
+
+The funnel ramp needed nothing: monotone, adjacent ΔL 0.09–0.13 against a 0.06
+floor, 4° of hue spread, dim end at 3.07:1.
+
+```bash
+npm run verify:charts
+```
+
+The gate also checks that **the comments are not lying** — every ratio and ΔE
+quoted in `tokens.ts` is compared against what was just measured. A stale comment
+is exactly how the last set of figures survived a redesign that invalidated them.
 
 ### The teal edge
 

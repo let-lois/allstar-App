@@ -203,15 +203,13 @@ console.log('\n--- chart series on the chart surface ---')
 SERIES.forEach((c, i) => at(c, INK.surface, AA_GRAPHIC, `series ${i} (${c}) on the card`))
 FUNNEL_RAMP.forEach((c, i) => at(c, INK.surface, AA_GRAPHIC, `funnel step ${i} (${c}) on the card`))
 /*
- * Ordinal ramps fail by having two neighbouring steps nobody can tell apart,
- * which no per-step contrast check can see. This is a weaker stand-in for the
- * ΔL check the missing validator did — it at least catches a duplicated or
- * transposed step.
+ * The ramp's step-to-step separation used to be approximated here with a
+ * contrast ratio between neighbours — a deliberately weak stand-in for a ΔL
+ * check this repo could not perform. It can now: `verify:charts` measures OKLCH
+ * lightness distance directly, along with the colour-blindness separation this
+ * file never claimed to cover. Two checks of the same thing would drift apart,
+ * and the weaker one would be the one nobody noticed had stopped mattering.
  */
-for (let i = 1; i < FUNNEL_RAMP.length; i++) {
-  const r = ratio(FUNNEL_RAMP[i], FUNNEL_RAMP[i - 1])
-  ok(r >= 1.25, `funnel steps ${i - 1} and ${i} are distinguishable`, r.toFixed(2))
-}
 
 /* -------------------------------------------------------------------------
  * 5. Outcome and status pills.
