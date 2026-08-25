@@ -9,6 +9,7 @@ import {
 } from './api'
 import * as store from './db'
 import { uid } from './id'
+import { drainPhotos } from './photos'
 
 /**
  * Durable outbox.
@@ -100,6 +101,15 @@ export async function drain(): Promise<void> {
   draining = true
   emit()
 
+  /*
+    Whether the outbox emptied, as opposed to the drain stopping for a reason.
+
+    It decides whether photo bytes are attempted afterwards. The server refuses
+    bytes for a photo whose metadata row hasn't landed, so sending them while
+    writes are still queued is a round trip that can only be told "not yet".
+  */
+  let clean = false
+
   try {
     // Re-read each pass: the rep keeps working while we're draining.
     for (;;) {
@@ -107,7 +117,10 @@ export async function drain(): Promise<void> {
         .filter((r) => r.status !== 'failed')
         .sort((a, b) => a.createdAt - b.createdAt)
         .slice(0, BATCH_SIZE)
-      if (rows.length === 0) break
+      if (rows.length === 0) {
+        clean = true
+        break
+      }
       if (!online()) break
 
       let results: PushResult[]
@@ -170,6 +183,15 @@ export async function drain(): Promise<void> {
     draining = false
     await recount()
   }
+
+  /*
+    Photos last, and outside the `finally`.
+
+    Outside because a drain that stopped on a dead link or a dead session has
+    nothing to gain from trying a much larger upload over the same link. Last
+    because the metadata has to arrive first, and the outbox is where it lives.
+  */
+  if (clean) await drainPhotos()
 }
 
 /** A request that failed as a whole: every row in it is still unsent. */

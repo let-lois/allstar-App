@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Allstar \u2014 mobile-first field sales (D2D) application",
+  "description": "Allstar — mobile-first field sales (D2D) application",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -38,7 +38,8 @@
     "leads:sample": "node scripts/make-test-leads.mjs",
     "verify:invite": "node scripts/verify-invite.mjs",
     "verify:avatar": "node scripts/verify-avatar.mjs",
-    "verify:tour": "node scripts/verify-tour.mjs"
+    "verify:tour": "node scripts/verify-tour.mjs",
+    "verify:photos": "node scripts/verify-photos.mjs"
   },
   "dependencies": {
     "@googlemaps/markerclusterer": "^2.6.2",

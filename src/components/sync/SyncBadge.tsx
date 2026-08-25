@@ -1,10 +1,25 @@
 import { useEffect, useState } from 'react'
 import { drain, getSyncSnapshot, subscribeSync, type SyncSnapshot } from '../../lib/sync'
+import {
+  getPhotoSyncSnapshot,
+  subscribePhotoSync,
+  type PhotoSyncSnapshot,
+} from '../../lib/photos'
 import { relativeLower } from '../../lib/format'
 
 export function useSync(): SyncSnapshot {
   const [snap, setSnap] = useState<SyncSnapshot>(getSyncSnapshot)
   useEffect(() => subscribeSync(setSnap), [])
+  return snap
+}
+
+/**
+ * The photo queue, which is a separate queue from the outbox and drains on its
+ * own schedule — see `lib/photos`.
+ */
+export function usePhotoSync(): PhotoSyncSnapshot {
+  const [snap, setSnap] = useState<PhotoSyncSnapshot>(getPhotoSyncSnapshot)
+  useEffect(() => subscribePhotoSync(setSnap), [])
   return snap
 }
 

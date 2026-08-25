@@ -4,6 +4,7 @@ import {
   NetworkError,
   apiBootstrap,
   apiPushMutations,
+  apiUploadPhoto,
   type BootstrapDTO,
 } from './http'
 import { isDemo, liveToken, sessionKnown, signalAuthExpired } from './session'
@@ -120,6 +121,75 @@ export async function pushMutations(rows: Mutation[]): Promise<PushResult[]> {
   } catch (err) {
     throw translate(err)
   }
+}
+
+/**
+ * What became of a photo's bytes.
+ *
+ * Three outcomes rather than a boolean, because the queue must treat them
+ * completely differently and only one of them is a failure:
+ *
+ *   stored       — done, drop the flag.
+ *   waiting      — the metadata row hasn't reached the server yet, so there is
+ *                  nothing to attach the bytes to. Not the photo's fault and
+ *                  not worth an attempt: the outbox is about to fix it.
+ *   unsupported  — this deployment has no photo storage bound. Retrying cannot
+ *                  change that, so the photo is marked local and left alone.
+ *
+ * Anything else throws, and the caller charges an attempt.
+ */
+export type PhotoUpload = 'stored' | 'waiting' | 'unsupported'
+
+/**
+ * Send one photo's bytes.
+ *
+ * Deliberately not part of `pushMutations`. That request has to succeed or fail
+ * as a unit, and putting a multi-megabyte body inside it means a batch of forty
+ * cheap writes can be lost to one slow image on one bar of signal.
+ */
+export async function uploadPhoto(photoId: string, dataUrl: string): Promise<PhotoUpload> {
+  if (!sessionKnown()) throw new OfflineError()
+  if (!online()) throw new OfflineError()
+
+  if (isDemo()) {
+    // A ~200KB image on cellular is not instant, and the whole point of the
+    // demo is that the waiting state is visible rather than theoretical.
+    await sleep(700 + Math.random() * 900)
+    if (!online()) throw new OfflineError()
+    return 'stored'
+  }
+
+  const token = liveToken()
+  if (!token) throw new AuthExpiredError()
+
+  try {
+    await apiUploadPhoto(token, photoId, dataUrlToBlob(dataUrl))
+    return 'stored'
+  } catch (err) {
+    // The metadata mutation hasn't been applied yet. The server is right to
+    // refuse — it has nothing proving this photo belongs to a property in this
+    // tenant — and the outbox is what fixes it, not a retry from here.
+    if (err instanceof ApiError && err.status === 404) return 'waiting'
+    if (err instanceof ApiError && err.code === 'no_photo_storage') return 'unsupported'
+    throw translate(err)
+  }
+}
+
+/**
+ * A data URL back to bytes.
+ *
+ * `fetch(dataUrl)` would be one line and is what most code does, but it routes
+ * a multi-megabyte string through the network stack and a service worker for no
+ * reason. This is the same work without leaving the main thread's memory.
+ */
+function dataUrlToBlob(dataUrl: string): Blob {
+  const comma = dataUrl.indexOf(',')
+  const header = dataUrl.slice(0, comma)
+  const type = /:(.*?)[;,]/.exec(header)?.[1] ?? 'image/jpeg'
+  const binary = atob(dataUrl.slice(comma + 1))
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new Blob([bytes], { type })
 }
 
 export async function fetchBootstrap(): Promise<BootstrapDTO | null> {

@@ -19,6 +19,7 @@ import type {
 import * as db from '../lib/db'
 import { uid } from '../lib/id'
 import { enqueue, drain, initSync } from '../lib/sync'
+import { initPhotoSync, onPhotoUpdated } from '../lib/photos'
 import { DEMO_USERS, FIELD_REPS } from '../data/seed'
 import { ensureFreshDemo, resetDemo } from '../lib/demo'
 import { fetchBootstrap } from '../lib/api'
@@ -229,7 +230,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     // that state as a backstop; this ordering is what makes it never arise.
     const session = await loadSession()
 
+    /*
+      The photo queue writes to disk from a background drain, and the screen
+      showing those photos is reading them out of this store. Without this the
+      waiting dot on a photo clears on disk and stays on screen until something
+      unrelated causes a re-render — which, on the visit screen a rep is staring
+      at, is never.
+    */
+    onPhotoUpdated((photo) => {
+      set((s) => (s.photos[photo.id] ? { photos: { ...s.photos, [photo.id]: photo } } : s))
+    })
+
     await initSync()
+    await initPhotoSync()
 
     // A live session can die while the phone is in a pocket. Discovering that
     // happens inside a background drain, where there's no screen to raise it on
