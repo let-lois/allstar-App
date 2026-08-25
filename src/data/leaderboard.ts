@@ -1,5 +1,4 @@
-import type { TeamMember } from '../types'
-import type { RepStats } from '../store/teamStats'
+import type { DailyStat, TeamMember } from '../types'
 
 /**
  * The day's standings.
@@ -74,8 +73,31 @@ export const POINTS = {
   sale: 25,
 } as const
 
+/**
+ * What the board needs to know about somebody.
+ *
+ * Narrower than `RepStats` on purpose, and narrowed *after* the fact: scoring
+ * and awards only ever read these nine fields, and asking for the whole of
+ * `RepStats` meant a week's totals — which have no route, no percentage
+ * complete and no last-known door — could not be ranked without inventing a
+ * dozen values that mean nothing over a week. `RepStats` satisfies this
+ * structurally, so today's path is unchanged.
+ */
+export interface Scorable {
+  id: string
+  name: string
+  initials: string
+  avatarUrl?: string
+  knocks: number
+  conversations: number
+  appointments: number
+  sales: number
+  /** Money *committed*, not money in play. See the note in `teamStats`. */
+  revenue: number
+}
+
 export interface Standing {
-  rep: RepStats
+  rep: Scorable
   points: number
   /** 1-based. Ties share a rank, and the next rank skips accordingly. */
   rank: number
@@ -83,7 +105,7 @@ export interface Standing {
   tied: boolean
 }
 
-export function scoreOf(rep: RepStats): number {
+export function scoreOf(rep: Scorable): number {
   return (
     rep.knocks * POINTS.door +
     rep.conversations * POINTS.conversation +
@@ -100,7 +122,7 @@ export function scoreOf(rep: RepStats): number {
  * something the rep cannot see) is the kind of detail that produces an argument
  * in a truck at 6pm.
  */
-export function standings(reps: RepStats[]): Standing[] {
+export function standings(reps: Scorable[]): Standing[] {
   const scored = reps
     .map((rep) => ({ rep, points: scoreOf(rep) }))
     // Name last, so the order is stable rather than dependent on roster order —
@@ -121,24 +143,30 @@ export interface Award {
   glyph: string
   label: string
   /** Everyone who earned it. More than one name means a genuine tie. */
-  winners: RepStats[]
+  winners: Scorable[]
   /** The figure that won it, already formatted by the caller's rules. */
   value: number
 }
 
 /**
- * Today's awards.
+ * The awards for whatever period is on screen.
  *
- * Every one of these is "the highest non-zero value", and the non-zero part is
- * the important half: an award for most revenue on a day when nobody has sold
- * anything is a lie with a trophy on it.
+ * Every one is "the highest non-zero value", and the non-zero half is the
+ * important one: an award for most revenue on a day when nobody has sold
+ * anything is a lie with a trophy on it. It is also what keeps the revenue
+ * award off a week — the history table cannot answer that question, so the
+ * figure is zero and the award correctly does not appear.
+ *
+ * The labels carry no period of their own. They used to say "today", which was
+ * redundant under a heading that already said so and simply wrong the moment the
+ * same board could show a week.
  */
-export function awards(reps: RepStats[]): Award[] {
+export function awards(reps: Scorable[]): Award[] {
   const best = (
     key: AwardKey,
     glyph: string,
     label: string,
-    valueOf: (r: RepStats) => number,
+    valueOf: (r: Scorable) => number,
   ): Award | null => {
     const top = Math.max(0, ...reps.map(valueOf))
     if (top <= 0) return null
@@ -146,9 +174,143 @@ export function awards(reps: RepStats[]): Award[] {
   }
 
   return [
-    best('top', '🏆', 'Top rep today', scoreOf),
+    best('top', '🏆', 'Top rep', scoreOf),
     best('doors', '🔥', 'Most doors', (r) => r.knocks),
     best('revenue', '💰', 'Most revenue', (r) => r.revenue),
     best('appointments', '📅', 'Most appointments', (r) => r.appointments),
   ].filter((a): a is Award => a !== null)
+}
+
+/* --- how far back the board looks ------------------------------------------ */
+
+/**
+ * Today, this week, or this month.
+ *
+ * Today was the only window for a long time, and it is still the default,
+ * because at 2pm the question a rep is asking is about this afternoon. But a
+ * board that only knows about today tells a rep who had a strong week and a slow
+ * Tuesday that they are nowhere — and it gives somebody who joined last month no
+ * window they can ever win, because everyone ahead of them had a good Tuesday
+ * too. A week is a length of time a person can actually change.
+ */
+export type Period = 'today' | 'week' | 'month'
+
+export const PERIODS: { key: Period; label: string }[] = [
+  { key: 'today', label: 'Today' },
+  { key: 'week', label: 'Week' },
+  { key: 'month', label: 'Month' },
+]
+
+/**
+ * The week starts on Sunday.
+ *
+ * A judgement, and the one line to change if a customer disagrees. US sales
+ * weeks are conventionally Sunday-to-Saturday and the rest of the app formats
+ * dates as `en-US`, so a Monday start would put "this week" out of step with
+ * every calendar a rep looks at. Teams that knock Monday to Saturday will see
+ * Sunday sitting at the front of their week rather than the end of it, which is
+ * the cost.
+ */
+const WEEK_STARTS_ON = 0
+
+/** `YYYY-MM-DD` in local time. The history table keys on this. */
+export function dayKey(at: number | Date): string {
+  const d = at instanceof Date ? at : new Date(at)
+  const m = `${d.getMonth() + 1}`.padStart(2, '0')
+  const day = `${d.getDate()}`.padStart(2, '0')
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+/**
+ * The first day a period includes, as a day key.
+ *
+ * Local time throughout, deliberately. A rep's week ends when their Saturday
+ * ends, not when Saturday ends in UTC — and a board that rolls over at 7pm
+ * local because that is midnight somewhere else is a board nobody trusts.
+ */
+export function periodStart(period: Period, now: number | Date = Date.now()): string {
+  const d = now instanceof Date ? new Date(now) : new Date(now)
+  if (period === 'today') return dayKey(d)
+  if (period === 'month') return dayKey(new Date(d.getFullYear(), d.getMonth(), 1))
+  const back = (d.getDay() - WEEK_STARTS_ON + 7) % 7
+  return dayKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - back))
+}
+
+/** What the top bar says under the title. */
+export function periodLabel(period: Period, now: number | Date = Date.now()): string {
+  const d = now instanceof Date ? now : new Date(now)
+  if (period === 'today') {
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+  }
+  if (period === 'month') return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const from = new Date(`${periodStart('week', d)}T00:00:00`)
+  return `Week of ${from.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`
+}
+
+/**
+ * Roll the history up into a board for a period.
+ *
+ * `live` is today's numbers as the device knows them, and it always wins for
+ * today. That is the whole reason this is not a plain sum over the history
+ * table: `daily_stats` is written by the *server*, so a rep working a street
+ * with no signal has a morning that exists only on their phone. Summing history
+ * alone would show them a week with today missing — on the one screen whose
+ * entire job is telling them where they stand right now.
+ *
+ * So history supplies the days *before* today and `live` supplies today, which
+ * also means a synced today cannot be counted twice.
+ *
+ * Money is deliberately absent. The history table's `pipelineValue` is not a
+ * daily figure — it holds a running lifetime total of everything the rep has
+ * ever won, stamped onto whichever day the write happened — so adding it up
+ * over a week produces a number with no meaning. `revenue` is therefore 0 for
+ * anything but today, and the revenue award suppresses itself as a result,
+ * which is the correct outcome: an award nobody can earn is better than one
+ * handed out on a number that is wrong.
+ */
+export function boardFor(
+  period: Period,
+  input: { live: Scorable[]; history: DailyStat[]; now?: number | Date },
+): Scorable[] {
+  const now = input.now ?? Date.now()
+  if (period === 'today') return input.live
+
+  const from = periodStart(period, now)
+  const today = dayKey(now)
+
+  const byRep = new Map<string, Scorable>()
+  for (const rep of input.live) {
+    byRep.set(rep.id, {
+      ...rep,
+      knocks: 0,
+      conversations: 0,
+      appointments: 0,
+      sales: 0,
+      revenue: 0,
+    })
+  }
+
+  for (const row of input.history) {
+    // Before today only — today comes from `live`, synced or not.
+    if (row.day < from || row.day >= today) continue
+    const rep = byRep.get(row.repId)
+    // A history row for somebody no longer on the roster. Their work happened,
+    // but a board is a list of people, and a deactivated rep is not one of them.
+    if (!rep) continue
+    rep.knocks += row.knocks
+    rep.conversations += row.conversations
+    rep.appointments += row.appointments
+    rep.sales += row.sold
+  }
+
+  for (const rep of input.live) {
+    const acc = byRep.get(rep.id)
+    if (!acc) continue
+    acc.knocks += rep.knocks
+    acc.conversations += rep.conversations
+    acc.appointments += rep.appointments
+    acc.sales += rep.sales
+  }
+
+  return [...byRep.values()]
 }

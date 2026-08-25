@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import type {
   ActivityEvent,
   Appointment,
+  DailyStat,
   Note,
   NoteTag,
   OutcomeCode,
@@ -78,6 +79,13 @@ interface AppState {
   appointments: Record<string, Appointment>
   tasks: Record<string, Task>
   activity: ActivityEvent[]
+  /**
+   * Per-rep daily totals, thirty days back, straight from bootstrap.
+   *
+   * An array rather than a map keyed by id: nothing ever looks one of these up
+   * on its own, and every reader wants a filtered sum across a date range.
+   */
+  dailyStats: DailyStat[]
   /** Names for the territory ids on properties. Empty in demo mode. */
   territories: Record<string, Territory>
   /** How this company has customised the field app. Empty means defaults. */
@@ -218,6 +226,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   appointments: {},
   tasks: {},
   activity: [],
+  dailyStats: [],
   territories: {},
   team: [],
   settings: {},
@@ -305,6 +314,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activity,
       territories,
       team,
+      dailyStats,
     ] =
       await Promise.all([
         db.all<Property>('properties'),
@@ -317,6 +327,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         db.all<ActivityEvent>('activity'),
         db.all<Territory>('territories'),
         db.all<TeamMember>('team'),
+        /*
+          Thirty days of per-rep daily totals, cached by bootstrap and until now
+          written to disk and never read. The standings board needs it to answer
+          "this week" and "this month" — anything longer than today cannot come
+          from the device's own activity log, which only holds what this phone
+          did.
+        */
+        db.all<DailyStat>('dailyStats'),
       ])
     const settings = (await db.metaGet<ClientSettings>('allstar.settings')) ?? {}
     /*
@@ -376,6 +394,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       appointments: indexById(appointments),
       tasks: indexById(tasks),
       activity: activity.sort((a, b) => b.at - a.at),
+      dailyStats,
       territories: indexById(territories),
       team: team.length
         ? team
@@ -576,6 +595,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       appointments: {},
       tasks: {},
       activity: [],
+      dailyStats: [],
       territories: {},
       team: [],
       settings: {},

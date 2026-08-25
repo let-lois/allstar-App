@@ -331,6 +331,64 @@ routes, tasks, appointments, field-added leads. The refresh now merges rather
 than replaces whenever the outbox holds work, sampled both before and after the
 request so a queue that drains mid-flight can't slip through the gap.
 
+## The board, and how far back it looks
+
+Door-to-door runs on the standings. A rep who cannot see where they stand at 2pm
+has no reason to knock the next street.
+
+For a long time the board knew about **today only**, which is right for 2pm and
+wrong for everything else. It told a rep who had a strong week and a slow Tuesday
+that they were nowhere, and it gave somebody who joined last month no window they
+could ever win — every window was one day long and the good days were already
+spent. A week is a length of time a person can actually change.
+
+**Today / Week / Month**, and Today is the default on every visit. Not
+remembered between visits on purpose: at 2pm the question is about this
+afternoon, and a rep who looked at the month once last week should not have to
+notice a filter before trusting the number in front of them.
+
+### Where each day's numbers come from
+
+This is the rule with teeth. `daily_stats` is written by the **server**, so a rep
+working a street with no signal has a morning that exists only on their phone.
+A week summed from history alone would show them a week with today missing — on
+the one screen whose entire job is telling them where they stand right now.
+
+So history supplies the days *before* today, the device supplies today, and
+neither can be counted twice. Sum the whole range including today's history row
+and a synced morning appears twice; drop the live day and an unsynced one
+vanishes. `verify:periods` fails on both.
+
+### Money stays out of a week
+
+`daily_stats.pipelineValue` is not a daily figure. It holds a running lifetime
+total of everything the rep has ever won, stamped onto whichever day the write
+happened, so adding it across a week produces a number with no meaning. A period
+board therefore carries no revenue at all, and the revenue award suppresses
+itself — an award nobody can earn beats one handed out on a wrong number.
+
+*(The console does sum that column, which is a real bug in the money figures on
+Dashboard and Reports. It is on the list, and it is not this screen's to fix.)*
+
+### The week starts on Sunday
+
+One named constant, and the one line to change if a customer disagrees. US sales
+weeks are conventionally Sunday-to-Saturday and the rest of the app formats dates
+as `en-US`, so a Monday start would put "this week" out of step with every
+calendar a rep looks at. Teams that knock Monday to Saturday get Sunday at the
+front of their week rather than the end, which is the cost.
+
+```bash
+npm run verify:periods
+```
+
+The clock is passed in rather than read, so "what happens on the 1st" and "what
+happens on a week that starts in the previous month" are assertions rather than a
+wait. Also covers the parts that are about people rather than arithmetic: history
+belonging to somebody off the roster does not resurrect them onto the board, and
+a rep who has knocked nothing this week is still on it at zero — a board you
+appear on only after you perform is a receipt, not a board.
+
 ## Adding people
 
 **Console → Team → Invite user.** Name, email, role; the server creates a
