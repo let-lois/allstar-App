@@ -410,6 +410,94 @@ npm run verify:invite           # the panel, including the delete confirmation
 
 Role changes are still read-only.
 
+## Backups, and proving they work
+
+The state before this section existed: nothing scheduled an export, nothing was
+written down, and the only thing between this account and total loss was D1's
+Time Travel — which is real, and automatic, and not the whole answer.
+
+### Two disasters, two answers
+
+**Somebody ran the wrong statement an hour ago.** Time Travel. It is built into
+D1, needs no setup, and rewinds the database to any point in the last thirty
+days. This is the disaster that actually happens, and it is already covered.
+
+```bash
+cd api
+npx wrangler d1 time-travel info allstar-db --remote
+npx wrangler d1 time-travel restore allstar-db --timestamp <ISO-8601> --remote
+```
+
+**Everything else.** Time Travel is bounded at thirty days, so a corruption
+noticed in month two is past its reach. And it lives *inside* the account: a
+closed, compromised or mis-billed Cloudflare account takes it along with the
+database it was protecting. A backup that shares the fate of the thing it
+protects is not a backup.
+
+```bash
+cd api
+npm run backup            # → api/backups/allstar-db-<utc>.sql
+```
+
+Plain SQL, so it restores into D1, into SQLite, or into anything that speaks the
+dialect — "we can restore" should not depend on one vendor still being willing
+to serve you. The file holds every customer's addresses, contact names and phone
+numbers plus password hashes; `backups/` is git-ignored and the file wants
+encrypting before it goes anywhere.
+
+### The drill
+
+A backup nobody has restored is a rumour. The failure mode is discovering during
+an incident that the dump was truncated, or that it restores a schema the Worker
+then tries to migrate again, or that it brings back rows whose foreign keys point
+at nothing.
+
+```bash
+cd api
+npm run verify:restore backups/allstar-db-<utc>.sql
+```
+
+It restores into a scratch database in a temp directory with its own name and its
+own state — it cannot reach the database the backup came from, because a restore
+test that can damage production is a second disaster queued behind the first.
+Then it asks, in the order the failures actually happen:
+
+| | |
+|---|---|
+| is it a database at all | not an error page somebody saved, not a truncated write |
+| every table came back | read from `schema.sql`, so a table added later is covered without anyone remembering |
+| the rows came back | counted against the dump's own INSERTs — this is what catches a truncated file that still parsed |
+| foreign keys intact | no row pointing at a parent that is not there |
+| SQLite agrees | `integrity_check` |
+| the ledger came back | see below |
+| it is a *usable* account | a client, a user, and their credentials — non-empty is not the same as usable |
+
+**The migration ledger matters more than it looks.** Restore without
+`schema_migrations` and the Worker's first request re-runs every migration
+against a schema that already has them. The additive ones are idempotent; the
+`ALTER TABLE` is not, and the migration state goes to `failed` on a database that
+is otherwise perfectly fine. That case restores *cleanly* — it is the one silent
+failure in the list, and the drill names exactly which migrations would re-run.
+
+The restore goes through D1, because that is the path a real recovery takes. The
+reads do not: D1 refuses `foreign_key_check` and `integrity_check` outright
+(`not authorized: SQLITE_AUTH`), so the checks that catch a silently broken
+restore are read off the restored file directly. That also took the drill from
+three minutes to eleven seconds, and a drill nobody runs is not a drill.
+
+Proved by feeding it bad backups: a dump truncated mid-write, an auth error saved
+with a `.sql` extension, a dump missing its users, one missing its ledger, and one
+with an orphaned foreign key. Each fails, and each fails in a way that says what
+is wrong.
+
+### What is still missing
+
+**Nothing runs `npm run backup` on a schedule.** The tooling exists and is
+proved; the habit does not. That needs either a scheduled job somewhere with a
+Cloudflare API token, or a calendar reminder and a person — and which of those is
+appropriate is a decision about who holds that token, not an engineering one.
+Until it is answered, this account's recovery window is Time Travel's thirty days.
+
 ## Schema changes apply themselves
 
 The Worker runs its own migrations on the first request after a deploy

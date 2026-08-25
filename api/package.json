@@ -21,7 +21,9 @@
     "smoke:migrate": "node scripts/smoke-migrate.mjs",
     "smoke:observe": "node scripts/smoke-observe.mjs",
     "verify:geocode:fallback": "node scripts/verify-geocode-fallback.mjs",
-    "smoke:photos": "node scripts/smoke-photos.mjs"
+    "smoke:photos": "node scripts/smoke-photos.mjs",
+    "backup": "node scripts/backup.mjs",
+    "verify:restore": "node scripts/verify-restore.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",

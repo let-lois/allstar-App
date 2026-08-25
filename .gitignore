@@ -12,6 +12,12 @@ viewport-audit
 .DS_Store
 .vite
 
+# Database exports. Every customer's addresses, contact names and phone numbers,
+# plus password hashes — a backup is the single most sensitive artifact this repo
+# can produce, and the one most likely to be committed by accident.
+api/backups
+backups
+
 # Worker local state and the generated seed.
 # seed.sql is produced by scripts/make-seed.mjs and contains password hashes —
 # it is regenerated per environment with that environment's pepper, and must
