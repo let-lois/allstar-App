@@ -596,10 +596,29 @@ Merging never deletes. A row the server did not mention may be one this phone
 took ninety seconds ago and has not uploaded yet — the same trap `applyBootstrap`
 documents at length for every other store.
 
-Still not done: the local copy is never evicted. Forty photos a day at ~270KB is
-~15MB a day with nothing pruning it, against a browser quota around 1GB. That is
-now safe to build, which it was not before this — a photo can be re-fetched on a
-device that never had it.
+### The copy stays on the phone
+
+Once a photo is in R2 the local copy could be dropped and re-fetched. It is not,
+by decision: a rep opening any photo of any lead with no signal is worth more
+than the space, and R2 holds the durable copy regardless.
+
+That makes filling the device a matter of time rather than a maybe — roughly
+15MB a day per rep at forty photos, against a browser quota around 1GB. So the
+guard is not eviction, it is honesty at the moment of failure. `putAll`
+translates a quota error into `StorageFull` (named across engines, since Firefox
+and Safari have each had their own wording), and the photo strip says what
+happened and what to do about it.
+
+The alternative is the one outcome this screen must never produce: the sheet
+closes, the strip stays empty, nothing is said, and the rep walks away from the
+house believing they photographed the roof. That is exactly what used to happen
+— `addPhoto` threw into a click handler and the error vanished.
+
+`verify:photos` injects a real `QuotaExceededError` at the IndexedDB layer
+rather than filling a disk, so there is no test-only branch anywhere in the app.
+Writing it turned up a second defect: a failing write aborts the transaction,
+which rejects `tx.done` as well, and nothing was awaiting it by then — an
+unhandled rejection on every write failure, not just this one.
 
 ## The theme
 
