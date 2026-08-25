@@ -1,11 +1,19 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { SectionHeader } from '../components/ui/Card'
 import { Avatar } from '../components/ui/Avatar'
 import { useAppStore } from '../store/useAppStore'
 import { useTeamStats } from '../store/teamStats'
-import { POINTS, awards, standings } from '../data/leaderboard'
+import {
+  PERIODS,
+  POINTS,
+  awards,
+  boardFor,
+  periodLabel,
+  standings,
+  type Period,
+} from '../data/leaderboard'
 import { money } from '../lib/format'
 import { IconChevron } from '../components/nav/icons'
 
@@ -33,27 +41,57 @@ export function Standings() {
   const nav = useNavigate()
   const me = useAppStore((s) => s.user)
   const reps = useTeamStats()
+  const history = useAppStore((s) => s.dailyStats)
 
-  const board = useMemo(() => standings(reps), [reps])
-  const prizes = useMemo(() => awards(reps), [reps])
+  /*
+    Today by default, every time the screen opens.
+
+    Not remembered between visits on purpose: at 2pm the question is about this
+    afternoon, and a rep who looked at the month once last week should not have
+    to notice a filter before they trust the number in front of them.
+  */
+  const [period, setPeriod] = useState<Period>('today')
+
+  const scored = useMemo(
+    () => boardFor(period, { live: reps, history: Object.values(history) }),
+    [period, reps, history],
+  )
+  const board = useMemo(() => standings(scored), [scored])
+  const prizes = useMemo(() => awards(scored), [scored])
   const mine = board.find((r) => r.rep.id === me?.id)
 
-  const totalDoors = reps.reduce((s, r) => s + r.knocks, 0)
+  const totalDoors = scored.reduce((s, r) => s + r.knocks, 0)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <TopBar
         title="Standings"
-        subtitle={new Date().toLocaleDateString('en-US', {
-          weekday: 'long',
-          month: 'long',
-          day: 'numeric',
-        })}
+        subtitle={periodLabel(period)}
         back
       />
 
       <div className="scroll-pane pad-nav bg-surface-sunk">
         <div className="content-col page anim-rise">
+          {/*
+            Today, Week, Month. A row of three rather than a dropdown: it is one
+            tap from any of them to any other, all three are readable without
+            opening anything, and a rep in sunlight can hit a 44px chip.
+          */}
+          <div className="snap-x-row -mx-1 px-1 pb-1" role="group" aria-label="Period">
+            {PERIODS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setPeriod(p.key)}
+                aria-pressed={period === p.key}
+                className={`press focusable metal min-h-tap shrink-0 rounded-full px-5 text-[14px] font-semibold ${
+                  period === p.key ? 'metal-brand' : 'metal-quiet !text-ink-mute'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
           {reps.length === 0 ? (
             <p className="card px-6 py-8 text-center text-[14px] text-ink-mute">
               No reps on this account yet. The board fills in as soon as somebody
@@ -69,7 +107,13 @@ export function Standings() {
               */}
               {mine && (
                 <section className="card p-5">
-                  <p className="text-[12.5px] font-medium text-ink-mute">You today</p>
+                  {/*
+                    Follows the switch. "You today" above a week's points is the
+                    kind of small lie that makes a rep distrust the whole board.
+                  */}
+                  <p className="text-[12.5px] font-medium text-ink-mute">
+                    {period === 'today' ? 'You today' : `You this ${period}`}
+                  </p>
                   <div className="mt-1 flex items-baseline gap-2.5">
                     <span className="nums text-[38px] font-semibold leading-none tracking-[-0.02em] text-accent">
                       {mine.tied ? 'T' : ''}#{mine.rank}
@@ -93,7 +137,10 @@ export function Standings() {
               {/* --- awards ------------------------------------------------ */}
               {prizes.length > 0 && (
                 <section className="section">
-                  <SectionHeader title="Today's honours" standalone />
+                  <SectionHeader
+                    title={period === 'today' ? "Today's honours" : `Honours this ${period}`}
+                    standalone
+                  />
                   <ul className="grid grid-cols-2 gap-3">
                     {prizes.map((a) => (
                       <li key={a.key} className="card p-4">

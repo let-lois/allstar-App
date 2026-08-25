@@ -67,9 +67,18 @@ for (const col of ['doors', 'convos', 'appts', 'sold']) {
 }
 
 /* --- awards --------------------------------------------------------------- */
-ok(/Top rep today/.test(body), 'top rep is awarded')
+ok(/Top rep/.test(body), 'top rep is awarded')
 ok(/Most doors/.test(body), 'most doors is awarded')
 ok(/Most appointments/.test(body), 'most appointments is awarded')
+/*
+  The heading says which period these belong to; the labels must not, or they
+  contradict it the moment the board is switched to a week. This used to read
+  "Top rep today", which was redundant here and wrong there.
+*/
+ok(
+  /Today.s honours/.test(body) && !/Top rep today/.test(body),
+  'the period is on the heading, not repeated inside every award',
+)
 
 /*
   Revenue is the one award that can legitimately be missing — the demo always has
@@ -135,6 +144,47 @@ if (tied.length > 0) {
     ),
   )
   ok(names.length >= 2, `the board is not a list of one (${names.length} rows)`)
+}
+
+/* --- the period switch ----------------------------------------------------- */
+//
+// The arithmetic behind Week and Month is covered by `verify:periods`, which
+// needs no browser. What only exists once the screen is real is the wiring: that
+// tapping a chip actually changes what is on the board, and that the words
+// around the numbers change with it. A switch that re-labels the heading and
+// leaves the figures alone looks exactly like a switch that works.
+{
+  for (const label of ['Today', 'Week', 'Month']) {
+    ok(
+      (await page.getByRole('button', { name: label, exact: true }).count()) > 0,
+      `the board offers ${label}`,
+    )
+  }
+
+  const todayText = await page.locator('body').innerText()
+  const todayPts = (todayText.match(/(\d[\d,]*)\s*pts/g) ?? []).join('|')
+
+  await page.getByRole('button', { name: 'Week', exact: true }).click()
+  await page.waitForTimeout(900)
+  const weekText = await page.locator('body').innerText()
+
+  ok(/Week of /.test(weekText), 'switching to Week says which week')
+  ok(/You this week/.test(weekText), 'and the rep’s own card follows the switch')
+  ok(!/You today/.test(weekText), 'rather than still claiming to be today')
+  ok(/Honours this week/.test(weekText), 'as does the honours heading')
+
+  /*
+    The numbers moved. Without this the whole switch could be re-labelling
+    headings over today's figures, which is the failure that would ship — every
+    word on screen would be right and every number would be wrong.
+  */
+  const weekPts = (weekText.match(/(\d[\d,]*)\s*pts/g) ?? []).join('|')
+  ok(weekPts !== todayPts, 'and the scores are a week’s, not today’s relabelled')
+
+  await page.getByRole('button', { name: 'Today', exact: true }).click()
+  await page.waitForTimeout(900)
+  const backText = await page.locator('body').innerText()
+  ok(/You today/.test(backText), 'and switching back returns to today')
 }
 
 /* --- the rules are on the screen ------------------------------------------ */
