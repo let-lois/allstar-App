@@ -141,14 +141,21 @@ export function Leads() {
       */}
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:max-w-[460px] lg:border-r lg:border-line">
+          {/*
+            The tour anchors the list, not a row in it.
+
+            `VirtualList` renders a window: row zero exists only while the list
+            is scrolled to the top, and not at all when a filter empties it. An
+            anchor that comes and goes with the scroll position is an anchor the
+            tutorial skips for reasons nobody can reproduce.
+          */}
           <VirtualList
+            data-tour="leads-row"
             items={list}
             itemHeight={ROW_HEIGHT}
             className="pad-nav bg-surface"
-            renderItem={(p, i) => (
+            renderItem={(p) => (
               <PropertyRow
-                /* The tour points at the first row, whichever lead it is. */
-                tour={i === 0 ? 'leads-row' : undefined}
                 property={p}
                 position={position}
                 showDistance={sort === 'nearest'}

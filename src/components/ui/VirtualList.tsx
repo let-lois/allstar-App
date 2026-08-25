@@ -6,6 +6,8 @@ interface Props<T> {
   itemHeight: number
   renderItem: (item: T, index: number) => React.ReactNode
   className?: string
+  /** A `data-tour` anchor for the walkthrough, on the scroll container. */
+  'data-tour'?: string
   overscan?: number
   header?: React.ReactNode
   empty?: React.ReactNode
@@ -23,6 +25,7 @@ export function VirtualList<T>({
   itemHeight,
   renderItem,
   className = '',
+  'data-tour': tour,
   overscan = 6,
   header,
   empty,
@@ -50,7 +53,7 @@ export function VirtualList<T>({
   const slice = items.slice(start, end)
 
   return (
-    <div ref={ref} onScroll={onScroll} className={`scroll-pane ${className}`}>
+    <div ref={ref} onScroll={onScroll} data-tour={tour} className={`scroll-pane ${className}`}>
       {header}
       {items.length === 0 ? (
         empty

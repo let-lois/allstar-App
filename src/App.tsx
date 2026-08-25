@@ -159,7 +159,13 @@ export function App() {
           </Routes>
         </main>
       </div>
-      {isRep && !inConsole && <QuickActions />}
+      {/*
+        Everyone, not just reps. The office adds leads and books appointments
+        from a phone too, and until now had no way to do either without first
+        navigating to the right screen. The sheet's contents are chosen by role
+        — see QuickActions.
+      */}
+      {!inConsole && <QuickActions />}
       {!inConsole && <BottomNav role={user.role} />}
       {/*
         The tour lives in the shell, not on a screen.

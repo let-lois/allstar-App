@@ -8,6 +8,7 @@ import {
   IconNote,
   IconPlus,
   IconRoute,
+  IconUpload,
 } from './icons'
 import { useAppStore } from '../../store/useAppStore'
 
@@ -23,6 +24,8 @@ export function QuickActions() {
   const nav = useNavigate()
   const { pathname } = useLocation()
   const route = useAppStore((s) => s.route)
+  const role = useAppStore((s) => s.user?.role)
+  const isRep = role === 'field_rep'
 
   const activeStop = route?.stops.find((s) => s.status === 'active')
 
@@ -34,7 +37,20 @@ export function QuickActions() {
   */
   if (/^\/(property|lead|schedule|visit|capture)/.test(pathname)) return null
 
-  const actions: { label: string; hint: string; icon: JSX.Element; run: () => void }[] = [
+  /*
+    The list is chosen by job.
+
+    This button used to be rep-only, which left the office with no way to add
+    anything from anywhere — and the office adds plenty. But handing them the
+    rep's five is not the fix either: "Start next visit" offers a manager a route
+    they do not have, and a shortcut whose subtitle is "Pick a property first" is
+    a dead end wearing an action's clothes.
+
+    So a rep gets the doorstep five, and the office gets the three things it
+    actually does from a phone: put a lead in, book something, and bring a list
+    of leads in from a file.
+  */
+  const repActions = [
     {
       label: 'Start next visit',
       hint: activeStop ? 'Next stop on your route' : 'Pick a property first',
@@ -67,6 +83,31 @@ export function QuickActions() {
       run: () => nav('/schedule/new'),
     },
   ]
+
+  const officeActions = [
+    {
+      label: 'Add lead',
+      hint: 'One property, entered by hand',
+      icon: <IconPlus />,
+      run: () => nav('/lead/new'),
+    },
+    {
+      label: 'Import leads',
+      hint: 'Upload a CSV from a list provider',
+      icon: <IconUpload />,
+      run: () => nav('/admin/import'),
+    },
+    {
+      label: 'Schedule',
+      hint: 'Appointment or follow-up',
+      icon: <IconCalendar />,
+      run: () => nav('/schedule/new'),
+    },
+  ]
+
+  const actions: { label: string; hint: string; icon: JSX.Element; run: () => void }[] = isRep
+    ? repActions
+    : officeActions
 
   return (
     <>
