@@ -311,13 +311,33 @@ const ctxOpts = {
 
 /* ========== a route that really is finished ============================== */
 {
+  const ctx = await browser.newContext(ctxOpts)
+
+  /*
+    "Knocked earlier today" has to mean today at every hour of the day.
+
+    This fixture used to say `Date.now() - 3_600_000`, which is yesterday
+    between midnight and 1am — and the app is right to call a lead knocked
+    yesterday routable, so the screen correctly offered a plan and the gate
+    correctly failed. It failed for an hour a day while saying nothing at all
+    about the app, which is worse than not existing: it taught me to read a red
+    line as noise, and I went on to wave through a genuine access-control
+    failure on the same reasoning.
+
+    So: an hour ago, or this morning, whichever is later. Midnight is read from
+    the browser rather than from Node so that this keeps holding if the context
+    is ever given a `timezoneId` of its own.
+  */
+  const probe = await ctx.newPage()
+  const startOfToday = await probe.evaluate(() => new Date().setHours(0, 0, 0, 0))
+  await probe.close()
+
   // Every lead knocked earlier today: nothing routable, but the day happened.
   const worked = leads(3).map((p) => ({
     ...p,
     status: 'contacted',
-    lastVisitAt: Date.now() - 3_600_000,
+    lastVisitAt: Math.max(startOfToday, Date.now() - 3_600_000),
   }))
-  const ctx = await browser.newContext(ctxOpts)
   const { page } = await signIn(ctx, worked)
   const text = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
   ok(

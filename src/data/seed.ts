@@ -25,6 +25,10 @@ import { dayKey } from '../lib/format'
  *     time, never hardcoded, and the whole bundle is regenerated when the day
  *     rolls over (see lib/demo.ts). Otherwise the demo empties out overnight —
  *     today's appointments become yesterday's and vanish from the Today screen.
+ *     "Now" includes the hour: a day laid out backwards from an early-morning
+ *     "now" runs off the start of the day and empties the demo just as
+ *     thoroughly, from the other end. Nothing here may reach back past
+ *     midnight.
  *
  * Replace with the real API once the backend lands; nothing outside this file
  * and lib/demo.ts knows the data is synthetic.
@@ -314,6 +318,26 @@ export function buildSeed(now = Date.now()): SeedBundle {
   const activity: ActivityEvent[] = []
   const today = dayKey(now)
 
+  /**
+   * How much of today there is to put a day's work into.
+   *
+   * The day is laid out backwards from "now", and until this was clamped it ran
+   * off the start of the day. Every screen in the app filters activity on "since
+   * midnight", so a demo opened at 6am showed a rep's twenty-two doors reaching
+   * back into last night and counted almost none of them: the whole team had
+   * knocked one door between them, the leaderboard had no appointments and no
+   * revenue, and the standings gate failed for reasons that had nothing to do
+   * with the standings.
+   *
+   * So a rep's span is squeezed into the part of today that has actually
+   * happened. The shape survives — each rep keeps their own pace and their own
+   * staggered start, and the ordering is untouched — it is only compressed, and
+   * only when the day is too young to hold it. The longest span here is six and
+   * a half hours, so from about half past six in the morning nothing is scaled
+   * at all and the timings are exactly what they always were.
+   */
+  const elapsedToday = Math.max(0, now - startOfDay.getTime())
+
   FIELD_REPS.forEach((rep, r) => {
     // Each rep knocks at their own pace and started at a slightly different
     // time. Without this every rep's activity lands on identical timestamps and
@@ -328,19 +352,26 @@ export function buildSeed(now = Date.now()): SeedBundle {
 
     const done = Math.min(rep.doneStops, candidates.length)
 
+    // How far back the first door would sit if the day were long enough.
+    const spanMs = done * cadenceMin * 60_000 + staggerMs
+    const squeeze = spanMs > elapsedToday ? elapsedToday / spanMs : 1
+    /** When stop `idx` was knocked — inside today by construction. */
+    const knockedAt = (idx: number) =>
+      Math.round(now - ((done - idx) * cadenceMin * 60_000 + staggerMs) * squeeze)
+
     routes.push({
       id: `r_${rep.id}`,
       repId: rep.id,
       date: today,
       name: rep.routeName,
-      // Everyone started somewhere in the last few hours of "this morning".
-      startedAt: now - 3 * 3_600_000,
+      // Everyone started somewhere in the last few hours of "this morning" —
+      // and never before this morning began.
+      startedAt: Math.max(startOfDay.getTime(), now - 3 * 3_600_000),
       stops: candidates.map((p, idx) => ({
         propertyId: p.id,
         order: idx,
         status: idx < done ? 'done' : idx === done ? 'active' : 'pending',
-        completedAt:
-          idx < done ? now - (done - idx) * cadenceMin * 60_000 - staggerMs : undefined,
+        completedAt: idx < done ? knockedAt(idx) : undefined,
       })),
     })
 
@@ -350,7 +381,7 @@ export function buildSeed(now = Date.now()): SeedBundle {
       const outcome = good
         ? GOOD[Math.floor(rand() * GOOD.length)]
         : MISS[Math.floor(rand() * MISS.length)]
-      const ts = now - (done - idx) * cadenceMin * 60_000 - staggerMs
+      const ts = knockedAt(idx)
       activity.push({
         id: `ev_${rep.id}_${idx}`,
         propertyId: p.id,
