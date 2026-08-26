@@ -23,7 +23,8 @@
     "verify:geocode:fallback": "node scripts/verify-geocode-fallback.mjs",
     "smoke:photos": "node scripts/smoke-photos.mjs",
     "backup": "node scripts/backup.mjs",
-    "verify:restore": "node scripts/verify-restore.mjs"
+    "verify:restore": "node scripts/verify-restore.mjs",
+    "smoke:integrations": "node scripts/smoke-integrations.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",
