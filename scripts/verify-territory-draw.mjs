@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { chromiumPath } from './lib/browser.mjs'
 import { dismissTour } from './lib/tour.mjs'
 
 /**
@@ -22,7 +23,7 @@ import { dismissTour } from './lib/tour.mjs'
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:4173'
 
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  executablePath: chromiumPath(),
 })
 
 const fails = []

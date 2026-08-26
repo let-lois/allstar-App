@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { chromiumPath } from './lib/browser.mjs'
 import fs from 'node:fs'
 import { dismissTour } from './lib/tour.mjs'
 
@@ -31,7 +32,7 @@ const VIEWPORTS = [
   { name: '1024-desktop', width: 1024, height: 800 },
 ]
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' })
+const browser = await chromium.launch({ executablePath: chromiumPath() })
 const problems = []
 
 for (const vp of VIEWPORTS) {
