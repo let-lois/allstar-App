@@ -10,6 +10,7 @@ import {
   effectivePhotoCategories,
 } from '../lib/settings'
 import { STATUS } from './charts/tokens'
+import { IntegrationsPanel } from './IntegrationsPanel'
 
 /**
  * Client configuration.
@@ -25,7 +26,7 @@ import { STATUS } from './charts/tokens'
  * break a year of history.
  */
 export function AdminSettings() {
-  const [tab, setTab] = useState<'outcomes' | 'notes' | 'photos'>('outcomes')
+  const [tab, setTab] = useState<'outcomes' | 'notes' | 'photos' | 'integrations'>('outcomes')
 
   const stored = useAppStore((s) => s.settings)
   const mode = useAppStore((s) => s.mode)
@@ -96,6 +97,7 @@ export function AdminSettings() {
             ['outcomes', 'Visit outcomes'],
             ['notes', 'Note templates'],
             ['photos', 'Photo categories'],
+            ['integrations', 'Integrations'],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -301,11 +303,20 @@ export function AdminSettings() {
         </section>
       )}
 
+      {tab === 'integrations' && <IntegrationsPanel />}
+
+      {/*
+        The footer is about relabelling, which is what three of the four tabs
+        do. It would be actively wrong under the integrations tab — nothing
+        there is a label, and none of it reaches a rep's phone.
+      */}
+      {tab !== 'integrations' && (
       <p className="mt-4 rounded-field bg-surface-sunk px-4 py-3 text-xs leading-relaxed text-ink-mute">
         {mode === 'live'
           ? 'These are the words reps see. Codes never change, so renaming an outcome keeps every report and every pipeline rule intact — and a rep whose phone is offline keeps the last labels it synced.'
           : 'Demo data — there is nowhere to persist a change. Sign in with real credentials to configure a company.'}
       </p>
+      )}
     </AdminPage>
   )
 }
