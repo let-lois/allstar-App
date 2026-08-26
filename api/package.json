@@ -26,7 +26,9 @@
     "verify:restore": "node scripts/verify-restore.mjs",
     "smoke:integrations": "node scripts/smoke-integrations.mjs",
     "smoke:money": "node scripts/smoke-closed-value.mjs",
-    "db:rebuild-closed": "node scripts/rebuild-closed-value.mjs"
+    "db:rebuild-closed": "node scripts/rebuild-closed-value.mjs",
+    "smoke:daybreak": "node scripts/smoke-daybreak.mjs",
+    "db:rebuild-stats": "node scripts/rebuild-daily-stats.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",
