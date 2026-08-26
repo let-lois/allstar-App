@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
@@ -47,17 +47,32 @@ export function NewLead() {
 
   const storePosition = useAppStore((s) => s.position)
 
+  /*
+    The fallback, read at answer time rather than depended on.
+
+    This effect used to list `storePosition` among its dependencies, which meant
+    it re-ran every time the shared watcher produced a fix — every few seconds
+    for a rep who is walking — and asked for the position again each time. On a
+    browser where nobody has made a persistent choice, every one of those is
+    another permission prompt.
+  */
+  const fallback = useRef(storePosition)
+  fallback.current = storePosition
+
   useEffect(() => {
     let cancelled = false
     void getPosition().then((p) => {
       if (cancelled) return
-      setCoords(p ? { lat: p.lat, lng: p.lng } : storePosition)
+      setCoords(p ? { lat: p.lat, lng: p.lng } : fallback.current)
       setLocating(false)
     })
     return () => {
       cancelled = true
     }
-  }, [storePosition])
+    // Once, on mount. Where the rep is standing when they open the form is the
+    // question; a fix arriving later does not change which lead they are adding.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   /*
     A picked address beats GPS: it is the rooftop rather than wherever the rep is

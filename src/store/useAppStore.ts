@@ -624,9 +624,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       pending: true,
     }
 
-    // Stamp where the rep actually stood. Best-effort: a slow GPS fix must never
-    // hold up the screen, so we attach it after the fact.
-    void getPosition(6000).then((pos) => {
+    /*
+      Stamp where the rep actually stood. Best-effort: a slow GPS fix must never
+      hold up the screen, so it is attached after the fact.
+
+      Thirty seconds rather than the default two minutes. This is the one place
+      the *age* of a fix is part of what it claims — a rep three houses along has
+      moved far enough that the previous door's coordinates would be a false
+      record of where they were. In practice the shared watcher keeps the cache
+      seconds old, so this still almost never costs a request.
+    */
+    void getPosition(6000, 30_000).then((pos) => {
       if (!pos) return
       const current = get().visits[id]
       if (!current) return

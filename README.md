@@ -75,6 +75,54 @@ npm run verify:offline
 with no connection, still see their work, and have it upload by itself on
 reconnect.
 
+### Asking for location once
+
+Reported from a real browser: the permission prompt kept reappearing while
+moving around the app.
+
+The cause was not one bug but an absence. **Every call to `getCurrentPosition`
+is its own permission request**, and a browser prompts on each one until somebody
+makes a *persistent* choice — so a rep who taps "Allow this time", or dismisses
+the bar, is asked again on the next screen. Four places were asking
+independently: the shared watcher, a refresh on boot and sign-in and
+pull-to-refresh, a stamp on visit start, and the new-lead form.
+
+The worst of them was a loop. The new-lead form listed the store's position among
+its effect's dependencies, so every fix the shared watcher produced re-ran the
+effect and asked for the position again — **a request per second for a rep who is
+walking**, each one a prompt.
+
+`lib/geo.ts` is now one source for the whole app:
+
+- a fix newer than the caller's freshness window is returned without touching the
+  browser at all
+- concurrent callers share one in-flight request instead of stacking prompts
+- the shared watcher fills the same cache, so once it is running the rest of the
+  app already has an answer
+- a permission already **denied** is never called again — `permissions.query`
+  answers that without prompting, which is the whole point of it
+
+Freshness is the caller's choice, because it is a claim about the data rather
+than a performance knob. Two minutes is the default; starting a visit asks for
+thirty seconds, because that stamp is a record of *where the rep stood* and one
+three houses stale is a false record.
+
+```bash
+npm run verify:location
+```
+
+It counts **requests to the browser**, not prompts. Playwright grants geolocation
+up front and never shows a prompt, so counting prompts would be untestable —
+while one request is one prompt on the browser the complaint came from. The stub
+moves the reported position on every fix, modelling a rep who is walking, because
+that movement is what drove the loop.
+
+Every move between screens goes **through the app**, never `page.goto`. A `goto`
+is a document load: the init script runs again, the counters reset, and a
+before-and-after comparison spanning one cannot fail. The first version of this
+file did exactly that and passed with all three bugs put back in — which is the
+only reason it is worth writing down.
+
 ### Asking the browser to keep it
 
 All of the above is worth nothing if the browser throws it away, and by default
