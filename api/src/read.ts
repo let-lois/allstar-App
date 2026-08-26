@@ -262,7 +262,13 @@ export async function bootstrap(env: Env, user: SessionUser) {
       appointments: s.appointments,
       quotes: s.quotes,
       sold: s.sold,
-      pipelineValue: s.pipeline_value,
+      /*
+        The column is still called `pipeline_value` in D1 — renaming it needs a
+        migration and buys nothing the client can see. What it *holds* changed:
+        money closed on that day, not a running lifetime total. So the wire name
+        is the honest one, and this line is the seam between them.
+      */
+      closedValue: s.pipeline_value,
     })),
     serverTime: Date.now(),
   }
