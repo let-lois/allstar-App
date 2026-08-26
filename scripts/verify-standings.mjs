@@ -68,8 +68,35 @@ for (const col of ['doors', 'convos', 'appts', 'sold']) {
 
 /* --- awards --------------------------------------------------------------- */
 ok(/Top rep/.test(body), 'top rep is awarded')
-ok(/Most doors/.test(body), 'most doors is awarded')
-ok(/Most appointments/.test(body), 'most appointments is awarded')
+
+/*
+  Each award is checked against the column it claims to summarise, not merely
+  looked for.
+
+  The rule is "the highest non-zero value", so an award over a board of zeroes
+  is a trophy on a lie — and that is exactly what a date filter reading the
+  wrong side of midnight produces. Not hypothetical: this block failed every
+  morning before about nine, because the seed laid today's work out backwards
+  from "now" without stopping at the start of the day, so a demo opened early
+  showed a team that had knocked one door between them. The award was missing
+  and the gate was right, and it still said nothing whatsoever about the
+  standings.
+
+  The presence half is a claim about the demo — its day now has doors and
+  appointments in it at any hour. The agreement half is a claim about the rule.
+*/
+for (const [award, column] of [
+  ['Most doors', 'doors'],
+  ['Most appointments', 'appts'],
+]) {
+  const shown = new RegExp(award).test(body)
+  const any = new RegExp(`[1-9]\\d* ${column}`).test(body)
+  ok(any, `the demo has ${column} on the board whatever the hour`)
+  ok(
+    shown === any,
+    `${award} is awarded exactly when there are ${column} (award=${shown}, data=${any})`,
+  )
+}
 /*
   The heading says which period these belong to; the labels must not, or they
   contradict it the moment the board is switched to a week. This used to read
@@ -81,15 +108,19 @@ ok(
 )
 
 /*
-  Revenue is the one award that can legitimately be missing — the demo always has
-  a sale, but a real morning does not. So it is asserted as *consistent* rather
-  than present: shown only when somebody has actually sold something.
+  Revenue is checked one way only, and the asymmetry is the point.
+
+  It is the money on the properties that were sold, not the count of sales, so a
+  sale on a lead carrying no opportunity value is a real state with a sale and
+  no revenue. Asserting the equivalence — as this did — was asserting something
+  the data does not promise; it happened to hold in the demo. What must hold is
+  that the trophy is never handed out with nothing sold behind it.
 */
 const hasSale = /[1-9]\d* sold/.test(body)
-ok(
-  /Most revenue/.test(body) === hasSale,
-  `the revenue award appears exactly when there are sales (award=${/Most revenue/.test(body)}, sales=${hasSale})`,
-)
+const revenueAward = /Most revenue/.test(body)
+ok(hasSale, 'the demo has a sale on the board whatever the hour')
+ok(revenueAward, 'and that sale earns the revenue award')
+ok(!revenueAward || hasSale, `no revenue award without a sale (award=${revenueAward}, sales=${hasSale})`)
 
 /* --- ties reach the page -------------------------------------------------- */
 //
