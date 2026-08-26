@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { chromiumPath } from './lib/browser.mjs'
 import { dismissTour } from './lib/tour.mjs'
 
 /**
@@ -14,7 +15,7 @@ import { dismissTour } from './lib/tour.mjs'
  */
 
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  executablePath: chromiumPath(),
 })
 const fails = []
 const ok = (c, m) => { console.log(`${c ? 'PASS' : 'FAIL'}  ${m}`); if (!c) fails.push(m) }

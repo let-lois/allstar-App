@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import { execSync } from 'node:child_process'
 import { chromium } from 'playwright'
+import { chromiumPath } from './lib/browser.mjs'
 import { REP_STEPS, OFFICE_STEPS } from '../src/data/tour.ts'
 
 /**
@@ -14,7 +15,7 @@ import { REP_STEPS, OFFICE_STEPS } from '../src/data/tour.ts'
 
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:4173'
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  executablePath: chromiumPath(),
 })
 const fails = []
 const ok = (cond, msg) => {

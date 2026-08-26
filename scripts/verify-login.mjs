@@ -1,4 +1,6 @@
 import { chromium } from 'playwright'
+import { chromiumPath } from './lib/browser.mjs'
+import { button } from './lib/app.mjs'
 import { dismissTour } from './lib/tour.mjs'
 
 /**
@@ -21,7 +23,7 @@ import { dismissTour } from './lib/tour.mjs'
 
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:4173'
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  executablePath: chromiumPath(),
 })
 
 const fails = []
@@ -238,7 +240,13 @@ const jsonRoute = (status, body) => (route) =>
 
   await page.goto(`${BASE}/property/${LIVE_PROPERTY.id}`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(700)
-  await page.getByRole('button', { name: /Start visit/ }).first().click()
+  /*
+    A hard navigation straight to a deep link, so the app boots and bootstraps
+    from scratch before this screen can have anything on it. When that does not
+    happen the useful information is what the screen says instead — see
+    lib/app.mjs.
+  */
+  ;(await button(page, /Start visit/, { why: 'a deep link into a property after a cold boot' })).click()
   await page.waitForTimeout(900)
   await page.getByRole('button', { name: /Interested/ }).first().click()
   await page.waitForTimeout(800)

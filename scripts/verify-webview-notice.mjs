@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { chromiumPath } from './lib/browser.mjs'
 
 /**
  * In-app browser detection check.
@@ -8,7 +9,7 @@ import { chromium } from 'playwright'
  * for the webviews that matter and — just as important — stays out of the way
  * in a real browser.
  */
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' })
+const b = await chromium.launch({ executablePath: chromiumPath() })
 const cases = [
   ['Messenger (Android)', 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 [FB_IAB/MESSENGER;FBAV/400.0.0.0;]', true],
   ['Facebook (iOS)', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FBAN/FBIOS;FBAV/440.0', true],
