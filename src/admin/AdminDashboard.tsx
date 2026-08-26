@@ -14,6 +14,7 @@ import {
   useRangeTotals,
   useRepRangeRows,
   type RangeKey,
+  useUnassigned,
 } from './useAdminData'
 import { STATUS_LABEL, outcomeByCode } from '../data/outcomes'
 import { money, moneyFull, relative } from '../lib/format'
@@ -33,6 +34,7 @@ export function AdminDashboard() {
   const properties = useAppStore((s) => s.properties)
   const activity = useAppStore((s) => s.activity)
   const propertyList = useMemo(() => Object.values(properties), [properties])
+  const unassigned = useUnassigned(propertyList)
 
   const totals = useRangeTotals(range)
   const series = useRangeSeries(range)
@@ -95,6 +97,29 @@ export function AdminDashboard() {
           sub={`${moneyFull(totals.closedValue)} closed`}
         />
       </div>
+
+      {/*
+        Shown only when there is something to say, and it is not a KPI tile —
+        it is a job somebody has to do. A rep's phone only receives leads
+        assigned to them, so an unassigned lead is work that exists nowhere a
+        rep can see it, while every total above counts it as healthy.
+      */}
+      {unassigned.count > 0 && (
+        <button
+          onClick={() => nav('/admin/leads')}
+          className="focusable press mt-3 flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-warn/40 bg-warn/5 p-4 text-left"
+        >
+          <span className="text-sm font-semibold text-warn">
+            {unassigned.count.toLocaleString()} open lead
+            {unassigned.count === 1 ? '' : 's'} assigned to nobody
+          </span>
+          <span className="text-[13px] text-ink-soft">
+            {unassigned.count === 1 ? 'It is' : 'They are'} on no rep&rsquo;s phone until
+            somebody owns {unassigned.count === 1 ? 'it' : 'them'}.
+          </span>
+          <span className="ml-auto text-[13px] font-semibold text-accent">Assign →</span>
+        </button>
+      )}
 
       <section className="mt-4 rounded-card border border-line bg-surface p-5">
         <h2 className="text-sm font-bold">Doors and conversations</h2>

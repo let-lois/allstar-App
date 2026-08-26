@@ -205,6 +205,140 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await ctx.close()
 }
 
+/* ========== an import with nobody assigned says so ======================= */
+//
+// Reported from a live account: leads added by an admin never appeared for a
+// field rep. Not a bug in the scoping — a rep's bootstrap is deliberately
+// filtered to `assigned_rep_id = them`, which is what stops a five-thousand-lead
+// database syncing onto every handset. The bug is that leaving the rep picker
+// blank is a silent dead end: the console reports a healthy import, every
+// phone shows nothing, and nothing anywhere connects the two. The first person
+// to notice is a rep saying the app is broken.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 } })
+  const page = await signedInConsole(ctx)
+
+  let assignPosted = null
+  await page.route('**/api/import/properties', async (route) => {
+    const body = JSON.parse(route.request().postData() || '{}')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        created: body.rows.length,
+        updated: 0,
+        rejected: [],
+        ids: body.rows.map((_, i) => `p_new_${i}`),
+        unassigned: body.assignRepId ? 0 : body.rows.length,
+      }),
+    })
+  })
+  await page.route('**/api/properties/assign', async (route) => {
+    assignPosted = JSON.parse(route.request().postData() || '{}')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ assigned: assignPosted.propertyIds.length }),
+    })
+  })
+
+  await page.locator('textarea').fill(MESSY_CSV)
+  await page.getByRole('button', { name: /^Continue$/ }).click()
+  await page.waitForTimeout(500)
+  await page.getByRole('button', { name: /^Continue$/ }).click()
+  await page.waitForTimeout(1200)
+
+  // Nothing in this file carries coordinates, and a row with none is not
+  // importable — the same lookup the happy path does.
+  await page.getByRole('button', { name: /Look up 3 addresses/ }).click()
+  await page.waitForTimeout(1500)
+
+  // Deliberately leaving the rep picker alone — this is the path that bites.
+  await page.getByRole('button', { name: /^Import 2 leads$/ }).click()
+  await page.waitForTimeout(1500)
+
+  const body = () => page.locator('body').innerText()
+  const done = (await body()).replace(/\s+/g, ' ')
+  ok(/Import finished/.test(done), 'the import completes')
+  ok(
+    /assigned to nobody/.test(done),
+    'and says the leads are assigned to nobody rather than reporting a clean success',
+  )
+  ok(
+    /will not appear on any phone/.test(done),
+    'naming the consequence, not just the state',
+  )
+
+  /* --- and it can be fixed without leaving the screen -------------------- */
+  const picker = page.locator('select').last()
+  await picker.selectOption('u_rep_1')
+  await page.getByRole('button', { name: /^Assign$/ }).click()
+  await page.waitForTimeout(1200)
+
+  ok(!!assignPosted, 'assigning from the result screen reaches the server')
+  ok(
+    assignPosted?.repId === 'u_rep_1',
+    `to the rep that was picked (${assignPosted?.repId})`,
+  )
+  /*
+    The ids the import actually wrote, not a guess. The server mints them, so
+    without them coming back this offer would have nothing to act on.
+  */
+  ok(
+    assignPosted?.propertyIds?.length === 2 &&
+      assignPosted.propertyIds.every((id) => id.startsWith('p_new_')),
+    `for exactly the leads that import created (${JSON.stringify(assignPosted?.propertyIds)})`,
+  )
+
+  const after = (await body()).replace(/\s+/g, ' ')
+  ok(/assigned\./i.test(after), 'and the operator is told it worked')
+  ok(!/assigned to nobody/.test(after), 'the warning clears rather than lingering')
+
+  await ctx.close()
+}
+
+/* ========== the console says how many leads nobody can see =============== */
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 } })
+  const page = await signedInConsole(ctx)
+
+  const lead = (id, over = {}) => ({
+    id, address1: `${id} Cedar Bend Dr`, city: 'Round Rock', state: 'TX', zip: '78664',
+    lat: 30.51, lng: -97.67, status: 'new', score: 60, contacts: [], ...over,
+  })
+  await page.unroute('**/api/bootstrap')
+  await page.route('**/api/bootstrap', json(200, {
+    ...EMPTY_BOOTSTRAP,
+    properties: [
+      lead('p1'),
+      lead('p2'),
+      lead('p3', { assignedRepId: 'u_rep_1' }),
+      // Closed out and ownerless. Finished business, not work waiting to be
+      // handed out — counting it leaves a number that can never reach zero,
+      // which is a number people stop reading.
+      lead('p4', { status: 'won' }),
+    ],
+  }))
+  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1800)
+
+  const text = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+  ok(
+    /2 open leads assigned to nobody/.test(text),
+    `the dashboard counts them (${(text.match(/\d+ open leads? assigned to nobody/) ?? ['none'])[0]})`,
+  )
+  ok(
+    !/3 open leads assigned to nobody/.test(text),
+    'and a closed-out lead with no owner is not counted as waiting work',
+  )
+
+  await page.getByRole('button', { name: /assigned to nobody/ }).click()
+  await page.waitForTimeout(1000)
+  ok(page.url().includes('/admin/leads'), `and it goes somewhere they can act (${page.url()})`)
+
+  await ctx.close()
+}
+
 /* ========== unassigned leads must appear on the territory map ============ */
 //
 // Reported from the field: an import with no territory name produced a

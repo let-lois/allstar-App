@@ -426,6 +426,15 @@ export interface ImportResultDTO {
    */
   territoryMatched?: number
   territoryUnmatched?: number
+  /**
+   * The ids this import wrote, so the console can offer to assign exactly them.
+   *
+   * Optional for the same reason the territory counts are: an older Worker does
+   * not send it. Without it the offer degrades to a link rather than vanishing.
+   */
+  ids?: string[]
+  /** How many of those nobody will see until somebody assigns them. */
+  unassigned?: number
 }
 
 export function apiImport(
