@@ -43,12 +43,33 @@ export function SignOutButton() {
 
   return (
     <>
+      {/*
+        A button, not a bare glyph.
+
+        It used to be a loose icon in the header, which is the same affordance as
+        a decoration — nothing about it said it could be pressed, and the one
+        control on this screen that ends the session is a poor place to make
+        somebody guess. It now wears the app's own machined face, so it reads as
+        a thing you press for the same reason every other button here does.
+
+        Gunmetal rather than the brand teal. The reference for this was a bright
+        blue call-to-action, and that is exactly what logging out must not be:
+        the loudest control on a screen whose job is to send a rep to the next
+        door. It is unmistakable, and it is not shouting.
+
+        The word rides along above 360px. On a 320px phone the identity block
+        and the sync chip need the width more, and the glyph plus a label that
+        screen readers always read is enough.
+      */}
       <button
         onClick={() => setOpen(true)}
         aria-label="Sign out"
-        className="focusable grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-mute active:bg-surface-field"
+        className="press focusable metal metal-quiet flex min-h-tap shrink-0 items-center gap-1.5 rounded-field px-2.5 text-ink-soft"
       >
         <IconSignOut />
+        <span className="hidden text-[12.5px] font-semibold uppercase tracking-[0.04em] min-[360px]:inline">
+          Logout
+        </span>
       </button>
 
       {createPortal(

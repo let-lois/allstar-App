@@ -123,6 +123,32 @@ let otherRepId = null
   /* --- but not somebody else's ------------------------------------------- */
   //
   // The one that matters. A URL is not a permission.
+  //
+  // `otherRepId` came from the *top of the board* in a manager's session, and
+  // which rep that is changes with the day's demo data. When it happened to be
+  // this rep, the check opened their own page, the guard correctly allowed it,
+  // and the gate reported a leak — a security alarm going off because two ids
+  // happened to match.
+  //
+  // Nothing about that was subtle to fix and everything about it was dangerous
+  // to leave: an assertion that cries wolf about access control is the one
+  // people learn to wave through. So the id is checked before it is used, and a
+  // collision picks a genuinely different rep off the same board rather than
+  // quietly testing nothing.
+  if (otherRepId === myId) {
+    await page.goto(`${BASE}/standings`, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(1500)
+    const notMe = page.locator('ul.plate > li button').filter({ hasNotText: 'you' })
+    ok((await notMe.count()) > 0, 'the board has somebody else on it to try')
+    await notMe.first().click()
+    await page.waitForTimeout(1200)
+    otherRepId = page.url().split('/rep/')[1]
+  }
+  ok(
+    otherRepId != null && otherRepId !== myId,
+    `the id being tried belongs to somebody else (${otherRepId} vs ${myId})`,
+  )
+
   await page.goto(`${BASE}/rep/${otherRepId}`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(1500)
   const other = await page.locator('body').innerText()

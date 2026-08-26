@@ -134,9 +134,34 @@ console.log('\n--- sign out ---')
   await page.waitForTimeout(1000)
 
   const header = page.locator('header').first()
+  const out = header.getByRole('button', { name: 'Sign out', exact: true })
+  ok((await out.count()) > 0, 'the header offers it')
+
+  /*
+    A button, not a loose glyph. It was an icon on the header's own ground,
+    which is the same affordance as a decoration — and the control that ends the
+    session is a poor place to make somebody guess whether it can be pressed.
+  */
+  const shape = await out.first().evaluate((el) => {
+    const cs = getComputedStyle(el)
+    const r = el.getBoundingClientRect()
+    return { h: r.height, w: r.width, shadow: cs.boxShadow, label: (el.innerText || '').trim() }
+  })
+  ok(shape.h >= 44, 'at a size a thumb can hit in a truck', `${Math.round(shape.h)}px tall`)
   ok(
-    (await header.getByRole('button', { name: 'Sign out', exact: true }).count()) > 0,
-    'the header offers it',
+    /rgb/.test(shape.shadow) && shape.shadow !== 'none',
+    'wearing the machined face the rest of the app uses for buttons',
+  )
+  ok(/logout/i.test(shape.label), 'and saying what it does in words', shape.label)
+
+  /*
+    The accessible name stays "Sign out" whether or not the word is drawn — the
+    label is hidden below 360px, and a control that renames itself with the
+    viewport is one nobody can find twice.
+  */
+  ok(
+    (await header.getByRole('button', { name: 'Sign out', exact: true }).count()) === 1,
+    'named the same way at every width',
   )
 
   // And it is gone from where it used to be.

@@ -149,10 +149,25 @@ export const IconRoute = () => (
   </svg>
 )
 
-/** Sign out: a door with an arrow leaving it. */
+/**
+ * Log out: a solid arrow leaving a room through the wall it opens.
+ *
+ * Drawn to the shape people already know from lift signs and exit doors — a
+ * filled arrowhead crossing a boundary — rather than the thin outlined door
+ * that was here before. On a 24px glyph in sunlight a 1.9px outline of a door
+ * reads as a rectangle with some marks in it; a filled head reads as an arrow
+ * at a glance, which is the whole job.
+ *
+ * The arrow points left because that is the direction of travel in every
+ * left-to-right interface: back out, away, done. Pointing it right would be the
+ * international sign for *entering*.
+ */
 export const IconSignOut = () => (
-  <svg {...base}>
-    <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
-    <path d="M10 8l-4 4 4 4M6 12h10" />
+  <svg {...base} strokeWidth={2}>
+    {/* The room, open on the side the arrow leaves through. */}
+    <path d="M13.5 4.5H18a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4.5" />
+    {/* The shaft, stopping short so the filled head sits on the end of it. */}
+    <path d="M13 12H6.5" />
+    <path d="M9 8.5 4.5 12 9 15.5z" fill="currentColor" stroke="currentColor" strokeLinejoin="round" />
   </svg>
 )

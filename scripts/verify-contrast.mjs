@@ -152,6 +152,13 @@ ok(selectedVsResting >= AA_GRAPHIC,
 
 const metalQuiet = face('#232e44', 0.06)
 at(T['ink'], metalQuiet, AA_TEXT, 'ink on a gunmetal control')
+/*
+ * A labelled control on that face — the header's logout button. `ink-mute`
+ * measures 4.36:1 here and would fail, which is worth pinning rather than
+ * rediscovering: the quiet tone that is right for a loose icon on the header's
+ * own ground is not right once the icon sits on a raised face.
+ */
+at(T['ink-soft'], metalQuiet, AA_TEXT, 'a label on a gunmetal control')
 
 /*
  * The primary button keeps a near-black label on a bright teal face. Both ends
