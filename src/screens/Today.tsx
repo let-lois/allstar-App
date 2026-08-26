@@ -8,6 +8,7 @@ import {
   useRouteProgress,
 } from '../store/useAppStore'
 import { TopBar } from '../components/nav/TopBar'
+import { SignOutButton } from '../components/nav/SignOutButton'
 import { SyncBadge, SyncDetail } from '../components/sync/SyncBadge'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { PullToRefresh } from '../components/ui/PullToRefresh'
@@ -109,7 +110,19 @@ export function Today() {
           month: 'long',
           day: 'numeric',
         })}
-        right={<SyncBadge onClick={() => setSyncOpen(true)} />}
+        /*
+          A rep's only way out, now that it has left More. Today and the
+          Overview are the two home screens, one per role — putting it on
+          every screen would be a destructive control permanently under a
+          thumb, and putting it on neither would strand whoever does not see
+          the other one.
+        */
+        right={
+          <>
+            <SignOutButton />
+            <SyncBadge onClick={() => setSyncOpen(true)} />
+          </>
+        }
       />
 
       <PullToRefresh

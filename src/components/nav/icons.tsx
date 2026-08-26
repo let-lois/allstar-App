@@ -148,3 +148,11 @@ export const IconRoute = () => (
     <path d="M6 8.5v4a3 3 0 003 3h6a3 3 0 003-3v-1" />
   </svg>
 )
+
+/** Sign out: a door with an arrow leaving it. */
+export const IconSignOut = () => (
+  <svg {...base}>
+    <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+    <path d="M10 8l-4 4 4 4M6 12h10" />
+  </svg>
+)

@@ -50,6 +50,36 @@ async function signIn(from, match) {
   return { ctx, page }
 }
 
+/**
+ * Sign out from the header, and confirm.
+ *
+ * It used to be a button at the bottom of More. It is one tap from every home
+ * screen now, so it asks first — see `SignOutButton` for why that is not
+ * decoration.
+ */
+async function signOut(page) {
+  await page.getByRole('button', { name: 'Sign out', exact: true }).first().click()
+  await page.waitForTimeout(800)
+
+  /*
+    Checked rather than assumed.
+
+    This used to reach straight for the sheet's button, so a build with no
+    confirmation at all made Playwright wait thirty seconds and then throw —
+    killing the run with a stack trace instead of a named failure, before a
+    single assertion had been recorded. The exit code was still non-zero, but
+    "the suite crashed" and "sign-out stopped asking" are not the same message,
+    and only one of them tells you what broke.
+  */
+  const sheet = page.locator('[role="dialog"]').getByRole('button', { name: /^Sign out$/ })
+  if ((await sheet.count()) === 0) {
+    ok(false, 'signing out asks for confirmation before it acts')
+    return
+  }
+  await sheet.last().click()
+  await page.waitForTimeout(1400)
+}
+
 async function pick(page, match) {
   await page.getByRole('button', { name: /Try the demo/ }).click()
   await page.waitForTimeout(700)
@@ -78,10 +108,7 @@ for (const from of ['/more', '/leads', '/pipeline']) {
   await dismissTour(page)
   await page.waitForTimeout(900)
 
-  await page.goto(`${BASE}/more`, { waitUntil: 'domcontentloaded' })
-  await page.waitForTimeout(1000)
-  await page.getByRole('button', { name: /^Sign out$/ }).click()
-  await page.waitForTimeout(1200)
+  await signOut(page)
 
   await page.goto(`${BASE}${from}`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(900)
@@ -93,6 +120,56 @@ for (const from of ['/more', '/leads', '/pipeline']) {
   // And it is the Overview, not merely the right URL.
   const body = await page.locator('body').innerText()
   ok(/Open pipeline|Deals won/.test(body), `and the Overview is what renders (${from})`)
+
+  await ctx.close()
+}
+
+/* --- signing out lives in the header ----------------------------------------- */
+
+console.log('\n--- sign out ---')
+
+{
+  const { ctx, page } = await signIn('/', /Client Admin|Petrov|Admin/)
+  await dismissTour(page)
+  await page.waitForTimeout(1000)
+
+  const header = page.locator('header').first()
+  ok(
+    (await header.getByRole('button', { name: 'Sign out', exact: true }).count()) > 0,
+    'the header offers it',
+  )
+
+  // And it is gone from where it used to be.
+  await page.goto(`${BASE}/more`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1200)
+  const moreText = await page.locator('body').innerText()
+  ok(!/Sign out/.test(moreText), 'and More no longer carries a second one')
+
+  await page.goto(`${BASE}/today`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1200)
+
+  /*
+    It asks. This is the assertion that matters: the control moved from the
+    bottom of a settings screen to a permanent header beside a chip people tap
+    to check sync, and signing out clears photos that have not uploaded.
+  */
+  await page.locator('header').first().getByRole('button', { name: 'Sign out', exact: true }).click()
+  await page.waitForTimeout(800)
+  const asking = await page.locator('body').innerText()
+  ok(/Sign out\?/.test(asking), 'and asks before doing it')
+  ok(/photos/i.test(asking), 'saying what signing out clears', 'visits, notes and photos')
+  ok(
+    (await page.getByRole('button', { name: /Stay signed in/ }).count()) > 0,
+    'with a way to back out',
+  )
+
+  // Backing out leaves you signed in.
+  await page.getByRole('button', { name: /Stay signed in/ }).click()
+  await page.waitForTimeout(900)
+  ok(
+    (await page.locator('header').first().innerText()).includes('Petrov'),
+    'and backing out keeps you signed in',
+  )
 
   await ctx.close()
 }

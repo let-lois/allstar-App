@@ -310,10 +310,22 @@ const jsonRoute = (status, body) => (route) =>
   await page.waitForTimeout(1500)
   await dismissTour(page)
 
-  await page.goto(`${BASE}/more`, { waitUntil: 'domcontentloaded' })
-  await page.waitForTimeout(600)
-  await page.getByRole('button', { name: /^Sign out$/ }).click()
+  /*
+    From the header, and through the confirmation. Sign out moved off More when
+    it moved into the header on the two home screens; it asks first, because it
+    is now one tap from a chip people press to check sync and it clears photos
+    that have not uploaded.
+  */
+  await page.goto(`${BASE}/today`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(900)
+  await page.locator('header').first().getByRole('button', { name: 'Sign out', exact: true }).click()
+  await page.waitForTimeout(700)
+  await page
+    .locator('[role="dialog"], .fixed')
+    .getByRole('button', { name: /^Sign out$/ })
+    .last()
+    .click()
+  await page.waitForTimeout(1200)
 
   ok((await page.locator('input[type="email"]').count()) === 1, 'sign out returns to the sign-in screen')
 
