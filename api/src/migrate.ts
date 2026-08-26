@@ -119,6 +119,69 @@ const MIGRATIONS: Migration[] = [
     statements: ['ALTER TABLE users ADD COLUMN avatar_url TEXT'],
     skipIfColumn: { table: 'users', column: 'avatar_url' },
   },
+  {
+    /*
+      Connecting a company's own CRM. Mirrors schema.sql — see the commentary
+      there for why each of these three tables exists.
+
+      The two unique indexes are the load-bearing part. Without the reverse one
+      on `integration_links`, two of our leads can both claim the same remote
+      record and an inbound webhook has no single answer to "which lead is
+      this". Without the partial one on `integration_outbox`, a rep correcting
+      an outcome three times sends three times.
+    */
+    id: '006-integrations',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS client_integrations (
+         client_id     TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+         provider      TEXT NOT NULL,
+         auth_type     TEXT NOT NULL DEFAULT 'pit',
+         access_token  TEXT NOT NULL,
+         refresh_token TEXT,
+         expires_at    INTEGER,
+         location_id   TEXT,
+         config        TEXT NOT NULL DEFAULT '{}',
+         status        TEXT NOT NULL DEFAULT 'active',
+         last_ok_at    INTEGER,
+         last_error    TEXT,
+         last_error_at INTEGER,
+         created_at    INTEGER NOT NULL,
+         updated_at    INTEGER NOT NULL,
+         PRIMARY KEY (client_id, provider)
+       )`,
+      `CREATE TABLE IF NOT EXISTS integration_links (
+         client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+         provider    TEXT NOT NULL,
+         kind        TEXT NOT NULL,
+         local_id    TEXT NOT NULL,
+         remote_id   TEXT NOT NULL,
+         created_at  INTEGER NOT NULL,
+         updated_at  INTEGER NOT NULL,
+         PRIMARY KEY (client_id, provider, kind, local_id)
+       )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS integration_links_remote
+         ON integration_links(client_id, provider, kind, remote_id)`,
+      `CREATE TABLE IF NOT EXISTS integration_outbox (
+         id              TEXT PRIMARY KEY,
+         client_id       TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+         provider        TEXT NOT NULL,
+         event           TEXT NOT NULL,
+         payload         TEXT NOT NULL,
+         dedupe_key      TEXT,
+         status          TEXT NOT NULL DEFAULT 'pending',
+         attempts        INTEGER NOT NULL DEFAULT 0,
+         next_attempt_at INTEGER NOT NULL,
+         last_error      TEXT,
+         created_at      INTEGER NOT NULL,
+         sent_at         INTEGER
+       )`,
+      `CREATE INDEX IF NOT EXISTS integration_outbox_due
+         ON integration_outbox(status, next_attempt_at)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS integration_outbox_dedupe
+         ON integration_outbox(client_id, provider, dedupe_key)
+         WHERE dedupe_key IS NOT NULL AND status = 'pending'`,
+    ],
+  },
 ]
 
 async function hasColumn(
