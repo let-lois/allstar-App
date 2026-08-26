@@ -260,13 +260,17 @@ export function periodLabel(period: Period, now: number | Date = Date.now()): st
  * So history supplies the days *before* today and `live` supplies today, which
  * also means a synced today cannot be counted twice.
  *
- * Money is deliberately absent. The history table's `pipelineValue` is not a
- * daily figure — it holds a running lifetime total of everything the rep has
- * ever won, stamped onto whichever day the write happened — so adding it up
- * over a week produces a number with no meaning. `revenue` is therefore 0 for
- * anything but today, and the revenue award suppresses itself as a result,
- * which is the correct outcome: an award nobody can earn is better than one
- * handed out on a number that is wrong.
+ * Money used to be deliberately absent. The history table's money column was
+ * not a daily figure — it held a running lifetime total of everything the rep
+ * had ever won, stamped onto whichever day the write happened — so adding it up
+ * over a week produced a number with no meaning. `revenue` was pinned to 0 for
+ * anything but today and the revenue award suppressed itself, which was the
+ * right call on a number that was wrong.
+ *
+ * The column now holds money closed on that day, so it can be summed like every
+ * other column here, and a week can be won on revenue like it can on doors. The
+ * award reappears on its own: `awards()` only ever asked for the highest
+ * non-zero value, and the value is no longer always zero.
  */
 export function boardFor(
   period: Period,
@@ -301,6 +305,7 @@ export function boardFor(
     rep.conversations += row.conversations
     rep.appointments += row.appointments
     rep.sales += row.sold
+    rep.revenue += row.closedValue
   }
 
   for (const rep of input.live) {
@@ -310,6 +315,7 @@ export function boardFor(
     acc.conversations += rep.conversations
     acc.appointments += rep.appointments
     acc.sales += rep.sales
+    acc.revenue += rep.revenue
   }
 
   return [...byRep.values()]

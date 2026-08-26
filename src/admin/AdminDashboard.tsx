@@ -92,7 +92,7 @@ export function AdminDashboard() {
           label="Deals won"
           value={totals.sold.toLocaleString()}
           delta={totals.soldDelta}
-          sub={`${moneyFull(totals.pipelineValue)} closed`}
+          sub={`${moneyFull(totals.closedValue)} closed`}
         />
       </div>
 
@@ -168,7 +168,7 @@ export function AdminDashboard() {
                 <td className="nums px-3 py-2.5 text-right">{r.quotes}</td>
                 <td className="nums px-3 py-2.5 text-right">{r.sold}</td>
                 <td className="nums px-5 py-2.5 text-right font-semibold text-good">
-                  {money(r.pipelineValue)}
+                  {money(r.closedValue)}
                 </td>
               </tr>
             ))}

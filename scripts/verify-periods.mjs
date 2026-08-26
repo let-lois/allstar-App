@@ -56,7 +56,7 @@ const stat = (repId, day, over = {}) => ({
   appointments: 0,
   quotes: 0,
   sold: 0,
-  pipelineValue: 0,
+  closedValue: 0,
   ...over,
 })
 
@@ -169,23 +169,65 @@ console.log('\n--- who appears ---')
   ok(board.find((r) => r.id === 'b')?.knocks === 0, 'at zero')
 }
 
-/* --- money stays out of it ---------------------------------------------------- */
+/* --- money over a period ------------------------------------------------------- */
 
 console.log('\n--- money ---')
 
 {
   /*
-   * `pipelineValue` in the history table is not a daily figure — it holds a
-   * running lifetime total of everything the rep has ever won, stamped onto
-   * whichever day the write happened. Summing it over a week produces a number
-   * with no meaning, so the period board carries no money at all and the
-   * revenue award suppresses itself.
-   */
-  const rich = [stat('a', '2026-08-17', { knocks: 1, pipelineValue: 250_000 })]
-  const week = boardFor('week', { live: [rep('a', 'Ana Diaz')], history: rich, now: wed })[0]
-  ok(week.revenue === 0, 'a week carries no revenue, because the history cannot answer it')
+    This block used to assert the opposite, and was right to.
+
+    The history table's money column held a running lifetime total of everything
+    a rep had ever won, stamped onto whichever day the write happened, so
+    summing it over a week produced a number with no meaning. The board pinned
+    revenue to 0 for anything but today and the revenue award suppressed itself
+    — the correct call on a number that was wrong.
+
+    The column now holds money closed on that day, so it sums like every other
+    column and a week can be won on revenue like it can on doors.
+  */
+  const days = [
+    stat('a', '2026-08-17', { knocks: 1, sold: 1, closedValue: 12_000 }),
+    stat('a', '2026-08-18', { knocks: 1, sold: 1, closedValue: 8_000 }),
+    // Before the window — must not be counted.
+    stat('a', '2026-08-14', { knocks: 1, sold: 1, closedValue: 500_000 }),
+  ]
+  const today = rep('a', 'Ana Diaz', { revenue: 5_000, sales: 1 })
+  const week = boardFor('week', { live: [today], history: days, now: wed })[0]
+
+  ok(week.revenue === 25_000, 'a week sums the money closed on each of its days', `${week.revenue}`)
+  ok(
+    week.revenue !== 500_000 && week.revenue !== 525_000,
+    'and a sale from before the window stays outside it',
+  )
+
   const prizes = awards([week])
-  ok(!prizes.some((p) => p.key === 'revenue'), 'so no revenue award is handed out on a wrong number')
+  ok(prizes.some((p) => p.key === 'revenue'), 'so a week can now be won on revenue')
+
+  /*
+    Today's money comes from the phone, not from history — the same rule the
+    door counts follow, and for the same reason: a rep working with no signal
+    has a morning that exists only on their device. Counting today from both
+    sides would double it.
+  */
+  const synced = boardFor('week', {
+    live: [today],
+    history: [...days, stat('a', dayKey(wed), { knocks: 20, sold: 1, closedValue: 5_000 })],
+    now: wed,
+  })[0]
+  ok(synced.revenue === 25_000, 'and today is not counted twice once the server knows about it', `${synced.revenue}`)
+
+  // The rule the awards have always had: nothing is awarded on nothing.
+  const dry = boardFor('week', {
+    live: [rep('b', 'Ben Cole')],
+    history: [stat('b', '2026-08-17', { knocks: 40 })],
+    now: wed,
+  })[0]
+  ok(dry.revenue === 0, 'a week with no sales carries no revenue')
+  ok(
+    !awards([dry]).some((p) => p.key === 'revenue'),
+    'and still hands out no trophy for it',
+  )
 }
 
 /* --- it is still the same board ------------------------------------------------ */

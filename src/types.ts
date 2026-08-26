@@ -290,7 +290,7 @@ export interface DailyStat {
   appointments: number
   quotes: number
   sold: number
-  pipelineValue: number
+  closedValue: number
 }
 
 /* ---------------------------------------------------------------------------
