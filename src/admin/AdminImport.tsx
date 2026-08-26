@@ -12,6 +12,7 @@ import {
 } from '../lib/csv'
 import {
   ApiError,
+  apiAssignProperties,
   apiGeocode,
   apiImport,
   apiUsers,
@@ -72,6 +73,18 @@ export default function AdminImport() {
 
   const [reps, setReps] = useState<TeamUserDTO[]>([])
   const [assignRepId, setAssignRepId] = useState('')
+
+  /*
+    A second rep picker, for after the fact.
+
+    Separate state from `assignRepId` on purpose: that one is a choice made
+    before the import and left blank on the path this exists to rescue. Reusing
+    it would pre-fill this with the empty answer that caused the problem.
+  */
+  const [afterRepId, setAfterRepId] = useState('')
+  const [assigning, setAssigning] = useState(false)
+  const [assignedNotice, setAssignedNotice] = useState<string | null>(null)
+  const [assignError, setAssignError] = useState<string | null>(null)
   const [territoryName, setTerritoryName] = useState('')
 
   const [busy, setBusy] = useState<string | null>(null)
@@ -114,6 +127,42 @@ export default function AdminImport() {
   }
 
   /* --- stage 2 → 3: apply the mapping --------------------------------- */
+
+  /** Hand the leads this import just wrote to one person. */
+  async function assignImported() {
+    const token = liveToken()
+    const ids = result?.ids ?? []
+    if (!token || !afterRepId || ids.length === 0) return
+    setAssigning(true)
+    setAssignError(null)
+    setAssignedNotice(null)
+    try {
+      // The endpoint caps a request at 500 ids, the same ceiling the import
+      // chunks on, so a large import is assigned in the same shape it arrived.
+      const CHUNK = 500
+      let assigned = 0
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const res = await apiAssignProperties(token, {
+          propertyIds: ids.slice(i, i + CHUNK),
+          repId: afterRepId,
+        })
+        assigned += res.assigned ?? 0
+      }
+      // The count is the server's, not the length of what was sent: a lead
+      // deleted between importing and assigning is not one that got assigned.
+      setResult((r) => (r ? { ...r, unassigned: Math.max(0, (r.unassigned ?? 0) - assigned) } : r))
+      setAssignedNotice(
+        `${assigned.toLocaleString()} assigned. They arrive on that rep's phone at the next sync.`,
+      )
+      await refreshFromServer()
+    } catch (err) {
+      setAssignError(
+        err instanceof ApiError ? err.message : 'Could not assign them. The leads are still there.',
+      )
+    } finally {
+      setAssigning(false)
+    }
+  }
 
   function prepare() {
     const out: PreparedRow[] = rows.map((row, i) => {
@@ -277,6 +326,10 @@ export default function AdminImport() {
         }
         if (res.territoryUnmatched != null) {
           totals.territoryUnmatched = (totals.territoryUnmatched ?? 0) + res.territoryUnmatched
+        }
+        if (res.ids?.length) totals.ids = [...(totals.ids ?? []), ...res.ids]
+        if (res.unassigned != null) {
+          totals.unassigned = (totals.unassigned ?? 0) + res.unassigned
         }
         setProgress({ done: Math.min(i + CHUNK, importable.length), total: importable.length })
       }
@@ -570,6 +623,99 @@ export default function AdminImport() {
               tone={result.rejected.length + unplaced.length + noAddress.length ? 'warn' : 'muted'}
             />
           </div>
+
+          {/*
+            The thing that otherwise goes unsaid.
+
+            A rep's phone only ever receives leads assigned to them — that is
+            deliberate, and it is what stops a five-thousand-lead database
+            syncing onto every handset. The consequence nobody warns you about
+            is that an import with no rep picked produces a console showing five
+            hundred healthy new leads and five hundred phones showing nothing,
+            with no error anywhere. The first person to notice is a rep saying
+            the app is broken.
+
+            So it is said here, in the one moment somebody is holding the intent
+            and can act on it in a single tap.
+          */}
+          {/*
+            Kept on screen once it has been acted on, rather than unmounting.
+
+            Assigning drops the count to zero, and the first version of this
+            hid the whole block the moment it did — taking the confirmation
+            with it. The warning simply vanished, which reads as the page
+            losing its place rather than as the job being done.
+          */}
+          {(!!result.unassigned || assignedNotice) && (
+            <div
+              className={`mt-4 rounded-card border p-4 ${
+                result.unassigned ? 'border-warn/40 bg-warn/5' : 'border-good/40 bg-good/5'
+              }`}
+            >
+              {!result.unassigned && assignedNotice ? (
+                <p className="text-sm font-semibold text-good">{assignedNotice}</p>
+              ) : (
+                <>
+              <p className="text-sm font-semibold text-warn">
+                {(result.unassigned ?? 0).toLocaleString()} lead{result.unassigned === 1 ? '' : 's'}{' '}
+                {result.unassigned === 1 ? 'is' : 'are'} assigned to nobody
+              </p>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                Reps only see leads assigned to them, so until somebody owns{' '}
+                {result.unassigned === 1 ? 'it' : 'these'} {result.unassigned === 1 ? 'it' : 'they'}{' '}
+                will not appear on any phone.
+              </p>
+
+              {reps.length > 0 ? (
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <label className="min-w-[220px] flex-1">
+                    <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">
+                      Assign them to
+                    </span>
+                    <select
+                      value={afterRepId}
+                      onChange={(e) => setAfterRepId(e.target.value)}
+                      className="field h-[46px] w-full"
+                    >
+                      <option value="">— pick somebody —</option>
+                      {reps.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <Button
+                    size="sm"
+                    disabled={!afterRepId || assigning || !result.ids?.length}
+                    onClick={() => void assignImported()}
+                  >
+                    {assigning ? 'Assigning…' : 'Assign'}
+                  </Button>
+                  {assignedNotice && (
+                    <span className="text-xs font-medium text-good">{assignedNotice}</span>
+                  )}
+                  {assignError && <span className="text-xs font-medium text-bad">{assignError}</span>}
+                </div>
+              ) : (
+                <p className="mt-2 text-[13px] text-ink-mute">
+                  Invite somebody to the team first, then assign these from the Leads screen.
+                </p>
+              )}
+
+              {!result.ids?.length && (
+                /*
+                  An older Worker does not return the ids, so the offer cannot
+                  target this import. Saying where to go beats a dead button.
+                */
+                <p className="mt-2 text-[13px] text-ink-mute">
+                  Assign them from the Leads screen — they are the ones showing “Nobody”.
+                </p>
+              )}
+                </>
+              )}
+            </div>
+          )}
 
           {result.territoryMatched != null &&
             result.territoryMatched + (result.territoryUnmatched ?? 0) > 0 && (

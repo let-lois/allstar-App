@@ -308,3 +308,24 @@ export function useTerritories(properties: Property[]): TerritoryRow[] {
       .sort((a, b) => a.id.localeCompare(b.id))
   }, [properties])
 }
+
+/**
+ * Leads nobody is going to see.
+ *
+ * A rep's phone only ever receives leads assigned to them, which is deliberate
+ * — it is what stops a five-thousand-lead database syncing onto every handset.
+ * The cost is a state with no symptom: leads sitting in the account, counted in
+ * every total, on nobody's phone, with nothing anywhere saying so. The first
+ * person to notice is a rep reporting that the app is broken.
+ *
+ * Closed-out leads are excluded on purpose. A `won` or `lost` lead with no
+ * owner is finished business, not work waiting to be handed out, and counting
+ * it would leave a number that can never reach zero — which is a number people
+ * stop reading.
+ */
+export function useUnassigned(properties: Property[]): { count: number; total: number } {
+  return useMemo(() => {
+    const open = properties.filter((p) => !['won', 'lost', 'dnc'].includes(p.status))
+    return { count: open.filter((p) => !p.assignedRepId).length, total: open.length }
+  }, [properties])
+}
