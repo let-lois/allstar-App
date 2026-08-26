@@ -9,6 +9,16 @@ interface Props {
   right?: ReactNode
   /** Sits directly under the title — filter chips, segmented controls. */
   below?: ReactNode
+  /**
+   * Replaces the visible title block — a profile photo and who is signed in.
+   *
+   * The `title` is still required and still rendered, for screen readers only.
+   * A page needs a heading whether or not it is drawn: swapping the visible h1
+   * for a person's name would make "Platform" disappear from the document
+   * outline, and the outline is how somebody navigating by heading finds out
+   * what screen they are on.
+   */
+  identity?: ReactNode
 }
 
 /**
@@ -18,7 +28,7 @@ interface Props {
  * Note what is *not* here — no primary action in the top-right. Anything the
  * rep actually does lives at the bottom of the screen, in thumb range.
  */
-export function TopBar({ title, subtitle, back, right, below }: Props) {
+export function TopBar({ title, subtitle, back, right, below, identity }: Props) {
   const nav = useNavigate()
   return (
     <header className="pad-top z-20 shrink-0 border-b border-line bg-surface/95 backdrop-blur">
@@ -33,13 +43,22 @@ export function TopBar({ title, subtitle, back, right, below }: Props) {
           </button>
         )}
         <div className={`min-w-0 flex-1 ${back ? 'pl-0.5' : 'pl-3'}`}>
-          {/* -0.01em: at 17px semibold the default tracking reads loose against
-              the tighter display sizes used for numbers on the same screens. */}
-          <h1 className="truncate text-[17px] font-semibold leading-tight tracking-[-0.01em]">
-            {title}
-          </h1>
-          {subtitle && (
-            <p className="truncate text-[12.5px] leading-tight text-ink-mute">{subtitle}</p>
+          {identity ? (
+            <>
+              <h1 className="sr-only">{title}</h1>
+              {identity}
+            </>
+          ) : (
+            <>
+              {/* -0.01em: at 17px semibold the default tracking reads loose against
+                  the tighter display sizes used for numbers on the same screens. */}
+              <h1 className="truncate text-[17px] font-semibold leading-tight tracking-[-0.01em]">
+                {title}
+              </h1>
+              {subtitle && (
+                <p className="truncate text-[12.5px] leading-tight text-ink-mute">{subtitle}</p>
+              )}
+            </>
           )}
         </div>
         {right && <div className="flex shrink-0 items-center gap-1 pr-2">{right}</div>}

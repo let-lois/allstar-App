@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { DEMO_USERS } from '../data/seed'
 import type { Role } from '../types'
@@ -28,6 +29,7 @@ const ROLE_BLURB: Record<Role, string> = {
  * keyboard hints set so the email field doesn't autocapitalise.
  */
 export function Login() {
+  const nav = useNavigate()
   const signInLive = useAppStore((s) => s.signInLive)
   const signInDemo = useAppStore((s) => s.signInDemo)
   const sessionExpired = useAppStore((s) => s.sessionExpired)
@@ -50,12 +52,28 @@ export function Login() {
     setError(null)
     try {
       await signInLive(email, password)
+      home()
     } catch (err) {
       setError(messageFor(err))
     } finally {
       setBusy(false)
     }
   }
+
+  /*
+    Signing in lands on the home tab, whatever the address bar said.
+
+    Nothing used to navigate here at all — the app simply re-rendered around a
+    user, on whichever URL happened to be current. Sign out from More and back
+    in, and you arrive on More; open a bookmarked lead after a session expires
+    and you arrive there. For a rep that is merely odd. For an office role it
+    means missing the Overview entirely, which is the one screen the whole role
+    is built around.
+
+    `/today` for everybody: it is Today for a rep and the Overview for the
+    office, which is what "home" means for each of them.
+  */
+  const home = () => nav('/today', { replace: true })
 
   /*
     The login used to hard-code its own dark ground while the rest of the app was
@@ -223,7 +241,7 @@ export function Login() {
                 {DEMO_USERS.map((u) => (
                   <li key={u.id}>
                     <button
-                      onClick={() => void signInDemo(u.id)}
+                      onClick={() => void signInDemo(u.id).then(home)}
                       className="metal metal-dark press focusable flex min-h-[68px] w-full items-center gap-3 rounded-card px-4 text-left"
                     >
                       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface-tint text-sm font-semibold text-accent-strong">

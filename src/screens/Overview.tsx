@@ -13,6 +13,7 @@ import { money, relative } from '../lib/format'
 import { drain } from '../lib/sync'
 import { useTeamStats, useTeamTotals } from '../store/teamStats'
 import { IconChevron } from '../components/nav/icons'
+import { ROLE_LABEL } from '../lib/roles'
 import type { Role } from '../types'
 
 /**
@@ -29,6 +30,14 @@ export function Overview({ role }: { role: Role }) {
   const { user, properties, activity, appointments, refreshFromServer } = useAppStore()
   const teamStats = useTeamStats()
   const totals = useTeamTotals()
+
+  /* Two letters from the name, the same rule the roster uses. */
+  const initials = (user?.name ?? '?')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
 
   const todayStart = useMemo(() => {
     const d = new Date()
@@ -79,14 +88,40 @@ export function Overview({ role }: { role: Role }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/*
+        Who is signed in, rather than what the screen is called.
+
+        The screen's name and the date used to sit here, and on the one screen an
+        admin opens first that is the least useful thing the header could hold —
+        they know which app they opened. What they cannot see anywhere else on a
+        phone is which account they are signed in as, which matters most for the
+        roles that can be signed into more than one.
+
+        The name is not lost: it is still the h1, read by anything navigating by
+        heading. The date moved down to sit opposite "Today", where it is a label
+        on the numbers underneath it rather than chrome.
+      */}
       <TopBar
         title={isSuper ? 'Platform' : user?.clientName ?? 'Overview'}
-        subtitle={new Date().toLocaleDateString('en-US', {
-          weekday: 'long',
-          month: 'long',
-          day: 'numeric',
-        })}
         right={<SyncBadge />}
+        identity={
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Avatar
+              initials={initials}
+              name={user?.name ?? ''}
+              src={user?.avatarUrl}
+              size="sm"
+            />
+            <span className="min-w-0">
+              <span className="block truncate text-[15px] font-semibold leading-tight">
+                {user?.name ?? 'Signed in'}
+              </span>
+              <span className="block truncate text-[12px] leading-tight text-ink-mute">
+                {user ? `${ROLE_LABEL[user.role]} · ${user.clientName}` : ''}
+              </span>
+            </span>
+          </div>
+        }
       />
 
       <PullToRefresh
@@ -107,7 +142,20 @@ export function Overview({ role }: { role: Role }) {
             should" from the top third of the screen.
           */}
           <section className="section">
-            <SectionHeader title="Today" standalone />
+            <SectionHeader
+            title="Today"
+            standalone
+            /* The date the numbers below belong to. */
+            right={
+              <span className="shrink-0 text-[12.5px] text-ink-mute">
+                {new Date().toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </span>
+            }
+          />
             <div className="grid grid-cols-2 gap-3" data-tour="overview-kpis">
               <KpiCard label="Doors" value={totals.knocks} />
               <KpiCard
