@@ -223,6 +223,8 @@ try {
     await stop()
     const health = await start(config, { withKey: false })
     ok(health.config?.migrations?.state !== 'failed', 'the database is ready')
+    // How an operator tells "not configured yet" from "broken", from a browser.
+    ok(health.config?.integrationKey === false, 'health reports the missing encryption key')
 
     const setup = await call('/setup', {
       method: 'POST',
@@ -265,7 +267,8 @@ try {
   }
 
   /* ===== phase 2: the real thing ========================================= */
-  await start(writeConfig('integrations-smoke.toml'), { withKey: true })
+  const keyed = await start(writeConfig('integrations-smoke.toml'), { withKey: true })
+  ok(keyed.config?.integrationKey === true, 'and reports it once the key is set')
 
   const session = (
     await (await call('/api/auth/login', { method: 'POST', body: JSON.stringify(OWNER) })).json()
