@@ -18,6 +18,18 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS clients (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
+  -- The company's own calendar. An IANA zone name; see api/src/day.ts.
+  --
+  -- Reporting is bucketed by day, and a day has to belong to the company rather
+  -- than to a server in Virginia or a phone in a truck. Cut in UTC — as this
+  -- was — a Texas crew's evening doors land in tomorrow's row while the reps'
+  -- own phones count them as today, and nobody sees an error because there
+  -- isn't one: just two answers to "which day is this".
+  --
+  -- Defaults to UTC so applying this migration changes nothing. A company gets
+  -- the fix when it sets its zone, which is also the moment its history wants
+  -- rebuilding.
+  timezone    TEXT NOT NULL DEFAULT 'UTC',
   created_at  INTEGER NOT NULL
 );
 

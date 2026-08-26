@@ -182,6 +182,19 @@ const MIGRATIONS: Migration[] = [
          WHERE dedupe_key IS NOT NULL AND status = 'pending'`,
     ],
   },
+  {
+    /*
+      The company's own calendar — see api/src/day.ts for why a day cannot be
+      cut in UTC for a business whose people work evenings.
+
+      Defaults to UTC, so applying this changes no existing behaviour and
+      re-buckets no existing row. A company opts into the fix by setting its
+      zone, and that is the moment its reporting history wants rebuilding.
+    */
+    id: '007-client-timezone',
+    statements: [`ALTER TABLE clients ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC'`],
+    skipIfColumn: { table: 'clients', column: 'timezone' },
+  },
 ]
 
 async function hasColumn(

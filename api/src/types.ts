@@ -44,6 +44,14 @@ export interface SessionUser {
   id: string
   clientId: string
   clientName: string
+  /**
+   * The company's IANA timezone — the calendar its reporting days are cut on.
+   *
+   * On the session rather than fetched where it is needed: every query that
+   * resolves a session already joins `clients`, so it rides along for free, and
+   * the alternative is an extra lookup inside the write path of every visit.
+   */
+  timezone: string
   email: string
   name: string
   role: Role

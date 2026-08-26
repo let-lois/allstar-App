@@ -1,3 +1,4 @@
+import { dayKeyIn, dayRangeIn } from './day'
 import type { Env, Mutation, MutationResult, SessionUser } from './types'
 
 /**
@@ -34,12 +35,7 @@ const OUTCOME_TO_STATUS: Record<string, string | undefined> = {
 // column on the triggering visit's outcome, which was half of why that column
 // was wrong.
 
-function dayKey(ts: number): string {
-  const d = new Date(ts)
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
-    d.getUTCDate(),
-  ).padStart(2, '0')}`
-}
+
 
 /** Narrow an unknown payload without trusting it. */
 function obj(payload: unknown): Record<string, unknown> {
@@ -523,10 +519,19 @@ async function bumpDailyStats(
   propertyId: string,
 ): Promise<void> {
   if (!outcome) return
-  const day = dayKey(at)
+  /*
+    The company's calendar, not the server's. This used to cut the day in UTC,
+    which put a Texas crew's evening doors into tomorrow's row while their own
+    phones counted them as today — two answers to "which day is this", neither
+    of them an error.
+
+    The range comes from `dayRangeIn` rather than start + 24h, because a day
+    with a clock change in it is 23 or 25 hours long and a fixed day would drop
+    an hour of work on one date a year and double-count an hour on another.
+  */
+  const day = dayKeyIn(at, user.timezone)
   const id = `${user.id}:${day}`
-  const dayStart = Date.parse(`${day}T00:00:00Z`)
-  const dayEnd = dayStart + 86_400_000
+  const [dayStart, dayEnd] = dayRangeIn(day, user.timezone)
 
   const agg = await env.DB.prepare(
     `SELECT COUNT(*) AS knocks,

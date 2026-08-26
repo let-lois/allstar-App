@@ -65,6 +65,7 @@ export async function applyBootstrap(dto: BootstrapDTO, mergeOnly = false): Prom
   // Settings are a single blob, not a store — kept in `meta` so it survives the
   // same wipe rules as everything else without needing a table of one row.
   if (dto.settings) await db.metaSet('allstar.settings', dto.settings)
+  if (dto.timezone) await db.metaSet('allstar.timezone', dto.timezone)
 
   /*
     The roster, same treatment and for the same reason as settings: it is one
@@ -122,4 +123,5 @@ export async function wipeCachedData(): Promise<void> {
   // One company's outcome labels have no business showing up under another's
   // account on a shared phone.
   await db.metaSet('allstar.settings', undefined)
+  await db.metaSet('allstar.timezone', undefined)
 }

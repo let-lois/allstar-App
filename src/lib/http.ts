@@ -459,7 +459,30 @@ export interface BootstrapDTO {
    */
   team?: { id: string; name: string; role: string; active: boolean }[]
   settings?: Record<string, unknown>
+  /**
+   * The company's IANA timezone — the calendar its reporting days are cut on.
+   *
+   * Optional for the same reason `team` is: a Worker deployed before this field
+   * existed does not send it, and a client that assumed it would break against
+   * the old server for as long as the two are out of step.
+   */
+  timezone?: string
   serverTime: number
+}
+
+/**
+ * Set the calendar reporting days are cut on.
+ *
+ * Its own endpoint rather than part of the settings blob, and the server draws
+ * the same line: that blob is labels and order, where a rename must never
+ * rewrite what history means. This changes which day past work belongs to.
+ */
+export function apiSetTimezone(token: string, timezone: string) {
+  return request<{ ok: true; timezone: string }>('/api/settings/timezone', {
+    method: 'POST',
+    body: { timezone },
+    token,
+  })
 }
 
 export function apiSaveSettings(token: string, settings: unknown) {

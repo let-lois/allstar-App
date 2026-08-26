@@ -34,6 +34,7 @@ export type AuditAction =
   | 'territory.created'
   | 'leads.imported'
   | 'settings.changed'
+  | 'settings.timezone'
   | 'integration.connected'
   | 'integration.disconnected'
 

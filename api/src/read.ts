@@ -1,4 +1,5 @@
 import { readSettings } from './settings'
+import { dayKeyIn } from './day'
 import type { Env, SessionUser } from './types'
 
 /**
@@ -13,19 +14,16 @@ import type { Env, SessionUser } from './types'
  * filter is a convenience, never a security boundary.
  */
 
-function dayKey(ts: number): string {
-  const d = new Date(ts)
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
-    d.getUTCDate(),
-  ).padStart(2, '0')}`
-}
+
 
 const isRep = (u: SessionUser) => u.role === 'field_rep'
 
 export async function bootstrap(env: Env, user: SessionUser) {
-  const today = dayKey(Date.now())
+  // The company's calendar — the same one the rows were bucketed on. Asking in
+  // UTC would clip or over-serve a day at each end of the window.
+  const today = dayKeyIn(Date.now(), user.timezone)
   // 30 days back is what the console's longest range needs; the phone ignores it.
-  const historyFrom = dayKey(Date.now() - 30 * 86_400_000)
+  const historyFrom = dayKeyIn(Date.now() - 30 * 86_400_000, user.timezone)
 
   const scope = isRep(user) ? 'AND assigned_rep_id = ?2' : ''
   const bind = (base: unknown[]) => (isRep(user) ? [...base, user.id] : base)
@@ -271,6 +269,16 @@ export async function bootstrap(env: Env, user: SessionUser) {
       closedValue: s.pipeline_value,
     })),
     serverTime: Date.now(),
+    /*
+      The calendar the rows above were bucketed on.
+
+      Sent so the client can agree with the server about which day it is rather
+      than guessing from the device. A phone in the right timezone would get the
+      same answer; a phone that has travelled, or is set wrong, would not — and
+      a rep whose board disagrees with their manager's console has no way to
+      tell which one is lying.
+    */
+    timezone: user.timezone,
   }
 }
 

@@ -91,6 +91,14 @@ interface AppState {
   /** How this company has customised the field app. Empty means defaults. */
   settings: ClientSettings
   /**
+   * The company's reporting calendar, as the server sees it.
+   *
+   * Empty until a bootstrap has landed. The field app does not yet bucket its
+   * own screens by it — a phone in the company's own timezone gets the same
+   * answer — but the console needs it to show and change it.
+   */
+  timezone: string
+  /**
    * Everyone with an account. The real roster in live mode, the seeded team in
    * demo mode — so every screen that names a rep reads from one place.
    */
@@ -230,6 +238,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   territories: {},
   team: [],
   settings: {},
+  timezone: '',
   activeVisitId: null,
 
   async boot() {
@@ -337,6 +346,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         db.all<DailyStat>('dailyStats'),
       ])
     const settings = (await db.metaGet<ClientSettings>('allstar.settings')) ?? {}
+    const timezone = (await db.metaGet<string>('allstar.timezone')) ?? ''
     /*
       The profile photo, keyed by user id rather than folded into the session.
 
@@ -410,6 +420,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             }))
           : seedTeam(mode),
       settings,
+      timezone,
       activeVisitId: openVisit?.id ?? null,
     })
   },

@@ -11,6 +11,7 @@ import {
 } from '../lib/settings'
 import { STATUS } from './charts/tokens'
 import { IntegrationsPanel } from './IntegrationsPanel'
+import { ReportingPanel } from './ReportingPanel'
 
 /**
  * Client configuration.
@@ -26,7 +27,7 @@ import { IntegrationsPanel } from './IntegrationsPanel'
  * break a year of history.
  */
 export function AdminSettings() {
-  const [tab, setTab] = useState<'outcomes' | 'notes' | 'photos' | 'integrations'>('outcomes')
+  const [tab, setTab] = useState<'outcomes' | 'notes' | 'photos' | 'reporting' | 'integrations'>('outcomes')
 
   const stored = useAppStore((s) => s.settings)
   const mode = useAppStore((s) => s.mode)
@@ -97,6 +98,7 @@ export function AdminSettings() {
             ['outcomes', 'Visit outcomes'],
             ['notes', 'Note templates'],
             ['photos', 'Photo categories'],
+            ['reporting', 'Reporting'],
             ['integrations', 'Integrations'],
           ] as const
         ).map(([key, label]) => (
@@ -303,6 +305,7 @@ export function AdminSettings() {
         </section>
       )}
 
+      {tab === 'reporting' && <ReportingPanel />}
       {tab === 'integrations' && <IntegrationsPanel />}
 
       {/*
@@ -310,7 +313,7 @@ export function AdminSettings() {
         do. It would be actively wrong under the integrations tab — nothing
         there is a label, and none of it reaches a rep's phone.
       */}
-      {tab !== 'integrations' && (
+      {tab !== 'integrations' && tab !== 'reporting' && (
       <p className="mt-4 rounded-field bg-surface-sunk px-4 py-3 text-xs leading-relaxed text-ink-mute">
         {mode === 'live'
           ? 'These are the words reps see. Codes never change, so renaming an outcome keeps every report and every pipeline rule intact — and a rep whose phone is offline keeps the last labels it synced.'
