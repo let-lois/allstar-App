@@ -34,10 +34,12 @@ export type AuditAction =
   | 'territory.created'
   | 'leads.imported'
   | 'settings.changed'
+  | 'integration.connected'
+  | 'integration.disconnected'
 
 export interface AuditEntry {
   action: AuditAction
-  targetType?: 'user' | 'territory' | 'import' | 'settings'
+  targetType?: 'user' | 'territory' | 'import' | 'settings' | 'integration'
   targetId?: string
   /** The name as it read at the time. Never resolved later. */
   targetLabel?: string

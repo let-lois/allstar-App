@@ -497,3 +497,55 @@ export function apiDirections(
     timeoutMs: 9_000,
   })
 }
+
+/* --- a company's own CRM --------------------------------------------------- */
+//
+// No endpoint here returns a stored token, and there is deliberately none that
+// could: connecting means pasting a fresh one, which is why there is no "edit".
+
+export interface IntegrationDTO {
+  provider: string
+  connected: boolean
+  locationId?: string
+  /** `••••abcd` — enough to tell two tokens apart and useless to a thief. */
+  tokenHint?: string
+  status?: string
+  lastOkAt?: number
+  lastError?: string
+  lastErrorAt?: number
+  config?: Record<string, unknown>
+}
+
+export interface IntegrationQueueDTO {
+  pending: number
+  failed: number
+  oldestPendingAt?: number
+}
+
+export function apiIntegrations(token: string) {
+  return request<{ integration: IntegrationDTO; queue: IntegrationQueueDTO }>(
+    '/api/integrations',
+    { token },
+  )
+}
+
+export function apiConnectGhl(token: string, input: { token: string; locationId: string }) {
+  return request<{ integration: IntegrationDTO; locationName?: string }>(
+    '/api/integrations/ghl',
+    {
+      method: 'POST',
+      token,
+      body: input,
+      // The Worker asks GoHighLevel whether the credential works before storing
+      // it, so this waits on a third party rather than on us.
+      timeoutMs: 20_000,
+    },
+  )
+}
+
+export function apiDisconnectGhl(token: string) {
+  return request<{ ok: true; dropped: number }>('/api/integrations/ghl', {
+    method: 'DELETE',
+    token,
+  })
+}

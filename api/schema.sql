@@ -318,3 +318,85 @@ CREATE TABLE IF NOT EXISTS sessions (
   revoked     INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS sessions_by_user ON sessions(user_id);
+
+-- ---------------------------------------------------------------------------
+-- Outbound integrations (GoHighLevel, and whatever follows it).
+--
+-- Three tables, and the reason for each is worth stating because two of them
+-- look like overhead until the first thing goes wrong.
+--
+-- `client_integrations` holds the connection. Tokens are stored ENCRYPTED —
+-- see api/src/secretbox.ts. The key lives as a Worker secret and never in D1,
+-- so a stolen database dump is useless on its own. That matters here more than
+-- it would elsewhere: a dump of this table would otherwise hand over write
+-- access to every customer's CRM, and we now take backups of it nightly.
+--
+-- `integration_links` maps our ids to theirs, permanently and in both
+-- directions. Without it every retry creates a duplicate contact in the
+-- customer's CRM, and an inbound webhook has no way to find the record it is
+-- talking about. It is the least interesting table here and the one whose
+-- absence would do the most damage.
+--
+-- `integration_outbox` is the same pattern as the phone's outbox, for the same
+-- reason: the other end will be down sometimes, and work must not be lost when
+-- it is. A rep's sync must never wait on a third party, so nothing is sent
+-- inline — it is queued here and drained separately.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS client_integrations (
+  client_id     TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  provider      TEXT NOT NULL,               -- 'ghl'
+  -- 'pit' is a Private Integration Token: a static bearer token the customer
+  -- generates in their own sub-account. 'oauth' is the marketplace flow and is
+  -- not built yet — the columns exist so adding it needs no migration.
+  auth_type     TEXT NOT NULL DEFAULT 'pit',
+  access_token  TEXT NOT NULL,               -- encrypted, never returned by any API
+  refresh_token TEXT,                        -- encrypted; oauth only
+  expires_at    INTEGER,                     -- oauth only
+  location_id   TEXT,                        -- the customer's GHL sub-account
+  config        TEXT NOT NULL DEFAULT '{}',  -- stage/field mapping, JSON
+  status        TEXT NOT NULL DEFAULT 'active',
+  last_ok_at    INTEGER,
+  last_error    TEXT,
+  last_error_at INTEGER,
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  PRIMARY KEY (client_id, provider)
+);
+
+CREATE TABLE IF NOT EXISTS integration_links (
+  client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  provider    TEXT NOT NULL,
+  kind        TEXT NOT NULL,   -- 'contact' | 'opportunity' | 'appointment'
+  local_id    TEXT NOT NULL,   -- ours
+  remote_id   TEXT NOT NULL,   -- theirs
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL,
+  PRIMARY KEY (client_id, provider, kind, local_id)
+);
+-- Both directions have to be unique. Without this second index two of our
+-- properties could each claim the same remote contact, and an inbound webhook
+-- would have no single answer to "which lead is this?".
+CREATE UNIQUE INDEX IF NOT EXISTS integration_links_remote
+  ON integration_links(client_id, provider, kind, remote_id);
+
+CREATE TABLE IF NOT EXISTS integration_outbox (
+  id              TEXT PRIMARY KEY,
+  client_id       TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  provider        TEXT NOT NULL,
+  event           TEXT NOT NULL,
+  payload         TEXT NOT NULL,
+  -- Collapses a burst of edits to the same thing into one send. A rep who
+  -- corrects an outcome three times should cost the customer's API quota once.
+  dedupe_key      TEXT,
+  status          TEXT NOT NULL DEFAULT 'pending',  -- pending | sent | failed
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at INTEGER NOT NULL,
+  last_error      TEXT,
+  created_at      INTEGER NOT NULL,
+  sent_at         INTEGER
+);
+CREATE INDEX IF NOT EXISTS integration_outbox_due
+  ON integration_outbox(status, next_attempt_at);
+CREATE UNIQUE INDEX IF NOT EXISTS integration_outbox_dedupe
+  ON integration_outbox(client_id, provider, dedupe_key) WHERE dedupe_key IS NOT NULL AND status = 'pending';
