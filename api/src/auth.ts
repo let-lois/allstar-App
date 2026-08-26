@@ -87,7 +87,8 @@ export async function login(
 ): Promise<LoginResult | null> {
   const row = await env.DB.prepare(
     `SELECT u.id, u.client_id, u.email, u.name, u.role, u.phone,
-            u.password_hash, u.password_salt, u.active, c.name AS client_name
+            u.password_hash, u.password_salt, u.active, c.name AS client_name,
+            c.timezone AS client_tz
        FROM users u JOIN clients c ON c.id = u.client_id
       WHERE lower(u.email) = lower(?1)`,
   )
@@ -124,6 +125,7 @@ export async function login(
       id: String(row.id),
       clientId: String(row.client_id),
       clientName: String(row.client_name),
+    timezone: String(row.client_tz ?? 'UTC'),
       email: String(row.email),
       name: String(row.name),
       role: String(row.role) as SessionUser['role'],
@@ -134,7 +136,8 @@ export async function login(
 
 export async function resolveSession(env: Env, token: string): Promise<SessionUser | null> {
   const row = await env.DB.prepare(
-    `SELECT u.id, u.client_id, u.email, u.name, u.role, u.phone, c.name AS client_name
+    `SELECT u.id, u.client_id, u.email, u.name, u.role, u.phone, c.name AS client_name,
+            c.timezone AS client_tz
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        JOIN clients c ON c.id = u.client_id
@@ -148,6 +151,7 @@ export async function resolveSession(env: Env, token: string): Promise<SessionUs
     id: String(row.id),
     clientId: String(row.client_id),
     clientName: String(row.client_name),
+    timezone: String(row.client_tz ?? 'UTC'),
     email: String(row.email),
     name: String(row.name),
     role: String(row.role) as SessionUser['role'],
