@@ -47,9 +47,14 @@ jobs:
           path: dist
           retention-days: 1
 
-  # Arithmetic, colour maths and class-name checks. No browser, no server, so
-  # these do not wait on the build and come back in about a minute.
+  # Arithmetic, colour maths and class-name checks. No browser and no server —
+  # but not no build. `verify:classes` reads the emitted CSS out of dist/assets
+  # to find class names the bundler kept, so "does not need a browser" and "does
+  # not need a build" are two different facts and this job assumed they were one.
+  # It cost the first CI run a red check. The artifact is already built, so the
+  # only price is waiting for it.
   pure:
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -59,6 +64,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
       - run: node scripts/ci/run.mjs --pure
 
   # Twenty-five browser gates, dealt into four piles. Serially this is most of
