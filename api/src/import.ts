@@ -346,6 +346,20 @@ export async function importProperties(
     territoryId,
     territoryMatched,
     territoryUnmatched,
+    /*
+      Which leads this import wrote, so the console can offer to assign exactly
+      them without guessing.
+
+      Ids are minted here rather than by the caller, so without this the screen
+      that knows somebody just imported 500 leads has no way to act on them —
+      which is how 500 leads end up assigned to nobody, invisible on every
+      phone, while the console reports a healthy import. Bounded already: the
+      endpoint refuses more than MAX_IMPORT_ROWS per request, and the response
+      is smaller than the request that produced it.
+    */
+    ids,
+    /** How many of them nobody is going to see, unless something says so. */
+    unassigned: assignRepId ? 0 : total,
   }
 
   await record(env, user, {
