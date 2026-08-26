@@ -1,4 +1,5 @@
 import { record } from './audit'
+import { isValidZone } from './day'
 import { canInvite } from './invites'
 import type { Env, SessionUser } from './types'
 
@@ -131,4 +132,54 @@ export async function writeSettings(
   })
 
   return { ok: true, settings }
+}
+
+/* --- the company's calendar ------------------------------------------------ */
+
+/**
+ * Set the timezone reporting days are cut on.
+ *
+ * Its own endpoint rather than a field in the settings blob, and deliberately.
+ * That blob is presentation only — labels and order, by its own rule, so that a
+ * rename can never rewrite what a year of history means. This is the opposite
+ * kind of value: changing it changes which day past work belongs to. Putting it
+ * in the same bag as a button label would be filing a structural fact under
+ * cosmetics.
+ *
+ * Changing it does NOT re-bucket existing rows. Those were written on the old
+ * calendar and stay there until history is rebuilt from `visits`, which is a
+ * deliberate, separate, backed-up operation — see scripts/rebuild-daily-stats.mjs.
+ * Silently rewriting a year of reporting because somebody opened a dropdown is
+ * not a thing this should be able to do.
+ */
+export async function writeTimezone(
+  env: Env,
+  actor: SessionUser,
+  tz: unknown,
+): Promise<{ ok: true; timezone: string } | { error: string; status: number }> {
+  if (!canInvite(actor)) return { error: 'Not permitted.', status: 403 }
+
+  const value = typeof tz === 'string' ? tz.trim() : ''
+  if (!isValidZone(value)) {
+    return {
+      error: `"${value.slice(0, 60)}" is not a timezone this server recognises.`,
+      status: 400,
+    }
+  }
+
+  const before = actor.timezone
+  await env.DB.prepare('UPDATE clients SET timezone = ?2 WHERE id = ?1')
+    .bind(actor.clientId, value)
+    .run()
+
+  await record(env, actor, {
+    action: 'settings.timezone',
+    targetType: 'settings',
+    targetLabel: 'Reporting timezone',
+    // Both sides, because "when did the numbers move and by how much" is the
+    // question somebody asks three months later.
+    detail: { from: before, to: value },
+  })
+
+  return { ok: true, timezone: value }
 }

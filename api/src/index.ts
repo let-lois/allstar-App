@@ -44,7 +44,7 @@ import {
   type RequestContext,
 } from './observe'
 import { applyMutations } from './mutations'
-import { readSettings, writeSettings } from './settings'
+import { readSettings, writeSettings, writeTimezone } from './settings'
 import {
   canManageIntegrations,
   connectIntegration,
@@ -611,6 +611,18 @@ export default {
       if (path === '/api/integrations/ghl' && req.method === 'DELETE') {
         if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
         const result = await disconnectIntegration(env, user)
+        return json(result, 200, cors)
+      }
+
+      /*
+        The company's calendar. Readable by anyone signed in — the field app has
+        to agree with the server about which day it is — and writable only by an
+        admin.
+      */
+      if (path === '/api/settings/timezone' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await writeTimezone(env, user, body.timezone)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 200, cors)
       }
 
