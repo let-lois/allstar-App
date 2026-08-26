@@ -1,5 +1,6 @@
 import { chromium } from 'playwright'
 import { chromiumPath } from './lib/browser.mjs'
+import { button } from './lib/app.mjs'
 import { dismissTour } from './lib/tour.mjs'
 
 /**
@@ -476,7 +477,8 @@ await page.waitForTimeout(300)
 
   await page4.goto(`${BASE}/property/p1`, { waitUntil: 'domcontentloaded' })
   await page4.waitForTimeout(700)
-  await page4.getByRole('button', { name: /Start visit/ }).first().click()
+  // Same cold-boot deep link as verify:login, and it failed the same way on CI.
+  ;(await button(page4, /Start visit/, { why: 'a deep link into a property after a cold boot' })).click()
   await page4.waitForTimeout(900)
 
   const grid = (await page4.locator('body').innerText()).replace(/\s+/g, ' ')
