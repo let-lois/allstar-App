@@ -29,7 +29,10 @@ const OUTCOME_TO_STATUS: Record<string, string | undefined> = {
   do_not_contact: 'dnc',
 }
 
-const GOOD_OUTCOMES = new Set(['interested', 'appointment', 'quote_requested', 'sold'])
+// The outcomes that count as a real conversation live inline in the aggregate
+// query below. The Set that used to sit here existed only to gate the money
+// column on the triggering visit's outcome, which was half of why that column
+// was wrong.
 
 function dayKey(ts: number): string {
   const d = new Date(ts)
@@ -537,17 +540,37 @@ async function bumpDailyStats(
     .bind(user.id, dayStart, dayEnd)
     .first<Record<string, number>>()
 
-  const value = GOOD_OUTCOMES.has(outcome)
-    ? ((
-        await env.DB.prepare(
-          `SELECT COALESCE(SUM(opportunity_value), 0) AS v
-             FROM properties
-            WHERE assigned_rep_id = ?1 AND status = 'won'`,
-        )
-          .bind(user.id)
-          .first<{ v: number }>()
-      )?.v ?? 0)
-    : 0
+  /*
+    Money closed on this day, and nothing else.
+
+    This used to ask "what has this rep won, ever" — no date bound at all, on a
+    row that is scoped to one day — and then wrap the answer in a check on the
+    triggering visit's outcome. Two things followed. Every day's row held the
+    rep's career total, so `useRangeTotals` summing the column across a window
+    turned one $10k sale into roughly $10k times days-worked. And because the
+    last write of the day won the upsert, a day whose final logged door went
+    badly stored 0 instead. Not a cumulative series with a known correction —
+    noise that skewed high, on the one console figure a manager quotes out loud.
+
+    So it is the same shape as the aggregate above: bounded to this day, read
+    from the visits that actually happened, and independent of which visit
+    triggered the recompute. It also now matches what the field app computes for
+    today in `teamStats.revenue`, so the console and the phone stop answering
+    the same question differently.
+  */
+  const value =
+    (
+      await env.DB.prepare(
+        `SELECT COALESCE(SUM(p.opportunity_value), 0) AS v
+           FROM visits v
+           JOIN properties p ON p.id = v.property_id
+          WHERE v.rep_id = ?1
+            AND v.ended_at >= ?2 AND v.ended_at < ?3
+            AND v.outcome = 'sold'`,
+      )
+        .bind(user.id, dayStart, dayEnd)
+        .first<{ v: number }>()
+    )?.v ?? 0
   void propertyId
 
   await env.DB.prepare(

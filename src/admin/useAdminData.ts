@@ -84,7 +84,7 @@ export interface RangeTotals {
   appointments: number
   quotes: number
   sold: number
-  pipelineValue: number
+  closedValue: number
   /**
    * Percentage change vs the immediately preceding window of equal length, or
    * `undefined` when there is no comparable window. Distinguishing those two
@@ -138,7 +138,7 @@ export function useRangeTotals(range: RangeKey, repId?: string): RangeTotals {
       appointments: sum(current, 'appointments'),
       quotes: sum(current, 'quotes'),
       sold: sum(current, 'sold'),
-      pipelineValue: sum(current, 'pipelineValue'),
+      closedValue: sum(current, 'closedValue'),
       knocksDelta: hasComparison ? pctChange(knocks, pKnocks) : undefined,
       conversationsDelta: hasComparison ? pctChange(conversations, pConversations) : undefined,
       contactRateDelta: hasComparison ? pctChange(rate, pRate) : undefined,
@@ -159,7 +159,7 @@ export interface RepRangeRow {
   appointments: number
   quotes: number
   sold: number
-  pipelineValue: number
+  closedValue: number
 }
 
 /** Per-rep leaderboard over the selected range. */
@@ -189,7 +189,7 @@ export function useRepRangeRows(range: RangeKey): RepRangeRow[] {
         appointments: mine.reduce((a, r) => a + r.appointments, 0),
         quotes: mine.reduce((a, r) => a + r.quotes, 0),
         sold: mine.reduce((a, r) => a + r.sold, 0),
-        pipelineValue: mine.reduce((a, r) => a + r.pipelineValue, 0),
+        closedValue: mine.reduce((a, r) => a + r.closedValue, 0),
       }
     }).sort((a, b) => b.sold - a.sold || b.conversations - a.conversations)
   }, [stats, range, reps])

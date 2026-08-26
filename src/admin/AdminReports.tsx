@@ -64,7 +64,15 @@ export function AdminReports() {
     .sort((a, b) => b.value - a.value)
 
   const csv = useMemo(() => {
-    const header = 'rep,day,knocks,conversations,appointments,quotes,sold,pipeline_value'
+    /*
+      `closed_value`, not `pipeline_value`. The old header named a thing this
+      column has never actually held: pipeline is money in play, this is money
+      committed. Anyone with a saved spreadsheet keyed on the old name has to
+      remap one column — worth it, because the figure under that header used to
+      be a lifetime total summed across days and was wrong by an order of
+      magnitude.
+    */
+    const header = 'rep,day,knocks,conversations,appointments,quotes,sold,closed_value'
     const lines = stats
       .filter((s) => !scopedRep || s.repId === scopedRep)
       .map((s) => {
@@ -77,7 +85,7 @@ export function AdminReports() {
           s.appointments,
           s.quotes,
           s.sold,
-          s.pipelineValue,
+          s.closedValue,
         ].join(',')
       })
     return [header, ...lines].join('\n')
@@ -139,7 +147,7 @@ export function AdminReports() {
         />
         <StatTile
           label="Closed"
-          value={moneyFull(totals.pipelineValue)}
+          value={moneyFull(totals.closedValue)}
           delta={totals.soldDelta}
           sub={`${totals.sold} deals`}
         />
@@ -197,7 +205,7 @@ export function AdminReports() {
                 <td className="nums px-3 py-2.5 text-right">{r.quotes}</td>
                 <td className="nums px-3 py-2.5 text-right">{r.sold}</td>
                 <td className="nums px-5 py-2.5 text-right font-semibold text-good">
-                  {money(r.pipelineValue)}
+                  {money(r.closedValue)}
                 </td>
               </tr>
             ))}
@@ -229,7 +237,7 @@ export function AdminReports() {
                 {repRows.reduce((a, r) => a + r.sold, 0)}
               </td>
               <td className="nums px-5 py-2.5 text-right text-good">
-                {money(repRows.reduce((a, r) => a + r.pipelineValue, 0))}
+                {money(repRows.reduce((a, r) => a + r.closedValue, 0))}
               </td>
             </tr>
           </tfoot>

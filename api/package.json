@@ -24,7 +24,9 @@
     "smoke:photos": "node scripts/smoke-photos.mjs",
     "backup": "node scripts/backup.mjs",
     "verify:restore": "node scripts/verify-restore.mjs",
-    "smoke:integrations": "node scripts/smoke-integrations.mjs"
+    "smoke:integrations": "node scripts/smoke-integrations.mjs",
+    "smoke:money": "node scripts/smoke-closed-value.mjs",
+    "db:rebuild-closed": "node scripts/rebuild-closed-value.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",

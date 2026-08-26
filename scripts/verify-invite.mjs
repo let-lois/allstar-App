@@ -621,7 +621,7 @@ await page.waitForTimeout(300)
     territories: [],
     dailyStats: [
       { id: 'd1', repId: 'u_rep_real', day: new Date().toISOString().slice(0, 10),
-        knocks: 42, conversations: 11, appointments: 3, quotes: 2, sold: 1, pipelineValue: 21000 },
+        knocks: 42, conversations: 11, appointments: 3, quotes: 2, sold: 1, closedValue: 21000 },
     ],
     serverTime: Date.now(),
   }))

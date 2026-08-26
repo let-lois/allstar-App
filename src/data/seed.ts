@@ -516,7 +516,7 @@ function buildHistory(now: number, todayActivity: ActivityEvent[]): DailyStat[] 
           appointments: mine.filter((a) => a.outcome === 'appointment').length,
           quotes: mine.filter((a) => a.outcome === 'quote_requested').length,
           sold: mine.filter((a) => a.outcome === 'sold').length,
-          pipelineValue: mine.filter((a) => a.outcome === 'sold').length * 14_000,
+          closedValue: mine.filter((a) => a.outcome === 'sold').length * 14_000,
         })
         continue
       }
@@ -537,7 +537,7 @@ function buildHistory(now: number, todayActivity: ActivityEvent[]): DailyStat[] 
         appointments,
         quotes,
         sold,
-        pipelineValue: sold * Math.round(11_000 + rand() * 9_000),
+        closedValue: sold * Math.round(11_000 + rand() * 9_000),
       })
     }
   }
