@@ -45,6 +45,13 @@ import {
 } from './observe'
 import { applyMutations } from './mutations'
 import { readSettings, writeSettings } from './settings'
+import {
+  canManageIntegrations,
+  connectIntegration,
+  disconnectIntegration,
+  queueDepth,
+  readIntegration,
+} from './integrations'
 import { checkLoginRate, clearFailures, recordFailure } from './ratelimit'
 import { directions } from './directions'
 import { invitePage, setupPage } from './pages'
@@ -567,6 +574,39 @@ export default {
           categories: PHOTO_CATEGORY_KEYS,
         })
         if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
+      }
+
+      /* --- a company's own CRM ---------------------------------------------- */
+      //
+      // Read is admin-only even though it returns no token: the queue depth and
+      // the last error say things about a company's operations that a field rep
+      // has no reason to see.
+      if (path === '/api/integrations' && req.method === 'GET') {
+        if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const [status, queue] = await Promise.all([
+          readIntegration(env, user.clientId),
+          queueDepth(env, user.clientId),
+        ])
+        return json({ integration: status, queue }, 200, cors)
+      }
+
+      // Write-only by design — there is no endpoint that hands a stored token
+      // back, so connecting means pasting a fresh one rather than editing.
+      if (path === '/api/integrations/ghl' && req.method === 'POST') {
+        if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await connectIntegration(env, user, {
+          token: typeof body.token === 'string' ? body.token : '',
+          locationId: typeof body.locationId === 'string' ? body.locationId : '',
+        })
+        if (!result.ok) return json({ error: result.error }, result.status, cors)
+        return json({ integration: result.status, locationName: result.locationName }, 200, cors)
+      }
+
+      if (path === '/api/integrations/ghl' && req.method === 'DELETE') {
+        if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const result = await disconnectIntegration(env, user)
         return json(result, 200, cors)
       }
 
