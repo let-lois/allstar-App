@@ -358,6 +358,10 @@ export default {
               // free Census geocoder, which places a house on the right block.
               maptilerGeocoding: !!env.MAPTILER_API_KEY,
               googleGeocoding: !!env.GOOGLE_MAPS_API_KEY,
+              // Absent means connecting a CRM is refused rather than storing a
+              // customer's token in plaintext — a deliberate refusal, but one
+              // that is otherwise indistinguishable from a broken integration.
+              integrationKey: !!env.INTEGRATION_KEY,
               appUrl: env.APP_URL ?? null,
               allowedOrigins: (env.ALLOWED_ORIGINS ?? '').split(',').filter(Boolean).length,
               // Surfaced because a failed migration is otherwise invisible:
