@@ -71,6 +71,7 @@ export function SectionHeader({
   action,
   onAction,
   standalone,
+  right,
   className = '',
 }: {
   title: string
@@ -78,6 +79,9 @@ export function SectionHeader({
   action?: string
   onAction?: () => void
   standalone?: boolean
+  /** A plain node opposite the title — a date, a total. Not a control; use
+   *  `action` for anything tappable so it keeps the focus ring and hit size. */
+  right?: ReactNode
   className?: string
 }) {
   return (
@@ -92,6 +96,7 @@ export function SectionHeader({
           <span className="nums text-[13px] font-medium text-ink-mute">{count}</span>
         )}
       </h2>
+      {right}
       {action && (
         <button
           onClick={onAction}
