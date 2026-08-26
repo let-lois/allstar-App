@@ -47,7 +47,6 @@ export function More() {
     requestTour()
   }
   const user = useAppStore((s) => s.user)
-  const signOut = useAppStore((s) => s.signOut)
   const resetDemoData = useAppStore((s) => s.resetDemoData)
   const mode = useAppStore((s) => s.mode)
   const properties = useAppStore((s) => s.properties)
@@ -453,17 +452,12 @@ export function More() {
             </Collapsible>
           )}
 
-          <Button
-            variant="tint"
-            full
-            size="lg"
-            onClick={() => void signOut()}
-            /* Red label on the teal face: 5.3:1, so it stays the colour that
-               says what it does rather than blending into the group. */
-            className="mt-1 !text-bad"
-          >
-            Sign out
-          </Button>
+          {/*
+            Sign out has moved to the header, beside the sync chip, on Today and
+            the Overview — one tap from the screen each role starts on rather
+            than at the bottom of this one. It asks before it acts now, which it
+            did not need to when it was this far down.
+          */}
 
           <p className="pb-1 pt-1 text-center text-[12.5px] text-ink-mute">
             Allstar Field · v0.1.0

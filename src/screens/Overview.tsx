@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { SyncBadge } from '../components/sync/SyncBadge'
+import { SignOutButton } from '../components/nav/SignOutButton'
 import { PullToRefresh } from '../components/ui/PullToRefresh'
 import { SectionHeader } from '../components/ui/Card'
 import { KpiCard } from '../components/ui/KpiCard'
@@ -103,7 +104,12 @@ export function Overview({ role }: { role: Role }) {
       */}
       <TopBar
         title={isSuper ? 'Platform' : user?.clientName ?? 'Overview'}
-        right={<SyncBadge />}
+        right={
+          <>
+            <SignOutButton />
+            <SyncBadge />
+          </>
+        }
         identity={
           <div className="flex min-w-0 items-center gap-2.5">
             <Avatar
