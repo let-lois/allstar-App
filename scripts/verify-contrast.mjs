@@ -249,66 +249,67 @@ for (const [, name, hex] of swatches) at(hex, MAP_GROUND, AA_GRAPHIC, `${name} p
 console.log('\n--- structure ---')
 
 
-/* --- the lit panel edge ------------------------------------------------------ */
+/* --- the material a panel is made of ----------------------------------------- */
 //
-// A panel's edge is `--accent` at `--lit-edge`, over the panel's own gradient
-// fill, with a bloom around it. Three things at once, which is why the number
-// below is a floor rather than the whole account of it.
+// There is no contrast floor on a panel's edge here, and that is the change
+// worth explaining rather than the assertions themselves.
 //
-// It has been three different things in three days, and the history is the
-// reason the floor sits where it does:
+// The edge has been four things: a navy hairline at 1.40:1, invisible; a grey at
+// 3.20:1, rejected twice from the same screenshot; white at 16.84:1; a lit teal
+// at 5.04:1. Each time the line was doing the separating alone, so each time the
+// honest question was "is this line bright enough".
 //
-//   A navy hairline at 1.40:1 — invisible, and the complaint that started this.
-//   A grey at 3.20:1 — over the graphic floor, sound by every rule in this file,
-//     and rejected twice from the same screenshot as "still not visible".
-//   White at 16.84:1 — visible, and then out of place once the dock was lit.
+// It is glass now. A translucent fill over a blurred, saturated backdrop, a
+// hairline, and a shadow — three things sharing the job, which is how iOS gets
+// depth on a dark ground without drawing anything bright. Measuring the hairline
+// on its own would now be measuring a third of the answer and calling it the
+// whole one, and it would fail a design that works.
 //
-// So a floor at the 3:1 a non-text mark needs would pass the grey that was
-// already rejected. It sits at 4.5 instead: comfortably clear of that grey,
-// which is the only empirical data point here about what "too quiet" looks like
-// on a real phone.
+// So these assert the *material is present*. If somebody deletes the blur, the
+// hairline that is left is the 3.20:1 grey that was already rejected — this is
+// what notices.
 {
-  const litEdge = css.match(/--lit-edge:\s*([0-9.]+)/)?.[1]
-  if (!litEdge) throw new Error('--lit-edge not found in index.css')
+  const rule = (name) => css.match(new RegExp(`\\.${name}\\s*\\{[^}]*`))?.[0] ?? ''
 
-  const fillMid = css.match(/--lit-fill-mid:\s*(#[0-9a-fA-F]{6})/)?.[1]
-  if (!fillMid) throw new Error('--lit-fill-mid not found in index.css')
-
-  const edge = over(T['accent'], Number(litEdge), fillMid)
-
-  const PANEL_FLOOR = 4.5
-  const REJECTED_GREY = 3.2
-
-  const onFill = ratio(edge, fillMid)
-  ok(onFill >= PANEL_FLOOR,
-     'the lit panel edge clears the grey that was rejected on a real phone',
-     `${onFill.toFixed(2)} vs ${REJECTED_GREY} rejected`)
-
-  const onGround = ratio(edge, T['surface-sunk'])
-  ok(onGround >= PANEL_FLOOR, 'and reads against the ground the panel sits on', onGround.toFixed(2))
-
-  /*
-    Width and colour, read from the rule itself. A contrast number cannot see
-    either: `.card` losing `border: 2px` or being repainted in a flat grey both
-    leave every measurement above untouched, because they are measurements of a
-    token rather than of what the class actually draws.
-  */
-  const cardRule = css.match(/\.card\s*\{[^}]*/)?.[0] ?? ''
-  ok(/border:\s*2px solid rgb\(var\(--accent\)/.test(cardRule),
-     '.card draws that edge at 2px, in the accent, not as a hairline')
-  ok(/box-shadow:[^;]*var\(--lit-bloom\)/.test(cardRule),
-     'and carries the bloom, which is half of why a 5:1 edge reads at all')
+  for (const name of ['card', 'nav-dock']) {
+    const r = rule(name)
+    ok(r.length > 0, `.${name} exists to be measured`)
+    /*
+      Written to accept a token or a literal. The first draft demanded literals
+      and failed `.card`, which reaches for `var(--glass-blur)` — a gate that
+      insists on one spelling of the same value is a gate that fails a
+      refactor and teaches people to loosen it rather than read it.
+    */
+    ok(/backdrop-filter:[^;]*blur\([^;]*saturate\(/.test(r),
+       `.${name} is glass: blurred *and* saturated, not just blurred`)
+    ok(/background:\s*rgb\(var\(--surface\)\s*\/\s*(var\(--glass-fill\)|0?\.[0-9]+)\)/.test(r),
+       `.${name} is translucent, so there is something for the blur to do`)
+    ok(/border:\s*1px solid var\(--glass-hairline\)/.test(r),
+       `.${name} states its edge with the shared hairline`)
+    ok((r.match(/rgba\(0, 0, 0,/g) ?? []).length >= 2,
+       `.${name} carries a layered shadow, which is the third of the three`)
+  }
 
   /*
-    The dock stays the brightest thing on the screen. A dozen panels matching it
-    would take away the one signal that tells a thumb where the navigation is —
-    so the dock's edge is asserted *above* a panel's rather than equal to it.
+    Safari needs the prefix and will render a flat, opaque panel without it —
+    on the one platform this app is most used on. Easy to drop in a tidy-up,
+    invisible in any Chromium screenshot.
   */
-  const dockRule = css.match(/\.nav-dock\s*\{[^}]*/)?.[0] ?? ''
-  const dockAlpha = Number(dockRule.match(/border:\s*2px solid rgb\(var\(--accent\)\s*\/\s*([0-9.]+)\)/)?.[1])
-  ok(dockAlpha > Number(litEdge),
-     'the dock is still lit brighter than the panels around it',
-     `dock ${dockAlpha} vs panel ${litEdge}`)
+  for (const name of ['card', 'nav-dock']) {
+    ok(/-webkit-backdrop-filter:/.test(rule(name)),
+       `.${name} keeps the -webkit- prefix, or Safari renders it flat`)
+  }
+
+  /*
+    Teal is the accent now, not the edge. The selected orb is the one lit thing
+    in the navigation, and if it stops being lit the dock loses its only signal
+    for where you are.
+  */
+  const selected = css.match(/\.nav-dock \.nav-pill\[data-active='true'\][^{]*\{[^}]*/)?.[0] ?? ''
+  ok(/box-shadow:[^;]*rgb\(var\(--accent\)/.test(selected),
+     'the selected orb is still lit, which is where the accent went')
+  ok(!/rgb\(var\(--accent\)/.test(rule('card')),
+     'and a resting panel is not, so selection stays the only teal on the screen')
 }
 
 const lift = ratio(T['surface'], T['surface-sunk'])
