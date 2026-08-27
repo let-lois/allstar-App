@@ -346,6 +346,48 @@ ok(light.size > 20, `the light palette parses (${light.size} colour tokens)`)
   ok(!!version && version >= 'v6', 'the shell cache is bumped past the pre-theme version', version)
 }
 
+/* --- 3d. nothing translucent floats over the map ----------------------------- */
+//
+// The one class of legibility bug `verify:legibility` cannot reach, so it is
+// asserted from the source instead.
+//
+// That gate measures a control against what is painted behind it — and behind a
+// map control is a map *tile*, which is not in the DOM and is a different colour
+// at every zoom. Locally there is no Maps key at all, so the drawn fallback
+// renders instead, and its ground is a light token in the light theme. A
+// translucent control over it composites light, the dark label on it reads
+// fine, and the gate passes.
+//
+// On a real satellite tile the same control composites *dark* while its label
+// stays near-black. That is how SAT, + and − came out invisible in the light
+// theme after twelve screens had been measured clean.
+//
+// So: controls over the map take `.metal-map`, which is opaque and token-driven.
+// Nothing translucent belongs there.
+{
+  for (const file of ['GoogleFieldMap', 'FieldMap']) {
+    const src = fs.readFileSync(
+      new URL(`../src/components/map/${file}.tsx`, import.meta.url),
+      'utf8',
+    )
+    ok(
+      !/metal-quiet/.test(src),
+      `${file} keeps no translucent control over the map`,
+      /metal-quiet/.test(src) ? 'found metal-quiet' : undefined,
+    )
+    ok(/metal-map/.test(src), `${file} uses the opaque map-control face`)
+  }
+
+  /* And that face has to actually be opaque, in both themes. */
+  const rule = css.match(/\.metal-map\s*\{[^}]*/)?.[0] ?? ''
+  ok(rule.length > 0, 'the map-control face exists to be checked')
+  ok(
+    /--metal-top:\s*rgb\(var\(--surface/.test(rule) &&
+      /--metal-bottom:\s*rgb\(var\(--surface/.test(rule),
+    'and both its stops are opaque surface tokens rather than an alpha',
+  )
+}
+
 /* --- 4. the pre-paint snippet still agrees with the app ---------------------- */
 //
 // Duplicated on purpose: the snippet runs before any module exists, which is the
