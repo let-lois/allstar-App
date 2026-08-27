@@ -1092,6 +1092,32 @@
     --sheen: 0.07;
   }
 
+  /**
+   * A control that floats over the map.
+   *
+   * Opaque, and that is the whole point of it. `.metal-quiet` is translucent —
+   * correct for a chip on a page, where the page is a known colour. Over map
+   * imagery the colour behind is unknowable: a dark neighbourhood at one zoom, a
+   * bright roof at the next, and the control takes its face from whichever it
+   * happens to be over.
+   *
+   * That is how the SAT and zoom buttons came out dark-on-dark in the *light*
+   * theme — a translucent face over dark satellite imagery, carrying a label
+   * that had flipped to near-black with the theme.
+   *
+   * Both faces come from tokens, so one rule serves both themes: white on white
+   * in light, raised navy in dark, and legible over any tile in either.
+   *
+   * The same reasoning already applied to the sync badge, which is plated for
+   * exactly this reason. This is that lesson generalised to every control that
+   * sits on the map.
+   */
+  .metal-map {
+    --metal-top: rgb(var(--surface-raised));
+    --metal-bottom: rgb(var(--surface));
+    --metal-ring: var(--edge);
+  }
+
   /** Dark controls, for the login's near-black ground. */
   .metal-dark {
     @apply text-white;
