@@ -34,7 +34,7 @@ const T = {}
 for (const n of [
   'ink', 'ink-soft', 'ink-mute', 'ink-faint',
   'surface', 'surface-sunk', 'surface-tint', 'surface-field', 'surface-raised',
-  'line', 'line-soft', 'accent', 'accent-strong',
+  'line', 'line-soft', 'line-card', 'accent', 'accent-strong',
   'good', 'good-bg', 'warn', 'warn-bg', 'bad', 'bad-bg', 'info', 'info-bg',
 ]) T[n] = themeVar(n)
 
@@ -247,6 +247,45 @@ for (const [, name, hex] of swatches) at(hex, MAP_GROUND, AA_GRAPHIC, `${name} p
  * 6. The ground itself.
  * ---------------------------------------------------------------------- */
 console.log('\n--- structure ---')
+
+
+/* --- the two border strengths ------------------------------------------------ */
+//
+// A panel's edge and a hairline are different jobs and used to be the same
+// colour, which is why the Overview read as a wash: two columns of tiles whose
+// boundaries you had to hunt for on a phone held at arm's length.
+//
+// Both ends are pinned, because the reason they are separate tokens is a
+// constraint rather than a preference. Raising `--line` itself was the obvious
+// fix, and it repaints every chart: the axis is pinned to `--line` below, and
+// the seam assertion at the end of this block is what stops a divider growing
+// into a second outline around every row.
+const panelEdge = T['line-card']
+
+const panelOnCard = ratio(panelEdge, T['surface'])
+ok(panelOnCard >= AA_GRAPHIC,
+   'a panel edge clears the non-text floor against the card it encloses',
+   panelOnCard.toFixed(2))
+
+const panelOnGround = ratio(panelEdge, T['surface-sunk'])
+ok(panelOnGround >= AA_GRAPHIC,
+   'and against the ground it sits on',
+   panelOnGround.toFixed(2))
+
+const panelVsHairline = ratio(panelEdge, hairline)
+ok(panelVsHairline >= 2,
+   'the panel edge and the hairline are two strengths, not one repainted',
+   panelVsHairline.toFixed(2))
+
+/*
+  The hairline stays quiet, deliberately. It is a seam inside a surface — a
+  divider between rows, a chart axis — and a divider as loud as the box around it
+  turns a list into a grid. This is the assertion that stops somebody "fixing"
+  the dividers to match the border.
+*/
+ok(ratio(hairline, T['surface']) < AA_GRAPHIC,
+   'and the hairline stays a seam rather than becoming a second outline',
+   ratio(hairline, T['surface']).toFixed(2))
 const lift = ratio(T['surface'], T['surface-sunk'])
 ok(lift >= 1.04 && lift <= 1.35, 'a card lifts off the ground without jumping', lift.toFixed(2))
 ok(parseHex(T['surface-field']).reduce((a, b) => a + b) < parseHex(T['surface']).reduce((a, b) => a + b),
