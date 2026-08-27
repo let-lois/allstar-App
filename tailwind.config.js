@@ -80,12 +80,21 @@ export default {
           raised: 'rgb(var(--surface-raised) / <alpha-value>)',
         },
         /**
-         * The one border colour. A single hairline everywhere is what stops the
-         * interface reading as a grid of boxes — see the note on `.card`.
+         * Two border strengths, and which one a thing wears says what it is.
+         *
+         * `line` is the hairline: dividers inside a surface, chart axes, edges
+         * that are seams rather than outlines. `line-card` is the edge of a
+         * panel — a card, a KPI tile, a grouped list — and is four times the
+         * contrast, because the alternative was a screen of tiles whose
+         * boundaries you had to hunt for on a phone in daylight.
+         *
+         * The measurements and the reason they are separate tokens are on
+         * `--line-card` in `index.css`.
          */
         line: {
           DEFAULT: 'rgb(var(--line) / <alpha-value>)',
           soft: 'rgb(var(--line-soft) / <alpha-value>)',
+          card: 'rgb(var(--line-card) / <alpha-value>)',
         },
         /*
          * Teal *as text*, which is a different problem from teal as a fill.

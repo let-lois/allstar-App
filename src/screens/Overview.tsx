@@ -197,7 +197,7 @@ export function Overview({ role }: { role: Role }) {
           {isSuper && (
             <section className="section">
               <SectionHeader title="Clients" standalone />
-              <ul className="plate row-group -mx-4 sm:mx-0 sm:rounded-card sm:border">
+              <ul className="panel row-group">
                 {[
                   { name: 'Summit Exteriors', reps: 12, status: 'Healthy' },
                   { name: 'Bright Path Solar', reps: 28, status: 'Healthy' },
@@ -252,7 +252,7 @@ export function Overview({ role }: { role: Role }) {
               action="All"
               onAction={() => nav('/team')}
             />
-            <ul className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border" data-tour="overview-team">
+            <ul className="panel row-group" data-tour="overview-team">
               {teamStats.map((rep) => (
                 <li key={rep.id}>
                   <button
@@ -331,7 +331,7 @@ export function Overview({ role }: { role: Role }) {
           {upcoming.length > 0 && (
             <section className="section">
               <SectionHeader title="Upcoming" count={upcoming.length} standalone />
-              <ul className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+              <ul className="panel row-group">
                 {upcoming.map((a) => {
                   const p = properties[a.propertyId]
                   return (
@@ -362,7 +362,7 @@ export function Overview({ role }: { role: Role }) {
           {/* --- recent activity ------------------------------------------ */}
           <section className="section">
             <SectionHeader title="Live activity" standalone />
-            <ul className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+            <ul className="panel row-group">
               {activity.slice(0, 10).map((ev) => {
                 const def = outcomeByCode(ev.outcome)
                 return (
