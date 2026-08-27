@@ -92,7 +92,17 @@ export function AdminSettings() {
       title="Settings"
       description={`How the field app behaves for everyone at ${user?.clientName ?? 'your company'}`}
     >
-      <div className="mb-4 flex gap-1 border-b border-line">
+      {/*
+        Scrolls inside itself rather than widening the page.
+
+        This was a plain flex row, which was fine at three tabs and wrong at
+        five: the row grew past the viewport and took the whole console with it,
+        so dragging the tabs sideways panned the entire page and the last tab
+        looked like it had fallen off the edge. The same `snap-x-row` the
+        console's own top nav uses — a row that overflows must scroll in its own
+        box, never in the document.
+      */}
+      <div className="snap-x-row mb-4 border-b border-line">
         {(
           [
             ['outcomes', 'Visit outcomes'],
@@ -105,7 +115,7 @@ export function AdminSettings() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`focusable -mb-px min-h-[40px] border-b-2 px-4 text-sm font-semibold ${
+            className={`focusable -mb-px min-h-[40px] shrink-0 whitespace-nowrap border-b-2 px-4 text-sm font-semibold ${
               tab === key
                 ? 'border-brand-500 text-accent'
                 : 'border-transparent text-ink-mute hover:text-ink'
@@ -249,7 +259,13 @@ export function AdminSettings() {
                   onChange={(e) =>
                     setTemplates((prev) => prev.map((x, xi) => (xi === i ? e.target.value : x)))
                   }
-                  className="focusable min-h-[38px] flex-1 rounded-lg border border-line px-3 text-sm"
+                  /*
+                    `min-w-0` because `flex-1` alone does not let a flex child
+                    shrink past its intrinsic width, and an input's is about
+                    twenty characters. On a 320px screen the row refused to fit
+                    and pushed the whole panel wider than the pane.
+                  */
+                  className="focusable min-h-[38px] min-w-0 flex-1 rounded-lg border border-line px-3 text-sm"
                 />
                 <button
                   onClick={() => setTemplates((prev) => prev.filter((_, xi) => xi !== i))}
@@ -260,7 +276,7 @@ export function AdminSettings() {
               </li>
             ))}
           </ul>
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <Button
               size="sm"
               variant="secondary"
