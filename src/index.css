@@ -53,28 +53,31 @@
     /**
      * The edge of a *panel* — a card, a KPI tile, a grouped list.
      *
-     * 3.20:1 on a card and 3.53:1 on the ground, against the hairline's 1.40:1.
+     * White, and 2px wide at the call site. That is a deliberate, requested
+     * departure from the rest of this theme, which is built on hairlines: the
+     * brief for this screen is a phone in daylight, and a manager who cannot
+     * find the boundary of a tile at arm's length does not care that the edge is
+     * tasteful. 16.84:1 on a card and 18.57:1 on the ground, against the
+     * hairline's 1.40:1.
      *
-     * A separate token rather than a brighter `--line`, because `--line` has two
-     * other jobs and both of them want it quiet. It is the chart axis — pinned
-     * to it by `verify:contrast`, so raising it repaints every graph — and it is
-     * the divider *inside* a surface, where an edge as loud as the box around it
-     * turns a list into a grid. Both are asserted, in both directions.
+     * Two things this costs, both real and both accepted rather than missed:
      *
-     * There is also a stretch of the ramp the hairline cannot cross: the teal
-     * control ring is 2.37:1 on the ground and has to stay a measurable step
-     * above the hairline it replaced, so a `--line` brightened to roughly
-     * rgb(60–80) collides with the ring instead of clearing it. This value sits
-     * well past that (1.49 against the ring, floor 1.2) — but it is the reason
-     * "just nudge --line up a bit" is the one move that cannot work.
+     *   It out-shouts the teal control ring, which sits at 2.37:1 on the ground.
+     *   The ring is still the only *coloured* edge on the screen and that is now
+     *   the whole of its distinctness, so the resting/selected gap below matters
+     *   more than it did, not less.
      *
-     * That leaves panels reading *louder* in luminance than the teal ring at
-     * rest, which is fine and worth stating: the ring's prominence comes from
-     * being the only coloured edge on the screen, not from being the lightest
-     * one. A neutral grey at 3.2:1 and a teal at 2.37:1 do not compete because
-     * they are not the same kind of mark.
+     *   It makes the interface read as a grid of boxes, which the original card
+     *   note argued against. That argument lost on the Overview: two columns of
+     *   near-borderless tiles over four full-bleed lists read as one grey field.
+     *
+     * Still a separate token from `--line`, because `--line` has two other jobs
+     * that both want it quiet. It is the chart axis — pinned to it by
+     * `verify:contrast`, so raising it repaints every graph — and it is the
+     * divider *inside* a list, where an edge as loud as the box around it turns
+     * a list into a grid for real. Both directions are asserted.
      */
-    --line-card: 92 108 142;
+    --line-card: 255 255 255;
 
     /*
      * The teal every control is edged in.
@@ -215,7 +218,7 @@
    * the elevation.
    */
   .card {
-    @apply rounded-card border border-line-card bg-surface;
+    @apply rounded-card border-2 border-line-card bg-surface;
     /*
      * On a near-black ground a drop shadow is invisible — there is nothing
      * darker for it to be. What separates a card here is the hairline and the
@@ -225,7 +228,6 @@
      * pasted on.
      */
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.045),
       0 1px 2px rgba(0, 0, 0, 0.4),
       0 8px 24px rgba(0, 0, 0, 0.28);
   }
@@ -238,7 +240,7 @@
    * of five stacked rectangles.
    */
   .plate {
-    @apply border-y border-line-card bg-surface;
+    @apply border-y border-line bg-surface;
   }
 
   /**
@@ -256,7 +258,7 @@
    * the kind of detail that only shows up on a real thumb.
    */
   .panel {
-    @apply overflow-hidden rounded-card border border-line-card bg-surface;
+    @apply overflow-hidden rounded-card border-2 border-line-card bg-surface;
   }
 
   /**

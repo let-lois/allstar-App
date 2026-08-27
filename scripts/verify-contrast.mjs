@@ -262,15 +262,41 @@ console.log('\n--- structure ---')
 // into a second outline around every row.
 const panelEdge = T['line-card']
 
+/*
+  The floor here is deliberately far above the 3:1 a non-text mark needs.
+
+  A merely *adequate* panel edge is what this replaced, twice. The first attempt
+  measured 3.20:1 — comfortably over the graphic floor, sound by every rule in
+  this file, and still not what had been asked for: on the phone it read as a
+  grey app with faint boxes. The screen was rejected a second time before the
+  edge went white.
+
+  So the assertion is pinned near the top of the scale rather than at the
+  threshold. This is the number to argue with if the edge should soften — not
+  something to slide underneath while the gate stays green.
+*/
+const PANEL_FLOOR = 12
+
 const panelOnCard = ratio(panelEdge, T['surface'])
-ok(panelOnCard >= AA_GRAPHIC,
-   'a panel edge clears the non-text floor against the card it encloses',
+ok(panelOnCard >= PANEL_FLOOR,
+   'a panel edge is unmistakable against the card it encloses, not merely adequate',
    panelOnCard.toFixed(2))
 
 const panelOnGround = ratio(panelEdge, T['surface-sunk'])
-ok(panelOnGround >= AA_GRAPHIC,
+ok(panelOnGround >= PANEL_FLOOR,
    'and against the ground it sits on',
    panelOnGround.toFixed(2))
+
+/*
+  Width is half of "thick white border" and a colour check cannot see it.
+  Without this, dropping `border-2` leaves every measurement above untouched and
+  the gate green while the screen quietly goes back to hairlines.
+*/
+for (const cls of ['card', 'panel']) {
+  const rule = css.match(new RegExp(`\\.${cls}\\s*\\{[^}]*`))?.[0] ?? ''
+  ok(/border-2\s+border-line-card/.test(rule),
+     `.${cls} draws that edge at 2px, not as a hairline`)
+}
 
 const panelVsHairline = ratio(panelEdge, hairline)
 ok(panelVsHairline >= 2,
