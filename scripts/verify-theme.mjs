@@ -304,6 +304,48 @@ ok(light.size > 20, `the light palette parses (${light.size} colour tokens)`)
   )
 }
 
+/* --- 3c. the two things outside the stylesheet that still have to follow ----- */
+//
+// Google's tiles are rendered on their side and take nothing from `index.css`,
+// and the app shell is applied before any module runs. Both were reported as
+// bugs by somebody looking at the app, and neither is visible to a check that
+// reads CSS.
+{
+  const mapTsx = fs.readFileSync(new URL('../src/components/map/GoogleFieldMap.tsx', import.meta.url), 'utf8')
+
+  /*
+    Pinned to DARK, the map asked Google for dark-scheme labels and got them —
+    orange road names — while the tiles themselves came back light on any device
+    that falls back to raster. Unreadable, and from inside a light app it looks
+    like the map is simply broken.
+  */
+  ok(
+    /colorScheme:\s*\n?\s*document\.documentElement\.dataset\.theme/.test(mapTsx),
+    "the basemap asks Google for the theme the app is actually in",
+  )
+
+  /*
+    The theme has to be applied at boot, not by the first component that happens
+    to read it. It used to be applied only where the toggle mounts — the More
+    screen — so a shell cached before themes shipped booted dark, stayed dark,
+    and flipped the moment the rep opened More. Reported exactly that way.
+  */
+  const main = fs.readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8')
+  ok(
+    /apply\(readChoice\(\)\)/.test(main),
+    'the app applies the stored theme at boot, not when a screen mounts',
+  )
+
+  /*
+    And the shell that carries the pre-paint snippet has to be re-fetched. The
+    service worker serves a cached `index.html`, so without a version bump the
+    phones already carrying the old one keep booting without the snippet.
+  */
+  const sw = fs.readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8')
+  const version = sw.match(/const VERSION = '([^']+)'/)?.[1]
+  ok(!!version && version >= 'v6', 'the shell cache is bumped past the pre-theme version', version)
+}
+
 /* --- 4. the pre-paint snippet still agrees with the app ---------------------- */
 //
 // Duplicated on purpose: the snippet runs before any module exists, which is the
