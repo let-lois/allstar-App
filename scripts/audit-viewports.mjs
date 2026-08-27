@@ -64,6 +64,58 @@ for (const vp of VIEWPORTS) {
     await page.screenshot({ path: `${OUT}/${vp.name}--${label}.png` })
   }
 
+  /**
+   * The floating action button has to stay clear of the dock.
+   *
+   * Both are pinned to the bottom of the screen and each used to carry its own
+   * copy of how tall the other one was — the button said `76px`, the dock grew
+   * past it, and the button ended up sitting on the dock's top edge. They key off
+   * `--dock-space` now, and this is what notices if they stop.
+   *
+   * Overlap, not overflow: `checkOverflow` measures width and this is entirely a
+   * vertical collision, so nothing already here could see it. Geometry rather
+   * than a screenshot, because the failure is a handful of pixels at 390 and
+   * obvious only at 320.
+   */
+  const checkDockClearance = async (label) => {
+    if (vp.width >= 768) return // the dock and the button are both md:hidden
+    const boxes = await page.evaluate(() => {
+      const rect = (sel) => {
+        const el = document.querySelector(sel)
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }
+      }
+      return { dock: rect('nav.nav-dock'), fab: rect('[data-tour="quick-actions"]') }
+    })
+    /*
+      Both must actually be on the page. A selector that quietly matches nothing
+      is the failure mode this whole check exists to avoid — it would report
+      "no overlap" forever, which is exactly what a passing gate looks like.
+    */
+    if (!boxes.dock) {
+      problems.push(`${vp.name} ${label}: no bottom dock found to measure`)
+      return
+    }
+    if (!boxes.fab) {
+      problems.push(`${vp.name} ${label}: no quick-action button found to measure`)
+      return
+    }
+    const overlaps =
+      boxes.fab.bottom > boxes.dock.top &&
+      boxes.fab.top < boxes.dock.bottom &&
+      boxes.fab.right > boxes.dock.left &&
+      boxes.fab.left < boxes.dock.right
+    if (overlaps) {
+      problems.push(
+        `${vp.name} ${label}: the quick-action button overlaps the dock ` +
+          `(button bottom ${Math.round(boxes.fab.bottom)}, dock top ${Math.round(boxes.dock.top)})`,
+      )
+    }
+  }
+
+  await checkDockClearance('today')
+
   // Takes the page to measure, because the console pass runs in its own tab —
   // a rep cannot open the console, so it needs a different sign-in.
   const checkOverflow = async (label, target = page) => {
