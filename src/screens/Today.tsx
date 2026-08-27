@@ -24,6 +24,7 @@ import { DEFAULT_ROUTE_SIZE, routableLeads } from '../lib/route'
 import { IconCalendar, IconChevron, IconNavigate } from '../components/nav/icons'
 import { useTeamStats } from '../store/teamStats'
 import { standings } from '../data/leaderboard'
+import { dayKeyIn, dayRangeIn, startOfToday, todayLabel } from '../lib/day'
 
 /**
  * The Today screen — the rep's operational home.
@@ -49,6 +50,7 @@ export function Today() {
   const myStanding = board.find((r) => r.rep.id === signedIn?.id)
   const { user, properties, route, position, refreshPosition, refreshFromServer } =
     useAppStore()
+  const tz = useAppStore((s) => s.timezone)
   const buildTodayRoute = useAppStore((s) => s.buildTodayRoute)
   // Scoped to this rep — with a full team in the data, the unscoped stores hold
   // everyone's work and would report the team's doors as this rep's.
@@ -65,12 +67,15 @@ export function Today() {
     return stop ? properties[stop.propertyId] : undefined
   }, [route, properties])
 
+  /*
+    The company's day, and its real length. `start + 86_400_000` is the version
+    that hides an appointment on the morning the clocks go back and shows
+    tomorrow's first one on the morning they go forward.
+  */
   const todaysAppointments = useMemo(() => {
-    const startOfDay = new Date()
-    startOfDay.setHours(0, 0, 0, 0)
-    const end = startOfDay.getTime() + 86_400_000
-    return appointments.filter((a) => a.startsAt >= startOfDay.getTime() && a.startsAt < end)
-  }, [appointments])
+    const [from, to] = dayRangeIn(dayKeyIn(Date.now(), tz), tz)
+    return appointments.filter((a) => a.startsAt >= from && a.startsAt < to)
+  }, [appointments, tz])
 
   const openTasks = useMemo(
     () => tasks.filter((t) => !t.done),
@@ -78,10 +83,9 @@ export function Today() {
   )
 
   const todayVisits = useMemo(() => {
-    const startOfDay = new Date()
-    startOfDay.setHours(0, 0, 0, 0)
-    return activity.filter((a) => a.type === 'visit' && a.at >= startOfDay.getTime())
-  }, [activity])
+    const from = startOfToday(tz)
+    return activity.filter((a) => a.type === 'visit' && a.at >= from)
+  }, [activity, tz])
 
   const wins = todayVisits.filter(
     (v) => v.outcome && ['interested', 'appointment', 'quote_requested', 'sold'].includes(v.outcome),
@@ -98,6 +102,14 @@ export function Today() {
     [todayVisits, properties],
   )
 
+  /*
+    The date under the greeting names the day the counts beside it were totalled
+    on, so it is read off the same key rather than off this device. UTC noon
+    because the key is already the answer — turning it back into a local instant
+    is how it drifts a day.
+  */
+  const dateLine = useMemo(() => todayLabel(tz), [tz])
+
   const dist = position && nextStop ? distanceMiles(position, nextStop) : null
   const greeting = getGreeting()
 
@@ -105,11 +117,7 @@ export function Today() {
     <div className="flex min-h-0 flex-1 flex-col">
       <TopBar
         title={`${greeting}, ${user?.name.split(' ')[0] ?? 'there'}`}
-        subtitle={new Date().toLocaleDateString('en-US', {
-          weekday: 'long',
-          month: 'long',
-          day: 'numeric',
-        })}
+        subtitle={dateLine}
         /*
           A rep's only way out, now that it has left More. Today and the
           Overview are the two home screens, one per role — putting it on
@@ -497,6 +505,7 @@ function PlanDayCard() {
   const properties = useAppStore((s) => s.properties)
   const user = useAppStore((s) => s.user)
   const position = useAppStore((s) => s.position)
+  const tz = useAppStore((s) => s.timezone)
   const buildTodayRoute = useAppStore((s) => s.buildTodayRoute)
   const [building, setBuilding] = useState(false)
 
@@ -504,8 +513,8 @@ function PlanDayCard() {
     const mine = Object.values(properties).filter(
       (p) => user?.role !== 'field_rep' || p.assignedRepId === user?.id,
     )
-    return routableLeads(mine)
-  }, [properties, user])
+    return routableLeads(mine, Date.now(), tz)
+  }, [properties, user, tz])
 
   if (available.length === 0) {
     return (

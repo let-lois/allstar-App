@@ -15,6 +15,7 @@ import { outcomeByCode } from '../data/outcomes'
 import { distanceMiles, formatDistance, walkMinutes } from '../lib/geo'
 import { cityLine, moneyFull, relative, relativeLower, time } from '../lib/format'
 import type { NoteTag } from '../types'
+import { dayKeyIn, dayLabel } from '../lib/day'
 
 /**
  * Lead / property profile.
@@ -35,6 +36,7 @@ export function PropertyDetail() {
   const allPhotos = useAppStore((s) => s.photos)
   const allVisits = useAppStore((s) => s.visits)
   const activity = useAppStore((s) => s.activity)
+  const tz = useAppStore((s) => s.timezone)
   const startVisit = useAppStore((s) => s.startVisit)
   const addNote = useAppStore((s) => s.addNote)
 
@@ -263,7 +265,7 @@ export function PropertyDetail() {
                           {def?.label ?? 'Visit'}
                         </span>
                         <span className="block text-[12.5px] text-ink-mute">
-                          {new Date(v.startedAt).toLocaleDateString('en-US', {
+                          {dayLabel(dayKeyIn(v.startedAt, tz), {
                             month: 'short',
                             day: 'numeric',
                           })}{' '}

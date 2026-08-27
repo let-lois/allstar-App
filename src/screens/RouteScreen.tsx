@@ -22,6 +22,7 @@ export function RouteScreen() {
   const nav = useNavigate()
   const { route, properties, position, skipStop, user } = useAppStore()
   const buildTodayRoute = useAppStore((s) => s.buildTodayRoute)
+  const tz = useAppStore((s) => s.timezone)
   const progress = useRouteProgress()
   const [building, setBuilding] = useState(false)
 
@@ -32,8 +33,10 @@ export function RouteScreen() {
         Object.values(properties).filter(
           (p) => user?.role !== 'field_rep' || p.assignedRepId === user?.id,
         ),
+        Date.now(),
+        tz,
       ),
-    [properties, user],
+    [properties, user, tz],
   )
 
   const stops = useMemo(

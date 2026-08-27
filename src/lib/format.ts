@@ -1,3 +1,5 @@
+import { dayKeyIn } from './day'
+
 export function money(n?: number): string {
   if (n == null) return '—'
   if (n >= 1000) return `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`
@@ -20,11 +22,21 @@ export function time(ts: number): string {
   })
 }
 
-export function dayKey(ts: number = Date.now()): string {
-  const d = new Date(ts)
-  const m = `${d.getMonth() + 1}`.padStart(2, '0')
-  const day = `${d.getDate()}`.padStart(2, '0')
-  return `${d.getFullYear()}-${m}-${day}`
+/**
+ * `YYYY-MM-DD` for an instant.
+ *
+ * With a company timezone, on that company's calendar; without one, on this
+ * device's clock. The second case is not a fallback so much as the demo's
+ * correct answer — it has no server and no company, and its seeded day should
+ * look like today to whoever opens it.
+ *
+ * Anything that has to line up with a number the *server* produced must pass
+ * the zone. Reporting rows are bucketed on the company's calendar, so asking
+ * this in the device's clock and comparing the two is how a rep's board ends up
+ * disagreeing with their manager's console about the same evening.
+ */
+export function dayKey(ts: number = Date.now(), tz?: string | null): string {
+  return dayKeyIn(ts, tz)
 }
 
 /** "3m ago", "2h ago", "Tue" — short enough for a dense mobile row. */

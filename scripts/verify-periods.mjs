@@ -3,12 +3,15 @@ import {
   POINTS,
   awards,
   boardFor,
-  dayKey,
   periodLabel,
   periodStart,
   scoreOf,
   standings,
 } from '../src/data/leaderboard.ts'
+import { dayKeyIn } from '../src/lib/day.ts'
+
+/** The old local-clock `dayKey`, which is what `dayKeyIn` does with no zone. */
+const dayKey = (at) => dayKeyIn(at instanceof Date ? at.getTime() : at)
 
 /**
  * Week and month on the standings board.
@@ -86,18 +89,59 @@ const sep2 = new Date(2026, 8, 2, 9, 0)
 ok(periodStart('week', sep2) === '2026-08-30', 'a week can start in the previous month', periodStart('week', sep2))
 
 /*
- * Local time, not UTC. A rep's week ends when their Saturday ends; a board that
- * rolls over at 7pm because it is midnight in London is a board nobody trusts.
+ * Not UTC. A rep's week ends when their Saturday ends; a board that rolls over
+ * at 7pm because it is midnight in London is a board nobody trusts.
  */
 const lateSat = new Date(2026, 7, 22, 22, 0)
-ok(dayKey(lateSat) === '2026-08-22', 'late evening is still the same local day', dayKey(lateSat))
+ok(dayKey(lateSat) === '2026-08-22', 'late evening is still the same day', dayKey(lateSat))
 
 ok(/August/.test(periodLabel('month', wed)), 'the month is labelled by name', periodLabel('month', wed))
 ok(/^Week of /.test(periodLabel('week', wed)), 'and the week by the day it started', periodLabel('week', wed))
 
-/* --- today is the device's, always ------------------------------------------ */
+/* --- the period is cut on the company's calendar ----------------------------- */
+//
+// It used to be cut on the device's, which is what this section originally
+// asserted. The boundary belongs to the company: a rep who drives across a state
+// line does not start a new week at lunchtime, and the history rows this board
+// sums were bucketed on the company's calendar by the server.
+{
+  console.log('\n--- the zone decides where the period starts ---')
 
-console.log('\n--- today comes from the phone, not the server ---')
+  // 2026-08-23 is a Sunday. An instant early on that Sunday UTC is still
+  // Saturday evening in Chicago, so the two zones disagree about which week it
+  // belongs to — which is the whole point.
+  const sunUtcMorning = Date.UTC(2026, 7, 23, 3, 0)
+  ok(
+    periodStart('week', sunUtcMorning, 'UTC') === '2026-08-23',
+    'in UTC that instant has already started a new week',
+    periodStart('week', sunUtcMorning, 'UTC'),
+  )
+  ok(
+    periodStart('week', sunUtcMorning, 'America/Chicago') === '2026-08-16',
+    "in Chicago it is Saturday night, still last week",
+    periodStart('week', sunUtcMorning, 'America/Chicago'),
+  )
+
+  // And the words on the screen follow the same key rather than the device.
+  ok(
+    periodLabel('today', sunUtcMorning, 'America/Chicago') === 'Saturday, August 22',
+    'the heading names the day the board is totalled from',
+    periodLabel('today', sunUtcMorning, 'America/Chicago'),
+  )
+  ok(
+    periodLabel('today', sunUtcMorning, 'UTC') === 'Sunday, August 23',
+    'and says something different in a different zone, as it must',
+    periodLabel('today', sunUtcMorning, 'UTC'),
+  )
+}
+
+/* --- today still comes from the phone's own numbers -------------------------- */
+//
+// Which day it is comes from the company. What happened *on* it, before the
+// server has heard, still comes from the device — that is the offline-first
+// half and it is unchanged.
+
+console.log('\n--- an unsynced morning still counts ---')
 
 const today = dayKey(wed)
 const live = [rep('a', 'Ana Diaz', { knocks: 20, conversations: 5, appointments: 2, sales: 1 })]

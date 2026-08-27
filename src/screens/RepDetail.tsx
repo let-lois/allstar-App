@@ -11,6 +11,7 @@ import { useTeamStats } from '../store/teamStats'
 import { scoreOf, standings } from '../data/leaderboard'
 import { money, relative, telHref } from '../lib/format'
 import { outcomeByCode } from '../data/outcomes'
+import { startOfToday } from '../lib/day'
 
 /**
  * One rep's day.
@@ -43,6 +44,7 @@ export function RepDetail() {
   const properties = useAppStore((s) => s.properties)
   const territories = useAppStore((s) => s.territories)
   const activity = useAppStore((s) => s.activity)
+  const tz = useAppStore((s) => s.timezone)
   const reps = useTeamStats()
 
   const rep = reps.find((r) => r.id === repId)
@@ -53,13 +55,13 @@ export function RepDetail() {
   const isOffice = me?.role !== 'field_rep'
 
   const todaysDoors = useMemo(() => {
-    const since = new Date()
-    since.setHours(0, 0, 0, 0)
+    /* The company's midnight — see the note in Team. */
+    const since = startOfToday(tz)
     return activity
-      .filter((a) => a.repId === repId && a.type === 'visit' && a.at >= since.getTime())
+      .filter((a) => a.repId === repId && a.type === 'visit' && a.at >= since)
       .map((a) => (a.propertyId ? properties[a.propertyId] : undefined))
       .filter((p): p is NonNullable<typeof p> => !!p)
-  }, [activity, properties, repId])
+  }, [activity, properties, repId, tz])
 
   if (!rep) {
     return (

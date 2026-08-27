@@ -1,3 +1,4 @@
+import { addDays, dayKeyIn, dayLabel, keyOf, ymdIn } from '../lib/day'
 import type { DailyStat, TeamMember } from '../types'
 
 /**
@@ -213,38 +214,51 @@ export const PERIODS: { key: Period; label: string }[] = [
  */
 const WEEK_STARTS_ON = 0
 
-/** `YYYY-MM-DD` in local time. The history table keys on this. */
-export function dayKey(at: number | Date): string {
-  const d = at instanceof Date ? at : new Date(at)
-  const m = `${d.getMonth() + 1}`.padStart(2, '0')
-  const day = `${d.getDate()}`.padStart(2, '0')
-  return `${d.getFullYear()}-${m}-${day}`
-}
-
 /**
  * The first day a period includes, as a day key.
  *
- * Local time throughout, deliberately. A rep's week ends when their Saturday
+ * On the company's calendar, deliberately. A rep's week ends when their Saturday
  * ends, not when Saturday ends in UTC — and a board that rolls over at 7pm
- * local because that is midnight somewhere else is a board nobody trusts.
+ * because that is midnight somewhere else is a board nobody trusts. Without a
+ * company zone this is the device's clock, which is the demo's right answer.
+ *
+ * The arithmetic runs on the calendar date rather than on the timestamp. Once
+ * the zone has told us what day it is, "the 1st of this month" and "back to
+ * Sunday" are questions about a date, and doing them by subtracting
+ * milliseconds is what lands a week boundary an hour out across a clock change.
  */
-export function periodStart(period: Period, now: number | Date = Date.now()): string {
-  const d = now instanceof Date ? new Date(now) : new Date(now)
-  if (period === 'today') return dayKey(d)
-  if (period === 'month') return dayKey(new Date(d.getFullYear(), d.getMonth(), 1))
-  const back = (d.getDay() - WEEK_STARTS_ON + 7) % 7
-  return dayKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - back))
+export function periodStart(
+  period: Period,
+  now: number | Date = Date.now(),
+  tz?: string | null,
+): string {
+  const at = now instanceof Date ? now.getTime() : now
+  const here = ymdIn(at, tz)
+  if (period === 'today') return keyOf(here)
+  if (period === 'month') return keyOf({ ...here, d: 1 })
+  const back = (here.weekday - WEEK_STARTS_ON + 7) % 7
+  return addDays(keyOf(here), -back)
 }
 
-/** What the top bar says under the title. */
-export function periodLabel(period: Period, now: number | Date = Date.now()): string {
-  const d = now instanceof Date ? now : new Date(now)
-  if (period === 'today') {
-    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-  }
-  if (period === 'month') return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-  const from = new Date(`${periodStart('week', d)}T00:00:00`)
-  return `Week of ${from.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`
+/**
+ * What the top bar says under the title.
+ *
+ * Rendered from the day key rather than from the instant, so the words match the
+ * numbers underneath them. Formatting the raw `now` in the device's zone is the
+ * version that says "Wednesday" over a board that has already been totalled as
+ * Thursday — the one place a boundary bug is visible and still gets argued about
+ * rather than believed.
+ */
+export function periodLabel(
+  period: Period,
+  now: number | Date = Date.now(),
+  tz?: string | null,
+): string {
+  const at = now instanceof Date ? now.getTime() : now
+  const from = periodStart(period, at, tz)
+  if (period === 'today') return dayLabel(from, { weekday: 'long', month: 'long', day: 'numeric' })
+  if (period === 'month') return dayLabel(from, { month: 'long', year: 'numeric' })
+  return `Week of ${dayLabel(from, { month: 'long', day: 'numeric' })}`
 }
 
 /**
@@ -274,13 +288,20 @@ export function periodLabel(period: Period, now: number | Date = Date.now()): st
  */
 export function boardFor(
   period: Period,
-  input: { live: Scorable[]; history: DailyStat[]; now?: number | Date },
+  input: { live: Scorable[]; history: DailyStat[]; now?: number | Date; tz?: string | null },
 ): Scorable[] {
   const now = input.now ?? Date.now()
   if (period === 'today') return input.live
 
-  const from = periodStart(period, now)
-  const today = dayKey(now)
+  /*
+    Both bounds on the company's calendar, because the rows being compared
+    against them were bucketed on it by the server. Asking "is this row before
+    today" with the device's idea of today is how a phone in another timezone
+    drops a day out of a week — or counts it twice, once from history and once
+    from `live`.
+  */
+  const from = periodStart(period, now, input.tz)
+  const today = dayKeyIn(typeof now === 'number' ? now : now.getTime(), input.tz)
 
   const byRep = new Map<string, Scorable>()
   for (const rep of input.live) {

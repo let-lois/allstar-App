@@ -1,5 +1,6 @@
 import type { Property, Route, RouteStop } from '../types'
 import { distanceMiles } from './geo'
+import { startOfToday } from './day'
 import { dayKey } from './format'
 
 /**
@@ -25,14 +26,26 @@ import { dayKey } from './format'
 export const DEFAULT_ROUTE_SIZE = 40
 export const MAX_ROUTE_SIZE = 120
 
-/** Leads worth knocking: not already closed out, and not already visited today. */
-export function routableLeads(properties: Property[], now = Date.now()): Property[] {
-  const startOfToday = new Date(now).setHours(0, 0, 0, 0)
+/**
+ * Leads worth knocking: not already closed out, and not already visited today.
+ *
+ * "Today" is the company's, not the phone's. Cut on the device it goes wrong in
+ * both directions at once: a rep east of the company's zone gets doors they
+ * knocked last night offered back to them before breakfast, and a rep west of it
+ * loses the last hours of their evening's work out of the route the next
+ * morning. Neither looks like a bug — it looks like the list being wrong.
+ */
+export function routableLeads(
+  properties: Property[],
+  now = Date.now(),
+  tz?: string | null,
+): Property[] {
+  const cutoff = startOfToday(tz, now)
   return properties.filter((p) => {
     if (['won', 'lost', 'dnc'].includes(p.status)) return false
     // Knocking the same door twice in one day is how a rep annoys a prospect and
     // inflates their own numbers.
-    if (p.lastVisitAt && p.lastVisitAt >= startOfToday) return false
+    if (p.lastVisitAt && p.lastVisitAt >= cutoff) return false
     // A lead with no coordinates can't be walked to.
     if (!p.lat || !p.lng) return false
     return true
@@ -44,6 +57,8 @@ export interface BuildOptions {
   from?: { lat: number; lng: number }
   size?: number
   now?: number
+  /** The company's calendar. Without it the device's own clock cuts the day. */
+  tz?: string | null
   repId: string
   name?: string
 }
@@ -93,7 +108,7 @@ export function orderStops(
 
 export function buildRoute(leads: Property[], opts: BuildOptions): Route | null {
   const size = Math.min(Math.max(1, opts.size ?? DEFAULT_ROUTE_SIZE), MAX_ROUTE_SIZE)
-  const routable = routableLeads(leads, opts.now)
+  const routable = routableLeads(leads, opts.now, opts.tz)
   const ordered = orderStops(routable, opts.from, size)
   if (ordered.length === 0) return null
 
@@ -104,7 +119,7 @@ export function buildRoute(leads: Property[], opts: BuildOptions): Route | null 
     status: i === 0 ? 'active' : 'pending',
   }))
 
-  const day = dayKey(opts.now)
+  const day = dayKey(opts.now, opts.tz)
   return {
     // Deterministic per rep per day: tapping "build" twice must replace today's
     // route, never leave two of them for the same day fighting over the screen.

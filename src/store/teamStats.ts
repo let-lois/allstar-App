@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useAppStore } from './useAppStore'
 import { onBoard } from '../data/leaderboard'
+import { startOfToday } from '../lib/day'
 import type { ActivityEvent, Property, Route, TeamMember } from '../types'
 
 /**
@@ -145,15 +146,22 @@ export function useTeamStats(): RepStats[] {
   const activity = useAppStore((s) => s.activity)
   const properties = useAppStore((s) => s.properties)
   const team = useAppStore((s) => s.team)
+  const tz = useAppStore((s) => s.timezone)
 
   return useMemo(() => {
-    const since = new Date()
-    since.setHours(0, 0, 0, 0)
-    const from = since.getTime()
+    /*
+      Midnight on the company's calendar, not the device's.
+
+      This is the boundary that decides whether an evening's doors count as
+      today, and the server buckets its reporting rows on the same one. Reading
+      it off the phone means a rep in another timezone sees a different day than
+      their manager's console does, with nothing anywhere saying which is right.
+    */
+    const from = startOfToday(tz)
     return onBoard(team)
       .map((m) => statsFor(m, routes, activity, properties, from))
       .sort((a, b) => b.conversations - a.conversations || b.done - a.done)
-  }, [team, routes, activity, properties])
+  }, [team, routes, activity, properties, tz])
 }
 
 /** Company roll-up, derived from the same per-rep numbers. */

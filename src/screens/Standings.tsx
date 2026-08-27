@@ -51,10 +51,16 @@ export function Standings() {
     to notice a filter before they trust the number in front of them.
   */
   const [period, setPeriod] = useState<Period>('today')
+  /*
+    The company's calendar. History rows were bucketed on it by the server, so
+    the week and month bounds have to be asked on it too — a phone in another
+    timezone otherwise drops a day out of a week, or counts it twice.
+  */
+  const tz = useAppStore((s) => s.timezone)
 
   const scored = useMemo(
-    () => boardFor(period, { live: reps, history: Object.values(history) }),
-    [period, reps, history],
+    () => boardFor(period, { live: reps, history: Object.values(history), tz }),
+    [period, reps, history, tz],
   )
   const board = useMemo(() => standings(scored), [scored])
   const prizes = useMemo(() => awards(scored), [scored])
@@ -66,7 +72,7 @@ export function Standings() {
     <div className="flex min-h-0 flex-1 flex-col">
       <TopBar
         title="Standings"
-        subtitle={periodLabel(period)}
+        subtitle={periodLabel(period, undefined, tz)}
         back
       />
 
