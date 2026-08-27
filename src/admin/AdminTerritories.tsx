@@ -302,7 +302,7 @@ export function AdminTerritories() {
             },
           ]}
         />
-        <div className="mt-3 rounded-card border border-line bg-surface px-4 py-3 text-xs lg:mt-0 lg:rounded-none lg:border-0 lg:border-t lg:border-line-soft">
+        <div className="mt-3 card px-4 py-3 text-xs lg:mt-0 lg:rounded-none lg:border-0 lg:border-t lg:border-line-soft">
 
             {assignError ? (
               <p role="alert" className="font-medium text-bad">
@@ -322,7 +322,7 @@ export function AdminTerritories() {
         </div>
         </>
 
-        <div className="overflow-hidden rounded-card border border-line bg-surface">
+        <div className="overflow-hidden card">
           <div className="flex items-baseline justify-between border-b border-line-soft px-4 py-3">
             <h2 className="text-sm font-semibold">
               {draft ? 'Outline the area' : selected ? label(selected) : 'All territories'}

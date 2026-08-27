@@ -59,7 +59,13 @@ export function PropertyRow({
         color: '#0A6B7D',
         onAction: () => nav(`/property/${property.id}?start=1`),
       }}
-      className="border-b border-line-soft last:border-0"
+      /*
+        A boxed row rather than a divider between rows. The Leads list is
+        virtualised and ran edge to edge, so it was the one screen left with no
+        boundaries on it at all once everything else became a panel. The 108px
+        slot has room: an 84px minimum button, 4px of border and a 12px gap.
+      */
+      className="panel mx-4 mb-3"
     >
       <button
         onClick={() =>

@@ -47,7 +47,7 @@ export function Plate({
   as?: 'section' | 'div' | 'article' | 'ul'
 } & React.HTMLAttributes<HTMLElement>) {
   return (
-    <Tag {...rest} className={`plate -mx-4 sm:mx-0 sm:rounded-card sm:border ${className}`}>
+    <Tag {...rest} className={`panel ${className}`}>
       {children}
     </Tag>
   )

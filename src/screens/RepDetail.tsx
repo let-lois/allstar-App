@@ -182,7 +182,7 @@ export function RepDetail() {
           {/* --- the funnel --------------------------------------------- */}
           <section className="section">
             <SectionHeader title="Today" standalone />
-            <ul className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+            <ul className="panel row-group">
               {funnel.map((row) => (
                 <li
                   key={row.label}
@@ -232,7 +232,7 @@ export function RepDetail() {
                 No doors logged yet today, so there is nothing to show on a map.
               </p>
             ) : (
-              <div className="overflow-hidden rounded-card border border-line bg-surface">
+              <div className="overflow-hidden card">
                 <FieldMap
                   className="h-[300px]"
                   properties={todaysDoors}
@@ -267,7 +267,7 @@ export function RepDetail() {
           {todaysDoors.length > 0 && (
             <section className="section">
               <SectionHeader title="Doors today" count={todaysDoors.length} standalone />
-              <ul className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+              <ul className="panel row-group">
                 {activity
                   .filter((a) => a.repId === repId && a.type === 'visit')
                   .slice(0, 12)

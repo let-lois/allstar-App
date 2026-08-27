@@ -126,7 +126,7 @@ export function IntegrationsPanel() {
 
   if (loading) {
     return (
-      <section className="rounded-card border border-line bg-surface p-5">
+      <section className="card p-5">
         <p className="text-[13px] text-ink-mute">Checking…</p>
       </section>
     )
@@ -137,7 +137,7 @@ export function IntegrationsPanel() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-card border border-line bg-surface p-5">
+      <section className="card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-sm font-bold">GoHighLevel</h2>
@@ -196,7 +196,7 @@ export function IntegrationsPanel() {
         the same action as connecting one, and hiding the form behind an "edit"
         would make the common maintenance job the hidden one.
       */}
-      <section className="rounded-card border border-line bg-surface p-5">
+      <section className="card p-5">
         <h2 className="text-sm font-bold">{connected ? 'Replace the connection' : 'Connect'}</h2>
         <p className="mt-0.5 text-xs leading-relaxed text-ink-mute">
           In GoHighLevel, open the sub-account you want Allstar to write to, then
@@ -240,7 +240,7 @@ export function IntegrationsPanel() {
       </section>
 
       {connected && (
-        <section className="rounded-card border border-line bg-surface p-5">
+        <section className="card p-5">
           <h2 className="text-sm font-bold">Disconnect</h2>
           {confirming ? (
             <>

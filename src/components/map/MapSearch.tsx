@@ -203,7 +203,7 @@ export function MapSearch({
             onClick={() => setOpen(false)}
             className="fixed inset-0 z-10 cursor-default"
           />
-          <div className="absolute inset-x-0 z-20 mt-1.5 overflow-hidden rounded-card border border-line bg-surface shadow-raise">
+          <div className="absolute inset-x-0 z-20 mt-1.5 overflow-hidden card shadow-raise">
             {leads.length > 0 && (
               <ul aria-label="Matching leads">
                 {leads.map((p) => (

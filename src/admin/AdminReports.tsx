@@ -153,7 +153,7 @@ export function AdminReports() {
         />
       </div>
 
-      <section className="mt-4 rounded-card border border-line bg-surface p-5">
+      <section className="mt-4 card p-5">
         <h2 className="text-sm font-bold">
           Daily volume{repId !== 'all' && ` — ${team.find((r) => r.id === repId)?.name ?? repId}`}
         </h2>
@@ -164,13 +164,13 @@ export function AdminReports() {
       </section>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <section className="rounded-card border border-line bg-surface p-5">
+        <section className="card p-5">
           <h2 className="text-sm font-bold">Doors by rep</h2>
           <p className="mb-3 text-xs text-ink-mute">Volume over the selected range.</p>
           <Bars data={doorsByRep} variant="single" format={(v) => v.toLocaleString()} />
         </section>
 
-        <section className="rounded-card border border-line bg-surface p-5">
+        <section className="card p-5">
           <h2 className="text-sm font-bold">Contact rate by rep</h2>
           <p className="mb-3 text-xs text-ink-mute">
             Conversations per door — the number volume alone can hide.
@@ -179,7 +179,7 @@ export function AdminReports() {
         </section>
       </div>
 
-      <section className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
+      <section className="mt-4 overflow-hidden card">
         <h2 className="px-5 pb-2 pt-4 text-sm font-bold">Full breakdown</h2>
         <table className="w-full text-sm">
           <thead className="bg-surface-sunk text-xs text-ink-mute">

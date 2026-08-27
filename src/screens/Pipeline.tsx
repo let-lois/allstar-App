@@ -129,7 +129,7 @@ export function Pipeline() {
                 Nothing in {STATUS_LABEL[stage].toLowerCase()} right now.
               </p>
             ) : (
-              <ul className="plate row-group -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+              <ul className="panel row-group">
                 {stageRows.map((p) => (
                   <li key={p.id}>
                     <button

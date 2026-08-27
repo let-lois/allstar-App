@@ -135,7 +135,7 @@ ok((await after.getAttribute('src')) === src, 'and it is the same image, not a r
  */
 await page.goto(`${BASE}/standings`, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1200)
-const onBoard = await page.locator('ul.plate > li').count()
+const onBoard = await page.locator('ul[data-tour="standings-board"] > li').count()
 ok(onBoard > 1, `the whole board survives setting a photo (${onBoard} people)`)
 await page.goto(`${BASE}/more`, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(900)

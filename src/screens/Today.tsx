@@ -436,7 +436,7 @@ function Section({
         titled band of rows reads as part of this screen; the same rows inside a
         rounded rectangle read as a widget that happens to be on it.
       */}
-      <div className="plate -mx-4 overflow-hidden sm:mx-0 sm:rounded-card sm:border">
+      <div className="panel">
         {children}
       </div>
     </section>

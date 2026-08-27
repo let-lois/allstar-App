@@ -121,7 +121,7 @@ export function AdminDashboard() {
         </button>
       )}
 
-      <section className="mt-4 rounded-card border border-line bg-surface p-5">
+      <section className="mt-4 card p-5">
         <h2 className="text-sm font-bold">Doors and conversations</h2>
         <p className="mb-3 text-xs text-ink-mute">
           Same unit, one axis — volume and the conversations it produced.
@@ -130,7 +130,7 @@ export function AdminDashboard() {
       </section>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <section className="rounded-card border border-line bg-surface p-5">
+        <section className="card p-5">
           <div className="mb-1 flex items-baseline justify-between">
             <h2 className="text-sm font-bold">Open pipeline</h2>
             <span className="nums text-xs font-semibold text-good">
@@ -143,7 +143,7 @@ export function AdminDashboard() {
           <Bars data={funnelData} variant="funnel" showConversion />
         </section>
 
-        <section className="rounded-card border border-line bg-surface p-5">
+        <section className="card p-5">
           <h2 className="text-sm font-bold">Today’s outcomes</h2>
           <p className="mb-3 text-xs text-ink-mute">
             What every knock logged today actually resulted in.
@@ -152,7 +152,7 @@ export function AdminDashboard() {
         </section>
       </div>
 
-      <section className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
+      <section className="mt-4 overflow-hidden card">
         <div className="flex items-baseline justify-between px-5 pb-2 pt-4">
           <h2 className="text-sm font-bold">Rep performance</h2>
           <button
@@ -201,7 +201,7 @@ export function AdminDashboard() {
         </table>
       </section>
 
-      <section className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
+      <section className="mt-4 overflow-hidden card">
         <h2 className="px-5 pb-2 pt-4 text-sm font-bold">Live activity</h2>
         <ul className="max-h-72 overflow-y-auto">
           {activity.slice(0, 30).map((ev) => {

@@ -85,7 +85,7 @@ export function DataList<T>({
 }) {
   if (rows.length === 0) {
     return (
-      <div className={`rounded-card border border-line bg-surface p-8 text-center ${className}`}>
+      <div className={`card p-8 text-center ${className}`}>
         <p className="text-sm text-ink-mute">{empty}</p>
       </div>
     )
@@ -169,7 +169,7 @@ export function DataList<T>({
 
       {/* --- desktop: the table it always was --------------------------- */}
       <div
-        className={`hidden overflow-hidden rounded-card border border-line bg-surface lg:block ${className}`}
+        className={`hidden overflow-hidden card lg:block ${className}`}
       >
         <table className="w-full text-sm">
           <thead className="bg-surface-sunk text-xs text-ink-mute">

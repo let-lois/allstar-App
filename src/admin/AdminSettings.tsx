@@ -127,7 +127,7 @@ export function AdminSettings() {
       </div>
 
       {tab === 'outcomes' && (
-        <section className="overflow-hidden rounded-card border border-line bg-surface">
+        <section className="overflow-hidden card">
           <div className="border-b border-line-soft px-5 py-3">
             <h2 className="text-sm font-bold">Visit outcomes</h2>
             <p className="mt-0.5 text-xs leading-relaxed text-ink-mute">
@@ -244,7 +244,7 @@ export function AdminSettings() {
       )}
 
       {tab === 'notes' && (
-        <section className="rounded-card border border-line bg-surface p-5">
+        <section className="card p-5">
           <h2 className="text-sm font-bold">Quick note templates</h2>
           <p className="mb-4 mt-0.5 text-xs leading-relaxed text-ink-mute">
             One tap instead of thirty characters. These appear above the note box in Visit
@@ -290,7 +290,7 @@ export function AdminSettings() {
       )}
 
       {tab === 'photos' && (
-        <section className="rounded-card border border-line bg-surface p-5">
+        <section className="card p-5">
           <h2 className="text-sm font-bold">Photo categories</h2>
           <p className="mb-4 mt-0.5 text-xs leading-relaxed text-ink-mute">
             Shown after a rep takes a shot. Keep this list short — it's a decision made

@@ -104,7 +104,7 @@ export function ReportingPanel() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-card border border-line bg-surface p-5">
+      <section className="card p-5">
         <h2 className="text-sm font-bold">Reporting day</h2>
         <p className="mt-0.5 text-xs leading-relaxed text-ink-mute">
           Which calendar a day&rsquo;s numbers are counted on. Everything on the dashboard
@@ -159,7 +159,7 @@ export function ReportingPanel() {
         </div>
       </section>
 
-      <section className="rounded-card border border-line bg-surface p-5">
+      <section className="card p-5">
         <h2 className="text-sm font-bold">Numbers already counted</h2>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
           Changing the timezone applies to work recorded from now on. Days already in
