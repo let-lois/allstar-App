@@ -24,6 +24,7 @@
     "verify:navigate": "node scripts/verify-navigate.mjs",
     "verify:flightline": "node scripts/verify-flightline.mjs",
     "verify:classes": "node scripts/verify-classes.mjs",
+    "verify:schema": "node scripts/verify-schema-drift.mjs",
     "verify:leaderboard": "node scripts/verify-leaderboard.mjs",
     "verify:standings": "node scripts/verify-standings.mjs",
     "verify:repdetail": "node scripts/verify-repdetail.mjs",

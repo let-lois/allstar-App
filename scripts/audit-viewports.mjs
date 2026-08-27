@@ -36,7 +36,7 @@ const browser = await chromium.launch({ executablePath: chromiumPath() })
 const problems = []
 
 for (const vp of VIEWPORTS) {
-  const ctx = await browser.newContext({
+  const ctxOpts = {
     viewport: { width: vp.width, height: vp.height },
     deviceScaleFactor: 2,
     isMobile: vp.width < 768,
@@ -44,7 +44,8 @@ for (const vp of VIEWPORTS) {
     permissions: ['geolocation'],
     geolocation: { latitude: 30.5115, longitude: -97.6755 },
     locale: 'en-US',
-  })
+  }
+  const ctx = await browser.newContext(ctxOpts)
   const page = await ctx.newPage()
   const errors = []
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
@@ -63,8 +64,10 @@ for (const vp of VIEWPORTS) {
     await page.screenshot({ path: `${OUT}/${vp.name}--${label}.png` })
   }
 
-  const checkOverflow = async (label) => {
-    const res = await page.evaluate(() => {
+  // Takes the page to measure, because the console pass runs in its own tab —
+  // a rep cannot open the console, so it needs a different sign-in.
+  const checkOverflow = async (label, target = page) => {
+    const res = await target.evaluate(() => {
       const de = document.documentElement
       const horizontal = de.scrollWidth > de.clientWidth + 1
       // find any element wider than the viewport
@@ -75,9 +78,36 @@ for (const vp of VIEWPORTS) {
           wide.push(`${el.tagName}.${(el.className || '').toString().slice(0, 60)} w=${Math.round(r.width)}`)
         }
       })
-      return { horizontal, wide: wide.slice(0, 5), sw: de.scrollWidth, cw: de.clientWidth }
+      /*
+        The document is not the only thing that can pan.
+
+        `.scroll-pane` is the box the app scrolls vertically in, and the screen
+        furniture — headers, tabs — sits inside it. If something in there is
+        wider than the pane, the pane scrolls sideways and takes the whole
+        screen with it, while `documentElement.scrollWidth` stays exactly equal
+        to the viewport and reports nothing wrong.
+
+        That is not hypothetical. The Settings tab row grew past the viewport at
+        five tabs; dragging it panned the entire console and the last tab looked
+        like it had fallen off the edge — and the document-level check above
+        passed, because the pane had absorbed it. A row too wide for the screen
+        has to scroll in its own box, and this is how that gets enforced.
+      */
+      const panes = []
+      document.querySelectorAll('.scroll-pane').forEach((el) => {
+        if (el.scrollWidth > el.clientWidth + 1) {
+          const inner = [...el.querySelectorAll('*')]
+            .filter((c) => c.scrollWidth > el.clientWidth + 1 && getComputedStyle(c).overflowX === 'visible')
+            .slice(0, 2)
+            .map((c) => `${c.tagName.toLowerCase()}.${(c.className || '').toString().split(' ').slice(0, 3).join('.')} w=${c.scrollWidth}`)
+          panes.push(`pane ${el.scrollWidth}>${el.clientWidth} :: ${inner.join(' | ') || '(source not isolated)'}`)
+        }
+      })
+
+      return { horizontal, wide: wide.slice(0, 5), sw: de.scrollWidth, cw: de.clientWidth, panes }
     })
     if (res.horizontal) problems.push(`${vp.name} ${label}: horizontal overflow ${res.sw}>${res.cw} :: ${res.wide.join(' | ')}`)
+    for (const p of res.panes) problems.push(`${vp.name} ${label}: the page pans sideways — ${p}`)
   }
 
   // Touch target audit: every interactive element must be >= 44px in its
@@ -258,6 +288,70 @@ for (const vp of VIEWPORTS) {
     await auditContainment('more-open-switched')
     await sw.click()
     await page.waitForTimeout(400)
+  }
+
+  /* ---- the office console -------------------------------------------- */
+  //
+  // Never audited until now, and it showed: the Settings tab row was a plain
+  // flex row, fine at three tabs and wrong at five. It grew past the viewport
+  // and took the whole document with it, so dragging the tabs sideways panned
+  // the entire console and the last tab looked like it had fallen off the edge.
+  //
+  // The console is desktop-shaped by design and that is not what is being
+  // argued with here. A page must not scroll sideways at any width — a row too
+  // wide for the screen scrolls in its own box. That rule has no exceptions,
+  // and the console had simply never been asked.
+  {
+    /*
+      Its own context, not another tab.
+
+      A session lives in the context, so a second page opened beside the rep's
+      is already signed in as the rep — it lands on Today rather than the sign-in
+      screen, and the roster this pass needs is never offered.
+    */
+    const adminCtx = await browser.newContext(ctxOpts)
+    const admin = await adminCtx.newPage()
+    admin.on('pageerror', (e) => errors.push(String(e)))
+    await admin.route(/maps\.googleapis\.com/, (r) => r.abort())
+    await admin.goto(BASE, { waitUntil: 'domcontentloaded' })
+    await admin.waitForTimeout(1200)
+    // A rep cannot open the console, so this pass needs somebody who can.
+    await admin.getByRole('button', { name: /Try the demo/ }).click()
+    await admin.getByRole('button', { name: /Nadia Petrov/ }).click()
+    await dismissTour(admin)
+    await admin.waitForTimeout(1200)
+
+    for (const [label, path] of [
+      ['dashboard', '/admin'],
+      ['leads', '/admin/leads'],
+      ['reports', '/admin/reports'],
+      ['import', '/admin/import'],
+      ['team', '/admin/team'],
+      ['territories', '/admin/territories'],
+      ['settings', '/admin/settings'],
+      ['audit', '/admin/audit'],
+    ]) {
+      await admin.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' })
+      await admin.waitForTimeout(800)
+      await checkOverflow(`console-${label}`, admin)
+    }
+
+    /*
+      Each Settings tab, not just the one that loads first. The row is the wide
+      thing, but a panel behind a tab nobody clicked is a panel nobody measured
+      — and the two newest tabs are the two least looked at.
+    */
+    await admin.goto(`${BASE}/admin/settings`, { waitUntil: 'domcontentloaded' })
+    await admin.waitForTimeout(800)
+    for (const tab of ['Note templates', 'Photo categories', 'Reporting', 'Integrations']) {
+      const button = admin.getByRole('button', { name: tab, exact: true })
+      if ((await button.count()) === 0) continue
+      await button.first().click()
+      await admin.waitForTimeout(500)
+      await checkOverflow(`console-settings-${tab.toLowerCase().replace(/ /g, '-')}`, admin)
+    }
+
+    await adminCtx.close()
   }
 
   if (errors.length) problems.push(`${vp.name}: console errors -> ${errors.slice(0, 4).join(' | ')}`)
