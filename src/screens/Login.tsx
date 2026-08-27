@@ -128,6 +128,15 @@ export function Login() {
             </h1>
           </div>
 
+          {/*
+            The form on a lit panel, matching every other surface in the app.
+
+            The lockup above it stays on the page ground on purpose: the mark is
+            already on its own light tile, and putting a tile inside a glowing
+            box makes the box look like a mistake around it. The panel starts
+            where the app's own controls start.
+          */}
+          <div className="card p-5">
           {sessionExpired && (
             <p
               role="status"
@@ -264,6 +273,8 @@ export function Login() {
               </ul>
             </>
           )}
+
+          </div>
 
           <p className="mt-8 text-center text-[12.5px] leading-relaxed text-ink-faint">
             Your work is saved on this device first and uploads automatically when
