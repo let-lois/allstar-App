@@ -30,6 +30,34 @@ function themeVar(name) {
   return toHex([Number(m[1]), Number(m[2]), Number(m[3])])
 }
 
+/**
+ * A token whose value is a hex colour rather than channels.
+ *
+ * Some tokens are consumed by inline styles and SVG attributes — chart ink, the
+ * drawn map's ground — where `21 29 46` is not a colour and only a hex will do.
+ * Read from the first `:root` block, which is the dark one; the light values sit
+ * further down the file and belong to `verify:theme`.
+ */
+function hexVar(name) {
+  const m = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{3,8})\\s*;`))
+  if (!m) throw new Error(`theme variable --${name} not found as a hex in index.css`)
+  return m[1]
+}
+
+/**
+ * Follow one `var()` hop, so a value held as a token measures the same as one
+ * written out.
+ *
+ * The chart palette moved from literal hex to `var(--chart-*)` so it could
+ * follow the theme, and every check below went to NaN in the same commit —
+ * comparing the string "var(--chart-surface)" to a colour. Resolving here keeps
+ * the assertions about *contrast* rather than about how the value is spelled.
+ */
+function resolveColour(value) {
+  const m = String(value).match(/^var\(--([a-z0-9-]+)\)$/)
+  return m ? hexVar(m[1]) : value
+}
+
 const T = {}
 for (const n of [
   'ink', 'ink-soft', 'ink-mute', 'ink-faint',
@@ -193,22 +221,22 @@ for (const n of ['good', 'warn', 'bad', 'info']) {
  * so this asserts they are the same values rather than trusting a comment.
  * ---------------------------------------------------------------------- */
 console.log('\n--- chart chrome tracks the theme ---')
-ok(INK.surface.toLowerCase() === T['surface'].toLowerCase(),
-   'chart surface matches --surface', `${INK.surface} vs ${T['surface']}`)
-ok(INK.primary.toLowerCase() === T['ink'].toLowerCase(),
-   'chart primary ink matches --ink', `${INK.primary} vs ${T['ink']}`)
-ok(INK.secondary.toLowerCase() === T['ink-soft'].toLowerCase(),
-   'chart secondary ink matches --ink-soft', `${INK.secondary} vs ${T['ink-soft']}`)
-ok(INK.muted.toLowerCase() === T['ink-mute'].toLowerCase(),
-   'chart muted ink matches --ink-mute', `${INK.muted} vs ${T['ink-mute']}`)
-ok(INK.grid.toLowerCase() === T['line-soft'].toLowerCase(),
-   'chart gridlines match --line-soft', `${INK.grid} vs ${T['line-soft']}`)
-ok(INK.axis.toLowerCase() === T['line'].toLowerCase(),
-   'chart axis matches --line', `${INK.axis} vs ${T['line']}`)
+ok(resolveColour(INK.surface).toLowerCase() === T['surface'].toLowerCase(),
+   'chart surface matches --surface', `${resolveColour(INK.surface)} vs ${T['surface']}`)
+ok(resolveColour(INK.primary).toLowerCase() === T['ink'].toLowerCase(),
+   'chart primary ink matches --ink', `${resolveColour(INK.primary)} vs ${T['ink']}`)
+ok(resolveColour(INK.secondary).toLowerCase() === T['ink-soft'].toLowerCase(),
+   'chart secondary ink matches --ink-soft', `${resolveColour(INK.secondary)} vs ${T['ink-soft']}`)
+ok(resolveColour(INK.muted).toLowerCase() === T['ink-mute'].toLowerCase(),
+   'chart muted ink matches --ink-mute', `${resolveColour(INK.muted)} vs ${T['ink-mute']}`)
+ok(resolveColour(INK.grid).toLowerCase() === T['line-soft'].toLowerCase(),
+   'chart gridlines match --line-soft', `${resolveColour(INK.grid)} vs ${T['line-soft']}`)
+ok(resolveColour(INK.axis).toLowerCase() === T['line'].toLowerCase(),
+   'chart axis matches --line', `${resolveColour(INK.axis)} vs ${T['line']}`)
 
 console.log('\n--- chart series on the chart surface ---')
-SERIES.forEach((c, i) => at(c, INK.surface, AA_GRAPHIC, `series ${i} (${c}) on the card`))
-FUNNEL_RAMP.forEach((c, i) => at(c, INK.surface, AA_GRAPHIC, `funnel step ${i} (${c}) on the card`))
+SERIES.forEach((c, i) => at(c, resolveColour(INK.surface), AA_GRAPHIC, `series ${i} (${c}) on the card`))
+FUNNEL_RAMP.forEach((c, i) => at(c, resolveColour(INK.surface), AA_GRAPHIC, `funnel step ${i} (${c}) on the card`))
 /*
  * The ramp's step-to-step separation used to be approximated here with a
  * contrast ratio between neighbours — a deliberately weak stand-in for a ΔL
@@ -237,9 +265,15 @@ console.log('\n--- map swatches on the basemap ---')
  * the failure mode a gate is supposed to prevent rather than demonstrate.
  */
 const fieldMap = fs.readFileSync(new URL('../src/components/map/FieldMap.tsx', import.meta.url), 'utf8')
-const groundMatch = fieldMap.match(/<rect width=\{size\.w\} height=\{size\.h\} fill="(#[0-9A-Fa-f]{6})" \/>/)
+const groundMatch = fieldMap.match(/<rect width=\{size\.w\} height=\{size\.h\} fill="([^"]+)" \/>/)
 ok(Boolean(groundMatch), 'the basemap ground fill is findable in FieldMap')
-const MAP_GROUND = groundMatch ? groundMatch[1] : '#ffffff'
+/*
+  Accepts a token as well as a hex. The drawn map painted itself in literal hex
+  and so stayed near-black in the light theme; the fill is `var(--map-ground)`
+  now, and a regex that only knew hex would have reported the fill missing
+  rather than the colour changing.
+*/
+const MAP_GROUND = groundMatch ? resolveColour(groundMatch[1]) : '#ffffff'
 console.log(`    basemap ground: ${MAP_GROUND}`)
 for (const [, name, hex] of swatches) at(hex, MAP_GROUND, AA_GRAPHIC, `${name} pin on the basemap`)
 

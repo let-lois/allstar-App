@@ -113,6 +113,53 @@
      * Held as hex in a TSX array they simply stayed dark, and a dark circle with
      * light-theme ink on it is two capitals nobody can read.
      */
+    /*
+     * The drawn map.
+     *
+     * `FieldMap` is the fallback that renders when Google's tiles are not there
+     * — offline, no key, no signal — and it paints itself in SVG attributes,
+     * which take no notice of a stylesheet. Left as hex it stayed a near-black
+     * rectangle in the middle of a light app.
+     *
+     * Hex rather than channel triplets because these are consumed as
+     * `fill="var(--map-ground)"` on an SVG element, where a bare `12 39 49` is
+     * not a colour.
+     */
+    /*
+     * The lead score bar, and the chart inks.
+     *
+     * Both were written as hex inside components, so both stayed dark: the score
+     * numbers on Leads measured 1.52:1 against a white row, and the trend arrows
+     * on the console 1.56:1. Neither is subtle, and neither was visible to a
+     * static check of the stylesheet — they were found by measuring the rendered
+     * page.
+     *
+     * Hex rather than triplets: these are consumed as inline `style` values and
+     * SVG attributes, where a bare `12 39 49` is not a colour.
+     */
+    --score-high: #20c4d3;
+    --score-high-ink: #7fe0ef;
+    --score-mid: #5e9ba6;
+    --score-mid-ink: #9fc4cc;
+    --score-low: #7c8ca6;
+    --score-low-ink: #93a2b8;
+
+    --chart-ink: #f2f6fa;
+    --chart-ink-2: #c6d2e0;
+    --chart-ink-muted: #93a2b8;
+    --chart-grid: #212b41;
+    --chart-axis: #2a3652;
+    --chart-surface: #151d2e;
+    --chart-good: #4ade80;
+    --chart-bad: #f87171;
+
+    --map-ground: #0f1828;
+    --map-grid-minor: #1e2a42;
+    --map-grid-major: #243250;
+    --map-grid-edge: #33456b;
+    --map-grid-hair: #1d2840;
+    --map-grid-hair-major: #2a3a5c;
+
     --tint-1-bg: 12 39 49;
     --tint-1-ink: 127 224 239;
     --tint-2-bg: 22 48 74;
@@ -192,8 +239,14 @@
     --ink-soft: 51 65 85;
     /** 4.8:1 on a card — the lowest tone that may still be text. */
     --ink-mute: 90 105 125;
-    /** 2.9:1 — decorative only, same contract as the dark one. */
-    --ink-faint: 148 163 184;
+    /*
+      3.8:1 on the ground — decorative in name, and used for real sentences.
+      The dark theme's equivalent manages 3.5:1; this was at 2.29:1, which put
+      "Demo — sample data" on the More screen past unreadable. The contract stays
+      "not for body copy", but a tone this app actually writes with has to clear
+      the graphic floor with room over it.
+    */
+    --ink-faint: 107 124 147;
 
     /* --- surfaces --------------------------------------------------------- */
     /*
@@ -215,13 +268,21 @@
     --line-soft: 226 232 240;
 
     /* --- teal, at the other end of the ramp -------------------------------- */
-    /** 4.75:1 on white. The bright teal measures 2.0:1 there and cannot be text. */
-    --accent: 8 127 140;
+    /*
+      5.02:1 on the *ground*, 5.63:1 on a card.
+      Measured against the ground on purpose. The first value here cleared 4.75:1
+      on white and was signed off on that — then every teal label that sits on the
+      page rather than inside a card came out at 4.24:1, which is most of them:
+      section headings, "All", the selected tab. A card is the easier of the two
+      backgrounds and the wrong one to tune against.
+    */
+    --accent: 10 114 128;
     /** Darker still, so "chosen" reads as more ink rather than less. */
-    --accent-strong: 6 102 112;
+    --accent-strong: 6 88 98;
 
     /* --- status ------------------------------------------------------------ */
-    --good: 21 128 61;
+    /* 5.17:1 on the ground. At 21 128 61 the won-money figures sat at 4.48. */
+    --good: 19 117 54;
     --good-bg: 220 252 231;
     --warn: 146 64 14;
     --warn-bg: 254 243 199;
@@ -231,6 +292,29 @@
     --info-bg: 219 234 254;
 
     /* --- avatar tints, read from the other side ---------------------------- */
+    --score-high: #0a7280;
+    --score-high-ink: #065f6a;
+    --score-mid: #4a7d88;
+    --score-mid-ink: #3d6670;
+    --score-low: #64748b;
+    --score-low-ink: #4b5768;
+
+    --chart-ink: #111827;
+    --chart-ink-2: #334155;
+    --chart-ink-muted: #5a697d;
+    --chart-grid: #e2e8f0;
+    --chart-axis: #cbd5e1;
+    --chart-surface: #ffffff;
+    --chart-good: #137536;
+    --chart-bad: #b91c1c;
+
+    --map-ground: #eaeef4;
+    --map-grid-minor: #dbe2ec;
+    --map-grid-major: #c9d3e1;
+    --map-grid-edge: #aab8cc;
+    --map-grid-hair: #e0e6ee;
+    --map-grid-hair-major: #c4cfdf;
+
     --tint-1-bg: 224 246 249;
     --tint-1-ink: 7 104 116;
     --tint-2-bg: 227 236 250;
@@ -1378,6 +1462,32 @@
     --metal-ring: rgb(0 0 0 / 0.12);
     --metal-lip: 0.95;
     --metal-bevel: 0.05;
+  }
+
+  /**
+   * The row faces, which are a *background* rather than a `--metal-top`.
+   *
+   * `.metal-row` and its selected variant paint themselves directly instead of
+   * going through the metal variables, which is why the first version of the
+   * theme gate never saw them: it read `--metal-top` declarations and these
+   * declare none. They are the rows under Stages, the "Go to" list on More and
+   * every collapsible header — three of the four screens that came back
+   * unreadable.
+   */
+  :root[data-theme='light'] .metal-row {
+    background: linear-gradient(180deg, #ffffff, #f4f7fa);
+    box-shadow:
+      inset 0 0 0 1px rgb(0 0 0 / 0.09),
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      inset 0 -1px 2px rgb(0 0 0 / 0.05);
+  }
+
+  :root[data-theme='light'] .metal-row-brand {
+    background: linear-gradient(180deg, #e8f7f9, #d6eff3);
+    box-shadow:
+      inset 0 0 0 1px rgb(var(--accent) / 0.35),
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      inset 0 -1px 2px rgb(0 0 0 / 0.05);
   }
 
   :root[data-theme='light'] .metal-tint {
