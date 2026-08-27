@@ -63,6 +63,11 @@ async function writeSeed(bundle: SeedBundle) {
 export async function ensureFreshDemo(): Promise<boolean> {
   const existing = await db.all('properties')
   const seededDay = await db.metaGet<string>(SEED_DAY_KEY)
+  /*
+    The device's own day, deliberately, and the one place in the app that is
+    still right to ask that way: the demo has no company and no server to agree
+    with, and its seeded day should look like today to whoever opens it.
+  */
   const today = dayKey()
 
   if (existing.length > 0 && seededDay === today) return false

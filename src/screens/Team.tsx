@@ -9,6 +9,7 @@ import { useTeamStats, useTeamTotals } from '../store/teamStats'
 import { outcomeByCode } from '../data/outcomes'
 import { money, relative, telHref } from '../lib/format'
 import { IconPhone } from '../components/nav/icons'
+import { startOfToday } from '../lib/day'
 
 /**
  * Team view for managers on a phone.
@@ -23,14 +24,16 @@ export function Team() {
   const nav = useNavigate()
   const activity = useAppStore((s) => s.activity)
   const properties = useAppStore((s) => s.properties)
+  const tz = useAppStore((s) => s.timezone)
   const reps = useTeamStats()
   const totals = useTeamTotals()
 
-  const todayStart = useMemo(() => {
-    const d = new Date()
-    d.setHours(0, 0, 0, 0)
-    return d.getTime()
-  }, [])
+  /*
+    Midnight on the company's calendar, not on this phone's. A rep who crosses a
+    state line mid-route should not watch their day's count reset at lunchtime,
+    and the console beside them has to be counting the same hours.
+  */
+  const todayStart = useMemo(() => startOfToday(tz), [tz])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

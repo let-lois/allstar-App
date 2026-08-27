@@ -397,7 +397,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       mode,
       routes,
       properties: indexById(properties),
-      route: routeFor(routes, me?.id),
+      route: routeFor(routes, me?.id, timezone),
       visits: indexById(visits),
       notes: indexById(notes),
       photos: indexById(photos),
@@ -983,6 +983,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       repId: user.id,
       from: state.position ?? undefined,
       size,
+      // The route's id and date key off the company's day, so building one at
+      // 11pm does not file it under tomorrow for half the crew.
+      tz: state.timezone,
     })
     if (!route) return null
 
@@ -1017,8 +1020,8 @@ export const useAppStore = create<AppState>((set, get) => ({
  * they ride along with the lead rep's — their Today screen is the Overview,
  * and this only backs the shared map/route views.
  */
-function routeFor(routes: Route[], userId?: string): Route | null {
-  const today = dayKey()
+function routeFor(routes: Route[], userId?: string, tz?: string | null): Route | null {
+  const today = dayKey(Date.now(), tz)
   const todays = routes.filter((r) => r.date === today)
   const pool = todays.length ? todays : routes
   return (

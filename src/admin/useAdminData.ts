@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as db from '../lib/db'
-import { dayKey } from '../lib/format'
+import { rangeStart } from '../lib/day'
 import { useAppStore } from '../store/useAppStore'
 import type { DailyStat, LeadStatus, OutcomeCode, Property } from '../types'
 
@@ -49,9 +49,15 @@ export interface RangeSeries {
 /** Company-wide daily series for the trend chart. */
 export function useRangeSeries(range: RangeKey, repId?: string): RangeSeries {
   const stats = useDailyStats()
+  const tz = useAppStore((s) => s.timezone)
   return useMemo(() => {
     const days = RANGES.find((r) => r.key === range)?.days ?? 30
-    const cutoff = dayKey(Date.now() - (days - 1) * 86_400_000)
+    /*
+      Counted back in calendar days, not in milliseconds. `now - 6 * 86_400_000`
+      is 144 hours ago, which on the week a clock goes back is six days and an
+      hour — landing a day early and quietly making "last 7 days" eight of them.
+    */
+    const cutoff = rangeStart(days, tz)
     const inRange = stats.filter(
       (s) => s.day >= cutoff && (!repId || s.repId === repId),
     )
@@ -74,7 +80,7 @@ export function useRangeSeries(range: RangeKey, repId?: string): RangeSeries {
       knocks: ordered.map((d) => byDay.get(d)!.knocks),
       conversations: ordered.map((d) => byDay.get(d)!.conversations),
     }
-  }, [stats, range, repId])
+  }, [stats, range, repId, tz])
 }
 
 export interface RangeTotals {
@@ -109,10 +115,11 @@ const pctChange = (now: number, prev: number) =>
  */
 export function useRangeTotals(range: RangeKey, repId?: string): RangeTotals {
   const stats = useDailyStats()
+  const tz = useAppStore((s) => s.timezone)
   return useMemo(() => {
     const days = RANGES.find((r) => r.key === range)?.days ?? 30
-    const start = dayKey(Date.now() - (days - 1) * 86_400_000)
-    const prevStart = dayKey(Date.now() - (days * 2 - 1) * 86_400_000)
+    const start = rangeStart(days, tz)
+    const prevStart = rangeStart(days * 2, tz)
 
     const scoped = repId ? stats.filter((s) => s.repId === repId) : stats
     const current = scoped.filter((s) => s.day >= start)
@@ -146,7 +153,7 @@ export function useRangeTotals(range: RangeKey, repId?: string): RangeTotals {
         ? pctChange(sum(current, 'sold'), sum(previous, 'sold'))
         : undefined,
     }
-  }, [stats, range, repId])
+  }, [stats, range, repId, tz])
 }
 
 export interface RepRangeRow {
@@ -165,11 +172,12 @@ export interface RepRangeRow {
 /** Per-rep leaderboard over the selected range. */
 export function useRepRangeRows(range: RangeKey): RepRangeRow[] {
   const stats = useDailyStats()
+  const tz = useAppStore((s) => s.timezone)
   const team = useAppStore((s) => s.team)
   const reps = useMemo(() => team.filter((m) => m.role === 'field_rep'), [team])
   return useMemo(() => {
     const days = RANGES.find((r) => r.key === range)?.days ?? 30
-    const start = dayKey(Date.now() - (days - 1) * 86_400_000)
+    const start = rangeStart(days, tz)
     const inRange = stats.filter((s) => s.day >= start)
 
     // The store's roster — real on a live account, seeded in the demo. Reading
@@ -192,7 +200,7 @@ export function useRepRangeRows(range: RangeKey): RepRangeRow[] {
         closedValue: mine.reduce((a, r) => a + r.closedValue, 0),
       }
     }).sort((a, b) => b.sold - a.sold || b.conversations - a.conversations)
-  }, [stats, range, reps])
+  }, [stats, range, reps, tz])
 }
 
 /* --- property-derived views ----------------------------------------------- */

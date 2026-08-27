@@ -16,6 +16,7 @@ import { useTeamStats, useTeamTotals } from '../store/teamStats'
 import { IconChevron } from '../components/nav/icons'
 import { ROLE_LABEL } from '../lib/roles'
 import type { Role } from '../types'
+import { startOfToday, todayLabel } from '../lib/day'
 
 /**
  * Overview for the office roles on a phone.
@@ -29,6 +30,7 @@ import type { Role } from '../types'
 export function Overview({ role }: { role: Role }) {
   const nav = useNavigate()
   const { user, properties, activity, appointments, refreshFromServer } = useAppStore()
+  const tz = useAppStore((s) => s.timezone)
   const teamStats = useTeamStats()
   const totals = useTeamTotals()
 
@@ -40,11 +42,12 @@ export function Overview({ role }: { role: Role }) {
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('')
 
-  const todayStart = useMemo(() => {
-    const d = new Date()
-    d.setHours(0, 0, 0, 0)
-    return d.getTime()
-  }, [])
+  /*
+    Midnight on the company's calendar, not on this phone's. A rep who crosses a
+    state line mid-route should not watch their day's count reset at lunchtime,
+    and the console beside them has to be counting the same hours.
+  */
+  const todayStart = useMemo(() => startOfToday(tz), [tz])
 
   const todayVisits = useMemo(
     () => activity.filter((a) => a.type === 'visit' && a.at >= todayStart),
@@ -154,11 +157,7 @@ export function Overview({ role }: { role: Role }) {
             /* The date the numbers below belong to. */
             right={
               <span className="shrink-0 text-[12.5px] text-ink-mute">
-                {new Date().toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric',
-                })}
+                {todayLabel(tz)}
               </span>
             }
           />
