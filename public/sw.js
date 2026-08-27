@@ -27,7 +27,12 @@
  * had never once had anything to delete. A poisoned entry was therefore
  * permanent, and unreachable from a rep's phone.
  */
-const VERSION = 'v5'
+const VERSION = 'v6'
+/*
+  v6 evicts every shell cached before the themes shipped. Those hold an
+  `index.html` with no pre-paint theme snippet in it, which boots the app in the
+  wrong theme until the More screen corrects it — see the note in `main.tsx`.
+*/
 const CACHE = `allstar-shell-${VERSION}`
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon-32.png']
 
