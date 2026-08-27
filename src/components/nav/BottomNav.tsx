@@ -63,15 +63,19 @@ export function BottomNav({ role }: { role: Role }) {
   return (
     <nav
       /*
-        A hairline, not a shadow. The bar is a boundary between the content and
-        the home indicator, and a drop shadow there reads as a floating panel —
-        which is what made the old bar feel like a widget bolted to the bottom.
+        A lit capsule floating on the ground, not a bar welded to the bottom
+        edge — see `.nav-dock`. It is still a flex child rather than fixed, so it
+        occupies its own space and nothing underneath needs to know it moved.
+
+        The safe-area inset is a *margin* here rather than padding: the dock has
+        a visible bottom edge now, and padding would stretch the capsule down
+        behind the home indicator instead of standing clear of it.
       */
-      className="z-30 shrink-0 border-t border-line bg-surface/95 backdrop-blur-md md:hidden"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      className="nav-dock z-30 mx-3 shrink-0 md:hidden"
+      style={{ marginBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}
       aria-label="Primary"
     >
-      <ul className="flex px-1 pb-1 pt-1.5">
+      <ul className="flex px-2 pb-2 pt-2.5">
         {items.map(({ to, label, Icon }) => (
           <li key={to} className="flex-1">
             <NavLink
@@ -85,12 +89,16 @@ export function BottomNav({ role }: { role: Role }) {
               }
               className={({ isActive }) =>
                 [
-                  'focusable relative flex min-h-[58px] flex-col items-center justify-center gap-1',
+                  'focusable relative flex min-h-[68px] flex-col items-center justify-center gap-1.5',
                   'rounded-pill text-[11px] transition-colors',
                   // The label follows the icon: teal and semibold when selected,
-                  // quiet grey otherwise. Weight carries as much of this as
-                  // colour does, which is what keeps it legible in sunlight.
-                  isActive ? 'font-semibold text-accent' : 'font-medium text-ink-mute',
+                  // quiet otherwise. Weight carries as much of this as colour
+                  // does, which is what keeps it legible in sunlight.
+                  //
+                  // Resting labels sit on `ink-soft` rather than `ink-mute`: the
+                  // dock is darker than the bar it replaced, and mute on that
+                  // fill is a step too quiet to scan at arm's length.
+                  isActive ? 'font-semibold text-accent' : 'font-medium text-ink-soft',
                 ].join(' ')
               }
             >
