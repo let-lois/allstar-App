@@ -141,6 +141,60 @@ ok(light.size > 20, `the light palette parses (${light.size} colour tokens)`)
   }
 }
 
+/* --- 2b. the palettes that live outside the token block ---------------------- */
+//
+// Chart ink, the score bar and the drawn map are consumed as inline styles and
+// SVG attributes, so they are held as hex tokens rather than channel triplets —
+// which means the parity check above, which reads triplets, never saw them.
+//
+// All three were literal hex inside components until the light theme arrived,
+// and all three stayed dark: the score on a Leads row measured 1.52:1 against a
+// white card, and the console's trend arrows 1.56:1. Neither was visible to any
+// static check; they were found by measuring the rendered page.
+{
+  const hexIn = (b) => new Map([...b.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{3,8})\s*;/g)].map((m) => [m[1], m[2]]))
+  const darkHex = hexIn(darkBlock)
+  const lightHex = hexIn(lightBlock)
+
+  ok(darkHex.size > 8, `hex-valued tokens parse (${darkHex.size})`)
+
+  const missing = [...darkHex.keys()].filter((k) => !lightHex.has(k))
+  ok(
+    missing.length === 0,
+    missing.length === 0
+      ? 'every hex token has a light value too'
+      : `hex tokens with no light value, so they stay dark: ${missing.join(', ')}`,
+  )
+
+  const AA = 4.5
+  const AA_GRAPHIC = 3
+  const card = lightHex.get('chart-surface') ?? '#ffffff'
+
+  /* Chart ink is read on the chart's own surface, which is the card. */
+  for (const [t, floor] of [['chart-ink', AA], ['chart-ink-2', AA], ['chart-ink-muted', AA], ['chart-good', AA], ['chart-bad', AA]]) {
+    const r = ratio(parseHex(lightHex.get(t)), parseHex(card))
+    ok(r >= floor, `light: ${t} reads on the chart surface`, r.toFixed(2))
+  }
+
+  /*
+    The score is a number on a row, so it is text and takes the text floor. The
+    bar beside it is a graphic and takes the lower one.
+  */
+  const surface = '#' + light.get('surface').split(/\s+/).map((n) => Number(n).toString(16).padStart(2, '0')).join('')
+  for (const band of ['high', 'mid', 'low']) {
+    const ink = ratio(parseHex(lightHex.get(`score-${band}-ink`)), parseHex(surface))
+    ok(ink >= AA, `light: the ${band} score reads on a row`, ink.toFixed(2))
+    const bar = ratio(parseHex(lightHex.get(`score-${band}`)), parseHex(surface))
+    ok(bar >= AA_GRAPHIC, `light: and its bar is findable`, bar.toFixed(2))
+  }
+
+  /* The drawn map's grid has to be visible on its own ground, in both themes. */
+  for (const [label, pal] of [['light', lightHex], ['dark', darkHex]]) {
+    const r = ratio(parseHex(pal.get('map-grid-major')), parseHex(pal.get('map-ground')))
+    ok(r >= 1.15, `${label}: the drawn map's grid shows against its ground`, r.toFixed(2))
+  }
+}
+
 /* --- 3. no control carries one theme's colours into the other ---------------- */
 //
 // The check that caught the real bug, after two goes at writing it.
@@ -204,6 +258,50 @@ ok(light.size > 20, `the light palette parses (${light.size} colour tokens)`)
       `${r.selector}'s light override moves the label as well as the face`,
     )
   }
+}
+
+/* --- 3b. and no surface paints itself dark either ---------------------------- */
+//
+// The hole the first two versions left, found the way the others were: from a
+// screenshot of the light theme with three unreadable screens on it.
+//
+// Checks 3 above read `--metal-top` declarations. `.metal-row` does not have
+// one — it paints itself with `background: linear-gradient(#143240, #0e2430)`
+// directly — so it was never in the list at all. It is the face under Stages,
+// under the "Go to" list on More and under every collapsible header, which is
+// most of the surfaces a rep actually taps.
+//
+// So this asks the broader question: does any component rule hardcode a colour
+// it paints itself with, and is that rule restated for the other theme. A rule
+// that reaches for a token needs no override; one that writes a hex does.
+{
+  const rules = [...css.matchAll(/([^\n{}]+)\{([^{}]*)\}/g)]
+    .map((m) => ({ selector: m[1].trim().split('\n').pop().trim(), body: m[2] }))
+    .filter((r) => /^[.:]/.test(r.selector))
+
+  /* Comments carry prose about colours; strip them before reading any as paint. */
+  const paint = (body) => body.replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+  const hardcoded = rules.filter(
+    (r) =>
+      !r.selector.startsWith(':root[data-theme=') &&
+      /(^|[;\s])background(-color|-image)?:[^;]*#[0-9a-fA-F]{3,8}/.test(paint(r.body)),
+  )
+  ok(hardcoded.length > 0, `surfaces that paint themselves a fixed colour (${hardcoded.map((r) => r.selector).join(', ')})`)
+
+  const overridden = new Set(
+    rules
+      .filter((r) => r.selector.startsWith(":root[data-theme='light']"))
+      .map((r) => r.selector.replace(/^:root\[data-theme='light'\]\s*/, '')),
+  )
+
+  const unthemed = hardcoded.filter((r) => !overridden.has(r.selector))
+  ok(
+    unthemed.length === 0,
+    unthemed.length === 0
+      ? 'and each of them is repainted for the light theme'
+      : `these stay dark under light-theme text: ${unthemed.map((r) => r.selector).join(', ')}`,
+  )
 }
 
 /* --- 4. the pre-paint snippet still agrees with the app ---------------------- */

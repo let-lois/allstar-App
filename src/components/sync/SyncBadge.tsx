@@ -49,7 +49,14 @@ const TONE = {
  * states worth interrupting someone for. The tap target stays 44px either way —
  * it is quieter, not smaller.
  */
-export function SyncBadge({ onClick }: { onClick?: () => void }) {
+export function SyncBadge({
+  onClick,
+  /** Set where the badge floats over the map and has no bar behind it. */
+  plated = false,
+}: {
+  onClick?: () => void
+  plated?: boolean
+}) {
   const snap = useSync()
   const tone = TONE[snap.state]
   const count = snap.state === 'error' ? snap.failed : snap.pending
@@ -62,7 +69,24 @@ export function SyncBadge({ onClick }: { onClick?: () => void }) {
       aria-label={`Sync status: ${tone.label}${count ? `, ${count} waiting` : ''}`}
       className={[
         'focusable inline-flex min-h-[44px] items-center gap-1.5 rounded-full text-[12.5px] font-medium',
-        quiet ? 'px-1 text-ink-mute' : `px-3 font-semibold ${tone.bg} ${tone.text}`,
+        /*
+          Quiet means "nothing to report", so it carries no fill — on a solid bar
+          that is the right amount of nothing.
+
+          Over the map it was the wrong amount: bare grey text on whatever tile
+          happened to be under it, which is a different colour every time the rep
+          pans. `plated` gives it a chip for that one case rather than giving
+          every instance a fill it does not need.
+
+          Opaque rather than the glass used everywhere else, and that is the
+          point of it. Glass takes its legibility from whatever it is over, and
+          over a map that is unknowable — a dark road, a pale field, satellite
+          imagery. A translucent chip measured 3.58:1 here against the map's own
+          fallback colour; solid, it does not depend on the tile at all.
+        */
+        quiet
+          ? `text-ink-mute ${plated ? 'border border-line bg-surface px-2.5' : 'px-1'}`
+          : `px-3 font-semibold ${tone.bg} ${tone.text}`,
       ].join(' ')}
     >
       <span

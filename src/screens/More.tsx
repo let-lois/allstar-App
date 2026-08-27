@@ -106,7 +106,7 @@ export function More() {
                 dataset has no way to trust the app, and an admin demoing to a
                 prospect needs to know that nothing they tap is real.
               */}
-              <p className="mt-1 truncate text-[12.5px] font-medium text-ink-faint">
+              <p className="mt-1 truncate text-[12.5px] font-medium text-ink-mute">
                 {mode === 'live' ? 'Signed in · syncing to server' : 'Demo — sample data'}
               </p>
               <AvatarRemove />

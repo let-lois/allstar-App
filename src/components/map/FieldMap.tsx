@@ -554,7 +554,7 @@ export function FieldMap({
             widget from somewhere else. The relationship is the one it always
             was: the ground recedes and the street network sits on top of it.
             Inverted, because everything else was. */}
-        <rect width={size.w} height={size.h} fill="#0F1828" />
+        <rect width={size.w} height={size.h} fill="var(--map-ground)" />
         {/*
           Roads at street zooms, a graticule below them. The widths are the
           difference between the two claims: fat lit ribbons read as streets, and
@@ -563,14 +563,14 @@ export function FieldMap({
         */}
         {grid.streets ? (
           <>
-            <path d={grid.minor.join(' ')} stroke="#1E2A42" strokeWidth={7} fill="none" />
-            <path d={grid.major.join(' ')} stroke="#243250" strokeWidth={13} fill="none" />
-            <path d={grid.major.join(' ')} stroke="#33456B" strokeWidth={1} fill="none" />
+            <path d={grid.minor.join(' ')} stroke="var(--map-grid-minor)" strokeWidth={7} fill="none" />
+            <path d={grid.major.join(' ')} stroke="var(--map-grid-major)" strokeWidth={13} fill="none" />
+            <path d={grid.major.join(' ')} stroke="var(--map-grid-edge)" strokeWidth={1} fill="none" />
           </>
         ) : (
           <>
-            <path d={grid.minor.join(' ')} stroke="#1D2840" strokeWidth={1} fill="none" />
-            <path d={grid.major.join(' ')} stroke="#2A3A5C" strokeWidth={1.5} fill="none" />
+            <path d={grid.minor.join(' ')} stroke="var(--map-grid-hair)" strokeWidth={1} fill="none" />
+            <path d={grid.major.join(' ')} stroke="var(--map-grid-hair-major)" strokeWidth={1.5} fill="none" />
           </>
         )}
 

@@ -67,8 +67,13 @@ export function ScoreBar({ score }: { score: number }) {
    * lead's bar was the *least* visible of the three, which inverts the one thing
    * this control is for.
    */
-  const tone = score >= 70 ? '#20C4D3' : score >= 45 ? '#5E9BA6' : '#7C8CA6'
-  const ink = score >= 70 ? '#7FE0EF' : score >= 45 ? '#9FC4CC' : '#93A2B8'
+  /*
+    Tokens, not hex. Written as literals these stayed dark, and the score itself
+    — the number the whole row is sorted by — measured 1.52:1 on a white row.
+  */
+  const band = score >= 70 ? 'high' : score >= 45 ? 'mid' : 'low'
+  const tone = `var(--score-${band})`
+  const ink = `var(--score-${band}-ink)`
   return (
     <span className="inline-flex items-center gap-1.5" title={`Lead score ${score}`}>
       <span className="h-1.5 w-9 overflow-hidden rounded-full bg-line">

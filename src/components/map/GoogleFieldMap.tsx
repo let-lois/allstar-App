@@ -255,8 +255,21 @@ export function GoogleFieldMap({
             A Map Style attached to this Map ID in the Cloud console wins over
             this. If the real map still comes up light, that is where to look —
             not here.
+
+            Read from the applied theme rather than pinned. Left on DARK it was
+            a near-black map with orange road labels sitting inside a white app,
+            which is the same mistake as the original bright rectangle, made
+            from the other side.
+
+            Construction-time only: `colorScheme` is a MapOptions value and
+            Maps JS does not re-read it, so switching theme with the map already
+            open leaves it as it was until the screen is next opened. Recreating
+            a live map would throw away the viewport and any tiles already
+            fetched, which is a worse trade on a metered connection than a map
+            that catches up on the next visit.
           */
-          colorScheme: 'DARK',
+          colorScheme:
+            document.documentElement.dataset.theme === 'light' ? 'LIGHT' : 'DARK',
           center: initialCenter ??
             (properties[0] ? { lat: properties[0].lat, lng: properties[0].lng } : { lat: 30.5083, lng: -97.6789 }),
           zoom: initialZoom ?? DEFAULT_ZOOM,

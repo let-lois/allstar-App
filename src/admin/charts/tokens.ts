@@ -82,13 +82,24 @@ export const STATUS = {
  * `--ink-*` and `--line-*` theme variables in `index.css`; `verify:contrast`
  * fails if they drift apart, because a chart cannot read a CSS variable.
  */
+/**
+ * Chart ink, read from the theme rather than pinned to one.
+ *
+ * These were literal hex, which is why the console's trend arrows measured
+ * 1.56:1 on a white card — a green meant for a near-black chart, on paper. Held
+ * as `var()` they follow whichever theme is applied, and the light values live
+ * beside the dark ones in `index.css` where the rest of the palette is.
+ *
+ * Every consumer puts these in an inline `style` or an SVG attribute, both of
+ * which resolve custom properties, so nothing here needs a computed lookup.
+ */
 export const INK = {
-  primary: '#F2F6FA',
-  secondary: '#C6D2E0',
-  muted: '#93A2B8',
-  grid: '#212B41',
-  axis: '#2A3652',
-  surface: '#151D2E',
-  deltaGood: '#4ADE80',
-  deltaBad: '#F87171',
+  primary: 'var(--chart-ink)',
+  secondary: 'var(--chart-ink-2)',
+  muted: 'var(--chart-ink-muted)',
+  grid: 'var(--chart-grid)',
+  axis: 'var(--chart-axis)',
+  surface: 'var(--chart-surface)',
+  deltaGood: 'var(--chart-good)',
+  deltaBad: 'var(--chart-bad)',
 } as const

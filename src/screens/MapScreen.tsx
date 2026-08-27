@@ -174,7 +174,7 @@ export function MapScreen() {
           setView('map')
         }}
       />
-      <SyncBadge onClick={() => nav('/more')} />
+      <SyncBadge plated onClick={() => nav('/more')} />
       <div
         role="group"
         aria-label="View"
