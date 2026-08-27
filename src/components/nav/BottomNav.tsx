@@ -131,7 +131,7 @@ export function SideRail({ role }: { role: Role }) {
   const showConsole = role !== 'field_rep'
   return (
     <nav
-      className="hidden w-[76px] shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-4 md:flex lg:w-56 lg:items-stretch lg:px-3"
+      className="nav-rail hidden w-[76px] shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-4 md:flex lg:w-56 lg:items-stretch lg:px-3"
       aria-label="Primary"
     >
       {/*

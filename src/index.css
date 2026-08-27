@@ -54,6 +54,26 @@
      */
     --dock-space: calc(100px + env(safe-area-inset-bottom, 0px));
 
+    /**
+     * The lit surface, in one place.
+     *
+     * Every panel, the dock, the top bar and the rail draw their edge, fill and
+     * bloom from these. Three surfaces with three hand-tuned teals is how the
+     * interface ends up *nearly* consistent, and how a later nudge fixes one of
+     * them — the floating action button already taught this the hard way, with
+     * its own copy of the dock's height.
+     *
+     * `--lit-edge` is the alpha on `--accent` for a resting edge. Panels sit
+     * lower than the dock on purpose: there are a dozen panels on a screen and
+     * exactly one dock, so the dock raises its own values rather than everything
+     * else matching the loudest thing.
+     */
+    --lit-edge: 0.75;
+    --lit-bloom: 0.2;
+    --lit-fill-top: #0c2a34;
+    --lit-fill-mid: #08202a;
+    --lit-fill-bottom: #061722;
+
     /* --- edges ------------------------------------------------------------ */
     /**
      * The hairline. Incidental edges, dividers and chart axes — 1.40:1 on a
@@ -61,34 +81,6 @@
      */
     --line: 42 54 82;
     --line-soft: 33 43 65;
-    /**
-     * The edge of a *panel* — a card, a KPI tile, a grouped list.
-     *
-     * White, and 2px wide at the call site. That is a deliberate, requested
-     * departure from the rest of this theme, which is built on hairlines: the
-     * brief for this screen is a phone in daylight, and a manager who cannot
-     * find the boundary of a tile at arm's length does not care that the edge is
-     * tasteful. 16.84:1 on a card and 18.57:1 on the ground, against the
-     * hairline's 1.40:1.
-     *
-     * Two things this costs, both real and both accepted rather than missed:
-     *
-     *   It out-shouts the teal control ring, which sits at 2.37:1 on the ground.
-     *   The ring is still the only *coloured* edge on the screen and that is now
-     *   the whole of its distinctness, so the resting/selected gap below matters
-     *   more than it did, not less.
-     *
-     *   It makes the interface read as a grid of boxes, which the original card
-     *   note argued against. That argument lost on the Overview: two columns of
-     *   near-borderless tiles over four full-bleed lists read as one grey field.
-     *
-     * Still a separate token from `--line`, because `--line` has two other jobs
-     * that both want it quiet. It is the chart axis — pinned to it by
-     * `verify:contrast`, so raising it repaints every graph — and it is the
-     * divider *inside* a list, where an edge as loud as the box around it turns
-     * a list into a grid for real. Both directions are asserted.
-     */
-    --line-card: 255 255 255;
 
     /*
      * The teal every control is edged in.
@@ -228,19 +220,35 @@
    * both into one property, so a ring utility on any card would silently erase
    * the elevation.
    */
+  /**
+   * A panel: lit edge, gradient fill, a little bloom.
+   *
+   * This was a white 2px border until the dock shipped and the rest of the
+   * interface stopped matching it. On a near-black ground a drop shadow is
+   * invisible — there is nothing darker for it to be — so what separates a card
+   * here is its edge, and that edge is now the same teal light the dock uses.
+   *
+   * The bloom is deliberately a fifth of the dock's. A screen carries a dozen
+   * panels and one dock; giving them equal glow would make the dock stop being
+   * the brightest thing at the bottom, which is what tells a thumb where it is.
+   */
   .card {
-    @apply rounded-card border-2 border-line-card bg-surface;
-    /*
-     * On a near-black ground a drop shadow is invisible — there is nothing
-     * darker for it to be. What separates a card here is the hairline and the
-     * 1.10:1 step in fill, plus a one-pixel lit top edge: the same trick the
-     * machined controls use, at a fraction of the strength. The outer shadow
-     * stays, much deeper than before, only to keep the corners from looking
-     * pasted on.
-     */
+    @apply rounded-card;
+    border: 2px solid rgb(var(--accent) / var(--lit-edge));
+    background:
+      linear-gradient(180deg, rgb(var(--accent) / 0.06) 0%, transparent 55%),
+      linear-gradient(
+        180deg,
+        var(--lit-fill-top) 0%,
+        var(--lit-fill-mid) 55%,
+        var(--lit-fill-bottom) 100%
+      );
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.4),
-      0 8px 24px rgba(0, 0, 0, 0.28);
+      0 0 16px rgb(var(--accent) / var(--lit-bloom)),
+      0 8px 24px rgba(0, 0, 0, 0.45),
+      /* the lit top lip, the same trick the machined controls use */
+      inset 0 1px 0 rgb(255 255 255 / 0.16),
+      inset 0 0 18px rgb(var(--accent) / 0.1);
   }
 
   /**
@@ -263,7 +271,7 @@
    * the kind of detail that only shows up on a real thumb.
    */
   .panel {
-    @apply overflow-hidden rounded-card border-2 border-line-card bg-surface;
+    @apply card overflow-hidden;
   }
 
   /**
@@ -456,6 +464,26 @@
   }
 
   /**
+   * The top bar, lit to match.
+   *
+   * A bottom edge rather than a full outline: the bar is flush to the top of the
+   * screen, so three of its four sides are off-screen and drawing them would
+   * only put a bright line down the very edge of the glass.
+   */
+  .topbar-lit {
+    border-bottom: 2px solid rgb(var(--accent) / var(--lit-edge));
+    background: linear-gradient(
+      180deg,
+      var(--lit-fill-top) 0%,
+      var(--lit-fill-mid) 60%,
+      var(--lit-fill-bottom) 100%
+    );
+    box-shadow:
+      0 4px 18px rgb(var(--accent) / var(--lit-bloom)),
+      inset 0 1px 0 rgb(255 255 255 / 0.16);
+  }
+
+  /**
    * The bottom dock.
    *
    * A lit capsule floating on the ground rather than a bar welded to the bottom
@@ -490,9 +518,21 @@
   }
 
   /* A resting orb: round, ringed, and otherwise unlit. */
+  .nav-rail .nav-pill {
+    /*
+      Sized inline by the component, not here: the rail is denser than the bar
+      and a width in this rule would win over its inline height, giving ovals.
+    */
+    aspect-ratio: 1;
+  }
+
   .nav-dock .nav-pill {
     height: 46px;
     width: 46px;
+  }
+
+  .nav-dock .nav-pill,
+  .nav-rail .nav-pill {
     border-radius: 9999px;
     border: 1.5px solid rgb(var(--accent) / 0.55);
     background: linear-gradient(180deg, rgb(255 255 255 / 0.06), rgb(0 0 0 / 0.28));
@@ -509,7 +549,8 @@
     inner fill — because at 46px a single one of them reads as a slightly
     different grey in daylight.
   */
-  .nav-dock .nav-pill[data-active='true'] {
+  .nav-dock .nav-pill[data-active='true'],
+  .nav-rail .nav-pill[data-active='true'] {
     border-color: rgb(var(--accent-strong));
     background: radial-gradient(
       120% 120% at 50% 18%,
@@ -656,6 +697,21 @@
     --metal-bottom: #0fa9b8;
     --metal-ring: rgba(127, 224, 239, 0.5);
   }
+  /**
+   * A chosen control glows; a resting one does not.
+   *
+   * `.metal-brand` is the selected face in a filter row — the 14-day chip, the
+   * sort you picked. It already carried the teal *face*; the bloom is what
+   * matches it to the dock's selected orb, and it is the only place a control
+   * gets one. Give every chip a glow and the row goes back to having no
+   * selection signal at all, which is a bug this app has already shipped once.
+   */
+  .metal-brand {
+    box-shadow:
+      0 0 14px rgb(var(--accent) / 0.45),
+      inset 0 1px 0 rgb(255 255 255 / 0.22);
+  }
+
 
   /** White controls: the same material in nickel rather than teal. */
   /**
