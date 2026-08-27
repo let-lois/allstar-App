@@ -113,7 +113,7 @@ export default function AdminAudit() {
         ))}
       </FilterBar>
 
-      <div className="overflow-hidden rounded-card border border-line bg-surface">
+      <div className="overflow-hidden card">
         {shown.length === 0 && !loading ? (
           <p className="p-8 text-center text-sm text-ink-mute">
             {entries.length === 0

@@ -233,25 +233,19 @@
   }
 
   /**
-   * A group of rows that reads as one surface, with no card around it.
-   *
-   * The brief for this interface is to use cards *selectively* — so lists of
-   * settings, clients and people are plain white sections with dividers instead
-   * of five stacked rectangles.
-   */
-  .plate {
-    @apply border-y border-line bg-surface;
-  }
-
-  /**
    * A grouped list that is a self-contained box at every width.
    *
-   * `.plate` bleeds to the screen edges on a phone and only becomes a bordered
-   * card at `sm:` — the original brief was to use cards selectively so a screen
-   * did not read as a stack of rectangles. On the Overview that turned out to be
-   * the wrong call: the reps and the activity feed ran edge to edge under two
-   * columns of bordered tiles, so the eye had nothing telling it where one
-   * section stopped and the next began.
+   * This replaced `.plate`, which bled to the screen edges on a phone and only
+   * became a bordered card at `sm:`. That came from a brief to use cards
+   * selectively, so a screen did not read as a stack of rectangles — and it lost
+   * on contact with the actual phone. Lists running edge to edge under two
+   * columns of bordered tiles gave the eye nothing to say where one section
+   * stopped and the next began, and the answer people wanted turned out to be
+   * exactly the stack of rectangles the brief was avoiding.
+   *
+   * `.plate` is gone rather than left beside this one. A dead class describing
+   * the opposite intention is how a codebase ends up with two ways to do the
+   * same thing and no way to tell which is current.
    *
    * `overflow-hidden` is part of the class rather than the call site: every row
    * in here has a pressed background, and a square one under a rounded corner is

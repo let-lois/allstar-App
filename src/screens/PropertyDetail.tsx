@@ -202,7 +202,7 @@ export function PropertyDetail() {
           screen, and as a stack of rectangles it was the most widget-like thing
           in the product.
         */}
-        <div className="plate my-4 overflow-hidden sm:mx-4 sm:rounded-card sm:border">
+        <div className="panel my-4 sm:mx-4">
           <Collapsible flat title="Notes" count={notes.length} defaultOpen={notes.length > 0}>
             {notes.length === 0 ? (
               <p className="text-[14px] text-ink-mute">No notes yet.</p>

@@ -127,8 +127,14 @@ ok(!revenueAward || hasSale, `no revenue award without a sale (award=${revenueAw
 //
 // Read off the rendered rows rather than recomputed: this is checking that what
 // the function decided survived the component.
+//
+// Selected by `data-tour` rather than by the board's styling class. These three
+// gates used to say `ul.plate`, and renaming that class to `.panel` when the
+// lists became bordered boxes would have broken all of them at once — a styling
+// change failing a correctness test, which teaches people that a red gate means
+// "the CSS moved" rather than "the app is wrong".
 const ranks = await page.evaluate(() =>
-  [...document.querySelectorAll('ul.plate > li')].map((li) => {
+  [...document.querySelectorAll('ul[data-tour="standings-board"] > li')].map((li) => {
     const cells = li.textContent || ''
     const rank = (cells.match(/^T?\d+/) ?? [''])[0]
     const pts = Number((cells.match(/(\d[\d,]*)\s*pts/) ?? ['', '0'])[1].replace(/,/g, ''))
@@ -171,7 +177,7 @@ if (tied.length > 0) {
 // is the symptom that was reported.
 {
   const names = await page.evaluate(() =>
-    [...document.querySelectorAll('ul.plate > li')].map(
+    [...document.querySelectorAll('ul[data-tour="standings-board"] > li')].map(
       (li) => (li.textContent || '').trim().split('\n')[0],
     ),
   )

@@ -27,7 +27,7 @@ export function StatTile({ label, value, delta, deltaLabel, sub, invert }: Props
   const arrow = delta == null ? '' : delta > 0 ? '↑' : delta < 0 ? '↓' : '→'
 
   return (
-    <div className="rounded-card border border-line bg-surface p-4">
+    <div className="card p-4">
       {/* Sentence case, medium weight, and the number in semibold — matching
           `KpiCard` in the field app. Small-caps labels over black numerals are
           the house style of a reporting tool, which is the thing this console

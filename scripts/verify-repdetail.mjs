@@ -60,7 +60,7 @@ let otherRepId = null
   await page.goto(`${BASE}/standings`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(1500)
 
-  const row = page.locator('ul.plate > li button').first()
+  const row = page.locator('ul[data-tour="standings-board"] > li button').first()
   ok((await row.count()) > 0, 'the board rows are tappable')
   await row.click()
   await page.waitForTimeout(1400)
@@ -104,7 +104,7 @@ let otherRepId = null
   */
   await page.goto(`${BASE}/standings`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(1500)
-  const mine = page.locator('ul.plate > li button').filter({ hasText: 'you' })
+  const mine = page.locator('ul[data-tour="standings-board"] > li button').filter({ hasText: 'you' })
   ok((await mine.count()) === 1, `the board marks exactly one row as theirs (${await mine.count()})`)
   await mine.first().click()
   await page.waitForTimeout(1400)
@@ -139,7 +139,7 @@ let otherRepId = null
   if (otherRepId === myId) {
     await page.goto(`${BASE}/standings`, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(1500)
-    const notMe = page.locator('ul.plate > li button').filter({ hasNotText: 'you' })
+    const notMe = page.locator('ul[data-tour="standings-board"] > li button').filter({ hasNotText: 'you' })
     ok((await notMe.count()) > 0, 'the board has somebody else on it to try')
     await notMe.first().click()
     await page.waitForTimeout(1200)

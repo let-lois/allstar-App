@@ -40,7 +40,7 @@ export function AdminClients() {
         <StatTile label="MRR" value={moneyFull(mrr)} />
       </div>
 
-      <section className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
+      <section className="mt-4 overflow-hidden card">
         <table className="w-full text-sm">
           <thead className="bg-surface-sunk text-xs text-ink-mute">
             <tr>
@@ -79,7 +79,7 @@ export function AdminClients() {
         </table>
       </section>
 
-      <section className="mt-4 rounded-card border border-line bg-surface p-5">
+      <section className="mt-4 card p-5">
         <h2 className="text-sm font-bold">Seat utilization</h2>
         <p className="mb-3 text-xs text-ink-mute">
           Reps active in the last 7 days as a share of seats sold — the earliest churn

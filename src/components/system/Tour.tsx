@@ -304,7 +304,7 @@ export function Tour({ onClose }: { onClose: (completed: boolean) => void }) {
           ref={cardRef}
           tabIndex={-1}
           data-tour-card
-          className="anim-rise rounded-card border border-line bg-surface p-4 shadow-float focus:outline-none"
+          className="anim-rise card p-4 shadow-float focus:outline-none"
         >
         <p className="nums text-[12px] font-semibold text-accent">
           {index + 1} of {steps.length}
