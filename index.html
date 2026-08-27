@@ -22,7 +22,53 @@
       html {
         background: #0d1320;
       }
+      /*
+        The same fix for the other theme. Two grounds now, and the pre-paint one
+        has to be whichever theme is about to apply — pinned to the dark value it
+        is a dark flash on every cold start *of the light theme*, which is the
+        exact bug this block exists to prevent, only harder to notice.
+      */
+      html[data-theme='light'] {
+        background: #f0f2f7;
+      }
     </style>
+    <script>
+      /*
+        Theme, resolved before the first pixel.
+
+        This has to run here, synchronously, ahead of the stylesheet and the
+        bundle: the app's own theme module cannot help because by the time any
+        module executes the browser has already painted. Reading a preference
+        asynchronously and applying it afterwards is what produces the white
+        flash people associate with dark-mode web apps.
+
+        Deliberately duplicated from `src/lib/theme.ts` rather than imported,
+        for the same reason the day boundary is duplicated between the phone and
+        the Worker: a build step that welds them together is a build step that
+        can fail on one side. `verify:theme` asserts the two agree.
+
+        Every line is guarded. A throw in here happens before anything is
+        rendered, so it would show a blank page rather than an error.
+      */
+      (function () {
+        try {
+          var raw = null
+          try {
+            raw = localStorage.getItem('allstar.theme')
+          } catch (e) {}
+          var choice = raw === 'light' || raw === 'dark' ? raw : 'system'
+          var applied = choice
+          if (choice === 'system') {
+            applied = window.matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark'
+          }
+          document.documentElement.setAttribute('data-theme', applied)
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', applied === 'light' ? '#F0F2F7' : '#0D1320')
+        } catch (e) {}
+      })()
+    </script>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

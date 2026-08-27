@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit",
     "audit:viewports": "node scripts/audit-viewports.mjs",
     "verify:contrast": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-contrast.mjs",
+    "verify:theme": "node scripts/verify-theme.mjs",
     "verify:offline": "node scripts/verify-offline.mjs",
     "verify:webview": "node scripts/verify-webview-notice.mjs",
     "verify:demo": "node scripts/verify-demo-freshness.mjs",

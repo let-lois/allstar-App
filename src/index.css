@@ -105,6 +105,23 @@
     --edge: rgb(var(--accent) / 0.4);
     --edge-strong: rgb(var(--accent-strong) / 0.8);
 
+    /*
+     * Avatar tints, one hue, four steps.
+     *
+     * Tokens rather than literals in the component, because they invert with the
+     * ground: deep fill and light ink on dark, light fill and dark ink on light.
+     * Held as hex in a TSX array they simply stayed dark, and a dark circle with
+     * light-theme ink on it is two capitals nobody can read.
+     */
+    --tint-1-bg: 12 39 49;
+    --tint-1-ink: 127 224 239;
+    --tint-2-bg: 22 48 74;
+    --tint-2-ink: 169 200 240;
+    --tint-3-bg: 30 42 61;
+    --tint-3-ink: 198 210 224;
+    --tint-4-bg: 18 50 39;
+    --tint-4-ink: 127 224 180;
+
     /* --- teal as writing --------------------------------------------------- */
     /** 7.94:1 on a card, 5.17:1 on a machined teal row. */
     --accent: 32 196 211;
@@ -144,6 +161,86 @@
       --app-h: 100dvh;
     }
   }
+
+  /**
+   * The light theme.
+   *
+   * Every token above restated, with nothing left to inherit. A missing token
+   * here does not fall back to "unset" — it falls back to the *dark* value, so
+   * a half-written light theme is navy text on white or white text on white,
+   * and only on the one screen nobody opened. `verify:theme` asserts parity by
+   * name for exactly that reason.
+   *
+   * The teal changes value rather than staying put, which is the part people get
+   * wrong. `#20C4D3` measures 7.94:1 on a dark card and 2.0:1 on white — the same
+   * role needs the other end of the ramp, and that is why the accent is a token
+   * and not a step number. The dark teal here is the one already documented in
+   * `tailwind.config.js` as the readable-on-white value.
+   *
+   * Applied by `data-theme` on `<html>` rather than by `prefers-color-scheme`
+   * alone, because the choice is a setting a rep makes — a truck cab in July is
+   * a different lighting problem from the same phone at a kitchen table, and
+   * neither of them is what the operating system thinks the time of day is.
+   */
+  :root[data-theme='light'] {
+    color-scheme: light;
+
+    /* --- text ------------------------------------------------------------ */
+    /** 16.1:1 on a card. */
+    --ink: 17 24 39;
+    /** 9.4:1. Secondary text. */
+    --ink-soft: 51 65 85;
+    /** 4.8:1 on a card — the lowest tone that may still be text. */
+    --ink-mute: 90 105 125;
+    /** 2.9:1 — decorative only, same contract as the dark one. */
+    --ink-faint: 148 163 184;
+
+    /* --- surfaces --------------------------------------------------------- */
+    /*
+      The ground is grey and the card is white, which is the inverse of the dark
+      theme's arrangement and deliberately so: on a dark ground a card lifts by
+      getting lighter, and on a light one it lifts by getting *cleaner*. A white
+      ground with a whiter card has nowhere to go.
+    */
+    --surface-sunk: 240 242 247;
+    --surface: 255 255 255;
+    --surface-raised: 255 255 255;
+    /** Inputs recess by going darker than the card here too. */
+    --surface-field: 236 239 244;
+    --surface-tint: 224 246 249;
+
+    /* --- edges ------------------------------------------------------------ */
+    --glass-hairline: rgb(0 0 0 / 0.1);
+    --line: 203 213 225;
+    --line-soft: 226 232 240;
+
+    /* --- teal, at the other end of the ramp -------------------------------- */
+    /** 4.75:1 on white. The bright teal measures 2.0:1 there and cannot be text. */
+    --accent: 8 127 140;
+    /** Darker still, so "chosen" reads as more ink rather than less. */
+    --accent-strong: 6 102 112;
+
+    /* --- status ------------------------------------------------------------ */
+    --good: 21 128 61;
+    --good-bg: 220 252 231;
+    --warn: 146 64 14;
+    --warn-bg: 254 243 199;
+    --bad: 185 28 28;
+    --bad-bg: 254 226 226;
+    --info: 29 78 216;
+    --info-bg: 219 234 254;
+
+    /* --- avatar tints, read from the other side ---------------------------- */
+    --tint-1-bg: 224 246 249;
+    --tint-1-ink: 7 104 116;
+    --tint-2-bg: 227 236 250;
+    --tint-2-ink: 29 78 137;
+    --tint-3-bg: 237 240 245;
+    --tint-3-ink: 59 71 87;
+    --tint-4-bg: 222 243 232;
+    --tint-4-ink: 16 105 63;
+  }
+
 
   html,
   body,
@@ -318,6 +415,31 @@
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.02),
       0 1px 2px rgba(0, 0, 0, 0.45);
+  }
+
+  /**
+   * One avatar tint per class, so the pairing cannot come apart.
+   *
+   * Fill and ink move together. Split across two utilities at the call site,
+   * a theme override that changed one and forgot the other would give a light
+   * circle with light ink — legible in whichever theme was being looked at, and
+   * invisible in the other.
+   */
+  .avatar-tint-1 {
+    background: rgb(var(--tint-1-bg));
+    color: rgb(var(--tint-1-ink));
+  }
+  .avatar-tint-2 {
+    background: rgb(var(--tint-2-bg));
+    color: rgb(var(--tint-2-ink));
+  }
+  .avatar-tint-3 {
+    background: rgb(var(--tint-3-bg));
+    color: rgb(var(--tint-3-ink));
+  }
+  .avatar-tint-4 {
+    background: rgb(var(--tint-4-bg));
+    color: rgb(var(--tint-4-ink));
   }
 
   /** Grouped rows inside one surface — dividers rather than a stack of cards. */
@@ -1218,5 +1340,70 @@
   /* And the wait, off the right edge, until the next pass. */
   100% {
     transform: translateX(120%);
+  }
+}
+
+@layer components {
+  /**
+   * The machined controls, on a light ground.
+   *
+   * `.metal` is built for a dark app: a bright top lip, a deep inset bevel and a
+   * heavy drop shadow, which is how a raised control reads against near-black.
+   * All three are wrong on white — the shadow becomes a smudge and the bevel a
+   * dirty edge — and `.metal-dark`'s navy face keeps its colour while the label
+   * on it turns near-black, which is how the sign-out button came out
+   * unreadable rather than merely ugly.
+   *
+   * Same material, lit from the same side, in the values a white ground needs.
+   */
+  :root[data-theme='light'] .metal {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, var(--metal-lip, 0.9)),
+      inset 0 -1px 2px rgba(0, 0, 0, var(--metal-bevel, 0.06)),
+      0 0 0 1px var(--metal-ring, var(--edge)),
+      0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+
+  :root[data-theme='light'] .metal-dark {
+    /*
+      The label as well as the face. `.metal-dark` pins `text-white` for the
+      login screen's near-black ground, and that survives a theme change — so
+      repainting only the face gave a white button with white type on it, which
+      is not a subtle failure and was still invisible to a gate that was only
+      looking at faces.
+    */
+    color: rgb(var(--ink));
+    --metal-top: #ffffff;
+    --metal-bottom: #eef1f6;
+    --metal-ring: rgb(0 0 0 / 0.12);
+    --metal-lip: 0.95;
+    --metal-bevel: 0.05;
+  }
+
+  :root[data-theme='light'] .metal-tint {
+    --metal-top: #e8f7f9;
+    --metal-bottom: #d6eff3;
+    --metal-ring: rgb(var(--accent) / 0.25);
+    --metal-lip: 0.95;
+    --metal-bevel: 0.05;
+    --sheen: 0.02;
+  }
+
+  /* The side rail's selected pill. The bar's lit orb is handled separately. */
+  :root[data-theme='light'] .nav-pill[data-active='true'] {
+    --metal-top: #e8f7f9;
+    --metal-bottom: #d6eff3;
+    --metal-ring: rgb(var(--accent) / 0.4);
+    --metal-lip: 0.95;
+    --metal-bevel: 0.05;
+    --sheen: 0.02;
+  }
+
+  :root[data-theme='light'] .metal-quiet {
+    --metal-top: rgba(0, 0, 0, 0.02);
+    --metal-bottom: rgba(0, 0, 0, 0.05);
+    --metal-ring: rgb(0 0 0 / 0.1);
+    --metal-lip: 0.9;
+    --metal-bevel: 0.05;
   }
 }
