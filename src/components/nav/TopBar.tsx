@@ -31,7 +31,7 @@ interface Props {
 export function TopBar({ title, subtitle, back, right, below, identity }: Props) {
   const nav = useNavigate()
   return (
-    <header className="pad-top z-20 shrink-0 border-b border-line bg-surface/95 backdrop-blur">
+    <header className="topbar-lit pad-top z-20 shrink-0">
       <div className="flex min-h-[54px] items-center gap-1 px-2">
         {back && (
           <button

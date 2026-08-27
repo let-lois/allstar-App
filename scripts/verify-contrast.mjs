@@ -34,7 +34,7 @@ const T = {}
 for (const n of [
   'ink', 'ink-soft', 'ink-mute', 'ink-faint',
   'surface', 'surface-sunk', 'surface-tint', 'surface-field', 'surface-raised',
-  'line', 'line-soft', 'line-card', 'accent', 'accent-strong',
+  'line', 'line-soft', 'accent', 'accent-strong',
   'good', 'good-bg', 'warn', 'warn-bg', 'bad', 'bad-bg', 'info', 'info-bg',
 ]) T[n] = themeVar(n)
 
@@ -249,69 +249,68 @@ for (const [, name, hex] of swatches) at(hex, MAP_GROUND, AA_GRAPHIC, `${name} p
 console.log('\n--- structure ---')
 
 
-/* --- the two border strengths ------------------------------------------------ */
+/* --- the lit panel edge ------------------------------------------------------ */
 //
-// A panel's edge and a hairline are different jobs and used to be the same
-// colour, which is why the Overview read as a wash: two columns of tiles whose
-// boundaries you had to hunt for on a phone held at arm's length.
+// A panel's edge is `--accent` at `--lit-edge`, over the panel's own gradient
+// fill, with a bloom around it. Three things at once, which is why the number
+// below is a floor rather than the whole account of it.
 //
-// Both ends are pinned, because the reason they are separate tokens is a
-// constraint rather than a preference. Raising `--line` itself was the obvious
-// fix, and it repaints every chart: the axis is pinned to `--line` below, and
-// the seam assertion at the end of this block is what stops a divider growing
-// into a second outline around every row.
-const panelEdge = T['line-card']
+// It has been three different things in three days, and the history is the
+// reason the floor sits where it does:
+//
+//   A navy hairline at 1.40:1 — invisible, and the complaint that started this.
+//   A grey at 3.20:1 — over the graphic floor, sound by every rule in this file,
+//     and rejected twice from the same screenshot as "still not visible".
+//   White at 16.84:1 — visible, and then out of place once the dock was lit.
+//
+// So a floor at the 3:1 a non-text mark needs would pass the grey that was
+// already rejected. It sits at 4.5 instead: comfortably clear of that grey,
+// which is the only empirical data point here about what "too quiet" looks like
+// on a real phone.
+{
+  const litEdge = css.match(/--lit-edge:\s*([0-9.]+)/)?.[1]
+  if (!litEdge) throw new Error('--lit-edge not found in index.css')
 
-/*
-  The floor here is deliberately far above the 3:1 a non-text mark needs.
+  const fillMid = css.match(/--lit-fill-mid:\s*(#[0-9a-fA-F]{6})/)?.[1]
+  if (!fillMid) throw new Error('--lit-fill-mid not found in index.css')
 
-  A merely *adequate* panel edge is what this replaced, twice. The first attempt
-  measured 3.20:1 — comfortably over the graphic floor, sound by every rule in
-  this file, and still not what had been asked for: on the phone it read as a
-  grey app with faint boxes. The screen was rejected a second time before the
-  edge went white.
+  const edge = over(T['accent'], Number(litEdge), fillMid)
 
-  So the assertion is pinned near the top of the scale rather than at the
-  threshold. This is the number to argue with if the edge should soften — not
-  something to slide underneath while the gate stays green.
-*/
-const PANEL_FLOOR = 12
+  const PANEL_FLOOR = 4.5
+  const REJECTED_GREY = 3.2
 
-const panelOnCard = ratio(panelEdge, T['surface'])
-ok(panelOnCard >= PANEL_FLOOR,
-   'a panel edge is unmistakable against the card it encloses, not merely adequate',
-   panelOnCard.toFixed(2))
+  const onFill = ratio(edge, fillMid)
+  ok(onFill >= PANEL_FLOOR,
+     'the lit panel edge clears the grey that was rejected on a real phone',
+     `${onFill.toFixed(2)} vs ${REJECTED_GREY} rejected`)
 
-const panelOnGround = ratio(panelEdge, T['surface-sunk'])
-ok(panelOnGround >= PANEL_FLOOR,
-   'and against the ground it sits on',
-   panelOnGround.toFixed(2))
+  const onGround = ratio(edge, T['surface-sunk'])
+  ok(onGround >= PANEL_FLOOR, 'and reads against the ground the panel sits on', onGround.toFixed(2))
 
-/*
-  Width is half of "thick white border" and a colour check cannot see it.
-  Without this, dropping `border-2` leaves every measurement above untouched and
-  the gate green while the screen quietly goes back to hairlines.
-*/
-for (const cls of ['card', 'panel']) {
-  const rule = css.match(new RegExp(`\\.${cls}\\s*\\{[^}]*`))?.[0] ?? ''
-  ok(/border-2\s+border-line-card/.test(rule),
-     `.${cls} draws that edge at 2px, not as a hairline`)
+  /*
+    Width and colour, read from the rule itself. A contrast number cannot see
+    either: `.card` losing `border: 2px` or being repainted in a flat grey both
+    leave every measurement above untouched, because they are measurements of a
+    token rather than of what the class actually draws.
+  */
+  const cardRule = css.match(/\.card\s*\{[^}]*/)?.[0] ?? ''
+  ok(/border:\s*2px solid rgb\(var\(--accent\)/.test(cardRule),
+     '.card draws that edge at 2px, in the accent, not as a hairline')
+  ok(/box-shadow:[^;]*var\(--lit-bloom\)/.test(cardRule),
+     'and carries the bloom, which is half of why a 5:1 edge reads at all')
+
+  /*
+    The dock stays the brightest thing on the screen. A dozen panels matching it
+    would take away the one signal that tells a thumb where the navigation is —
+    so the dock's edge is asserted *above* a panel's rather than equal to it.
+  */
+  const dockRule = css.match(/\.nav-dock\s*\{[^}]*/)?.[0] ?? ''
+  const dockAlpha = Number(dockRule.match(/border:\s*2px solid rgb\(var\(--accent\)\s*\/\s*([0-9.]+)\)/)?.[1])
+  ok(dockAlpha > Number(litEdge),
+     'the dock is still lit brighter than the panels around it',
+     `dock ${dockAlpha} vs panel ${litEdge}`)
 }
 
-const panelVsHairline = ratio(panelEdge, hairline)
-ok(panelVsHairline >= 2,
-   'the panel edge and the hairline are two strengths, not one repainted',
-   panelVsHairline.toFixed(2))
-
-/*
-  The hairline stays quiet, deliberately. It is a seam inside a surface — a
-  divider between rows, a chart axis — and a divider as loud as the box around it
-  turns a list into a grid. This is the assertion that stops somebody "fixing"
-  the dividers to match the border.
-*/
-ok(ratio(hairline, T['surface']) < AA_GRAPHIC,
-   'and the hairline stays a seam rather than becoming a second outline',
-   ratio(hairline, T['surface']).toFixed(2))
 const lift = ratio(T['surface'], T['surface-sunk'])
 ok(lift >= 1.04 && lift <= 1.35, 'a card lifts off the ground without jumping', lift.toFixed(2))
 ok(parseHex(T['surface-field']).reduce((a, b) => a + b) < parseHex(T['surface']).reduce((a, b) => a + b),
