@@ -1,5 +1,6 @@
+import fs from 'node:fs'
 import { SERIES, SINGLE, FUNNEL_RAMP, STATUS, INK } from '../src/admin/charts/tokens.ts'
-import { ratio } from './lib/contrast.mjs'
+import { ratio, resolveThemeColour } from './lib/contrast.mjs'
 import {
   BAND,
   CHROMA_FLOOR,
@@ -31,7 +32,16 @@ import {
  * No browser: colour is arithmetic.
  */
 
-const SURFACE = INK.surface
+/*
+  Resolved, not read raw. `INK.surface` is `var(--chart-surface)` since the chart
+  palette started following the theme, and a ratio taken against that string is
+  NaN — which fails every comparison and so reports a clean verdict rather than a
+  wrong number.
+*/
+const SURFACE = resolveThemeColour(
+  INK.surface,
+  fs.readFileSync(new URL('../src/index.css', import.meta.url), 'utf8'),
+)
 const fails = []
 const ok = (cond, msg, measured) => {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}${measured ? `  (${measured})` : ''}`)

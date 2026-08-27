@@ -41,3 +41,31 @@ export function contrast(a, b) {
 }
 
 export const ratio = (a, b) => Math.round(contrast(a, b) * 100) / 100
+
+/**
+ * Follow one `var()` hop to the hex it names in the theme.
+ *
+ * Colours that are consumed by inline styles and SVG attributes — chart ink, the
+ * drawn map's ground — are held as hex-valued custom properties so they can
+ * follow the theme. Read straight out of a `.ts` file they arrive as the string
+ * "var(--chart-surface)", and every measurement taken against one becomes NaN.
+ *
+ * NaN is the dangerous part rather than the inconvenience: it fails every
+ * comparison, so a gate that forgets to resolve does not report a wrong number,
+ * it reports a wrong *verdict*. Moving the chart palette onto tokens sent 21
+ * checks in `verify:contrast` and 10 in `verify:charts` to NaN in one commit.
+ *
+ * Lives here so there is one of it. Two gates had already grown their own copy
+ * before this was written, which is the same shape of problem as the palettes
+ * this whole exercise was about.
+ *
+ * Reads the first `:root` block, which is the dark theme. Light values sit
+ * further down the file and belong to `verify:theme`.
+ */
+export function resolveThemeColour(value, css) {
+  const m = /^var\(--([a-z0-9-]+)\)$/.exec(String(value).trim())
+  if (!m) return value
+  const hit = css.match(new RegExp(`--${m[1]}:\\s*(#[0-9a-fA-F]{3,8})\\s*;`))
+  if (!hit) throw new Error(`--${m[1]} is not a hex-valued token in index.css`)
+  return hit[1]
+}

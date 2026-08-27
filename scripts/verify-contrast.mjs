@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import { ratio, over, toHex, parseHex } from './lib/contrast.mjs'
+import { ratio, over, toHex, parseHex, resolveThemeColour } from './lib/contrast.mjs'
 import { INK, SERIES, FUNNEL_RAMP } from '../src/admin/charts/tokens.ts'
 
 /**
@@ -31,32 +31,14 @@ function themeVar(name) {
 }
 
 /**
- * A token whose value is a hex colour rather than channels.
+ * Hex-valued tokens, and one `var()` hop to them.
  *
- * Some tokens are consumed by inline styles and SVG attributes — chart ink, the
- * drawn map's ground — where `21 29 46` is not a colour and only a hex will do.
- * Read from the first `:root` block, which is the dark one; the light values sit
- * further down the file and belong to `verify:theme`.
+ * Both live in `lib/contrast.mjs` so the gates share one copy. Two of them had
+ * already grown their own before that was written, which is the same shape of
+ * problem as the hardcoded palettes this exercise was about.
  */
-function hexVar(name) {
-  const m = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{3,8})\\s*;`))
-  if (!m) throw new Error(`theme variable --${name} not found as a hex in index.css`)
-  return m[1]
-}
-
-/**
- * Follow one `var()` hop, so a value held as a token measures the same as one
- * written out.
- *
- * The chart palette moved from literal hex to `var(--chart-*)` so it could
- * follow the theme, and every check below went to NaN in the same commit —
- * comparing the string "var(--chart-surface)" to a colour. Resolving here keeps
- * the assertions about *contrast* rather than about how the value is spelled.
- */
-function resolveColour(value) {
-  const m = String(value).match(/^var\(--([a-z0-9-]+)\)$/)
-  return m ? hexVar(m[1]) : value
-}
+const hexVar = (name) => resolveThemeColour(`var(--${name})`, css)
+const resolveColour = (value) => resolveThemeColour(value, css)
 
 const T = {}
 for (const n of [
