@@ -55,24 +55,27 @@
     --dock-space: calc(100px + env(safe-area-inset-bottom, 0px));
 
     /**
-     * The lit surface, in one place.
+     * The material, in one place.
      *
-     * Every panel, the dock, the top bar and the rail draw their edge, fill and
-     * bloom from these. Three surfaces with three hand-tuned teals is how the
-     * interface ends up *nearly* consistent, and how a later nudge fixes one of
-     * them — the floating action button already taught this the hard way, with
-     * its own copy of the dock's height.
+     * This was a lit teal edge on every surface. It is glass now: a translucent
+     * fill over a blurred backdrop, a hairline, and a soft shadow — depth from
+     * material rather than from light. Teal survives as the *accent*, on the
+     * one thing in a group that is chosen, which is the only place iOS spends
+     * a colour too.
      *
-     * `--lit-edge` is the alpha on `--accent` for a resting edge. Panels sit
-     * lower than the dock on purpose: there are a dozen panels on a screen and
-     * exactly one dock, so the dock raises its own values rather than everything
-     * else matching the loudest thing.
+     * Still one recipe rather than a value per surface. Three hand-tuned
+     * translucencies is how an interface ends up nearly consistent, and the
+     * floating action button already taught that lesson with its own copy of
+     * the dock's height.
      */
-    --lit-edge: 0.75;
-    --lit-bloom: 0.2;
-    --lit-fill-top: #0c2a34;
-    --lit-fill-mid: #08202a;
-    --lit-fill-bottom: #061722;
+    --glass-fill: 0.72;
+    --glass-blur: 22px;
+    --glass-hairline: rgb(255 255 255 / 0.16);
+    /*
+      No `--lit-edge` any more. Teal is not an edge on anything at rest; it is
+      the accent on the one thing in a group that is chosen, and those places
+      reach for `--accent` and `--edge-strong` directly.
+    */
 
     /* --- edges ------------------------------------------------------------ */
     /**
@@ -167,6 +170,18 @@
     /* The app owns scrolling per-pane; the document itself never scrolls. */
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
+    /*
+      The details that separate a system font from a typeset one.
+
+      `text-rendering` and the ligature/kerning pair are what the platform's own
+      apps get for free from SF; asking for them explicitly gets a web build most
+      of the way there. `-moz-osx-font-smoothing` only affects macOS Firefox and
+      costs nothing elsewhere.
+    */
+    font-feature-settings: 'kern' 1, 'liga' 1, 'cv11' 1;
+    text-rendering: optimizeLegibility;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.011em;
   }
 
   /* Never let iOS zoom the page when a field is focused. 16px is the threshold. */
@@ -188,6 +203,20 @@
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
     }
+  }
+}
+
+@layer base {
+  /*
+    Large type tightens; small type does not.
+
+    Tracking that suits a 13px label is too loose at 38px — the larger the face,
+    the less air the letters need. One rule rather than a tracking class on every
+    heading, because the moment it is opt-in half the headings will not have it.
+  */
+  h1,
+  h2 {
+    letter-spacing: -0.021em;
   }
 }
 
@@ -221,35 +250,32 @@
    * the elevation.
    */
   /**
-   * A panel: lit edge, gradient fill, a little bloom.
+   * A panel: glass, a hairline, and a shadow.
    *
-   * This was a white 2px border until the dock shipped and the rest of the
-   * interface stopped matching it. On a near-black ground a drop shadow is
-   * invisible — there is nothing darker for it to be — so what separates a card
-   * here is its edge, and that edge is now the same teal light the dock uses.
+   * Three things do the separating, and only one of them is a line. The fill is
+   * translucent over a blurred, saturated backdrop; the hairline states the
+   * edge; the shadow lifts it off the ground. That is how iOS gets depth on a
+   * dark ground without drawing anything bright, and it is why the hairline can
+   * be quiet here when a flat grey border at 3.20:1 was rejected twice as
+   * invisible — a line on its own was carrying the whole job.
    *
-   * The bloom is deliberately a fifth of the dock's. A screen carries a dozen
-   * panels and one dock; giving them equal glow would make the dock stop being
-   * the brightest thing at the bottom, which is what tells a thumb where it is.
+   * `saturate` is not decoration. Blur alone greys whatever is behind it; the
+   * saturation is what keeps a card over the map looking like glass over colour
+   * rather than fog.
    */
   .card {
     @apply rounded-card;
-    border: 2px solid rgb(var(--accent) / var(--lit-edge));
-    background:
-      linear-gradient(180deg, rgb(var(--accent) / 0.06) 0%, transparent 55%),
-      linear-gradient(
-        180deg,
-        var(--lit-fill-top) 0%,
-        var(--lit-fill-mid) 55%,
-        var(--lit-fill-bottom) 100%
-      );
+    background: rgb(var(--surface) / var(--glass-fill));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+    border: 1px solid var(--glass-hairline);
     box-shadow:
-      0 0 16px rgb(var(--accent) / var(--lit-bloom)),
-      0 8px 24px rgba(0, 0, 0, 0.45),
-      /* the lit top lip, the same trick the machined controls use */
-      inset 0 1px 0 rgb(255 255 255 / 0.16),
-      inset 0 0 18px rgb(var(--accent) / 0.1);
+      0 1px 1px rgba(0, 0, 0, 0.22),
+      0 10px 30px rgba(0, 0, 0, 0.4),
+      /* the lit top lip — a millimetre of light, the way a real bevel catches it */
+      inset 0 1px 0 rgb(255 255 255 / 0.09);
   }
+
 
   /**
    * A grouped list that is a self-contained box at every width.
@@ -471,17 +497,12 @@
    * only put a bright line down the very edge of the glass.
    */
   .topbar-lit {
-    border-bottom: 2px solid rgb(var(--accent) / var(--lit-edge));
-    background: linear-gradient(
-      180deg,
-      var(--lit-fill-top) 0%,
-      var(--lit-fill-mid) 60%,
-      var(--lit-fill-bottom) 100%
-    );
-    box-shadow:
-      0 4px 18px rgb(var(--accent) / var(--lit-bloom)),
-      inset 0 1px 0 rgb(255 255 255 / 0.16);
+    background: rgb(var(--surface) / 0.68);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    border-bottom: 1px solid var(--glass-hairline);
   }
+
 
   /**
    * The bottom dock.
@@ -504,18 +525,16 @@
    */
   .nav-dock {
     border-radius: 34px;
-    background:
-      linear-gradient(180deg, rgb(var(--accent) / 0.10) 0%, transparent 55%),
-      linear-gradient(180deg, #0c2a34 0%, #071a23 55%, #04111a 100%);
-    border: 2px solid rgb(var(--accent) / 0.8);
+    background: rgb(var(--surface) / 0.7);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid var(--glass-hairline);
     box-shadow:
-      /* the bloom, which is what makes it read as lit rather than painted */
-      0 0 26px 3px rgb(var(--accent) / 0.4),
-      0 10px 30px rgba(0, 0, 0, 0.55),
-      /* a lit top lip, the same trick the machined controls use */
-      inset 0 1px 0 rgb(255 255 255 / 0.26),
-      inset 0 0 26px rgb(var(--accent) / 0.26);
+      0 2px 6px rgba(0, 0, 0, 0.3),
+      0 16px 40px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgb(255 255 255 / 0.12);
   }
+
 
   /* A resting orb: round, ringed, and otherwise unlit. */
   .nav-rail .nav-pill {
@@ -534,7 +553,7 @@
   .nav-dock .nav-pill,
   .nav-rail .nav-pill {
     border-radius: 9999px;
-    border: 1.5px solid rgb(var(--accent) / 0.55);
+    border: 1px solid var(--glass-hairline);
     background: linear-gradient(180deg, rgb(255 255 255 / 0.06), rgb(0 0 0 / 0.28));
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12);
     @apply text-ink-soft;
@@ -894,13 +913,13 @@
    */
   .field-sunk {
     background: rgba(0, 0, 0, 0.32);
-    box-shadow: inset 0 0 0 1px rgb(var(--accent) / 0.4);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
     transition: box-shadow 150ms ease;
   }
 
   .field-sunk:focus {
     outline: none;
-    box-shadow: inset 0 0 0 1px rgb(var(--accent) / 0.4), 0 0 0 2px var(--brand-focus, #20c4d3);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14), 0 0 0 2px var(--brand-focus, #20c4d3);
   }
 
   /*

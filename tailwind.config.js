@@ -179,12 +179,20 @@ export default {
         tap: '48px',
       },
       borderRadius: {
-        // One card radius, used everywhere, so nothing looks borrowed.
-        card: '22px',
-        field: '14px',
-        sheet: '26px',
+        /*
+         * One card radius, used everywhere, so nothing looks borrowed.
+         *
+         * Opened up across the board. A tighter radius reads as a box with
+         * rounded corners; a generous one reads as a shape, which is most of
+         * what separates a polished interface from a competent one. CSS has no
+         * continuous corner, so the nearest honest approximation is a larger
+         * radius and a softer shadow under it.
+         */
+        card: '26px',
+        field: '16px',
+        sheet: '30px',
         /** Nav pills, chips, small tappable surfaces. */
-        pill: '16px',
+        pill: '18px',
       },
       boxShadow: {
         /*
