@@ -11,15 +11,13 @@
  * lighter ink, all well past 4.5:1, because two capital letters at 11px is small
  * text and has to be legible rather than suggestive.
  *
- * Inverted with the ground: on white these were light fills with dark ink, which
- * is the same relationship read from the other side. Measured 7.9-10.2:1.
+ * Inverted with the ground, and now literally so: each pairing is a token that
+ * flips between a deep fill with light ink and a light fill with dark ink, so
+ * the same rule holds in both themes. Held as hex here, they stayed dark when
+ * the light theme arrived, and a dark circle with near-black initials on it is
+ * two capitals nobody can read. See `.avatar-tint-1` in `index.css`.
  */
-const TINTS = [
-  'bg-surface-tint text-accent-strong',
-  'bg-[#16304A] text-[#A9C8F0]',
-  'bg-[#1E2A3D] text-ink-soft',
-  'bg-[#123227] text-[#7FE0B4]',
-]
+const TINTS = ['avatar-tint-1', 'avatar-tint-2', 'avatar-tint-3', 'avatar-tint-4']
 
 function tintFor(seed: string): string {
   let h = 0

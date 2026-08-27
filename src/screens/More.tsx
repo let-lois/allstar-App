@@ -20,6 +20,7 @@ import { IconChevron } from '../components/nav/icons'
 import { AvatarPicker, AvatarRemove } from '../components/ui/AvatarPicker'
 import * as db from '../lib/db'
 import { TOUR_KEY } from '../data/tour'
+import { ThemeToggle } from '../components/ui/ThemeToggle'
 
 const ROLE_LABEL: Record<string, string> = {
   field_rep: 'Field Rep',
@@ -110,6 +111,14 @@ export function More() {
               </p>
               <AvatarRemove />
             </div>
+            {/*
+              Appearance sits with the person, not under a heading.
+
+              It is a property of this handset rather than of the account, and
+              putting it beside the avatar is the difference between a setting
+              somebody finds and a setting somebody is told about.
+            */}
+            <ThemeToggle />
           </div>
 
           {/* --- sync ----------------------------------------------------- */}
