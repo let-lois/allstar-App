@@ -16,10 +16,13 @@ import {
   apiGeocode,
   apiImport,
   apiUsers,
+  apiGeocoders,
+  type GeocodeProviderDTO,
   type ImportResultDTO,
   type TeamUserDTO,
 } from '../lib/http'
 import { liveToken } from '../lib/session'
+import { describeSpend, estimateLookupSpend } from '../lib/spend'
 import { useAppStore } from '../store/useAppStore'
 
 /**
@@ -72,6 +75,12 @@ export default function AdminImport() {
   const [prepared, setPrepared] = useState<PreparedRow[]>([])
 
   const [reps, setReps] = useState<TeamUserDTO[]>([])
+  /*
+    The company's active geocoding provider, so the lookup below can be costed
+    before it runs. Null until it loads, and null on any failure — a provider we
+    could not read is one we must not put a price on.
+  */
+  const [geocoder, setGeocoder] = useState<GeocodeProviderDTO | null>(null)
   const [assignRepId, setAssignRepId] = useState('')
 
   /*
@@ -183,8 +192,27 @@ export default function AdminImport() {
     })
     setPrepared(out)
     setStage('review')
-    // The rep dropdown is only needed from here on, and only in live mode.
-    if (mode === 'live') void loadReps()
+    // The rep dropdown and the lookup price are only needed from here on, and
+    // only in live mode.
+    if (mode === 'live') {
+      void loadReps()
+      void loadGeocoder()
+    }
+  }
+
+  async function loadGeocoder() {
+    const token = liveToken()
+    if (!token) return
+    try {
+      const res = await apiGeocoders(token)
+      setGeocoder(res.providers.find((p) => p.id === res.active) ?? null)
+    } catch {
+      /*
+        Left null rather than guessed. Without knowing the provider there is no
+        honest estimate to show, and showing the wrong one is worse than showing
+        none — the operator would stop reading it.
+      */
+    }
   }
 
   async function loadReps() {
@@ -533,6 +561,17 @@ export default function AdminImport() {
                 marked with how precisely it was found — on the house, on the block, or
                 only nearby — so you can see what you’re importing before you import it.
               </p>
+              {/*
+                The cost, before the button rather than after the invoice.
+
+                A company on their own key is billed per address by the vendor,
+                and nothing in this app caps or interrupts that. This line is the
+                only thing between an operator and a bill they did not expect —
+                see LAUNCH.md item 5. It says nothing at all on the free Census
+                lookup, so when it does appear it means something.
+              */}
+              <SpendNotice provider={geocoder} lookups={unplaced.length} />
+
               <div className="mt-3 flex items-center gap-3">
                 <Button onClick={() => void runGeocode()} disabled={busy !== null || mode === 'demo'}>
                   {busy === 'geocode'
@@ -844,6 +883,34 @@ function Tally({
  * the first ten rows — rendering five thousand table rows to prove it twice costs
  * a visibly janky page. The count is stated so nobody thinks the rest vanished.
  */
+/**
+ * What this batch of lookups will cost, in a sentence.
+ *
+ * Silent on a free provider. That silence is deliberate and is what gives the
+ * warning its weight: an operator who sees a cost line on every import stops
+ * reading it by the third one.
+ */
+function SpendNotice({
+  provider,
+  lookups,
+}: {
+  provider: GeocodeProviderDTO | null
+  lookups: number
+}) {
+  const note = describeSpend(estimateLookupSpend(provider, lookups))
+  if (!note || lookups === 0) return null
+  return (
+    <p
+      data-testid="spend-notice"
+      className={`mt-3 rounded-lg px-4 py-3 text-sm leading-relaxed ${
+        note.tone === 'warn' ? 'bg-warn-bg text-warn' : 'bg-surface-sunk text-ink-soft'
+      }`}
+    >
+      {note.text}
+    </p>
+  )
+}
+
 function PreviewTable({ rows }: { rows: PreparedRow[] }) {
   const shown = rows.slice(0, 100)
   return (

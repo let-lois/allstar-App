@@ -91,6 +91,40 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ matches }) })
     })
   }
+  /*
+    A company on their own Google key, so the spend notice has something to say.
+    Without this the screen loads no provider, shows nothing, and the two
+    assertions below would pass on an empty string — which is the failure this
+    whole feature exists to prevent, reproduced inside its own test.
+  */
+  await page.route('**/api/geocoders', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        providers: [
+          {
+            id: 'google',
+            label: 'Google',
+            needsKey: true,
+            adapter: 'live',
+            storage: 'temporary',
+            storageNote: '30 days only.',
+            price: '$5.00 per 1,000',
+            pricePerThousandUsd: 5,
+            free: '10,000 per month',
+            freeCount: 10000,
+            freePeriod: 'month',
+            accuracy: 'Rooftop.',
+            signup: '',
+          },
+        ],
+        configured: [{ provider: 'google', active: true, hint: 'AIza…9fQ4', status: 'active' }],
+        active: 'google',
+      }),
+    }),
+  )
+
   await page.goto(BASE, { waitUntil: 'networkidle' })
   await page.locator('input[type="email"]').fill(ADMIN.email)
   await page.locator('input[autocomplete="current-password"]').fill('a-real-password')
@@ -164,6 +198,19 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
     (await page.locator('td', { hasText: 'Whitfield, Dana' }).count()) > 0,
     'a comma inside a quoted owner name survives into the preview',
   )
+
+  /*
+    The cost of the lookup, before the lookup.
+
+    This company is on Google's key in this scenario — the geocoders route
+    below returns it — so pressing the button spends their money. Three
+    addresses is inside Google's free allowance, so what has to be true is that
+    the screen says which allowance is being drawn down rather than staying
+    silent about a billable provider entirely.
+  */
+  const spend = await page.getByTestId('spend-notice').innerText().catch(() => '')
+  ok(/Google/.test(spend), `the lookup names the provider that will be billed — saw "${spend.slice(0, 90)}"`)
+  ok(/free/i.test(spend), 'and says the batch draws on a free allowance')
 
   await page.getByRole('button', { name: /Look up 3 addresses/ }).click()
   await page.waitForTimeout(1200)

@@ -1288,6 +1288,38 @@ API key anywhere in the rendered page**. Both halves were proved by
 reintroducing the bugs: relabelling Google as permanent, and returning a whole
 key in the hint.
 
+### The cost of a lookup, before the lookup
+
+A company on their own geocoding key is billed by the vendor, per address, and
+this app has no spend cap, no running total and no cut-off. The only thing
+between an operator and an invoice they did not expect is knowing the number
+before they press the button, so the address-lookup step says it.
+
+The registry carries each provider's price twice: as prose for the row a human
+reads, and as a number for the arithmetic. Parsing the prose to spend money
+would have been worse, and `verify:geocoders` asserts the two agree — drift
+between them is a screen that quotes one figure and bills against another.
+
+`src/lib/spend.ts` does the sum, and three rules govern it.
+
+**Never undershoot.** Where a vendor quotes a range the registry carries the top
+of it, dollar figures round *up* to the cent, and the wording says an allowance
+may already be partly spent — this app cannot see the vendor's meter. An
+estimate that reads low produces exactly the surprise it exists to prevent.
+
+**Never invent a number.** HERE and TomTom publish no simple per-thousand rate,
+so those return `unknown` and the line says to check the account instead of
+quoting a figure. A confident wrong number is worse than an honest gap, because
+the operator stops checking.
+
+**Say nothing when there is nothing to say.** On Census — free, no account, no
+bill — the line does not render at all. That silence is what makes the warning
+mean something on the third import rather than being scrolled past.
+
+The estimate is arithmetic on data that already existed: the preview knows the
+row count, the registry knows the price and the free tier. Nothing multiplied
+them until now.
+
 ## Before this goes to a paying customer
 
 Deliberate compromises taken to keep the prototype moving. Each is fine for
