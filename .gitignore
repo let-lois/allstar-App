@@ -30,3 +30,11 @@ api/seed.sql
 # silently, and a .lnk committed in place of an asset fails in a way that is very
 # hard to read (it looks like the file is there and is simply corrupt).
 *.lnk
+
+# Weekly build reports.
+#
+# A deliverable, not source: each is written for a particular week and handed
+# over, and committing them would accumulate a binary per week that nothing in
+# the app reads. Ignored rather than deleted, so one can sit here while it is
+# being sent without showing up as a change to the app.
+Allstar-week*.pdf
