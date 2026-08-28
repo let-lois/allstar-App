@@ -1,6 +1,5 @@
 import { DataList } from './DataList'
 import { AdminPage } from './AdminLayout'
-import { useAppStore } from '../store/useAppStore'
 import { StatTile } from './charts/StatTile'
 import { Bars } from './charts/Bars'
 import { STATUS } from './charts/tokens'
@@ -8,6 +7,10 @@ import { moneyFull } from '../lib/format'
 
 /**
  * Platform view — Super Admin only.
+ *
+ * Enforced by AdminLayout, from the same NAV table that hides the link — not
+ * here. A second check on the screen would be a second source of truth, and two
+ * sources of truth disagreeing is exactly how this went wrong.
  *
  * That line was a comment and nothing else for a while. The console's nav hides
  * this entry from everyone below super admin, which hides the door without
@@ -33,21 +36,6 @@ const CLIENTS = [
 const HEALTH_LABEL = { good: 'Healthy', warning: 'Low activity' } as const
 
 export function AdminClients() {
-  const user = useAppStore((st) => st.user)
-  if (user && user.role !== 'super_admin') {
-    return (
-      <AdminPage title="Clients">
-        <div className="card p-8 text-center">
-          <p className="text-lg font-semibold">Not available for your role</p>
-          <p className="mt-1 text-sm text-ink-mute">
-            The platform view is for Allstar staff. Your own company's numbers are on
-            the Dashboard.
-          </p>
-        </div>
-      </AdminPage>
-    )
-  }
-
   const totalSeats = CLIENTS.reduce((a, c) => a + c.seats, 0)
   const totalActive = CLIENTS.reduce((a, c) => a + c.activeReps, 0)
   const mrr = CLIENTS.reduce((a, c) => a + c.mrr, 0)

@@ -1410,6 +1410,39 @@ Clients screen before measuring, because a 403 renders a page that is narrow,
 tidy and completely clean — which would report as a pass and quietly restore the
 gap. That guard is what caught the missing role check.
 
+### The console's role gate is one table, not nine screens
+
+`NAV` in `AdminLayout.tsx` names which roles may see each section. It used to do
+only that — *see*. The sidebar hid what a role should not have, and nothing
+stopped anyone typing the URL: a manager could open the activity log and the
+settings editor, and anybody who could reach the console at all could open the
+platform Clients view. Its own docstring said "Super Admin only" the whole time.
+
+The layout now derives both facts from the same list. A route in `NAV` is
+navigable by exactly the roles it names, matched longest-prefix-first so
+`/admin/settings` resolves to its own entry rather than to `/admin`, and
+`/admin/team/:id` inherits Team's roles. No screen guards itself, which is the
+point: a screen cannot forget to do something it does not do.
+
+**What was actually exposed, stated plainly:** almost nothing. The server was
+holding the whole time — `/api/audit` and every settings write check
+`canInvite`, so a manager reached those screens and saw furniture with no rows
+and an editor that would refuse to save. The Clients view was the real gap,
+because it renders a hardcoded illustration and calls no API at all, so there
+was no server check standing behind it. The lesson is not that data leaked; it
+is that the UI told three different stories about who was allowed where.
+
+`npm run verify:console` now navigates rather than reading the sidebar. For
+every restricted route, each role that should not have it goes straight to the
+URL and must be refused *visibly* and with none of the screen's content on the
+page — both halves, because "refused" alone passes on a screen that renders its
+furniture and shows nothing, and "not rendered" alone passes on a blank page.
+
+That sweep is what found the two manager routes. The check that existed before
+it asserted a manager could not *see* the Clients and Settings links, which is a
+different claim from being unable to open them, and the difference is the whole
+bug.
+
 ### Tap targets on the theme control
 
 The three-way appearance control shipped at 32px per button. Three small glyphs
