@@ -43,9 +43,9 @@ const STORAGE_WORD: Record<GeocodeProviderDTO['storage'], string> = {
 }
 
 const STORAGE_TONE: Record<GeocodeProviderDTO['storage'], string> = {
-  permanent: 'bg-ok-soft text-ok',
-  conditional: 'bg-warn-soft text-warn',
-  temporary: 'bg-bad-soft text-bad',
+  permanent: 'bg-good-bg text-good',
+  conditional: 'bg-warn-bg text-warn',
+  temporary: 'bg-bad-bg text-bad',
 }
 
 export function GeocodingPanel() {
@@ -128,10 +128,10 @@ export function GeocodingPanel() {
       </div>
 
       {notice && (
-        <p className="rounded-card bg-ok-soft px-4 py-3 text-[15px] text-ok">{notice}</p>
+        <p className="rounded-card bg-good-bg px-4 py-3 text-[15px] text-good">{notice}</p>
       )}
       {error && (
-        <p className="rounded-card bg-bad-soft px-4 py-3 text-[15px] text-bad">{error}</p>
+        <p className="rounded-card bg-bad-bg px-4 py-3 text-[15px] text-bad">{error}</p>
       )}
 
       <ul className="flex flex-col gap-3">
@@ -145,7 +145,7 @@ export function GeocodingPanel() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[16px] font-semibold text-ink">{p.label}</span>
                 {isActive && (
-                  <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[12px] font-semibold text-accent">
+                  <span className="rounded-full bg-info-bg px-2 py-0.5 text-[12px] font-semibold text-info">
                     In use
                   </span>
                 )}
@@ -165,7 +165,7 @@ export function GeocodingPanel() {
               <p className="mt-1 text-[14px] text-ink-mute">
                 {p.price} · {p.free} free
               </p>
-              <p className="mt-2 text-[14px] text-ink-body">{p.storageNote}</p>
+              <p className="mt-2 text-[14px] text-ink-soft">{p.storageNote}</p>
 
               {row && (
                 <p className="mt-2 font-mono text-[13px] text-ink-mute">
