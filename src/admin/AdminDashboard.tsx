@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { DataList } from './DataList'
 import { AdminPage, FilterBar } from './AdminLayout'
 import { StatTile } from './charts/StatTile'
 import { TrendChart } from './charts/TrendChart'
@@ -162,43 +163,51 @@ export function AdminDashboard() {
             Full report
           </button>
         </div>
-        <table className="w-full text-sm">
-          <thead className="bg-surface-sunk text-xs text-ink-mute">
-            <tr>
-              <th className="px-5 py-2 text-left font-semibold">Rep</th>
-              <th className="px-3 py-2 text-right font-semibold">Doors</th>
-              <th className="px-3 py-2 text-right font-semibold">Conversations</th>
-              <th className="px-3 py-2 text-right font-semibold">Contact rate</th>
-              <th className="px-3 py-2 text-right font-semibold">Appts</th>
-              <th className="px-3 py-2 text-right font-semibold">Quotes</th>
-              <th className="px-3 py-2 text-right font-semibold">Won</th>
-              <th className="px-5 py-2 text-right font-semibold">Closed</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reps.map((r) => (
-              <tr key={r.id} className="border-t border-line-soft hover:bg-surface-field">
-                <td className="px-5 py-2.5">
-                  <span className="flex items-center gap-2.5">
-                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[11px] font-bold text-accent">
-                      {r.initials}
-                    </span>
-                    <span className="font-medium">{r.name}</span>
+        {/*
+          Same move as Reports, and the same reason: eight columns at 622px
+          inside an `overflow-hidden` card meant everything past "Doors" was
+          cut off on a phone with no way to reach it. Cards here, the table a
+          manager compares reps in on a desktop.
+        */}
+        <DataList
+          rows={reps}
+          keyOf={(r) => r.id}
+          empty="No rep activity yet today."
+          className="px-5 pb-5 lg:px-0 lg:pb-0"
+          columns={[
+            {
+              header: 'Rep',
+              phone: 'title',
+              cell: (r) => (
+                <span className="flex items-center gap-2.5">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[11px] font-bold text-accent">
+                    {r.initials}
                   </span>
-                </td>
-                <td className="nums px-3 py-2.5 text-right">{r.knocks.toLocaleString()}</td>
-                <td className="nums px-3 py-2.5 text-right">{r.conversations}</td>
-                <td className="nums px-3 py-2.5 text-right font-semibold">{r.contactRate}%</td>
-                <td className="nums px-3 py-2.5 text-right">{r.appointments}</td>
-                <td className="nums px-3 py-2.5 text-right">{r.quotes}</td>
-                <td className="nums px-3 py-2.5 text-right">{r.sold}</td>
-                <td className="nums px-5 py-2.5 text-right font-semibold text-good">
-                  {money(r.closedValue)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <span className="font-medium">{r.name}</span>
+                </span>
+              ),
+            },
+            { header: 'Doors', cell: (r) => r.knocks.toLocaleString(), align: 'right' },
+            { header: 'Conversations', cell: (r) => r.conversations, align: 'right' },
+            {
+              // What a manager glances at, so it sits beside the name.
+              header: 'Contact rate',
+              cell: (r) => `${r.contactRate}%`,
+              align: 'right',
+              phone: 'trailing',
+              className: 'font-semibold',
+            },
+            { header: 'Appts', cell: (r) => r.appointments, align: 'right' },
+            { header: 'Quotes', cell: (r) => r.quotes, align: 'right' },
+            { header: 'Won', cell: (r) => r.sold, align: 'right' },
+            {
+              header: 'Closed',
+              cell: (r) => <span className="text-good">{money(r.closedValue)}</span>,
+              align: 'right',
+              className: 'font-semibold',
+            },
+          ]}
+        />
       </section>
 
       <section className="mt-4 overflow-hidden card">

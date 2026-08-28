@@ -1359,6 +1359,41 @@ is billed. Inside the allowance nothing is interrupted at all — a prompt that
 appears on every lookup is one people click through without reading, which would
 make it worthless on the batch that actually costs money.
 
+### Tables that were clipped rather than scrollable
+
+Four of the console's screens were tables sitting inside `overflow-hidden`
+cards. On a phone that does not produce overflow — the card simply cuts the
+table off. Nothing is wider than the viewport, no pane pans, the document
+measures clean, and the columns past the second do not exist as far as the
+device is concerned. The Dashboard's was 622px in a 390px viewport with its last
+column, "Closed", rendered at x=639.
+
+Reports, Dashboard and Clients now render through `DataList`: cards at phone
+width, the table kept on a desktop where comparing reps down a column is the
+whole point of it. Settings' outcome editor scrolls horizontally instead —
+that one is an editor rather than a data screen, its `#` column is the order
+reps see, and cards would keep the data while losing the thing being edited.
+
+`audit:viewports` now refuses the pattern. Two mistakes were made writing that
+check and both are the same mistake in different places:
+
+- It first compared a table against **its own** `clientWidth` and found nothing.
+  A clipped table is laid out at its full natural width and is perfectly happy;
+  `scrollWidth` equals `clientWidth`. Nothing overflows — the box is simply
+  bigger than the hole it is shown through. It compares against the viewport now.
+- It then walked **past** the clipping parent looking for any scroller, found
+  the app's own `.scroll-pane` two levels up, and declared every one of these
+  tables reachable. The walk stops at the first ancestor that is not `visible`,
+  because whichever boundary is nearest is the one the content is trapped
+  behind.
+
+With both fixed it names all three offenders at every phone width, which is how
+the fixes were verified.
+
+One gap remains and is worth knowing: `/admin/clients` is super-admin only and
+the audit signs in as a client admin, so that route is never measured. Its table
+was found by reading, not by a gate.
+
 ## Running the gates
 
 ```bash

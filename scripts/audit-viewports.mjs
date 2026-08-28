@@ -162,6 +162,79 @@ for (const vp of VIEWPORTS) {
     for (const p of res.panes) problems.push(`${vp.name} ${label}: the page pans sideways — ${p}`)
   }
 
+  /*
+    Tables that are clipped rather than scrollable.
+
+    A distinct failure from everything above, and invisible to all of it. The
+    console's screens were built as tables inside `overflow-hidden` cards, which
+    on a phone does not produce overflow — the card simply cuts the table off.
+    Nothing is wider than the viewport, no pane pans, the document measures
+    clean, and columns three onward do not exist as far as the device is
+    concerned. Reports shipped that way with eight columns: a manager checking
+    closed value from a truck saw a name and two numbers.
+
+    So this asks the only question that matters: the table cannot show all of
+    itself, and can the person reach the rest? A table wider than its box is
+    fine when an ancestor scrolls horizontally. It is a bug when nothing does.
+
+    The fix is usually DataList, which renders cards at this width instead. A
+    horizontal scroller is the right answer for the screens where the grid
+    itself is the point — an import preview, a settings editor — and this check
+    accepts either.
+  */
+  const auditClippedTables = async (label, target = page) => {
+    const clipped = await target.evaluate(() => {
+      const out = []
+      document.querySelectorAll('table').forEach((t) => {
+        const r = t.getBoundingClientRect()
+        if (r.width === 0 || r.height === 0) return
+        /*
+          Wider than the screen, not wider than itself.
+
+          The first version of this compared the table against its own
+          clientWidth and found nothing, because a table clipped by its parent
+          is laid out at its full natural width and is perfectly happy — the
+          Dashboard's is 622px in a 390px viewport with scrollWidth exactly
+          equal to clientWidth. Nothing is overflowing; the box is simply bigger
+          than the hole it is being shown through.
+        */
+        if (r.width <= window.innerWidth + 1) return
+
+        /*
+          The FIRST ancestor that is not `visible` decides, and the walk stops
+          there.
+
+          An earlier version kept climbing past a clipping parent looking for
+          any scroller, found the app's own `.scroll-pane` two levels up, and
+          declared every one of these tables reachable. It is not: the section
+          has already cut the table off at 356px, so scrolling the pane reveals
+          nothing. Whichever boundary is nearest is the one the content is
+          actually trapped behind.
+        */
+        let el = t.parentElement
+        let reachable = false
+        while (el && el !== document.body) {
+          const ox = getComputedStyle(el).overflowX
+          if (ox !== 'visible') {
+            reachable = ox === 'auto' || ox === 'scroll'
+            break
+          }
+          el = el.parentElement
+        }
+        if (!reachable) {
+          const headers = [...t.querySelectorAll('th')].map((h) => h.textContent?.trim()).filter(Boolean)
+          out.push(
+            `${Math.round(r.width)}px wide in a ${window.innerWidth}px viewport (${headers.length} cols, last is "${headers[headers.length - 1] ?? '?'}")`,
+          )
+        }
+      })
+      return out
+    })
+    for (const c of clipped) {
+      problems.push(`${vp.name} ${label}: a table is cut off with no way to scroll it — ${c}`)
+    }
+  }
+
   // Touch target audit: every interactive element must be >= 44px in its
   // smaller dimension (allowing inline links inside prose).
   const auditTargets = async (label) => {
@@ -386,6 +459,7 @@ for (const vp of VIEWPORTS) {
       await admin.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' })
       await admin.waitForTimeout(800)
       await checkOverflow(`console-${label}`, admin)
+      await auditClippedTables(`console-${label}`, admin)
     }
 
     /*
