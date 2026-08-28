@@ -654,7 +654,62 @@ await page.waitForTimeout(300)
   ok(/Marcus Vance/.test(reports), 'Reports names the real rep')
   ok(!/u_rep_real/.test(reports), 'and not their internal id')
 
+  /*
+    The team totals, in both shapes.
+
+    The breakdown used to be a plain table with a <tfoot>; moving it onto
+    DataList could have dropped that row without anything noticing, because the
+    per-rep numbers would still have been on screen and the page would have
+    looked fine. It is the one line that answers "how did the company do", and
+    it is the reason DataList grew a footer at all.
+  */
+  /*
+    Anchored to the element, not the word.
+
+    The first version matched /Team/ against the whole page and passed with the
+    footer deliberately deleted — the console's own left-hand nav has a "Team"
+    link, so the assertion was reading the sidebar. It has to be the totals row
+    itself or it is measuring nothing.
+  */
+  const totalsDesktop = await visibleText(page3, 'datalist-total')
+  ok(/Team/.test(totalsDesktop), `the breakdown carries a team totals row on a desktop — saw "${totalsDesktop.slice(0, 60)}"`)
+
+  await page3.setViewportSize({ width: 390, height: 844 })
+  await page3.reload({ waitUntil: 'domcontentloaded' })
+  await page3.waitForTimeout(1200)
+  const totalsPhone = await visibleText(page3, 'datalist-total')
+  ok(/Team/.test(totalsPhone), `and still carries it on a phone — saw "${totalsPhone.slice(0, 60)}"`)
+  ok(/Closed value/.test(totalsPhone), 'with the summed closed value on it, not just a label')
+  /*
+    The clipping this replaced. Eight columns inside overflow-hidden meant
+    "Closed value" was simply off the right edge with no scrollbar — present in
+    the DOM, unreachable on the device. Asserting the header is *visible* rather
+    than merely rendered is what tells those two apart.
+  */
+  ok(
+    await page3.getByText('Closed value').first().isVisible().catch(() => false),
+    'and the last column is reachable at 390px rather than clipped',
+  )
+
   await ctx3.close()
+}
+
+
+/**
+ * The one of them that is actually on screen.
+ *
+ * DataList renders both shapes into the DOM and hides one with CSS, so a test
+ * id matches twice and a strict locator throws. Reading the visible one is also
+ * the more honest assertion: what matters is what the person at that width can
+ * see, not what exists in the markup behind `display: none`.
+ */
+async function visibleText(page, testId) {
+  const all = page.getByTestId(testId)
+  for (let i = 0; i < (await all.count()); i++) {
+    const el = all.nth(i)
+    if (await el.isVisible().catch(() => false)) return el.innerText()
+  }
+  return ''
 }
 
 /* ========== the demo has no real team to invite anyone to ================ */
