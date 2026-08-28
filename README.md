@@ -1390,9 +1390,33 @@ check and both are the same mistake in different places:
 With both fixed it names all three offenders at every phone width, which is how
 the fixes were verified.
 
-One gap remains and is worth knowing: `/admin/clients` is super-admin only and
-the audit signs in as a client admin, so that route is never measured. Its table
-was found by reading, not by a gate.
+That gap is closed too. The audit now opens a second context as the demo's
+super admin and measures `/admin/clients`, which is how the table there should
+have been found in the first place — it was found by reading, which is not a
+system.
+
+Closing it turned up something else. The pass, run deliberately as a client
+admin to check it would notice, reported nothing: **`/admin/clients` had no role
+check at all.** Its own docstring said "Super Admin only" and the console's nav
+hides the entry, which hides the door without locking it — `AdminLayout` admits
+managers and client admins, so typing the URL rendered the whole screen. Nothing
+real leaked, because the figures on it are a hardcoded illustration; a company's
+own admin seeing what looks like other customers' seat counts and revenue is
+still wrong on its face, and it would have become a real leak the day that
+screen is wired to an API. The screen enforces the role now.
+
+The pass will not silently skip, either: it confirms it is actually on the
+Clients screen before measuring, because a 403 renders a page that is narrow,
+tidy and completely clean — which would report as a pass and quietly restore the
+gap. That guard is what caught the missing role check.
+
+### Tap targets on the theme control
+
+The three-way appearance control shipped at 32px per button. Three small glyphs
+looked right and measured wrong: `audit:viewports` flagged them at every width
+against this project's own 44px rule, and a rep changing theme outdoors in
+gloves is exactly who that rule is for. They are 44px now, with the pill's own
+padding removed so the group does not grow into the profile row beside it.
 
 ## Running the gates
 

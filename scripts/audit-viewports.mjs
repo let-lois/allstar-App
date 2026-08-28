@@ -463,6 +463,51 @@ for (const vp of VIEWPORTS) {
     }
 
     /*
+      The super-admin screens, which a client admin cannot reach at all.
+
+      This gap cost something real: /admin/clients had a six-column table
+      clipped at every phone width and this audit never saw it, because the
+      console pass signs in as Nadia Petrov and the route 403s for her. It was
+      found by reading the source, which is not a system.
+
+      Its own context rather than switching accounts in the existing one: a
+      session lives in the context, and signing out and back in would take the
+      rest of this pass with it.
+    */
+    const superCtx = await browser.newContext(ctxOpts)
+    const superPage = await superCtx.newPage()
+    superPage.on('pageerror', (e) => errors.push(String(e)))
+    await superPage.route(/maps\.googleapis\.com/, (r) => r.abort())
+    await superPage.goto(BASE, { waitUntil: 'domcontentloaded' })
+    await superPage.waitForTimeout(1200)
+    await superPage.getByRole('button', { name: /Try the demo/ }).click()
+    await superPage.getByRole('button', { name: /Curtis Lane/ }).click()
+    await dismissTour(superPage)
+    await superPage.waitForTimeout(1200)
+
+    await superPage.goto(`${BASE}/admin/clients`, { waitUntil: 'domcontentloaded' })
+    await superPage.waitForTimeout(900)
+    /*
+      Prove the pass is actually on the screen before measuring it. A 403 or a
+      redirect renders a page that is narrow, tidy and completely clean — which
+      would report as a pass and quietly restore the gap this exists to close.
+    */
+    const onClients = await superPage
+      .getByText('Seat utilization')
+      .first()
+      .isVisible()
+      .catch(() => false)
+    if (!onClients) {
+      problems.push(
+        `${vp.name} console-clients: the super-admin pass never reached /admin/clients, so nothing was measured`,
+      )
+    } else {
+      await checkOverflow('console-clients', superPage)
+      await auditClippedTables('console-clients', superPage)
+    }
+    await superCtx.close()
+
+    /*
       Each Settings tab, not just the one that loads first. The row is the wide
       thing, but a panel behind a tab nobody clicked is a panel nobody measured
       — and the two newest tabs are the two least looked at.

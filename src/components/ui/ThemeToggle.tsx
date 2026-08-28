@@ -46,7 +46,7 @@ export function ThemeToggle() {
       role="radiogroup"
       aria-label="Appearance"
       data-tour="theme-toggle"
-      className="flex shrink-0 items-center gap-0.5 rounded-pill border border-line bg-surface-field p-0.5"
+      className="flex shrink-0 items-center rounded-pill border border-line bg-surface-field"
     >
       {OPTIONS.map((o) => {
         const selected = choice === o.value
@@ -72,7 +72,16 @@ export function ThemeToggle() {
               setChoice(o.value)
             }}
             className={[
-              'focusable grid h-8 w-8 place-items-center rounded-full text-[13px] leading-none transition-colors',
+              /*
+                44px, not the 32 this shipped with.
+
+                Three small glyphs looked right and measured wrong: the viewport
+                audit flagged them at every width against this project's own
+                tap-target rule, and a rep changing theme outdoors in gloves is
+                exactly who the rule is for. The pill's own padding shrank to
+                keep the group from growing into the profile row beside it.
+              */
+              'focusable grid h-11 w-11 place-items-center rounded-full text-[15px] leading-none transition-colors',
               selected
                 ? 'bg-surface text-accent shadow-sm ring-1 ring-line'
                 : 'text-ink-mute active:bg-surface',
