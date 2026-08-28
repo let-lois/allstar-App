@@ -1320,6 +1320,20 @@ The estimate is arithmetic on data that already existed: the preview knows the
 row count, the registry knows the price and the free tier. Nothing multiplied
 them until now.
 
+**A chargeable batch asks before it spends.** Past the free allowance the
+one-click lookup is withheld and replaced by a confirmation carrying the figure
+— *Look up anyway — about $12.40* — so the amount and the action are the same
+button rather than a warning above a button that ignores it. Nothing reaches the
+vendor until it is pressed.
+
+Deliberately a confirmation and not a cap. A ceiling this app enforced would be
+guesswork dressed as a limit, because it cannot see the vendor's meter and does
+not know what today's allowance has already spent. What it can do is put the
+decision in front of the person whose account is being billed, at the moment it
+is billed. Inside the allowance nothing is interrupted at all — a prompt that
+appears on every lookup is one people click through without reading, which would
+make it worthless on the batch that actually costs money.
+
 ## Before this goes to a paying customer
 
 Deliberate compromises taken to keep the prototype moving. Each is fine for

@@ -222,11 +222,14 @@ Historical figures on the live account are still wrong until this runs. Use
 ### 13. Spend guardrail — the estimate is in, a running total is not
 **Owner: me · Severity: medium · Tracked as #46 (partly done)**
 
-**Done:** the address-lookup step now states what the batch will cost before it
-runs — the number of lookups, the provider being billed, the free allowance, and
-an estimated charge when the batch exceeds it. Silent on Census, so the warning
-means something when it appears. Rounds up, never quotes a figure for a
-volume-priced vendor, and says an allowance may already be partly spent.
+**Done:** the address-lookup step states what the batch will cost before it runs
+— the number of lookups, the provider being billed, the free allowance, and an
+estimated charge when the batch exceeds it. Past the allowance the one-click
+lookup is withheld and replaced by a confirmation carrying the figure, so
+nothing reaches the vendor until someone agrees to be charged. Silent and
+uninterrupted on a free provider, so the prompt still means something when it
+appears. Rounds up, never quotes a figure for a volume-priced vendor, and says
+an allowance may already be partly spent.
 
 **Still missing:** a running lookup count, so nobody can see what has been spent
 this day or month, and a ceiling an admin can set with a hard stop at it. Both
