@@ -2,6 +2,7 @@ import { chromium } from 'playwright'
 import { chromiumPath } from './lib/browser.mjs'
 import { dismissTour } from './lib/tour.mjs'
 import { GEOCODE_PROVIDERS, findProvider, isSelectable } from '../api/src/geocode-providers.ts'
+import { describeSpend, estimateLookupSpend } from '../src/lib/spend.ts'
 
 /**
  * Companies bringing their own geocoding provider.
@@ -71,6 +72,93 @@ const ok = (cond, msg) => {
   )
   const live = GEOCODE_PROVIDERS.filter((p) => p.adapter === 'live')
   ok(live.length > 0 && live.every((p) => isSelectable(p.id)), `every live provider can be selected (${live.map((p) => p.id).join(', ')})`)
+}
+
+/* ========== 1b. the price a company will actually be charged =========== */
+{
+  /*
+    The display string and the number have to agree.
+
+    Two copies of a price exist on purpose — prose for the row a human reads,
+    a number for the arithmetic that warns them before an import spends money.
+    Parsing the prose to do the maths would have been worse, so instead the two
+    are checked against each other here. Drift between them is a screen that
+    quotes one figure and bills against another.
+  */
+  for (const p of GEOCODE_PROVIDERS) {
+    const quoted = [...p.price.matchAll(/\$([0-9]+(?:\.[0-9]+)?)/g)].map((m) => Number(m[1]))
+    if (quoted.length === 0) {
+      ok(p.pricePerThousandUsd === null, `${p.label} quotes no price and carries no number ("${p.price}")`)
+    } else {
+      // A range takes its top, so an estimate is never cheaper than the bill.
+      const top = Math.max(...quoted)
+      ok(
+        p.pricePerThousandUsd === top,
+        `${p.label}'s number matches its price line (${p.pricePerThousandUsd} vs "${p.price}")`,
+      )
+    }
+
+    const allowance = p.free.match(/([0-9][0-9,]*)\s*per\s*(day|month)/i)
+    if (allowance) {
+      const n = Number(allowance[1].replace(/,/g, ''))
+      ok(
+        p.freeCount === n && p.freePeriod === allowance[2].toLowerCase(),
+        `${p.label}'s free allowance matches its free line (${p.freeCount}/${p.freePeriod} vs "${p.free}")`,
+      )
+    } else {
+      ok(p.freeCount === null, `${p.label} states no countable allowance and carries none ("${p.free}")`)
+    }
+  }
+}
+
+/* ========== 1c. the estimate itself ==================================== */
+{
+  const google = findProvider('google')
+  const geocodio = findProvider('geocodio')
+  const here = findProvider('here')
+  const census = findProvider('census')
+
+  // Census bills nobody, so the screen stays silent. That silence is what makes
+  // the warning mean something when it does appear.
+  ok(estimateLookupSpend(census, 50_000).kind === 'free', 'Census is free at any size')
+  ok(describeSpend(estimateLookupSpend(census, 50_000)) === null, 'and says nothing at all')
+  ok(estimateLookupSpend(null, 900).kind === 'free', 'no configured provider is treated as free')
+
+  // Inside the allowance is still worth saying — it names what is being spent.
+  const small = estimateLookupSpend(google, 5_000)
+  ok(small.kind === 'within-allowance', '5,000 lookups sit inside Google’s 10,000/month')
+  ok(/free/i.test(describeSpend(small)?.text ?? ''), 'and the wording says so')
+
+  // The number that matters: 50,000 leads, minus 10,000 free, at $5/1,000.
+  const big = estimateLookupSpend(google, 50_000)
+  ok(big.kind === 'billable', '50,000 lookups on Google is billable')
+  ok(big.kind === 'billable' && big.billableLookups === 40_000, 'the free allowance is deducted first')
+  ok(big.kind === 'billable' && big.estimateUsd === 200, `and the estimate is $200 (got ${big.estimateUsd})`)
+
+  const gc = estimateLookupSpend(geocodio, 4_000)
+  ok(gc.kind === 'billable' && gc.estimateUsd === 1.5, `Geocodio: 4,000 lookups is $1.50 (got ${gc.estimateUsd})`)
+
+  // Rounded up, always. $1.234 is reported as $1.24 — the one direction this
+  // must never be wrong in is cheap, because cheap is what causes the surprise.
+  const odd = estimateLookupSpend(geocodio, 3_734)
+  const exact = ((3_734 - 2_500) / 1000) * 1.0
+  ok(
+    odd.kind === 'billable' && odd.estimateUsd >= exact,
+    `an estimate never reads below the true cost (${odd.kind === 'billable' ? odd.estimateUsd : '?'} vs ${exact})`,
+  )
+  ok(odd.kind === 'billable' && odd.estimateUsd === 1.24, `and rounds up to the cent (got ${odd.kind === 'billable' ? odd.estimateUsd : '?'})`)
+
+  // A vendor with no published rate gets an honest gap, not an invented figure.
+  const vol = estimateLookupSpend(here, 300_000)
+  ok(vol.kind === 'unknown', 'a volume-priced vendor produces no number')
+  const volText = describeSpend(vol)?.text ?? ''
+  ok(/check your/i.test(volText) && !/\$/.test(volText), 'and says to check the account rather than quoting one')
+
+  // Every warning must name the provider being billed — an operator cannot
+  // check a charge against an account the sentence never mentions.
+  for (const [label, est] of [['Google', big], ['Geocodio', gc], ['HERE', vol]]) {
+    ok(new RegExp(label).test(describeSpend(est)?.text ?? ''), `the ${label} warning names ${label}`)
+  }
 }
 
 /* ========== 2. the screen =============================================== */

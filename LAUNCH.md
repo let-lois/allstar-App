@@ -219,18 +219,22 @@ and it costs nothing to avoid.
 Historical figures on the live account are still wrong until this runs. Use
 `db:rebuild-stats` — **not** `db:rebuild-closed`.
 
-### 13. No spend guardrail before an import bills a customer
-**Owner: me · Severity: medium · Tracked as #46**
+### 13. Spend guardrail — the estimate is in, a running total is not
+**Owner: me · Severity: medium · Tracked as #46 (partly done)**
 
-The product gap underneath item 5. The import preview knows the row count and
-the active provider's price and free tier — the registry carries both — and does
-not multiply them. There is no running lookup count, no daily-cap warning, and
-no ceiling an admin can set.
+**Done:** the address-lookup step now states what the batch will cost before it
+runs — the number of lookups, the provider being billed, the free allowance, and
+an estimated charge when the batch exceeds it. Silent on Census, so the warning
+means something when it appears. Rounds up, never quotes a figure for a
+volume-priced vendor, and says an allowance may already be partly spent.
 
-Smallest useful version: one line before the confirm button naming the number of
-lookups, the provider, and the free allowance, with an estimated charge when the
-import exceeds it. Worded as an estimate, since the registry's prices came from
-search results rather than vendor pages.
+**Still missing:** a running lookup count, so nobody can see what has been spent
+this day or month, and a ceiling an admin can set with a hard stop at it. Both
+need usage tracking the app does not do yet, and neither can be inferred from
+the vendor — this app cannot read their meter.
+
+That gap is why **item 5 stays a blocker**. The estimate makes a surprise bill
+much less likely; only a real total and a cap would make it impossible.
 
 ### 14. `ALLOWED_ORIGINS` rejects preview deployments
 **Owner: me · Severity: medium (friction)**

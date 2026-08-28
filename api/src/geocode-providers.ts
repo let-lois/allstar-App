@@ -43,8 +43,25 @@ export interface GeocodeProvider {
   storageNote: string
   /** Rough list price, for orientation only. Verify before spending money. */
   price: string
+  /**
+   * The same price as a number, so an import can be costed before it runs.
+   *
+   * Null where the vendor publishes no simple per-thousand rate — volume
+   * pricing, or a plan. Where a vendor quotes a *range*, this carries the top
+   * of it: an estimate that undershoots produces exactly the surprise bill the
+   * estimate exists to prevent, so it is wrong in the safe direction on purpose.
+   *
+   * Kept alongside the display string rather than derived from it because
+   * parsing prose to spend money is a bad idea. `verify:geocoders` asserts the
+   * two agree, which is what stops them drifting.
+   */
+  pricePerThousandUsd: number | null
   /** What the vendor gives away, if anything. */
   free: string
+  /** The allowance as a number, or null where it is not a simple count. */
+  freeCount: number | null
+  /** Whether `freeCount` refills daily or monthly. Null when there is none. */
+  freePeriod: 'day' | 'month' | null
   /** How good the US pins are, in the terms this app cares about. */
   accuracy: string
   /** Where the company goes to get a key. */
@@ -72,7 +89,10 @@ export const GEOCODE_PROVIDERS: GeocodeProvider[] = [
     storage: 'permanent',
     storageNote: 'Public domain. Keep the coordinates as long as you like.',
     price: 'Free',
+    pricePerThousandUsd: null,
     free: 'Unlimited',
+    freeCount: null,
+    freePeriod: null,
     accuracy: 'Right block and side of the street. Not the right house.',
     signup: '',
   },
@@ -84,7 +104,10 @@ export const GEOCODE_PROVIDERS: GeocodeProvider[] = [
     storage: 'permanent',
     storageNote: 'Permanent storage permitted.',
     price: '$1.00 per 1,000',
+    pricePerThousandUsd: 1.0,
     free: '2,500 per day',
+    freeCount: 2500,
+    freePeriod: 'day',
     accuracy: 'Rooftop for most US addresses; falls back to block level.',
     signup: 'https://www.geocod.io',
   },
@@ -97,7 +120,10 @@ export const GEOCODE_PROVIDERS: GeocodeProvider[] = [
     storageNote:
       'Google permits caching coordinates for about 30 days only. This app stores them permanently so the map works offline — using this key means accepting that conflict on your own account.',
     price: '$5.00 per 1,000',
+    pricePerThousandUsd: 5.0,
     free: '10,000 per month',
+    freeCount: 10000,
+    freePeriod: 'month',
     accuracy: 'The benchmark. Rooftop almost everywhere.',
     signup: 'https://console.cloud.google.com',
   },
@@ -109,7 +135,10 @@ export const GEOCODE_PROVIDERS: GeocodeProvider[] = [
     storage: 'permanent',
     storageNote: 'Permanent storage permitted.',
     price: '~$0.33 per 1,000',
+    pricePerThousandUsd: 0.33,
     free: '5,000 per day',
+    freeCount: 5000,
+    freePeriod: 'day',
     accuracy: 'Built on OpenStreetMap — rooftop quality varies by area.',
     signup: 'https://locationiq.com',
   },
@@ -121,7 +150,10 @@ export const GEOCODE_PROVIDERS: GeocodeProvider[] = [
     storage: 'permanent',
     storageNote: 'Permanent storage permitted.',
     price: 'Volume pricing',
+    pricePerThousandUsd: null,
     free: '250,000 per month',
+    freeCount: 250000,
+    freePeriod: 'month',
     accuracy: 'Strong US coverage; built for logistics.',
     signup: 'https://developer.here.com',
   },
@@ -134,7 +166,10 @@ export const GEOCODE_PROVIDERS: GeocodeProvider[] = [
     storageNote:
       'Standard geocoding may not be stored. Keeping coordinates requires their separate Permanent Geocoding product, which costs more.',
     price: '$0.75 per 1,000',
+    pricePerThousandUsd: 0.75,
     free: '100,000 per month',
+    freeCount: 100000,
+    freePeriod: 'month',
     accuracy: 'Good US coverage.',
     signup: 'https://account.mapbox.com',
   },
@@ -147,7 +182,10 @@ export const GEOCODE_PROVIDERS: GeocodeProvider[] = [
     storageNote:
       'Most results may be kept permanently. US Rooftop results may only be kept while the rooftop subscription is active.',
     price: '$1.50–$3.00 per 1,000',
+    pricePerThousandUsd: 3.0,
     free: 'Trial only',
+    freeCount: null,
+    freePeriod: null,
     accuracy: 'US address specialist. Rooftop on the paid tier.',
     signup: 'https://www.smarty.com',
   },
@@ -159,7 +197,10 @@ export const GEOCODE_PROVIDERS: GeocodeProvider[] = [
     storage: 'permanent',
     storageNote: 'Permanent storage permitted.',
     price: 'Volume pricing',
+    pricePerThousandUsd: null,
     free: 'Daily allowance',
+    freeCount: null,
+    freePeriod: null,
     accuracy: 'Good US coverage.',
     signup: 'https://developer.tomtom.com',
   },
@@ -171,7 +212,10 @@ export const GEOCODE_PROVIDERS: GeocodeProvider[] = [
     storage: 'conditional',
     storageNote: 'Coordinates may only be stored on a paid plan.',
     price: '~$4.00 per 1,000',
+    pricePerThousandUsd: 4.0,
     free: 'None for stored results',
+    freeCount: null,
+    freePeriod: null,
     accuracy: 'Strong US coverage.',
     signup: 'https://developers.arcgis.com',
   },
@@ -184,7 +228,10 @@ export const GEOCODE_PROVIDERS: GeocodeProvider[] = [
     storageNote:
       'Radar permits caching for about 30 days only — the same conflict as Google, at a lower price.',
     price: '~$0.50 per 1,000',
+    pricePerThousandUsd: 0.5,
     free: 'Generous monthly tier',
+    freeCount: null,
+    freePeriod: null,
     accuracy: 'Close to Google.',
     signup: 'https://radar.com',
   },

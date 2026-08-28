@@ -600,7 +600,11 @@ export interface GeocodeProviderDTO {
   storage: 'permanent' | 'conditional' | 'temporary'
   storageNote: string
   price: string
+  /** Null where the vendor publishes no simple per-thousand rate. */
+  pricePerThousandUsd: number | null
   free: string
+  freeCount: number | null
+  freePeriod: 'day' | 'month' | null
   accuracy: string
   signup: string
 }
