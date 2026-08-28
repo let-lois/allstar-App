@@ -1374,8 +1374,27 @@ whole point of it. Settings' outcome editor scrolls horizontally instead —
 that one is an editor rather than a data screen, its `#` column is the order
 reps see, and cards would keep the data while losing the thing being edited.
 
-`audit:viewports` now refuses the pattern. Two mistakes were made writing that
-check and both are the same mistake in different places:
+`audit:viewports` now refuses the pattern, on **every** screen it measures — the
+check runs from inside `checkOverflow` rather than beside it. It was first added
+next to two of sixteen call sites, so the console was covered and the fourteen
+field-app screens were not: the same shape as the bug it was written to find, a
+rule that has to be remembered in sixteen places holding in two.
+
+That also closed the reporting gap underneath all of this. `checkOverflow`
+collects every element wider than the viewport, and only ever *reported* that
+list when the document itself scrolled sideways — so an element that is too wide
+and then clipped by a parent was silent by construction. The collection happened;
+the reporting did not. It is why four clipped tables survived an audit that had
+been running over those screens all along, and why they were eventually found by
+reading instead.
+
+Elements inside an `<svg>` are skipped. A path wider than its own `<svg>` is not
+clipped content, it is how SVG works — the viewBox is a window onto a drawing
+that is usually bigger than it, and the map's roads tripped this at three widths
+on the first run.
+
+Three mistakes were made writing that check, and the first two are the same
+mistake in different places:
 
 - It first compared a table against **its own** `clientWidth` and found nothing.
   A clipped table is laid out at its full natural width and is perfectly happy;
@@ -1387,8 +1406,9 @@ check and both are the same mistake in different places:
   because whichever boundary is nearest is the one the content is trapped
   behind.
 
-With both fixed it names all three offenders at every phone width, which is how
-the fixes were verified.
+With all three fixed it names every offender at every width — verified by
+planting a clipped element on Leads, a field-app screen that had no coverage at
+all until the check moved inside `checkOverflow`.
 
 That gap is closed too. The audit now opens a second context as the demo's
 super admin and measures `/admin/clients`, which is how the table there should

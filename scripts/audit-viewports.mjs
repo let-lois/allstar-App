@@ -160,6 +160,16 @@ for (const vp of VIEWPORTS) {
     })
     if (res.horizontal) problems.push(`${vp.name} ${label}: horizontal overflow ${res.sw}>${res.cw} :: ${res.wide.join(' | ')}`)
     for (const p of res.panes) problems.push(`${vp.name} ${label}: the page pans sideways — ${p}`)
+
+    /*
+      Called from in here rather than beside each of the sixteen call sites.
+
+      The clipping check was added next to two of them and the other fourteen
+      screens went unchecked — which is the same shape as the bug it was written
+      to find: a rule that has to be remembered in sixteen places is a rule that
+      holds in two. Anywhere overflow is measured, clipping is now measured too.
+    */
+    await auditClipped(label, target)
   }
 
   /*
@@ -182,23 +192,48 @@ for (const vp of VIEWPORTS) {
     itself is the point — an import preview, a settings editor — and this check
     accepts either.
   */
-  const auditClippedTables = async (label, target = page) => {
-    const clipped = await target.evaluate(() => {
-      const out = []
-      document.querySelectorAll('table').forEach((t) => {
-        const r = t.getBoundingClientRect()
-        if (r.width === 0 || r.height === 0) return
-        /*
-          Wider than the screen, not wider than itself.
+  /*
+    Anything cut off rather than scrollable — not only tables.
 
-          The first version of this compared the table against its own
-          clientWidth and found nothing, because a table clipped by its parent
-          is laid out at its full natural width and is perfectly happy — the
-          Dashboard's is 622px in a 390px viewport with scrollWidth exactly
-          equal to clientWidth. Nothing is overflowing; the box is simply bigger
-          than the hole it is being shown through.
+    Two failures met here, and the second is why this is general.
+
+    A table inside `overflow-hidden` does not produce overflow: the card cuts it
+    off. Nothing is wider than the viewport, no pane pans, the document measures
+    clean, and columns three onward do not exist as far as the device is
+    concerned. Four of the console's screens shipped that way.
+
+    And `checkOverflow` above could not have told anyone. It collects every
+    element wider than the viewport — but only *reports* that list when the
+    document itself scrolls sideways. An element that is too wide and then
+    clipped by a parent is silent by construction: the collection happens, the
+    reporting does not. That is why this was found by reading rather than by the
+    audit that had been running over these screens all along.
+
+    So the question asked here is the one that matters: something cannot fit,
+    and can the person reach the rest of it? Wider than the viewport is fine
+    when an ancestor scrolls. It is a bug when the nearest boundary clips.
+  */
+  const auditClipped = async (label, target = page) => {
+    const clipped = await target.evaluate(() => {
+      const offenders = []
+      const reported = []
+
+      for (const el of document.querySelectorAll('body *')) {
+        /*
+          Nothing inside an <svg>.
+
+          A path wider than its own svg is not clipped content, it is how SVG
+          works — the viewBox is a window onto a drawing that is usually bigger
+          than it. The map's roads and graticule tripped this on the first run
+          at three widths. (The `className` of an SVG element is also an
+          SVGAnimatedString rather than a string, which is what made those
+          findings unreadable and gave the false positive away.)
         */
-        if (r.width <= window.innerWidth + 1) return
+        if (el.namespaceURI === 'http://www.w3.org/2000/svg') continue
+
+        const r = el.getBoundingClientRect()
+        if (r.width === 0 || r.height === 0) continue
+        if (r.width <= window.innerWidth + 2) continue
 
         /*
           The FIRST ancestor that is not `visible` decides, and the walk stops
@@ -211,27 +246,44 @@ for (const vp of VIEWPORTS) {
           nothing. Whichever boundary is nearest is the one the content is
           actually trapped behind.
         */
-        let el = t.parentElement
+        let a = el.parentElement
         let reachable = false
-        while (el && el !== document.body) {
-          const ox = getComputedStyle(el).overflowX
+        let clipper = null
+        while (a && a !== document.body) {
+          const ox = getComputedStyle(a).overflowX
           if (ox !== 'visible') {
             reachable = ox === 'auto' || ox === 'scroll'
+            clipper = a
             break
           }
-          el = el.parentElement
+          a = a.parentElement
         }
-        if (!reachable) {
-          const headers = [...t.querySelectorAll('th')].map((h) => h.textContent?.trim()).filter(Boolean)
-          out.push(
-            `${Math.round(r.width)}px wide in a ${window.innerWidth}px viewport (${headers.length} cols, last is "${headers[headers.length - 1] ?? '?'}")`,
-          )
+        // No boundary at all means it runs off the document, which is the
+        // horizontal-overflow case checked separately and reported there.
+        if (reachable || !clipper) continue
+
+        /*
+          Only the outermost offender in a subtree. A clipped table drags every
+          cell in it over the same line, and eight hundred identical findings
+          for one bug is a report nobody reads to the end of.
+        */
+        if (reported.some((seen) => seen.contains(el))) continue
+        reported.push(el)
+
+        const tag = el.tagName.toLowerCase()
+        let what = `${tag}.${(el.className || '').toString().split(' ').filter(Boolean).slice(0, 2).join('.')}`
+        if (tag === 'table') {
+          const headers = [...el.querySelectorAll('th')].map((h) => h.textContent?.trim()).filter(Boolean)
+          what = `a table (${headers.length} cols, last is "${headers[headers.length - 1] ?? '?'}")`
         }
-      })
-      return out
+        offenders.push(
+          `${what} — ${Math.round(r.width)}px in a ${window.innerWidth}px viewport, clipped by ${clipper.tagName.toLowerCase()}.${(clipper.className || '').toString().split(' ').filter(Boolean).slice(0, 2).join('.')}`,
+        )
+      }
+      return offenders.slice(0, 6)
     })
     for (const c of clipped) {
-      problems.push(`${vp.name} ${label}: a table is cut off with no way to scroll it — ${c}`)
+      problems.push(`${vp.name} ${label}: cut off with no way to scroll it — ${c}`)
     }
   }
 
@@ -459,7 +511,6 @@ for (const vp of VIEWPORTS) {
       await admin.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' })
       await admin.waitForTimeout(800)
       await checkOverflow(`console-${label}`, admin)
-      await auditClippedTables(`console-${label}`, admin)
     }
 
     /*
@@ -503,7 +554,6 @@ for (const vp of VIEWPORTS) {
       )
     } else {
       await checkOverflow('console-clients', superPage)
-      await auditClippedTables('console-clients', superPage)
     }
     await superCtx.close()
 
