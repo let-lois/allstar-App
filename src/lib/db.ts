@@ -92,10 +92,44 @@ export function db(): Promise<IDBPDatabase<AllstarDB>> {
         store('team', 'id')
         store('meta')
       },
+
+      /*
+        Another tab wants to upgrade and this connection is what is stopping it.
+
+        Closing is the only cooperative answer. Without it the two tabs deadlock:
+        the new one waits on `blocked` forever, and this one keeps a connection
+        open forever because nothing tells it to let go. Reads here fail
+        afterwards and fall back to memory, which is the correct trade — one tab
+        losing durability beats both tabs hanging.
+      */
+      blocking() {
+        /*
+          Marked unusable in the same breath as the close, not left to be
+          discovered. A closed connection does not fail reads gracefully — it
+          throws InvalidStateError out of `getAll`, past callers that have no
+          branch for it. Flipping the flag sends every later read down the
+          memory path the no-IndexedDB case already uses, and the rep picks the
+          upgraded database back up on their next launch.
+        */
+        idbUsable = false
+        void dbPromise?.then((d) => d.close()).catch(() => {})
+      },
     })
   }
   return dbPromise
 }
+
+/**
+ * How long a database open is allowed to take before the app gives up on disk.
+ *
+ * There is no smaller number that is safe and no larger one that is useful. An
+ * open that is merely slow — a first-run upgrade on a cheap phone — finishes
+ * well inside a second; an open that is *blocked* never finishes at all, because
+ * `openDB` does not reject when another connection is holding the old version,
+ * it simply waits. Ten seconds separates the two without ever mistaking one for
+ * the other.
+ */
+const OPEN_BUDGET_MS = 10_000
 
 /**
  * IndexedDB is unavailable in some private-browsing modes and inside certain
@@ -113,7 +147,29 @@ function mem(store: string): Map<string, unknown> {
 export async function idbAvailable(): Promise<boolean> {
   if (idbUsable !== null) return idbUsable
   try {
-    await db()
+    /*
+      Bounded, because the failure this guards against is not an error.
+
+      `openDB` rejects when IndexedDB is disabled, and that case was already
+      handled. What it does *not* do is reject when the open is blocked — it
+      waits, silently, for as long as whatever is blocking it lives. Every read
+      in the app goes through here, so an unbounded wait is not a slow start,
+      it is an app that never starts: `boot` never reaches `loadLocal`, `ready`
+      never flips, and the rep sits on "Loading your territory…" with nothing on
+      screen to explain it and no way to retry. That is the shape of the
+      unexplained cold-boot hang recorded in #40.
+
+      Losing durability for the session is a real cost, paid knowingly: a rep
+      who can work and lose their cache on reload is strictly better off than a
+      rep who cannot open the app at all, and the outbox drains from memory the
+      same way it drains from disk.
+    */
+    await Promise.race([
+      db(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('indexeddb open timed out')), OPEN_BUDGET_MS),
+      ),
+    ])
     idbUsable = true
   } catch {
     idbUsable = false

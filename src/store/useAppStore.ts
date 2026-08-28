@@ -277,15 +277,38 @@ export const useAppStore = create<AppState>((set, get) => ({
       set((s) => ({ photos: { ...s.photos, [photo.id]: photo } }))
     })
 
-    await initSync()
-    await initPhotoSync()
-
     // A live session can die while the phone is in a pocket. Discovering that
     // happens inside a background drain, where there's no screen to raise it on
     // — so the store listens and moves the app to the login screen itself.
     onAuthExpired(() => {
       void get().handleAuthExpired()
     })
+
+    /*
+      Started, never awaited.
+
+      These two read a timestamp and count two tables for the sync chip. Nothing
+      on any screen waits for those numbers, but they used to be `await`ed here,
+      ahead of the `loadLocal` below that actually fills the store — which
+      quietly made every pixel in the app depend on two IndexedDB reads
+      completing. When one of them didn't, `loadLocal` never ran, `ready` never
+      flipped, and the app sat on "Loading your territory…" forever: no error,
+      no timeout, no self-heal, because the code that would have healed it was
+      parked behind the same await. That is #40. Dropping the `await` removes
+      the failure mode outright rather than guessing which read was slow.
+
+      Above the branch, not below it, because the signed-out path returns early
+      and `boot` is the only caller. Underneath the counts, `initSync` registers
+      the online and visibilitychange listeners that retry a drain when a rep
+      regains signal — skipping them for anyone who signs in from a cold start
+      would strand queued work until the next launch.
+
+      What is still load-bearing: `loadSession()` has already resolved, because
+      a drain that does not know who is signed in has no correct destination for
+      the writes.
+    */
+    void initSync()
+    void initPhotoSync()
 
     if (session?.mode === 'live') {
       // The cache is already on disk from the last session; read it and paint.

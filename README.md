@@ -1160,6 +1160,50 @@ rather than a bad password, the demo works with every API call aborted, a live
 account sees only its own tenant's addresses, an expired session preserves the
 outbox, and signing out leaves nothing on the device.
 
+## Starting up
+
+`boot()` in `store/useAppStore.ts` is the only path into a running app, and its
+ordering is load-bearing in two directions.
+
+The session is read **before** the outbox is started, because `initSync` drains
+on start-up and a drain that does not know who is signed in has no correct
+destination for the writes.
+
+The cached territory is read **before** the sync bookkeeping. This is the
+opposite of how it was first written, and the difference is the whole of #40.
+`initSync` and `initPhotoSync` read a timestamp and count two tables — nothing
+on any screen waits for those numbers — but they used to be awaited ahead of
+`loadLocal`, which is what fills the store. That quietly made every pixel in the
+app depend on two IndexedDB reads completing. When one of them didn't, `ready`
+never flipped, and the app sat on "Loading your territory…" with no error, no
+timeout and no recovery: the code that would have healed it was parked behind
+the same `await`. Two gates failed this way on a machine nobody could log into,
+and the diagnosis was a Playwright timeout.
+
+Underneath that, `db()` now has a **budget**. `openDB` rejects when IndexedDB is
+switched off — that case was always handled, and callers fall back to memory.
+What it does not do is reject when an open is *blocked*, which is what happens
+when one tab holds the old version of the database while another wants to
+upgrade it: the open simply waits, for as long as the other connection lives.
+Every read in the app is behind that open, so an unbounded wait is not a slow
+start, it is an app that never starts. Ten seconds separates a blocked open from
+a merely slow one — a first-run upgrade on a cheap phone finishes inside a
+second — and past it the app runs from memory. That trade is deliberate: a rep
+who can work and loses their cache on reload is far better off than a rep who
+cannot open the app, and the outbox drains from memory exactly as it does from
+disk. The other half of the same fix is cooperative: when another tab needs the
+upgrade, this one closes its connection instead of deadlocking both.
+
+```bash
+npm run verify:boot
+```
+
+...checks the ordering in the source *and* drives a browser whose IndexedDB
+never opens, asserting the app still reaches a screen a rep can use. Both halves
+were confirmed by putting each bug back and watching them fail — the first
+version of the browser half passed with the bug reintroduced, because a fake
+request object is not an `IDBRequest` and `idb` never promisified it.
+
 ## Data layer
 
 `lib/http.ts` is the API client — thin on purpose, because the app reads from
