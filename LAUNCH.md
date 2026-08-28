@@ -85,7 +85,45 @@ Preferred fix is to move geocoding into the browser (~half a day), which lets th
 key be fully origin-locked and drops the Worker's need for one. Remove `?`
 afterwards and confirm with `/api/selftest/geocode`.
 
-### 5. DNC / TCPA review
+### 5. Brief every company on geocoding cost before they connect a key
+**Owner: Curtis · Severity: blocker · Tracked as #45**
+
+Companies can now bring their own geocoding account under **More → Admin console
+→ Settings → Address lookup**. The moment one does, **the vendor bills them
+directly, per address, and Allstar has no spend cap, no budget alert and no
+cut-off.** A large import can generate a real charge in an afternoon, and the
+first anyone hears of it is the invoice.
+
+Four things they have to hear before pasting a key:
+
+1. **It is per address, not per month.** Every imported lead is one billable
+   lookup. 50,000 leads on Google at $5/1,000 is roughly $250 in one sitting,
+   past the 10,000/month free allowance. The same import on Geocodio is about
+   $50 — or near nothing if spread across enough days to stay inside the
+   2,500/day free tier.
+2. **Free tiers are daily on some vendors and monthly on others.** Geocodio
+   2,500/day, LocationIQ 5,000/day, Google 10,000/month, HERE 250,000/month. One
+   big import can cross a daily cap partway through, leaving part of the batch
+   geocoded and part not.
+3. **Google and Radar cost twice.** Expensive per lookup, *and* both permit
+   caching coordinates for only ~30 days — so compliance means re-geocoding the
+   whole database every month, forever. That turns a one-time import cost into a
+   subscription nobody budgeted for. The app shows "30 days only" on those rows;
+   it does not explain the recurring bill that compliance implies.
+4. **Their key, their liability.** If it leaks or is misconfigured, the charges
+   are theirs. Pair this with the MapTiler lesson in item 4: anything compiled
+   into a browser bundle is readable, so origin-lock it.
+
+**What to advise:** stay on Census — free, no account, no bill — unless
+block-level pins are actually costing them doors. If they upgrade, Geocodio is
+the one that improves accuracy without the 30-day recurring trap.
+
+This is a blocker because it cannot be fixed after the fact. A customer who
+discovers a surprise bill from a vendor they were pointed at by us is a support
+problem and a trust problem at the same time, and the app currently has nothing
+that would have stopped it — see item 13.
+
+### 6. DNC / TCPA review
 **Owner: counsel · Severity: blocker · Not tracked anywhere until now**
 
 The app stores phone numbers and reps contact people from it. The README assumes
@@ -95,14 +133,14 @@ and no task tracks it.
 Flagged here as an open question rather than an assessment — whether and how
 these rules apply to this use is exactly what counsel is for.
 
-### 6. Photo retention
+### 7. Photo retention
 **Owner: counsel + Curtis · Severity: blocker · Tracked as #18**
 
 Reps photograph private property. There is no retention policy, no deletion path,
 and no stated answer to how long the photos are kept or who can see them.
 
 Task #18 says to put this on the legal review list. **There is no legal review
-list.** Items 1, 5 and 6 are all waiting on the same conversation that has never
+list.** Items 1, 6 and 7 are all waiting on the same conversation that has never
 been scheduled — creating that list is probably the single highest-leverage thing
 on this page.
 
@@ -110,7 +148,7 @@ on this page.
 
 ## High — real defects, not blockers
 
-### 7. Pins are block-level, not rooftop
+### 8. Pins are block-level, not rooftop
 **Owner: Curtis (pricing) + me (implementation) · Severity: high**
 
 Every lead's pin is interpolated along a street, not placed on a building. A rep
@@ -131,7 +169,7 @@ allowance.
 preview is already honest about it — a guessed match is flagged "close match —
 check this one" — and that honesty is the mitigation.
 
-### 8. Is GHL sync part of what the customer is buying?
+### 9. Is GHL sync part of what the customer is buying?
 **Owner: Curtis · Severity: high (product decision) · Tracked as #33–#37**
 
 The foundation is built and merged (#33). Push (#34) and pull (#35) are not, and
@@ -149,7 +187,7 @@ decision on which side wins when both have changed a lead's pipeline stage.
 
 ## Medium
 
-### 9. `react-router-dom` open redirect — a watch item, not a finding
+### 10. `react-router-dom` open redirect — a watch item, not a finding
 **Owner: me · Severity: medium (today: none)**
 
 An open redirect via a backslash in `<Link>`/`useNavigate`, advisory range
@@ -162,7 +200,7 @@ It becomes reachable the moment anyone adds a redirect parameter, a deep link
 from an email, or navigation to a stored URL. That is the trigger to revisit, and
 it is the sort of thing that arrives quietly.
 
-### 10. `npm audit` — 11 findings, all development-only
+### 11. `npm audit` — 11 findings, all development-only
 **Owner: me · Severity: medium**
 
 5 in the app, 6 in `api/`. All eleven were read and none are reachable in
@@ -175,13 +213,26 @@ bumped.
 browser session that is also visiting untrusted sites. That is the whole exposure,
 and it costs nothing to avoid.
 
-### 11. Reporting history has not been rebuilt on production
+### 12. Reporting history has not been rebuilt on production
 **Owner: Curtis · Severity: medium · Tracked as #41**
 
 Historical figures on the live account are still wrong until this runs. Use
 `db:rebuild-stats` — **not** `db:rebuild-closed`.
 
-### 12. `ALLOWED_ORIGINS` rejects preview deployments
+### 13. No spend guardrail before an import bills a customer
+**Owner: me · Severity: medium · Tracked as #46**
+
+The product gap underneath item 5. The import preview knows the row count and
+the active provider's price and free tier — the registry carries both — and does
+not multiply them. There is no running lookup count, no daily-cap warning, and
+no ceiling an admin can set.
+
+Smallest useful version: one line before the confirm button naming the number of
+lookups, the provider, and the free allowance, with an estimated charge when the
+import exceeds it. Worded as an estimate, since the registry's prices came from
+search results rather than vendor pages.
+
+### 14. `ALLOWED_ORIGINS` rejects preview deployments
 **Owner: me · Severity: medium (friction)**
 
 CORS is an exact match, so per-deployment Pages hostnames — the hashed
@@ -219,15 +270,18 @@ collected to make it work.
 
 ## What to do first
 
-1. **Book the legal conversation.** Items 1, 5 and 6 all wait on it, and it is
+1. **Book the legal conversation.** Items 1, 6 and 7 all wait on it, and it is
    the only thing here where the calendar is the bottleneck rather than the work.
-2. **Rotate the MapTiler key** (item 4). Minutes of dashboard work; something is
+2. **Write the geocoding cost briefing** (item 5) before any company connects a
+   key. Nothing in the app stops a surprise bill; right now that conversation is
+   the only thing that does.
+3. **Rotate the MapTiler key** (item 4). Minutes of dashboard work; something is
    currently exposed.
-3. **Decide who holds a Cloudflare API token** (item 3), which unblocks scheduled
+4. **Decide who holds a Cloudflare API token** (item 3), which unblocks scheduled
    backups.
-4. **Say whether GHL is in scope for customer one** (item 8), which decides
+5. **Say whether GHL is in scope for customer one** (item 9), which decides
    whether it is a blocker or a roadmap item.
 
 Everything on that list is yours. While it moves, the code I can pick up without
 input is backup encryption (item 2), moving geocoding into the browser (item 4),
-and the `ALLOWED_ORIGINS` fix (item 12).
+and the `ALLOWED_ORIGINS` fix (item 14).
