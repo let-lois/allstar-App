@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright'
 import { chromiumPath } from './lib/browser.mjs'
 import { dismissTour } from './lib/tour.mjs'
@@ -74,6 +75,43 @@ const ok = (cond, msg) => {
   ok(live.length > 0 && live.every((p) => isSelectable(p.id)), `every live provider can be selected (${live.map((p) => p.id).join(', ')})`)
 }
 
+/* ========== 1a. the picker is actually wired to the geocoder ============ */
+{
+  /*
+    The gap this check exists for shipped once, and nothing caught it.
+
+    `activeGeocoderFor` was written, exported, covered by the screen, described
+    in the README — and never called. A company could save a key, select a
+    provider, be told on screen they would be billed for it, and every import
+    still ran on the deployment's own keys. A feature that is entirely present
+    except for being connected, which no amount of testing the parts detects.
+
+    So this reads the endpoint that spends the money and insists it goes through
+    the two functions that make the picker real. Structural rather than
+    behavioural because the alternative needs a live Worker and a real vendor
+    key, and a check that cannot run is worth nothing.
+  */
+  const src = readFileSync(new URL('../api/src/index.ts', import.meta.url), 'utf8')
+  const i = src.indexOf("path === '/api/import/geocode'")
+  if (i < 0) throw new Error('the geocode endpoint moved — update this gate')
+  // To the end of that handler: far enough to contain it, short enough not to
+  // pick up a mention from the next route along.
+  const handler = src.slice(i, i + 2000)
+
+  ok(
+    /geocodeKeysFor\(/.test(handler),
+    'the geocode endpoint asks which provider this company chose',
+  )
+  ok(
+    /recordLookups\(/.test(handler),
+    'and records what it sent, so the next estimate knows what is left',
+  )
+  ok(
+    !/env\.GOOGLE_MAPS_API_KEY/.test(handler),
+    'and does not reach past that to the deployment’s own key',
+  )
+}
+
 /* ========== 1b. the price a company will actually be charged =========== */
 {
   /*
@@ -147,6 +185,48 @@ const ok = (cond, msg) => {
     `an estimate never reads below the true cost (${odd.kind === 'billable' ? odd.estimateUsd : '?'} vs ${exact})`,
   )
   ok(odd.kind === 'billable' && odd.estimateUsd === 1.24, `and rounds up to the cent (got ${odd.kind === 'billable' ? odd.estimateUsd : '?'})`)
+
+  /*
+    Accumulation — the case the counter exists for.
+
+    Three 1,000-address imports on Geocodio are each well inside the 2,500/day
+    allowance when priced against a fresh one, so without usage every single
+    batch reads as free and the day quietly crosses the cap. With 2,400 already
+    sent, the fourth 1,000 has to come back billable.
+  */
+  const fresh = estimateLookupSpend(geocodio, 1_000)
+  ok(fresh.kind === 'within-allowance', 'a small batch on an untouched allowance is free')
+
+  const late = estimateLookupSpend(geocodio, 1_000, { today: 2_400, month: 2_400 })
+  ok(late.kind === 'billable', 'the same batch is billable once 2,400 have already gone')
+  ok(
+    late.kind === 'billable' && late.billableLookups === 900,
+    `and only the part past the remaining 100 is charged (got ${late.kind === 'billable' ? late.billableLookups : '?'})`,
+  )
+  ok(
+    /already/.test(describeSpend(late)?.text ?? ''),
+    'and the wording says some of the allowance is already gone',
+  )
+
+  // Daily and monthly allowances must read the right field. Google's is monthly,
+  // so a day's usage must not be what is subtracted from it.
+  const monthly = estimateLookupSpend(google, 1_000, { today: 9_900, month: 200 })
+  ok(
+    monthly.kind === 'within-allowance',
+    'a monthly allowance is measured against the month, not the day',
+  )
+  const daily = estimateLookupSpend(geocodio, 200, { today: 2_450, month: 40_000 })
+  ok(
+    daily.kind === 'billable',
+    'and a daily allowance against the day, not the month',
+  )
+
+  // Missing usage must never read as "plenty left" — it reads as a fresh
+  // allowance, which is the same as the old behaviour and no worse.
+  ok(
+    estimateLookupSpend(geocodio, 1_000, null).kind === 'within-allowance',
+    'unknown usage falls back to a fresh allowance rather than throwing',
+  )
 
   // A vendor with no published rate gets an honest gap, not an invented figure.
   const vol = estimateLookupSpend(here, 300_000)

@@ -18,6 +18,7 @@ import {
   apiUsers,
   apiGeocoders,
   type GeocodeProviderDTO,
+  type GeocodeUsageDTO,
   type ImportResultDTO,
   type TeamUserDTO,
 } from '../lib/http'
@@ -81,6 +82,8 @@ export default function AdminImport() {
     could not read is one we must not put a price on.
   */
   const [geocoder, setGeocoder] = useState<GeocodeProviderDTO | null>(null)
+  /** What the server says we have already sent on this company's key. */
+  const [geocodeUsage, setGeocodeUsage] = useState<GeocodeUsageDTO | null>(null)
   /*
     Set once the operator has seen the cost and said go. Only ever consulted
     when the batch is actually billable — a free or within-allowance lookup is
@@ -213,6 +216,7 @@ export default function AdminImport() {
     try {
       const res = await apiGeocoders(token)
       setGeocoder(res.providers.find((p) => p.id === res.active) ?? null)
+      setGeocodeUsage(res.usage ?? null)
     } catch {
       /*
         Left null rather than guessed. Without knowing the provider there is no
@@ -314,7 +318,7 @@ export default function AdminImport() {
     False for a free provider, false inside a free allowance, and false once
     they have agreed — so the ordinary path is one click, exactly as before.
   */
-  const spendEstimate = estimateLookupSpend(geocoder, unplaced.length)
+  const spendEstimate = estimateLookupSpend(geocoder, unplaced.length, geocodeUsage)
   const needsSpendConfirm = spendEstimate.kind === 'billable' && !spendOk
 
 
@@ -587,7 +591,7 @@ export default function AdminImport() {
                 see LAUNCH.md item 5. It says nothing at all on the free Census
                 lookup, so when it does appear it means something.
               */}
-              <SpendNotice provider={geocoder} lookups={unplaced.length} />
+              <SpendNotice provider={geocoder} lookups={unplaced.length} usage={geocodeUsage} />
 
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 {/*
@@ -947,11 +951,13 @@ function Tally({
 function SpendNotice({
   provider,
   lookups,
+  usage,
 }: {
   provider: GeocodeProviderDTO | null
   lookups: number
+  usage: GeocodeUsageDTO | null
 }) {
-  const note = describeSpend(estimateLookupSpend(provider, lookups))
+  const note = describeSpend(estimateLookupSpend(provider, lookups, usage))
   if (!note || lookups === 0) return null
   return (
     <p

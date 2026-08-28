@@ -231,13 +231,22 @@ uninterrupted on a free provider, so the prompt still means something when it
 appears. Rounds up, never quotes a figure for a volume-priced vendor, and says
 an allowance may already be partly spent.
 
-**Still missing:** a running lookup count, so nobody can see what has been spent
-this day or month, and a ceiling an admin can set with a hard stop at it. Both
-need usage tracking the app does not do yet, and neither can be inferred from
-the vendor — this app cannot read their meter.
+**Also done:** every batch sent on a company's key is now counted, so the
+allowance is measured as it stands rather than as it started — three 1,000-row
+imports against a 2,500/day tier no longer each read as free while the day
+crosses the cap. And the picker is now actually wired to the geocoder: it
+shipped in the previous PR without being connected, so a company could select a
+provider, be told they would be billed for it, and have every import run on the
+deployment's keys instead.
 
-That gap is why **item 5 stays a blocker**. The estimate makes a surprise bill
-much less likely; only a real total and a cap would make it impossible.
+**Still missing:** a ceiling an admin can set with a hard stop at it. Not built,
+and arguably should not be — any limit this app enforced would be guesswork,
+because it cannot see the vendor's meter and its own count is a floor rather
+than a total.
+
+**Item 5 stays a blocker** regardless. The app now warns accurately about what
+it can see; it cannot see the same key being used from somewhere else, and no
+amount of code changes that. The briefing is what covers the rest.
 
 ### 14. `ALLOWED_ORIGINS` rejects preview deployments
 **Owner: me · Severity: medium (friction)**

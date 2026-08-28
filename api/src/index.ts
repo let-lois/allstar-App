@@ -35,7 +35,9 @@ import {
 } from './users'
 import { ensureSchema, migrationState } from './migrate'
 import {
+  geocodeKeysFor,
   listGeocoders,
+  recordLookups,
   removeGeocoder,
   saveGeocoderKey,
   setActiveGeocoder,
@@ -720,16 +722,24 @@ export default {
           return json({ error: `Send at most ${GEOCODE_CHUNK} addresses.` }, 413, cors)
         }
         try {
-          return json(
-            {
-              matches: await geocode(rows, {
-                maptiler: env.MAPTILER_API_KEY,
-                google: env.GOOGLE_MAPS_API_KEY,
-              }),
-            },
-            200,
-            cors,
-          )
+          /*
+            The company's own provider, when they have chosen one.
+
+            Their choice replaces our paid providers rather than joining them:
+            falling back to the deployment's key would mean us quietly paying
+            for lookups the screen has just told them they are paying for.
+            Census is still underneath, inside `geocode`, because it is free.
+          */
+          const { keys, provider } = await geocodeKeysFor(env, user.clientId)
+          const matches = await geocode(rows, keys)
+          /*
+            Counted after the fact, because the money is spent by the time the
+            answer arrives — a refusal here would lose the work without saving
+            the charge. Every address sent counts, matched or not: the vendor
+            bills for the question, not the answer.
+          */
+          await recordLookups(env, user.clientId, provider, rows.length)
+          return json({ matches }, 200, cors)
         } catch (err) {
           // A geocoder outage must not read as "these addresses are bad". The
           // console needs to distinguish "couldn't look them up" from "looked

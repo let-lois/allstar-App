@@ -1247,6 +1247,11 @@ row next to the button that selects it — `Keeps coordinates`, `Conditional`,
 key. A company choosing a thirty-day provider is choosing to carry that conflict
 under their own contract, and the screen says so before they do.
 
+A company's choice **replaces** the paid providers rather than joining them.
+Falling back to our key when theirs misses would mean us paying for lookups the
+screen has just told them they are paying for. Census stays underneath either
+way, which is what keeps a deployment with no keys at all a working product.
+
 Ten providers are listed. **Census is the default and needs no account at all**,
 which is the property that matters most: a company that signed up this afternoon
 gets working pins without talking to a vendor. Everything else is an upgrade
@@ -1277,7 +1282,15 @@ not as a quote.
 npm run verify:geocoders
 ```
 
-...runs in two halves. The registry half drives no browser and imports the
+...also checks that the picker is *connected*. `activeGeocoderFor` shipped once
+written, exported, covered by the screen and described here — and never called,
+so a company could save a key, select a provider, be told they would be billed,
+and have every import run on the deployment's keys anyway. A feature entirely
+present except for being wired up, which testing the parts cannot find. The gate
+now reads the endpoint that spends the money and insists it goes through the two
+functions that make the choice real.
+
+The rest runs in two halves. The registry half drives no browser and imports the
 Worker's own registry rather than a copy, so it cannot pass against a
 description that has drifted from the thing described: ids are unique, at least
 one provider needs no account, every provider states its storage terms, and
@@ -1326,9 +1339,21 @@ one-click lookup is withheld and replaced by a confirmation carrying the figure
 button rather than a warning above a button that ignores it. Nothing reaches the
 vendor until it is pressed.
 
+**And it knows what has already gone.** Every batch sent on a company's key is
+counted in `geocode_usage`, one row per client, provider and day, so the
+allowance is measured as it stands rather than as it started. Without that, each
+of three 1,000-address imports on a 2,500/day allowance reads as free while the
+day quietly crosses the cap and nobody is warned on any of them.
+
+The count is deliberately phrased as *what we have sent*, never *what you have
+left*. The same key used from anywhere else adds to the vendor's total and not
+to ours, and vendors reset on their own boundary — UTC for some, a billing month
+for others — which this app cannot see. A floor we can stand behind beats a
+remaining balance that would be wrong in the direction that costs money.
+
 Deliberately a confirmation and not a cap. A ceiling this app enforced would be
-guesswork dressed as a limit, because it cannot see the vendor's meter and does
-not know what today's allowance has already spent. What it can do is put the
+guesswork dressed as a limit, for the same reason: it cannot see the vendor's
+meter. What it can do is put the
 decision in front of the person whose account is being billed, at the moment it
 is billed. Inside the allowance nothing is interrupted at all — a prompt that
 appears on every lookup is one people click through without reading, which would
