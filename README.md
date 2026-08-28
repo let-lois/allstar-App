@@ -1334,6 +1334,38 @@ is billed. Inside the allowance nothing is interrupted at all — a prompt that
 appears on every lookup is one people click through without reading, which would
 make it worthless on the batch that actually costs money.
 
+## Running the gates
+
+```bash
+npm run verify:all              # every gate
+npm run verify:all -- theme     # only gates whose name contains "theme"
+npm run verify:all -- --bail    # stop at the first failure
+```
+
+Not CI. Nothing schedules it, nothing triggers it on push, and it bills nobody —
+it is the same by-hand suite that has always been here, with the two ways of
+fooling yourself removed. Both cost a full run on the day it was written.
+
+**A failed build leaves the last one on disk.** `npm run build` is
+`tsc -b && vite build`, so a type error means Vite never runs and `dist/` still
+holds the previous bundle. Every browser gate then tests code that is not the
+code you just wrote — and passes. So the build runs first and a failure aborts
+everything loudly, rather than scrolling past above a wall of green.
+
+**A dead preview server looks like broken code.** When `vite preview` stopped
+partway through a run, 28 browser gates failed with `ERR_CONNECTION_REFUSED` and
+the summary read as 28 bugs. The only clue was that every pure-Node gate passed
+— failures do not distribute that way. So the server is checked *before every
+gate*, not once at the start, and if it stops the run ends naming the server
+instead of producing a list of failures that are all the same failure.
+
+It starts a preview server if none is running and stops that one afterwards. A
+server you started yourself is left alone, because you are probably using it.
+
+Both behaviours were tested rather than assumed: the build path by introducing a
+type error, and the server path by running against a stand-in server stopped
+mid-run, which reported the server and named the gate it stopped before.
+
 ## Before this goes to a paying customer
 
 Deliberate compromises taken to keep the prototype moving. Each is fine for
