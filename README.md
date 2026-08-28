@@ -1234,6 +1234,13 @@ Deliberate compromises taken to keep the prototype moving. Each is fine for
 building and testing and each is a real defect at launch, so they are written
 down here rather than left in a chat log.
 
+**[`LAUNCH.md`](LAUNCH.md) is the checklist.** This section holds the reasoning —
+what was measured, what was tried, why each compromise was taken. `LAUNCH.md`
+holds the severity and the owner, and adds the items that were never written down
+anywhere: the legal review that has no list, unencrypted backups, and the
+question of whether GHL sync is part of what customer one is buying. Read that
+one to decide what to do next; read this one to understand why.
+
 ### The MapTiler key allows unknown origins
 
 `Allowed HTTP Origins` on the MapTiler key includes `?`, which permits requests
