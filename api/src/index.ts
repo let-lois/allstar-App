@@ -20,10 +20,11 @@ import {
   type GeocodeRequest,
 } from './geocode'
 import { maptilerProbe, probeOverrides } from './geocode-maptiler'
+import { findProvider } from './geocode-providers'
 import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
 import { assignProperties, assignTerritory } from './assign'
 import { createTerritory } from './territories'
-import { readAudit } from './audit'
+import { readAudit, record as recordAudit } from './audit'
 import {
   createResetLink,
   deleteUser,
@@ -33,6 +34,12 @@ import {
   setRole,
 } from './users'
 import { ensureSchema, migrationState } from './migrate'
+import {
+  listGeocoders,
+  removeGeocoder,
+  saveGeocoderKey,
+  setActiveGeocoder,
+} from './geocoders'
 import {
   logResponse,
   logUnhandled,
@@ -612,6 +619,68 @@ export default {
         if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
         const result = await disconnectIntegration(env, user)
         return json(result, 200, cors)
+      }
+
+      /*
+        Geocoding providers.
+
+        Same permission as the CRM connection, and for the same reason: both
+        take a customer's own API credential. Write-only in the same way too —
+        no endpoint hands a stored key back, so changing one means pasting a
+        fresh one rather than editing what is there.
+      */
+      if (path === '/api/geocoders' && req.method === 'GET') {
+        if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        return json(await listGeocoders(env, user.clientId), 200, cors)
+      }
+
+      if (path === '/api/geocoders/key' && req.method === 'POST') {
+        if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const provider = typeof body.provider === 'string' ? body.provider : ''
+        const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : ''
+        if (!apiKey) return json({ error: 'Paste the API key first.' }, 400, cors)
+        try {
+          await saveGeocoderKey(env, user.clientId, provider, apiKey)
+        } catch (err) {
+          // The message is the provider's own reason or ours, never the key.
+          return json({ error: (err as Error).message }, 400, cors)
+        }
+        await recordAudit(env, user, {
+          action: 'geocoder.connected',
+          targetType: 'geocoder',
+          targetLabel: findProvider(provider)?.label ?? provider,
+        })
+        return json(await listGeocoders(env, user.clientId), 200, cors)
+      }
+
+      if (path === '/api/geocoders/active' && req.method === 'POST') {
+        if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const provider = typeof body.provider === 'string' ? body.provider : ''
+        try {
+          await setActiveGeocoder(env, user.clientId, provider)
+        } catch (err) {
+          return json({ error: (err as Error).message }, 400, cors)
+        }
+        await recordAudit(env, user, {
+          action: 'geocoder.changed',
+          targetType: 'geocoder',
+          targetLabel: findProvider(provider)?.label ?? provider,
+        })
+        return json(await listGeocoders(env, user.clientId), 200, cors)
+      }
+
+      if (path === '/api/geocoders/key' && req.method === 'DELETE') {
+        if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const provider = url.searchParams.get('provider') ?? ''
+        await removeGeocoder(env, user.clientId, provider)
+        await recordAudit(env, user, {
+          action: 'geocoder.disconnected',
+          targetType: 'geocoder',
+          targetLabel: findProvider(provider)?.label ?? provider,
+        })
+        return json(await listGeocoders(env, user.clientId), 200, cors)
       }
 
       /*

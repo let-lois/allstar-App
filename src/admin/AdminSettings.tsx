@@ -11,6 +11,7 @@ import {
 } from '../lib/settings'
 import { STATUS } from './charts/tokens'
 import { IntegrationsPanel } from './IntegrationsPanel'
+import { GeocodingPanel } from './GeocodingPanel'
 import { ReportingPanel } from './ReportingPanel'
 
 /**
@@ -27,7 +28,9 @@ import { ReportingPanel } from './ReportingPanel'
  * break a year of history.
  */
 export function AdminSettings() {
-  const [tab, setTab] = useState<'outcomes' | 'notes' | 'photos' | 'reporting' | 'integrations'>('outcomes')
+  const [tab, setTab] = useState<
+    'outcomes' | 'notes' | 'photos' | 'reporting' | 'integrations' | 'geocoding'
+  >('outcomes')
 
   const stored = useAppStore((s) => s.settings)
   const mode = useAppStore((s) => s.mode)
@@ -110,6 +113,7 @@ export function AdminSettings() {
             ['photos', 'Photo categories'],
             ['reporting', 'Reporting'],
             ['integrations', 'Integrations'],
+            ['geocoding', 'Address lookup'],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -323,13 +327,14 @@ export function AdminSettings() {
 
       {tab === 'reporting' && <ReportingPanel />}
       {tab === 'integrations' && <IntegrationsPanel />}
+      {tab === 'geocoding' && <GeocodingPanel />}
 
       {/*
         The footer is about relabelling, which is what three of the four tabs
         do. It would be actively wrong under the integrations tab — nothing
         there is a label, and none of it reaches a rep's phone.
       */}
-      {tab !== 'integrations' && tab !== 'reporting' && (
+      {tab !== 'integrations' && tab !== 'reporting' && tab !== 'geocoding' && (
       <p className="mt-4 rounded-field bg-surface-sunk px-4 py-3 text-xs leading-relaxed text-ink-mute">
         {mode === 'live'
           ? 'These are the words reps see. Codes never change, so renaming an outcome keeps every report and every pipeline rule intact — and a rep whose phone is offline keeps the last labels it synced.'

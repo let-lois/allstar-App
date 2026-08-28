@@ -195,6 +195,26 @@ const MIGRATIONS: Migration[] = [
     statements: [`ALTER TABLE clients ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC'`],
     skipIfColumn: { table: 'clients', column: 'timezone' },
   },
+  {
+    id: '008-client-geocoders',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS client_geocoders (
+         client_id     TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+         provider      TEXT NOT NULL,
+         api_key       TEXT NOT NULL,
+         active        INTEGER NOT NULL DEFAULT 0,
+         status        TEXT NOT NULL DEFAULT 'active',
+         last_ok_at    INTEGER,
+         last_error    TEXT,
+         last_error_at INTEGER,
+         created_at    INTEGER NOT NULL,
+         updated_at    INTEGER NOT NULL,
+         PRIMARY KEY (client_id, provider)
+       )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS client_geocoders_active
+         ON client_geocoders(client_id) WHERE active = 1`,
+    ],
+  },
 ]
 
 async function hasColumn(

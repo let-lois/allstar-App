@@ -581,3 +581,70 @@ export function apiDisconnectGhl(token: string) {
     token,
   })
 }
+
+/* --- geocoding providers -------------------------------------------------- */
+
+/**
+ * The provider catalogue and what this company has configured.
+ *
+ * The catalogue comes from the server rather than being duplicated here. It
+ * carries each vendor's storage terms, and those are the substance of the
+ * choice being made on that screen — two copies of them would drift, and the
+ * copy that drifts is the one telling a customer what they may keep.
+ */
+export interface GeocodeProviderDTO {
+  id: string
+  label: string
+  needsKey: boolean
+  adapter: 'live' | 'planned'
+  storage: 'permanent' | 'conditional' | 'temporary'
+  storageNote: string
+  price: string
+  free: string
+  accuracy: string
+  signup: string
+}
+
+export interface GeocoderRowDTO {
+  provider: string
+  active: boolean
+  /** Masked. The key itself is never returned by any endpoint. */
+  hint: string
+  status: string
+  lastOkAt?: number
+  lastError?: string
+  lastErrorAt?: number
+}
+
+export interface GeocodersDTO {
+  providers: GeocodeProviderDTO[]
+  configured: GeocoderRowDTO[]
+  active: string
+}
+
+export function apiGeocoders(token: string) {
+  return request<GeocodersDTO>('/api/geocoders', { token })
+}
+
+export function apiSaveGeocoderKey(token: string, provider: string, apiKey: string) {
+  return request<GeocodersDTO>('/api/geocoders/key', {
+    method: 'POST',
+    body: { provider, apiKey },
+    token,
+  })
+}
+
+export function apiSetActiveGeocoder(token: string, provider: string) {
+  return request<GeocodersDTO>('/api/geocoders/active', {
+    method: 'POST',
+    body: { provider },
+    token,
+  })
+}
+
+export function apiRemoveGeocoderKey(token: string, provider: string) {
+  return request<GeocodersDTO>(`/api/geocoders/key?provider=${encodeURIComponent(provider)}`, {
+    method: 'DELETE',
+    token,
+  })
+}
