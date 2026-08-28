@@ -19,6 +19,7 @@
     "verify:demo": "node scripts/verify-demo-freshness.mjs",
     "verify:console": "node scripts/verify-console-access.mjs",
     "verify:login": "node scripts/verify-login.mjs",
+    "verify:boot": "node scripts/verify-boot.mjs",
     "verify:csv": "node scripts/verify-csv.mjs",
     "verify:import": "node scripts/verify-import-ui.mjs",
     "verify:route": "node scripts/verify-route.mjs",
