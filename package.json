@@ -20,6 +20,7 @@
     "verify:console": "node scripts/verify-console-access.mjs",
     "verify:login": "node scripts/verify-login.mjs",
     "verify:all": "node scripts/verify-all.mjs",
+    "verify:api-access": "node scripts/verify-api-access.mjs",
     "verify:boot": "node scripts/verify-boot.mjs",
     "verify:geocoders": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-geocoders.mjs",
     "verify:csv": "node scripts/verify-csv.mjs",

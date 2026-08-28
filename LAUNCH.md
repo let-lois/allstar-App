@@ -219,6 +219,22 @@ and it costs nothing to avoid.
 Historical figures on the live account are still wrong until this runs. Use
 `db:rebuild-stats` — **not** `db:rebuild-closed`.
 
+### 12b. Diagnostic endpoints were open to the internet — fixed
+**Owner: me · Severity: was a blocker · Tracked as #47**
+
+`/api/selftest/geocode` sat in front of authentication, accepted an arbitrary
+address, and handed it to a paid geocoder — so anyone with curl could spend the
+deployment's Google quota in a loop at $5/1,000. `/api/selftest` was open the
+same way and burns a password hash per call.
+
+Both now require `SETUP_TOKEN`, and refuse outright on a deployment that has not
+set one. `npm run verify:api-access` holds all 27 routes to a declared access
+level, and fails on any route that does not name one.
+
+**Nothing to do — listed because it was live.** If that endpoint was ever hit by
+anything other than us, it would show as geocoding spend with no matching
+import. Worth a glance at the Google console for the last week.
+
 ### 13. Spend guardrail — the estimate is in, a running total is not
 **Owner: me · Severity: medium · Tracked as #46 (partly done)**
 

@@ -145,6 +145,39 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
   }
 }
 
+/**
+ * Guard for the diagnostic endpoints, which sit in front of authentication.
+ *
+ * They are there deliberately: the questions they answer — "is password
+ * hashing working on this deployment", "does the geocoder still parse an
+ * address the way it used to" — are exactly the ones worth asking when nobody
+ * can sign in. Requiring a session would make them useless in the case they
+ * exist for.
+ *
+ * That is not a reason to leave them open, and one of them was. Anyone with
+ * curl could hand /api/selftest/geocode an address and make this Worker spend
+ * the deployment's Google quota, in a loop, at list price. CORS does not help:
+ * it is a browser rule and a script ignores it.
+ *
+ * So they take the same SETUP_TOKEN the first-run page uses — a secret that
+ * already exists, is already handled as a secret, and is held by exactly the
+ * people who have reason to run a diagnostic. With no token configured the
+ * endpoints refuse rather than defaulting open, because a deployment that
+ * forgot to set one is the deployment least able to notice the bill.
+ */
+function diagnosticsAllowed(req: Request, env: Env): boolean {
+  const expected = env.SETUP_TOKEN
+  if (!expected) return false
+  const given =
+    new URL(req.url).searchParams.get('token') ??
+    req.headers.get('x-setup-token') ??
+    ''
+  // Length-independent comparison is not worth it here: the token is not
+  // derived from anything, and a wrong guess costs the attacker a round trip
+  // either way.
+  return given === expected
+}
+
 async function requireUser(req: Request, env: Env): Promise<SessionUser | null> {
   const token = bearerToken(req)
   if (!token) return null
@@ -237,6 +270,9 @@ export default {
       // is a real question with a real answer, not something to infer from a
       // 500. Reports the cost so a too-small budget is diagnosable directly.
       if (path === '/api/selftest') {
+        if (!diagnosticsAllowed(req, env)) {
+          return json({ error: 'Diagnostics need the setup token.' }, 403, cors)
+        }
         const started = Date.now()
         try {
           await hashPassword('self-test-password', 'self-test-salt', env.SESSION_PEPPER ?? '')
@@ -264,6 +300,14 @@ export default {
       // about the response format shows up here rather than as a territory of
       // leads at latitude zero.
       if (path === '/api/selftest/geocode') {
+        /*
+          Checked before anything else in here, because everything in here
+          spends money. This endpoint hands an arbitrary address to a paid
+          geocoder and was reachable by anyone on the internet.
+        */
+        if (!diagnosticsAllowed(req, env)) {
+          return json({ error: 'Diagnostics need the setup token.' }, 403, cors)
+        }
         // Accepts an address so a list can be spot-checked before importing it:
         //   /api/selftest/geocode?address=1302+Deepwood+Dr&city=Round+Rock&state=TX&zip=78681
         // Cheaper than discovering a whole territory won't place after uploading

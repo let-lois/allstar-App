@@ -1410,6 +1410,51 @@ Clients screen before measuring, because a 403 renders a page that is narrow,
 tidy and completely clean — which would report as a pass and quietly restore the
 gap. That guard is what caught the missing role check.
 
+### Who may call each API route
+
+The console fix above was only cosmetic because the server refused those
+requests anyway. That is the boundary that actually protects anything, so it
+should not be the layer nobody has read end to end. Reading all 27 routes found
+one that was open and should not have been.
+
+**`/api/selftest/geocode` sat in front of authentication, took an arbitrary
+address off the query string, and handed it to a paid geocoder.** Anyone with
+curl could spend the deployment's Google quota in a loop, at list price. CORS
+does not help — it is a browser rule and a script ignores it. `/api/selftest`
+was open the same way and burns a password hash per call, which on a
+per-CPU-second platform is its own small bill.
+
+Both are diagnostics, and both are deliberately in front of sign-in: the
+questions they answer — *is password hashing working on this deployment, does
+the geocoder still parse an address the way it used to* — are exactly the ones
+worth asking when nobody can sign in. So they are gated on `SETUP_TOKEN`, the
+secret the first-run page already uses, held by exactly the people with reason
+to run a diagnostic. A deployment with no token configured **refuses** rather
+than defaulting open, because the deployment that forgot to set one is the one
+least able to notice the bill.
+
+```bash
+npm run verify:api-access
+```
+
+...is a table, not a heuristic. Every route names how it is guarded — `public`,
+`token`, `session`, an inline `can*()` call, or a delegate that checks for
+itself — and **a route in the source that is not in the table fails the gate.**
+That is the part that matters: the point is not that every route is locked,
+because several are deliberately open. It is that somebody decided and wrote the
+decision down, since a forgotten route and a deliberately public one look
+identical in code.
+
+Delegates are read rather than trusted. A function that takes `user` looks
+guarded from the call site whether or not it is, so the gate opens the file and
+checks the function itself.
+
+Proved three ways: removing the diagnostics guard, adding an undeclared route,
+and stripping a role check out of a delegate. The first attempt at the first of
+those was a no-op edit that reported a pass — worth saying, because "the check
+did not fire" and "the edit did not apply" look the same from the outside, and
+only one of them means the check is broken.
+
 ### The console's role gate is one table, not nine screens
 
 `NAV` in `AdminLayout.tsx` names which roles may see each section. It used to do
