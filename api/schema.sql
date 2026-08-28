@@ -376,6 +376,45 @@ CREATE TABLE IF NOT EXISTS client_integrations (
   PRIMARY KEY (client_id, provider)
 );
 
+-- ---------------------------------------------------------------------------
+-- Per-company geocoding providers.
+--
+-- Separate from `client_integrations` on purpose, though both hold an encrypted
+-- third-party credential. That table is the CRM connection: it has an outbox
+-- draining against it and links mapping our ids to theirs, and anything that
+-- lists it is listing "who is this company connected to". A geocoder key is
+-- none of those things, and putting it in the same table would mean every
+-- integration listing had to remember to exclude it. One forgotten WHERE clause
+-- and a customer's API key appears on a screen built for something else.
+--
+-- `api_key` is ENCRYPTED — see api/src/secretbox.ts, same as CRM tokens, same
+-- Worker secret, and never returned by any endpoint. A row is kept per provider
+-- so a company can hold keys for two vendors and switch between them without
+-- pasting a key again; the partial unique index is what enforces that exactly
+-- one of them is the chosen one.
+--
+-- No row at all is the normal state. It means the free Census geocoder, which
+-- needs no account and no card, and which is what every company gets until
+-- somebody deliberately chooses otherwise.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS client_geocoders (
+  client_id     TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  provider      TEXT NOT NULL,               -- matches GEOCODE_PROVIDERS[].id
+  api_key       TEXT NOT NULL,               -- encrypted, never returned by any API
+  active        INTEGER NOT NULL DEFAULT 0,  -- exactly one per client, see index
+  status        TEXT NOT NULL DEFAULT 'active',
+  last_ok_at    INTEGER,
+  last_error    TEXT,
+  last_error_at INTEGER,
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  PRIMARY KEY (client_id, provider)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS client_geocoders_active
+  ON client_geocoders(client_id) WHERE active = 1;
+
 CREATE TABLE IF NOT EXISTS integration_links (
   client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   provider    TEXT NOT NULL,

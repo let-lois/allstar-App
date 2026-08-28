@@ -37,10 +37,13 @@ export type AuditAction =
   | 'settings.timezone'
   | 'integration.connected'
   | 'integration.disconnected'
+  | 'geocoder.connected'
+  | 'geocoder.disconnected'
+  | 'geocoder.changed'
 
 export interface AuditEntry {
   action: AuditAction
-  targetType?: 'user' | 'territory' | 'import' | 'settings' | 'integration'
+  targetType?: 'user' | 'territory' | 'import' | 'settings' | 'integration' | 'geocoder'
   targetId?: string
   /** The name as it read at the time. Never resolved later. */
   targetLabel?: string

@@ -35,6 +35,17 @@ const GROUPS = [
     actions: ['user.invited', 'user.deactivated', 'user.reactivated', 'user.deleted'],
   },
   { key: 'leads', label: 'Leads', actions: ['territory.assigned', 'leads.imported'] },
+  {
+    key: 'connections',
+    label: 'Connections',
+    actions: [
+      'integration.connected',
+      'integration.disconnected',
+      'geocoder.connected',
+      'geocoder.disconnected',
+      'geocoder.changed',
+    ],
+  },
 ]
 
 /** Severity is about what a reader should stop on, not about failure. */
@@ -48,6 +59,12 @@ const WEIGHT: Record<string, 'high' | 'medium' | 'low'> = {
   'user.reactivated': 'low',
   'territory.assigned': 'low',
   'leads.imported': 'low',
+  // A geocoding key is a customer's own billable credential, and switching
+  // provider changes where every future lead's coordinates come from — and
+  // whose terms they arrive under. Worth stopping on, short of an access change.
+  'geocoder.connected': 'medium',
+  'geocoder.disconnected': 'medium',
+  'geocoder.changed': 'medium',
 }
 
 export default function AdminAudit() {
@@ -218,6 +235,12 @@ function describe(e: AuditRowDTO): React.ReactNode {
           {d.leads === 1 ? '' : 's'} in {target}
         </>
       )
+    case 'geocoder.connected':
+      return <>{who} added a geocoding key for {target}</>
+    case 'geocoder.disconnected':
+      return <>{who} removed the geocoding key for {target}</>
+    case 'geocoder.changed':
+      return <>{who} switched address lookup to {target}</>
     case 'leads.imported':
       return (
         <>

@@ -1228,6 +1228,66 @@ unset, the client uses the deployed Worker.
 Toggle **More → Field testing → Simulate no signal** to exercise the offline
 path without leaving coverage.
 
+## A company's own geocoder
+
+Under **More → Admin console → Settings → Address lookup**, a company can bring
+their own geocoding account and choose which provider places their pins.
+
+The reason is not cost, though it does move the bill to the people generating
+it. It is that the vendors disagree about whether we may *keep* what they
+return, and that disagreement is load-bearing here: this app writes a lead's
+coordinates to D1 and to every phone and holds them for the life of the record,
+because the map has to draw with no signal. Google and Radar permit caching for
+about thirty days. Geocodio, LocationIQ, HERE and TomTom permit keeping them.
+Mapbox, Smarty and Esri permit it conditionally, on a specific product or plan.
+
+So the terms are carried in the registry next to each provider and stated on the
+row next to the button that selects it — `Keeps coordinates`, `Conditional`,
+`30 days only` — rather than left in documentation nobody reads before pasting a
+key. A company choosing a thirty-day provider is choosing to carry that conflict
+under their own contract, and the screen says so before they do.
+
+Ten providers are listed. **Census is the default and needs no account at all**,
+which is the property that matters most: a company that signed up this afternoon
+gets working pins without talking to a vendor. Everything else is an upgrade
+somebody chose.
+
+Keys are stored **encrypted** under the same Worker secret as the CRM tokens
+(`api/src/secretbox.ts`), in their own table rather than in
+`client_integrations` — a geocoder key is not a CRM connection, has no outbox
+draining against it, and putting the two in one table would mean every
+integration listing had to remember to exclude it. One forgotten `WHERE` clause
+is a customer's API key on a screen built for something else. No endpoint
+returns a key: a saved provider shows a mask derived by decrypting and
+re-masking on the server, and changing one means pasting a fresh one.
+
+**A provider with no adapter is shown but cannot be connected.** The registry
+distinguishes `live` from `planned`, the API refuses to store a key for a
+`planned` provider, and the row says *Not connected yet*. The alternative is the
+worst outcome this screen can produce: an operator who has been told they are
+connected, and an import that quietly geocodes with something else. Adding an
+adapter is a small isolated change; pretending one exists is not.
+
+Every vendor host is unreachable from the build container, so no adapter can be
+written or verified here from its own documentation — prices and terms in the
+registry came from search results in August 2026 and are marked as orientation,
+not as a quote.
+
+```bash
+npm run verify:geocoders
+```
+
+...runs in two halves. The registry half drives no browser and imports the
+Worker's own registry rather than a copy, so it cannot pass against a
+description that has drifted from the thing described: ids are unique, at least
+one provider needs no account, every provider states its storage terms, and
+Google and Radar are still marked temporary. The browser half asserts what a
+customer sees — all ten listed, the thirty-day warning on its own row, an
+unavailable provider offering no way to connect it, a masked key, and **no full
+API key anywhere in the rendered page**. Both halves were proved by
+reintroducing the bugs: relabelling Google as permanent, and returning a whole
+key in the hint.
+
 ## Before this goes to a paying customer
 
 Deliberate compromises taken to keep the prototype moving. Each is fine for
