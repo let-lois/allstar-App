@@ -1,5 +1,5 @@
 import type { Contact, Property } from '../../types'
-import { mailHref, smsHref, telHref } from '../../lib/format'
+import { homeownerContact } from '../../lib/contact'
 
 import { useAppStore } from '../../store/useAppStore'
 import { haptic } from '../../lib/haptics'
@@ -13,6 +13,11 @@ import { IconMessage, IconNavigate, IconPhone } from '../nav/icons'
  * should never be asked to copy a number into another app. Each hand-off is
  * logged locally so the activity timeline stays truthful even though the call
  * itself happens outside the app.
+ *
+ * Every link comes from `homeownerContact`, which takes the property and returns
+ * nothing to call when the household has been marked Do Not Contact. This screen
+ * used to build the links itself and never looked at the status, so a household
+ * that asked not to be contacted still got three working buttons.
  */
 export function CommActions({
   property,
@@ -24,15 +29,44 @@ export function CommActions({
   compact?: boolean
 }) {
   const logComm = useAppStore((s) => s.logComm)
-  const primary = contact ?? property.contacts.find((c) => c.isPrimary) ?? property.contacts[0]
-
-  const tel = telHref(primary?.phone)
-  const sms = smsHref(primary?.phone, `Hi ${primary?.name?.split(' ')[0] ?? ''}, `)
-  const mail = mailHref(primary?.email, 'Following up on your property')
+  const { person: primary, tel, sms, mail, blocked } = homeownerContact(property, contact)
 
   const cls = compact
     ? 'min-h-[46px] flex-1 gap-1.5 text-[12.5px]'
     : 'min-h-[62px] flex-1 flex-col gap-1 text-[11.5px]'
+
+  /*
+    Said plainly rather than shown as three greyed-out buttons. A disabled
+    control on this screen already means "no number on file", and a rep who
+    reads it that way goes looking for the number somewhere else — which is the
+    one outcome this is here to prevent. Navigate stays: Do Not Contact
+    withdraws contact, it does not make the house disappear from a route the rep
+    is already walking past.
+  */
+  if (blocked) {
+    return (
+      <div className="flex flex-col gap-2">
+        <div
+          data-testid="contact-blocked"
+          className="bg-bad-bg text-bad border-bad/25 flex items-start gap-2 rounded-field border px-3 py-2.5 text-[12.5px] font-semibold"
+        >
+          <span aria-hidden="true" className="text-[15px] leading-none">⊘</span>
+          <span>
+            Do not contact.
+            <span className="block font-normal opacity-90">{blocked.reason}</span>
+          </span>
+        </div>
+        <Link
+          to={`/navigate/${property.id}`}
+          onClick={() => haptic('tap')}
+          className={`metal metal-brand press focusable flex items-center justify-center rounded-field font-semibold ${cls}`}
+        >
+          <IconNavigate />
+          Navigate
+        </Link>
+      </div>
+    )
+  }
 
   return (
     <div className="flex gap-2">

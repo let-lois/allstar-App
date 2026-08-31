@@ -4,7 +4,8 @@ import { STATUS_COLOR } from '../../data/outcomes'
 import { OutcomePill, ScoreBar, StatusPill } from '../ui/StatusPill'
 import { SwipeRow } from '../ui/SwipeRow'
 import { distanceMiles, formatDistance, type Position } from '../../lib/geo'
-import { money, relative, telHref } from '../../lib/format'
+import { money, relative } from '../../lib/format'
+import { homeownerContact } from '../../lib/contact'
 import { useAppStore } from '../../store/useAppStore'
 
 /**
@@ -34,9 +35,15 @@ export function PropertyRow({
 }) {
   const nav = useNavigate()
   const logComm = useAppStore((s) => s.logComm)
-  const contact = property.contacts.find((c) => c.isPrimary) ?? property.contacts[0]
   const dist = position ? distanceMiles(position, property) : null
-  const tel = telHref(contact?.phone)
+  /*
+    Through `homeownerContact` rather than `telHref`, so the swipe obeys Do Not
+    Contact. This row offered swipe-left-to-call on any property in any list —
+    one gesture, no confirmation — and never looked at the status. It was the
+    fourth path to a live `tel:` and the easiest one to miss, because the check
+    that should have covered it lived on a different screen.
+  */
+  const { person: contact, tel } = homeownerContact(property)
 
   return (
     <SwipeRow

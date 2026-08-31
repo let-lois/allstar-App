@@ -25,7 +25,7 @@ file paths.
 | | Question | First recorded | Code defect attached |
 | --- | --- | --- | --- |
 | 1 | Personal data about people who never agreed to anything | This sweep | — |
-| 2 | Do Not Contact is recorded and not enforced | `LAUNCH.md` item 6 | **Yes — task #50** |
+| 2 | Do Not Contact — rules unsettled | `LAUNCH.md` item 6 | Fixed (task #50) |
 | 3 | Photographs kept forever, deletable by nobody | `LAUNCH.md` item 7 / task #53 | **Yes** |
 | 4 | Google's licence terms against an offline map | `LAUNCH.md` item 1 | — |
 | 5 | The app also tracks the people using it | This sweep | — |
@@ -69,21 +69,22 @@ whether this is code or contract.
 outcome with a ⊘ marker. `src/admin/useAdminData.ts` excludes `dnc` properties
 from pipeline and open-lead counts.
 
-**The defect.** `src/components/property/CommActions.tsx` renders one-tap Call,
-Text and Email on the primary contact and **never reads `property.status`**. It
-is rendered on `PropertyDetail`, on the map's `PropertyPeek` bottom sheet, and
-inside `VisitMode`. The text action pre-fills a message body.
+**The defect, since fixed.** `CommActions.tsx` rendered one-tap Call, Text and
+Email and **never read `property.status`** — on `PropertyDetail`, the map's
+`PropertyPeek` bottom sheet and `VisitMode` — and `PropertyRow.tsx` offered
+**swipe-left-to-Call** from any list, also unchecked. Marking a household Do Not
+Contact changed the reports and nothing about the app's ability to contact them.
 
-`src/components/property/PropertyRow.tsx` offers **swipe-left-to-Call** from any
-property list, also without checking status.
+Contact links now come only from `src/lib/contact.ts`, whose entry point takes
+the property, and which returns nothing to call when the household is marked Do
+Not Contact. `npm run verify:dnc` covers it. **The app no longer contacts a
+household that asked not to be contacted.**
 
-So marking a household Do Not Contact changes the reports and nothing about the
-app's ability to contact them. A further gap: the flag is on the *property*,
-while phone numbers are on *contacts*, and a household can have several — nothing
-suppresses a person or a number.
-
-*Engineering opinion, not legal: this is a defect whatever counsel says, and it
-is a small fix.*
+**What is still open, and is why this remains a question.** Suppression is
+per-property, because that is where the flag lives — while phone numbers live on
+`contacts` and a household can have several. Nothing suppresses a named person or
+a specific number, and nothing carries the flag across a re-import of the same
+address in a later list.
 
 **For counsel.** Whether DNC must be enforced in-app and at what granularity
 (property / person / number); whether it must survive re-import of the same

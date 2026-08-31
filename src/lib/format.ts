@@ -97,18 +97,18 @@ export function telHref(phone?: string): string | undefined {
   return digits ? `tel:${digits}` : undefined
 }
 
-export function smsHref(phone?: string, body?: string): string | undefined {
-  if (!phone) return undefined
-  const digits = phone.replace(/[^\d+]/g, '')
-  if (!digits) return undefined
-  // iOS wants `&body=`, Android wants `?body=`. `?` works on both modern OSes.
-  return body ? `sms:${digits}?body=${encodeURIComponent(body)}` : `sms:${digits}`
-}
+/*
+  `smsHref` and `mailHref` used to live here, exported. They moved to
+  `lib/contact.ts` and are private there, so the only way to build a message or
+  email link to a homeowner is `homeownerContact(property, contact)` — which
+  takes the property, and therefore the Do Not Contact status that governs it.
+  They were exported here and used without that check, which is how a household
+  that asked not to be contacted kept its Text and Email buttons.
 
-export function mailHref(email?: string, subject?: string): string | undefined {
-  if (!email) return undefined
-  return subject ? `mailto:${email}?subject=${encodeURIComponent(subject)}` : `mailto:${email}`
-}
+  `telHref` stays, because Team and Rep Detail call colleagues, who have no lead
+  status. `scripts/verify-dnc.mjs` holds the allowlist of files allowed to import
+  it.
+*/
 
 /**
  * "Round Rock, TX 78664" — from whichever of those three parts exist.
