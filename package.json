@@ -17,6 +17,7 @@
     "verify:offline": "node scripts/verify-offline.mjs",
     "verify:webview": "node scripts/verify-webview-notice.mjs",
     "verify:demo": "node scripts/verify-demo-freshness.mjs",
+    "verify:dnc": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-dnc.mjs",
     "verify:console": "node scripts/verify-console-access.mjs",
     "verify:login": "node scripts/verify-login.mjs",
     "verify:all": "node scripts/verify-all.mjs",

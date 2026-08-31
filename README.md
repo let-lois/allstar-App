@@ -1686,6 +1686,60 @@ generated before there is a production backup at all, and the question of whethe
 GHL sync is part of what customer one is buying. Read that
 one to decide what to do next; read this one to understand why.
 
+### Do Not Contact was recorded and not enforced
+
+A rep can close a visit with **Do Not Contact**. It is terminal, it shows a ⊘, it
+drops the property out of pipeline counts and out of route building. What it did
+not do was stop the app offering to contact them.
+
+`CommActions` built its own `tel:`, `sms:` and `mailto:` links and never read
+`property.status`, so a household that had asked not to be contacted still showed
+three working buttons — on the property screen, on the map's bottom sheet, and
+inside Visit Mode. `PropertyRow` offered **swipe-left-to-call** from any list:
+one gesture, no confirmation, also unchecked. Marking a household Do Not Contact
+changed the reports and nothing else.
+
+**Why the fix is not three patched call sites.** There were four paths to a live
+`tel:`, and the swipe was added later by somebody who had no reason to know a
+check existed. A fifth will be added. Patching the callers leaves the same trap
+open.
+
+So the check moved into the type. `smsHref` and `mailHref` are no longer exported
+from `lib/format.ts`; they are private inside `lib/contact.ts`, and the only way
+out of that module is `homeownerContact(property, contact)` — which takes the
+property, and therefore the status that governs it. **There is no signature
+anywhere in the app that produces a message or email link to a person without
+that status coming along.** When contact is withdrawn the links are not built at
+all rather than built and hidden, because a hidden `href` is one CSS mistake away
+from being tappable.
+
+`telHref` stays exported, because Team and Rep Detail call *colleagues*, who have
+no lead status. `npm run verify:dnc` holds the three-file allowlist permitted to
+import it, so reaching for the raw builder on a homeowner screen fails a gate.
+
+The screen says *why* rather than showing three greyed-out buttons: a disabled
+control there already means "no number on file", and a rep who reads it that way
+goes hunting for the number somewhere else, which is the one outcome this exists
+to prevent. **Navigate stays** — the block withdraws contact, it does not remove
+the house from a route the rep is already walking.
+
+**Three layers of check, and the middle one caught something the others could
+not.** `verify:dnc` tests the rule as a function, the shape structurally, and the
+screen in a browser with a real Do Not Contact property *that has a phone number*
+plus a contactable control property — without that control, "no `tel:` links on
+this page" passes just as happily on a build where the buttons were deleted
+outright. Proved by breaking it seven ways. One of those — setting the blocked
+flag but building the links anyway — was invisible to the browser, because the
+component returns early on the flag and never renders them; only the direct test
+of `homeownerContact` saw it.
+
+**What this deliberately does not settle.** Suppression is per-property, where the
+flag lives, while phone numbers live per-contact and a household can have several.
+Whether Do Not Contact should attach to a person, a number or the address, whether
+it survives a re-import of the same address, and whether a rep may reverse one are
+questions for counsel — [`LEGAL.md`](LEGAL.md) question 2. This closed the gap
+between what the app records and what it does; it did not pre-empt the answer.
+
 ### The MapTiler key allowed unknown origins — the code half is fixed
 
 `Allowed HTTP Origins` on the MapTiler key includes `?`, which permits requests

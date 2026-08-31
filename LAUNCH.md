@@ -11,7 +11,7 @@ also in the README is recorded here for the first time.
 **Owner** is who can actually move it — several of these cannot be closed by
 writing code, which is the main thing this document is for.
 
-The code itself is in good shape: 43 verification gates, all passing. Almost
+The code itself is in good shape: 44 verification gates, all passing. Almost
 nothing below is a coding problem — and the two blockers added most recently
 (items 8 and 9) were found by writing a document, not by writing code.
 
@@ -157,25 +157,33 @@ discovers a surprise bill from a vendor they were pointed at by us is a support
 problem and a trust problem at the same time, and the app currently has nothing
 that would have stopped it — see item 15.
 
-### 6. DNC / TCPA review — and Do Not Contact is not enforced
-**Owner: counsel (the rules) + me (the defect) · Severity: blocker · Tracked as #50**
+### 6. DNC / TCPA review — the rules are counsel's; the defect is fixed
+**Owner: counsel · Severity: blocker (the review) · Tracked as #50 (closed)**
 
 Scoped in [`LEGAL.md`](LEGAL.md) question 2, with the facts counsel needs.
 
-Preparing that brief turned up a defect. A rep can close a visit with the outcome
-`do_not_contact`; it is terminal, marked ⊘, and excluded from pipeline counts. But
-`CommActions.tsx` renders one-tap Call, Text and Email and **never reads
-`property.status`** — so a Do Not Contact household still shows live contact
-buttons on the property screen, the map bottom sheet and Visit Mode.
-`PropertyRow.tsx` offers swipe-left-to-Call from any list, also unchecked.
+Preparing that brief turned up a defect, and **it is now fixed.** A rep could
+close a visit with `do_not_contact` — terminal, marked ⊘, excluded from pipeline
+counts and from route building — and the app went on offering one-tap Call, Text
+and Email on that household from four separate places. `CommActions.tsx` never
+read `property.status`; `PropertyRow.tsx` offered swipe-left-to-Call from any
+list. Marking a household Do Not Contact changed the reports and nothing else.
 
-**Marking a household Do Not Contact changes the reports and nothing else.** The
-flag is also per-property while phone numbers are per-contact, so nothing
-suppresses a person or a number.
+The fix is not three patched call sites. One of those four paths was added later
+by somebody with no reason to know a check existed, so the check moved into the
+type: `smsHref` and `mailHref` are no longer exported from `format.ts`, they are
+private inside `src/lib/contact.ts`, and the only way out of that module takes
+the **property**. There is no signature anywhere that yields a message or email
+link to a person without the status that governs them coming along. `telHref`
+survives for Team and Rep Detail, which call colleagues, and `npm run verify:dnc`
+holds the three-file allowlist permitted to import it.
 
-That is a defect whatever counsel says, and a small fix. The granularity —
-property, person or number — and whether it must survive re-import are questions
-for them.
+**Still counsel's, and still a blocker:** whether Do Not Contact must attach to a
+person, a phone number, or the address — it is per-property today while numbers
+are per-contact; whether it survives the same address being re-imported in a
+later list; whether a rep may reverse one; and the DNC-registry and TCPA
+questions in `LEGAL.md`. The code no longer contradicts what it records, which is
+a different thing from the rules being settled.
 
 ### 7. Photo retention — and nothing in the product can delete anything
 **Owner: counsel + Curtis · Severity: blocker · Tracked as #18**
@@ -426,10 +434,8 @@ all.
 Everything on that list is yours. The engineering behind items 2 and 4 is now
 done, so both are waiting on a console step rather than on code.
 
-Two things I can pick up without input. The **Do Not Contact enforcement defect**
-(item 6) — a household marked Do Not Contact still shows live Call, Text and
-Email buttons, which is wrong whatever counsel says about the rules. And the
-`ALLOWED_ORIGINS` fix (item 16).
+The Do Not Contact enforcement defect (item 6) is done. The only thing left that
+I can pick up without input is the `ALLOWED_ORIGINS` fix (item 16).
 
 Writing the counsel brief also found the two new blockers, items 8 and 9. Neither
 had been recorded anywhere. That is the argument for having written it.
