@@ -1,4 +1,5 @@
 import { dayKeyIn, dayRangeIn } from './day'
+import { queueForCrm } from './integrations'
 import type { Env, Mutation, MutationResult, SessionUser } from './types'
 
 /**
@@ -209,6 +210,25 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
         .run()
 
       await bumpDailyStats(env, user, endedAt, outcome, propertyId)
+
+      /*
+        The lead's new state goes to the customer's CRM, if they have one.
+
+        Queued rather than sent: the rep is standing on a doorstep and their sync
+        must never wait on a third party. `queueForCrm` cannot throw — a failure
+        here would be reported to the phone as the *visit* failing to save.
+
+        Deduped per property, not per visit, because what is sent is the lead's
+        current state rather than an event log. A rep correcting an outcome three
+        times costs the customer's API quota once, and the last correction is the
+        one that is true.
+
+        This carries `do_not_contact` outward too, and that is the case that
+        matters most. A household that told a rep to stop must stop being called
+        from the customer's CRM as well, not just from this app — otherwise the
+        rep honours it and the office autodialler does not.
+      */
+      await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId }, `contact:${propertyId}`)
       return
     }
 
@@ -323,6 +343,17 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
           str(p.notes),
         )
         .run()
+
+      // Deduped on the appointment itself: this is a discrete thing that
+      // happened, not a state that gets corrected, so two appointments for one
+      // property must both survive.
+      await queueForCrm(
+        env,
+        user.clientId,
+        'appointment.create',
+        { appointmentId: id, propertyId },
+        `appointment:${id}`,
+      )
       return
     }
 
@@ -470,6 +501,8 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
             Date.now(),
           )
           .run()
+        // A lead added at the door is a new contact for the CRM.
+        await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
         return
       }
       await env.DB.prepare(
@@ -477,6 +510,9 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
       )
         .bind(id, str(p.status) ?? 'new', Date.now(), user.clientId)
         .run()
+      // A status changed from the console reaches the CRM the same way a rep's
+      // outcome does — including a manual Do Not Contact.
+      await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
       return
     }
 

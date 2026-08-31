@@ -28,6 +28,24 @@ database_id = "3adac120-500e-404d-8a37-571ce3654bc0"
 binding = "PHOTOS"
 bucket_name = "allstar-photos"
 
+# ---------------------------------------------------------------------------
+# Scheduled work.
+#
+# The only thing in this Worker that runs without somebody asking for it. It
+# empties `integration_outbox` into each customer's CRM — a rep's sync queues
+# the work and returns, so something has to push it, and doing that inside
+# whatever request happens to be passing makes a rep on a doorstep wait on a
+# third party.
+#
+# Five minutes rather than one: a lead reaching the office CRM within five
+# minutes of a knock is well inside what anyone notices, and a fifth of the
+# invocations is a fifth of the cost. The drain is capped per run and picks up
+# where it left off, so a backlog clears over several ticks instead of one long
+# one that could time out part-way.
+# ---------------------------------------------------------------------------
+[triggers]
+crons = ["*/5 * * * *"]
+
 [vars]
 # Comma-separated. The console and the field app are the same origin today, but
 # local development is a second one.

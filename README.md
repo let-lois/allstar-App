@@ -1686,6 +1686,118 @@ generated before there is a production backup at all, and the question of whethe
 GHL sync is part of what customer one is buying. Read that
 one to decide what to do next; read this one to understand why.
 
+### What a rep does reaches the customer's CRM
+
+The foundation — encrypted credentials, an id-link table, an outbox with dedupe
+and backoff — was built first and then sat unused: `enqueue` had no callers and
+nothing drained the queue. It was plumbing with no water in it. This is the
+water.
+
+**Queue on the way in, drain on the way out.** A rep completing a visit writes a
+row and returns. Everything that can be slow or fail happens later, in a
+scheduled drain, away from anyone standing on a doorstep.
+
+The rule that shapes all of it: `queueForCrm` is called from inside `applyOne`,
+and `applyMutations` treats a throw from there as the mutation being **rejected**
+— it releases the idempotency claim and hands the phone an error. So a failure to
+queue a CRM update would not lose a CRM update; it would tell a rep at a door
+that their visit did not save, and the phone would retry the whole thing. Every
+failure in that function is therefore swallowed and logged. The rep's work is the
+product; the CRM copy is a convenience for the office.
+
+**What is sent is state, not an event log.** Deduped per property, and the
+payload carries only ids — the drain reads the lead at send time. A rep who
+corrects an outcome three times costs the customer's API quota once, and the
+correction that ships is the last one rather than the first.
+
+**Do Not Contact travels outward,** and that is the case that matters most. A
+household that told a rep to stop is only actually stopped if the office CRM
+hears about it too — otherwise the rep honours it and the autodialler does not.
+
+**Failures are sorted by who has to fix them.** A 500 or a rate limit retries with
+backoff and does not mark the customer's connection broken, because flipping the
+indicator every time GHL hiccups trains people to ignore it. A 401 or 403 does
+mark it broken, because a human must fix the credential. A 400 fails that one row
+and leaves the connection alone: we sent something they refused, which is our bug,
+not their outage. Five attempts, then it stops and says so.
+
+**Two ordinary cases are refused rather than retried.** A lead with no phone and
+no email is dropped with a reason — GHL matches an upsert on one of those, and
+sending anyway would create a fresh duplicate contact on every retry, which for a
+door-to-door list is the common case rather than the edge one. And when two of
+our properties share a phone number, GHL returns *one* contact for both;
+`integration_links` is unique in both directions on purpose, so the second link
+collides. The send succeeded, so the row is marked sent and carries a sentence
+explaining that the link stayed with the lead that claimed it first. Before that
+was handled, the raw `UNIQUE constraint failed` propagated, the row retried five
+times against a condition waiting cannot change, and then failed in front of an
+admin as a D1 error. **That bug was found by a reintroduction**, not by review:
+removing the no-phone guard on purpose made two leads collide on one contact id.
+
+#### The part that is not verified
+
+`ghl.ts` says of itself that nothing in it invents an endpoint it has not been
+able to check, and the request *shapes* for contacts were left out on those
+grounds — GHL's documentation hosts are unreachable from this build environment
+and still are.
+
+`crm-push.ts` writes them anyway, from knowledge of their API rather than from
+their docs, and says so where it sits. That is a departure from the standard the
+file next to it sets, and it is called out rather than hidden. It is a contained
+risk: a wrong shape produces a 4xx, a 4xx is permanent, and the row fails with
+GHL's own words recorded against the customer's integration where an admin reads
+them. Nothing is silently dropped and nothing is written incorrectly on their
+side. **The first send against a real account is what turns this from probable
+into known** — that is step 5 of connecting the live account, and it is the
+reason that step exists.
+
+#### The rule for when both sides disagree
+
+Decided ahead of the pull side being built, because it shapes what pull can do:
+**Allstar wins, absolutely.** On any lead both systems know about, Allstar's copy
+is authoritative for every field — status, visit outcome, Do Not Contact and
+contact details alike. Nothing inbound is applied to a linked lead.
+
+A split rule was proposed first — lead state to Allstar because the rep was at
+the door, contact details to whichever side changed last on *event* time so an
+office correction could stick — and rejected in favour of the simpler one. The
+trade it accepts, stated because it will generate a support call: a correction
+made in GoHighLevel is not merely ignored, it is **overwritten**. The old value
+is still here and the next push writes it back. Corrections belong in Allstar.
+
+Two things fall out of that, both good. There is no timestamp comparison
+anywhere, so clock skew between two systems stops being a problem that has to be
+tolerated. And pull loses its merge engine entirely: with no field-level
+resolution to do, it collapses to *bringing in leads GoHighLevel has and Allstar
+does not*, which have no local copy to disagree with.
+
+Do Not Contact is the same rule with no exception: sticky, one-way, unreversible
+by anything inbound.
+
+The customer has to be told this before it bites them, and the note to send is
+written out in `LAUNCH.md` item 11a.
+
+#### Proving it
+
+`cd api && npm run smoke:crm-push` — a real Worker, a real database, and a
+GoHighLevel stand-in that records every byte we send, so the assertions are about
+the request rather than the reply. It covers the auth and `Version` headers, the
+sub-account, the address and phone, the id link, dedupe, and every failure mode
+above.
+
+Proved by breaking it eight ways: the queue failure rethrown into a rep's sync;
+the enqueue removed; a 500 treated as permanent; every 4xx retried; the dedupe
+key dropped; the id never linked; the no-phone guard removed; and a dead
+credential no longer marking the connection broken.
+
+Two of those runs were worth more than the other six. One found the collision bug
+above. The other found that **three of my own assertions were vacuous**: the "GHL
+is down" phase queued the address-only lead, which is dropped before any HTTP
+happens, so the 500 was never reached and "a 500 does not mark the connection
+broken" passed without a single request leaving the Worker. Every phase now
+asserts what the stand-in actually received, not only what the database says
+afterwards.
+
 ### Do Not Contact was recorded and not enforced
 
 A rep can close a visit with **Do Not Contact**. It is terminal, it shows a ⊘, it

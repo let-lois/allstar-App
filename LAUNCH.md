@@ -273,16 +273,95 @@ check this one" — and that honesty is the mitigation.
 ### 11. Is GHL sync part of what the customer is buying?
 **Owner: Curtis · Severity: high (product decision) · Tracked as #33–#37**
 
-The foundation is built and merged (#33). Push (#34) and pull (#35) are not, and
-#37 — connecting the live account — is paused at step 5.
+The foundation is built and merged (#33). **Push (#34) is now built too**: a
+rep's outcome queues, a scheduled drain sends it, and `npm run smoke:crm-push`
+holds the whole path up against a real Worker and a GoHighLevel stand-in. Pull
+(#35) is not built, and #37 — connecting the live account — is still paused at
+step 5.
 
 This is on the list because its severity is entirely a product question. If the
 first customer expects their leads to flow into GoHighLevel, this is a blocker.
 If they don't, it is a roadmap item. Nobody has said which.
 
-Note for when it resumes: #34 is blocked in this environment because GHL's
-documentation is egress-blocked from the container, and #35 additionally needs a
-decision on which side wins when both have changed a lead's pipeline stage.
+**One thing to know before the first live send.** GHL's documentation hosts are
+still egress-blocked from the build container, so the contact request *shape* in
+`crm-push.ts` is written from knowledge of their API rather than from their docs,
+and is marked as such in the file. Everything around it — the transport, the auth,
+the retry rules, the queue — is verified. If the shape is wrong, GHL answers 4xx,
+the row fails permanently with their own words recorded against the customer's
+integration, and nothing is written incorrectly on their side. **Step 5 of #37 is
+what settles it**, and it is now the cheapest way to settle it.
+
+**The conflict rule for #35 is decided (Curtis): Allstar wins, absolutely.**
+
+Not split by field. On any lead the two systems both know about, **Allstar's copy
+is authoritative for every field** — status, visit outcome, Do Not Contact, and
+contact details alike. An inbound GoHighLevel change to a linked lead is never
+applied.
+
+This was proposed first as a split — lead state to Allstar, contact details to
+whichever changed last — and rejected in favour of the simpler rule. The trade
+was stated before it was taken and is worth restating here, because it is the
+part that will generate a support call:
+
+> **A correction made in GoHighLevel does not merely fail to arrive — it gets
+> overwritten.** Someone fixes a misspelled phone number over there; Allstar
+> still holds the old one, and the next push writes the old one back over the
+> fix. Corrections have to be made in Allstar.
+
+**Do Not Contact** is the same rule with no exception anywhere: sticky, one-way,
+and no inbound change may reverse it. Consistent with `LEGAL.md` question 2.
+
+**What this does to #35.** It removes the merge engine. With no field-level
+resolution to perform, pull collapses to one useful job: **bringing in leads that
+exist in GoHighLevel and not in Allstar.** Those have no local copy to conflict
+with, so they simply arrive. Everything else inbound is recorded and ignored.
+Smaller to build, far smaller to get wrong, and there is no timestamp comparison
+anywhere — which also disposes of clock skew between the two systems.
+
+One sub-question left open rather than decided quietly: when Allstar holds *no
+value at all* for a field and GoHighLevel has one, is filling the blank a
+conflict? It is not, on any reading — but "absolutely" was the instruction, so it
+is flagged here rather than assumed either way.
+
+### 11a. Tell the customer how sync conflicts resolve
+**Owner: Curtis · Severity: high, once GHL sync is live · Tracked as #54**
+
+Not a code item. The rule above is defensible and it will still surprise somebody
+the first time it bites — an office manager edits a lead's stage in GoHighLevel,
+a rep closes the same lead from a doorstep, and the office edit vanishes. That
+conversation goes far better before it happens than after.
+
+The note, ready to send:
+
+> **How Allstar and GoHighLevel stay in step**
+>
+> Both systems can hold the same lead, so there has to be a rule for when they
+> disagree. Ours is deliberately simple: **Allstar is the record.**
+>
+> For any lead both systems know about, what is in Allstar wins — its status, the
+> outcome a rep recorded at the door, a Do Not Contact mark, and its contact
+> details too. Allstar pushes its version to GoHighLevel; GoHighLevel does not
+> push back.
+>
+> **The part to plan around:** editing one of those leads in GoHighLevel will not
+> hold. If you correct a phone number there, Allstar still has the old one, and
+> the next time a rep touches that lead the old number is written back over your
+> correction. It will look like the edit was undone, because it was.
+>
+> **So make corrections in Allstar.** They flow outward from there, and they
+> stick.
+>
+> Leads that exist only in GoHighLevel are a different case — there is nothing in
+> Allstar to disagree with, so they come across normally.
+>
+> One rule with no exception: **Do Not Contact only ever travels outward.** Once a
+> household has asked a rep to stop, nothing in GoHighLevel can undo that in
+> Allstar.
+
+Also worth telling them at the same time: **connecting does not backfill.** Sync
+starts from the moment the connection is made; leads already in either system do
+not flow across on their own.
 
 ---
 
