@@ -1751,6 +1751,24 @@ side. **The first send against a real account is what turns this from probable
 into known** — that is step 5 of connecting the live account, and it is the
 reason that step exists.
 
+#### The rule for when both sides disagree
+
+Decided ahead of the pull side being built, because it shapes what pull can do:
+**the app has the last say.** Split by who owns the field, since applied to every
+field it would mean the office could never correct anything.
+
+Lead state — status, visit outcome, Do Not Contact — always comes from Allstar.
+The rep was at the door. Contact details — name, phone, email — are last-write-wins
+on **event** time rather than arrival time, because comparing arrival gets the
+offline case backwards: a rep working a dead zone at 9am syncs at 1pm and would
+lose to an office edit made at 12:30 by somebody who was not there. `createdAt`
+on a mutation and `visits.ended_at` are both event time and already stored.
+
+Do Not Contact is sticky and one-way: no inbound change may reverse it.
+
+The customer has to be told this before it bites them, and the note to send is
+written out in `LAUNCH.md` item 11a.
+
 #### Proving it
 
 `cd api && npm run smoke:crm-push` — a real Worker, a real database, and a

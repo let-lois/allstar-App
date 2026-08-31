@@ -292,8 +292,63 @@ the row fails permanently with their own words recorded against the customer's
 integration, and nothing is written incorrectly on their side. **Step 5 of #37 is
 what settles it**, and it is now the cheapest way to settle it.
 
-Note for when #35 resumes: it needs a decision on which side wins when both have
-changed a lead's pipeline stage.
+**The conflict rule for #35 is decided (Curtis): the app has the last say.**
+Split by who owns the field, because applied to every field it would mean the
+office can never correct anything:
+
+| | |
+|---|---|
+| Lead state — status, visit outcome, Do Not Contact | **Allstar always wins.** The rep was at the door. |
+| Contact details — name, phone, email | Last write wins, on **event** time. |
+
+"Event time, not arrival time" is the part that took a second pass. Comparing
+when a change *arrived* gets the offline case backwards: a rep works a street
+with no signal at 9am and syncs at 1pm, an office edit at 12:30 has a newer
+arrival stamp, and the outcome from the person who was physically at the door
+loses to someone who was not. The app already carries event time — mutations have
+`createdAt` from the device and `visits.ended_at` is when the visit really ended —
+so comparing those against GHL's `dateUpdated` keeps "last in wins" while making
+the rep's presence count.
+
+**Do Not Contact is sticky and one-way.** No inbound GHL change can un-DNC a
+household, whatever the timestamps say. Everything else may flip freely.
+
+### 11a. Tell the customer how sync conflicts resolve
+**Owner: Curtis · Severity: high, once GHL sync is live · Tracked as #54**
+
+Not a code item. The rule above is defensible and it will still surprise somebody
+the first time it bites — an office manager edits a lead's stage in GoHighLevel,
+a rep closes the same lead from a doorstep, and the office edit vanishes. That
+conversation goes far better before it happens than after.
+
+The note, ready to send:
+
+> **How Allstar and GoHighLevel stay in step**
+>
+> Both systems can change the same lead, so there has to be a rule for when they
+> disagree. Ours: **what the rep recorded at the door wins.**
+>
+> A lead's status, its visit outcome, and a Do Not Contact mark always come from
+> Allstar. If someone moves a lead in GoHighLevel and a rep closes that same lead
+> in the field, the rep's version is the one that stands — they were the person
+> who was actually there.
+>
+> Contact details work the other way round: a name, phone number or email is
+> whichever was **changed most recently**, from either system. So correcting a
+> misspelled number in GoHighLevel sticks.
+>
+> "Most recently" means when the change was *made*, not when it reached us. Reps
+> work in basements and dead zones and their phones sync hours later; without
+> this, an office edit made at lunchtime would silently overwrite a doorstep
+> outcome recorded that morning.
+>
+> One exception with no override: **Do Not Contact only ever travels outward.**
+> Once a household has asked a rep to stop, nothing in GoHighLevel can undo that
+> in Allstar. It is the one flag we will not let a sync reverse.
+
+Also worth telling them at the same time: **connecting does not backfill.** Sync
+starts from the moment the connection is made; leads already in either system do
+not flow across on their own.
 
 ---
 
