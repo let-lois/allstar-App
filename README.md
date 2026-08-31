@@ -1754,17 +1754,25 @@ reason that step exists.
 #### The rule for when both sides disagree
 
 Decided ahead of the pull side being built, because it shapes what pull can do:
-**the app has the last say.** Split by who owns the field, since applied to every
-field it would mean the office could never correct anything.
+**Allstar wins, absolutely.** On any lead both systems know about, Allstar's copy
+is authoritative for every field — status, visit outcome, Do Not Contact and
+contact details alike. Nothing inbound is applied to a linked lead.
 
-Lead state — status, visit outcome, Do Not Contact — always comes from Allstar.
-The rep was at the door. Contact details — name, phone, email — are last-write-wins
-on **event** time rather than arrival time, because comparing arrival gets the
-offline case backwards: a rep working a dead zone at 9am syncs at 1pm and would
-lose to an office edit made at 12:30 by somebody who was not there. `createdAt`
-on a mutation and `visits.ended_at` are both event time and already stored.
+A split rule was proposed first — lead state to Allstar because the rep was at
+the door, contact details to whichever side changed last on *event* time so an
+office correction could stick — and rejected in favour of the simpler one. The
+trade it accepts, stated because it will generate a support call: a correction
+made in GoHighLevel is not merely ignored, it is **overwritten**. The old value
+is still here and the next push writes it back. Corrections belong in Allstar.
 
-Do Not Contact is sticky and one-way: no inbound change may reverse it.
+Two things fall out of that, both good. There is no timestamp comparison
+anywhere, so clock skew between two systems stops being a problem that has to be
+tolerated. And pull loses its merge engine entirely: with no field-level
+resolution to do, it collapses to *bringing in leads GoHighLevel has and Allstar
+does not*, which have no local copy to disagree with.
+
+Do Not Contact is the same rule with no exception: sticky, one-way, unreversible
+by anything inbound.
 
 The customer has to be told this before it bites them, and the note to send is
 written out in `LAUNCH.md` item 11a.
