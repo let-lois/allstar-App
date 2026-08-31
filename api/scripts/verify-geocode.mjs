@@ -9,6 +9,8 @@
  * ever diverges from them, `GET /api/selftest/geocode` on the deployed Worker is
  * what catches it: it geocodes a known address and asserts the coordinates land
  * where that address actually is.
+ *
+ * Two providers, since MapTiler left the chain: Google and Census.
  */
 
 import { build } from 'esbuild'
@@ -24,10 +26,6 @@ const load = async (entry, name) => {
 }
 const { parseCensusResponse, toCensusCsv } = await load('src/geocode.ts', 'geocode')
 const { parseGoogleResponse } = await load('src/geocode-google.ts', 'google')
-const { parseMapTilerResponse, maptilerProbe, probeOverrides } = await load(
-  'src/geocode-maptiler.ts',
-  'maptiler',
-)
 const { addressKey, propertyIdFor } = await load('src/import.ts', 'import')
 
 const fails = []
@@ -226,234 +224,18 @@ const ok = (cond, msg) => {
 }
 
 
-/* --- MapTiler ------------------------------------------------------------- */
+/* --- MapTiler's parsing tests went with its adapter ----------------------- */
 //
-// Same coordinate trap as Census, in a different disguise: GeoJSON `center` is
-// [longitude, latitude]. Read left-to-right, a Texas address lands off Somalia.
-{
-  const m = parseMapTilerResponse('1', {
-    features: [
-      {
-        place_name: '1600 Pennsylvania Ave NW, Washington, DC',
-        place_type: ['address'],
-        relevance: 1,
-        center: [-77.03535, 38.898754],
-        address: '1600',
-      },
-    ],
-  })
-  ok(m.status === 'match', 'a matched address is reported as a match')
-  ok(
-    Math.abs(m.lat - 38.898754) < 1e-6 && Math.abs(m.lng + 77.03535) < 1e-6,
-    'longitude and latitude are not transposed',
-  )
-  ok(m.provider === 'maptiler', 'attributed to the provider that answered')
-  ok(m.precision === 'rooftop', 'an address match carrying a house number is a rooftop')
-  ok(m.partial !== true, 'a full-relevance hit is not flagged as a guess')
-}
-
-// Precision has to be inferred here — there is no location_type field — so the
-// inference is what needs pinning. Claiming rooftop for a street match would
-// make the whole provider swap pointless.
-{
-  // MapTiler calls a street `road`. The Mapbox-style APIs this resembles call it
-  // `street`, and using their word both broke the request and mis-read the
-  // response — so both spellings are pinned here.
-  const road = parseMapTilerResponse('2', {
-    features: [{ place_name: 'Cedar Bend Dr', place_type: ['road'], relevance: 1, center: [-97.7, 30.5] }],
-  })
-  ok(road.precision === 'interpolated', 'a road match is interpolated, never rooftop')
-
-  const street = parseMapTilerResponse('2b', {
-    features: [{ place_name: 'Cedar Bend Dr', place_type: ['street'], relevance: 1, center: [-97.7, 30.5] }],
-  })
-  ok(
-    street.precision === 'approximate',
-    "'street' is not a MapTiler type, so it must not be read as a road",
-  )
-
-  const addressNoNumber = parseMapTilerResponse('3', {
-    features: [{ place_name: 'Cedar Bend Dr', place_type: ['address'], relevance: 1, center: [-97.7, 30.5] }],
-  })
-  ok(
-    addressNoNumber.precision === 'interpolated',
-    'an address match with no house number is not a rooftop either',
-  )
-
-  const place = parseMapTilerResponse('4', {
-    features: [{ place_name: 'Round Rock, TX', place_type: ['place'], relevance: 1, center: [-97.7, 30.5] }],
-  })
-  ok(place.precision === 'approximate', 'a place match is approximate')
-}
-
-// Relevance is how MapTiler says "I guessed", where Google sets partial_match.
-{
-  const fuzzy = parseMapTilerResponse('5', {
-    features: [{ place_name: 'X', place_type: ['address'], relevance: 0.62, center: [-97.7, 30.5], address: '1' }],
-  })
-  ok(fuzzy.partial === true, 'a low-relevance hit is flagged so an operator can look before importing')
-}
-
-// An empty feature list is a genuine miss; a message is a fault. Reporting a
-// fault as "not found" sends someone hunting for a typo that is not there.
-{
-  const none = parseMapTilerResponse('6', { features: [] })
-  ok(none.status === 'no_match', 'no features means not found')
-
-  const bad = parseMapTilerResponse('7', { message: 'Key is invalid' })
-  ok(bad.status === 'error', 'a message means the provider failed, not that the address is wrong')
-  ok(/invalid/i.test(bad.error ?? ''), 'and the reason is carried through')
-}
-
-// A latitude beyond ±90 only makes sense the other way round, which is a parse
-// error rather than data.
-{
-  const swapped = parseMapTilerResponse('8', {
-    features: [{ place_name: 'X', place_type: ['address'], center: [30.5, -197.7] }],
-  })
-  ok(swapped.status === 'no_match', 'an impossible coordinate pair is refused rather than plotted')
-}
-
-/* --- the raw probe -------------------------------------------------------- */
+// This file used to carry ~230 lines on MapTiler: the GeoJSON coordinate trap,
+// `road` vs the `street` type it does not use, relevance as its way of saying "I
+// guessed", and the raw-probe variants behind `/api/selftest/geocode?raw=1`.
+// MapTiler left the geocoding chain — see the note on `geocode` in
+// api/src/geocode.ts — so the adapter, the probe and their tests are all gone
+// together rather than left testing code nothing calls.
 //
-// A diagnostic that echoes its own request URL is one paste away from leaking the
-// key into a chat log or a screenshot, so the redaction is tested as a property
-// rather than trusted as an intention.
-{
-  const KEY = 'sk-super-secret-maptiler-key'
-  const seen = []
-  const realFetch = globalThis.fetch
-  globalThis.fetch = async (u) => {
-    seen.push(String(u))
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({
-        features: [
-          {
-            place_name: '704 West 40th Street, Austin, Texas 78751, United States',
-            place_type: ['address'],
-            relevance: 1,
-            address: '704',
-            center: [-97.74, 30.31],
-          },
-        ],
-      }),
-    }
-  }
-
-  const variants = await maptilerProbe(
-    { ref: 'probe', address1: '704 W 40th St', city: 'Austin', state: 'TX', zip: '78751' },
-    KEY,
-  )
-  globalThis.fetch = realFetch
-
-  ok(
-    variants.map((v) => v.label).join(',') ===
-      'current,us-parser,us-parser-unfiltered,us-parser-exact',
-    'the probe pairs a control against the documented US-parser parameters',
-  )
-  ok(
-    variants.every((v) => v.why && v.why.length > 10),
-    'each variant says what hypothesis it isolates',
-  )
-
-  ok(
-    variants.every((v) => !v.url.includes(KEY)),
-    'no reported URL contains the key',
-  )
-  ok(
-    variants.every((v) => v.url.includes('[redacted]')),
-    'the key is replaced rather than dropped, so the request shape stays readable',
-  )
-  ok(
-    seen.every((u) => u.includes(KEY)),
-    'the real requests still carry the key — redaction is display-only',
-  )
-
-  // The control has to keep sending exactly what production sends, or it stops
-  // being a control and the comparison means nothing.
-  ok(
-    seen[0].includes('types=address,road') && seen[0].includes('limit=1'),
-    'the control sends exactly what the import path sends, commas unescaped',
-  )
-  ok(!seen[0].includes('language='), 'and the control does not send language, which is the variable under test')
-  ok(
-    seen.slice(1).every((u) => u.includes('language=en') && u.includes('country=us')),
-    'every US-parser variant sends country and language together — one without the other is the bug',
-  )
-  ok(!seen[2].includes('types='), 'the unfiltered variant sends no type filter at all')
-  ok(seen[3].includes('autocomplete=false'), 'the exact variant turns off prefix matching')
-  ok(
-    seen.every((u) => u.includes(encodeURIComponent('704 W 40th St, Austin, TX, 78751'))),
-    'every variant asks about the same address',
-  )
-
-  ok(
-    variants[0].features[0]?.address === '704',
-    'a house number in the response is surfaced — it is the whole point of reading raw',
-  )
-  ok(
-    Array.isArray(variants[0].features[0]?.place_type),
-    'and place_type comes through unflattened, not reduced to our precision bucket',
-  )
-}
-
-/* --- tunable parameters --------------------------------------------------- */
-//
-// The point of the whitelist is that a new hypothesis about the query string
-// costs a page reload instead of a deploy. The point of it being a *whitelist*
-// is that nothing a caller sends can redirect the request or spend someone
-// else's quota.
-{
-  const picked = probeOverrides(
-    new URLSearchParams('language=de&limit=3&raw=1&address=x&key=attacker-key&types=poi'),
-  )
-  ok(picked.language === 'de' && picked.limit === '3' && picked.types === 'poi', 'tunable parameters are read from the query string')
-  ok(!('key' in picked), 'key is not tunable — a caller cannot point the probe at another account')
-  ok(
-    !('address' in picked) && !('raw' in picked),
-    'and unrelated parameters are dropped rather than forwarded',
-  )
-
-  const seen = []
-  const realFetch = globalThis.fetch
-  globalThis.fetch = async (u) => {
-    seen.push(String(u))
-    return { ok: true, status: 200, json: async () => ({ features: [] }) }
-  }
-  await maptilerProbe({ ref: 'p', address1: '1 Main St' }, 'k', { limit: '9', language: 'es' })
-  globalThis.fetch = realFetch
-
-  ok(
-    seen.every((u) => u.includes('limit=9') && !u.includes('limit=1&') && !u.endsWith('limit=1')),
-    'an override replaces the variant default rather than appending a duplicate',
-  )
-  ok(
-    seen.every((u) => u.includes('language=es')),
-    'an override applies to every variant, including the control',
-  )
-  ok(
-    seen.every((u) => u.includes('key=k')),
-    'and the key survives the override merge',
-  )
-}
-
-/* --- the probe when the provider rejects it ------------------------------- */
-{
-  const realFetch = globalThis.fetch
-  globalThis.fetch = async () => ({ ok: false, status: 403, text: async () => 'forbidden' })
-  const variants = await maptilerProbe({ ref: 'p', address1: 'x' }, 'k')
-  globalThis.fetch = realFetch
-  ok(
-    variants.length === 4 && variants.every((v) => v.status === 403),
-    'a rejected probe still reports every variant rather than throwing',
-  )
-  ok(
-    variants.every((v) => /forbidden/.test(v.error ?? '')),
-    "and carries the provider's own words",
-  )
-}
+// Deleted, not commented out: a test suite for a deleted module is the kind of
+// thing that gets resurrected against a rewritten API two years later. The
+// history is in git.
 
 console.log(fails.length ? `\n${fails.length} check(s) failed` : '\ngeocode parsing and dedupe are correct')
 process.exit(fails.length ? 1 : 0)

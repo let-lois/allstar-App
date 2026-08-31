@@ -247,11 +247,11 @@ export async function activeGeocoderFor(
 export async function geocodeKeysFor(
   env: Env,
   clientId: string,
-): Promise<{ keys: { google?: string; maptiler?: string }; provider: string }> {
+): Promise<{ keys: { google?: string }; provider: string }> {
   const own = await activeGeocoderFor(env, clientId)
   if (!own) {
     return {
-      keys: { maptiler: env.MAPTILER_API_KEY, google: env.GOOGLE_MAPS_API_KEY },
+      keys: { google: env.GOOGLE_MAPS_API_KEY },
       provider: env.GOOGLE_MAPS_API_KEY ? 'google' : 'census',
     }
   }

@@ -19,7 +19,6 @@ import {
   type GeocodeAttempt,
   type GeocodeRequest,
 } from './geocode'
-import { maptilerProbe, probeOverrides } from './geocode-maptiler'
 import { findProvider } from './geocode-providers'
 import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
 import { assignProperties, assignTerritory } from './assign'
@@ -331,28 +330,16 @@ export default {
               zip: '20500',
             }
 
-        // `?raw=1` reports what MapTiler actually said, rather than the precision
-        // bucket we sorted it into. Reach for it when a result is wrong in a way
-        // the parsed output cannot explain — a missing house number, or a match
-        // on a street in a ZIP nobody asked about.
-        if (q.get('raw') === '1') {
-          if (!env.MAPTILER_API_KEY) {
-            return json({ ok: false, error: 'MAPTILER_API_KEY is not configured' }, 200, cors)
-          }
-          return json(
-            {
-              ok: true,
-              sent: probeRow,
-              // Tunable parameters are read straight off the query string, so a
-              // new hypothesis about the request costs a page reload rather than
-              // a deploy. The whitelist is in geocode-maptiler.ts.
-              overrides: probeOverrides(q),
-              variants: await maptilerProbe(probeRow, env.MAPTILER_API_KEY, probeOverrides(q)),
-            },
-            200,
-            cors,
-          )
-        }
+        /*
+          `?raw=1` used to report what MapTiler actually said about the probe
+          address, variant by variant, for the case where a result was wrong in a
+          way the parsed output could not explain. It went with the MapTiler
+          geocoder. Nothing equivalent exists for Google or Census and none is
+          added here: the diagnostic existed because MapTiler answered a house
+          with a street and the parsed output could not show why. `attempts`
+          below covers what remains — which provider was asked, what it placed,
+          and its own words when it refused.
+        */
 
         try {
           // Every provider's attempt is reported, not just the winner. Without
@@ -362,7 +349,7 @@ export default {
           const attempts: GeocodeAttempt[] = []
           const matches = await geocode(
             [probeRow],
-            { maptiler: env.MAPTILER_API_KEY, google: env.GOOGLE_MAPS_API_KEY },
+            { google: env.GOOGLE_MAPS_API_KEY },
             attempts,
           )
           const m = matches[0]
@@ -409,7 +396,9 @@ export default {
               setupToken: !!env.SETUP_TOKEN,
               // Present means rooftop geocoding via Google; absent means the
               // free Census geocoder, which places a house on the right block.
-              maptilerGeocoding: !!env.MAPTILER_API_KEY,
+              // `maptilerGeocoding` was reported here until MapTiler left the
+              // chain. The Worker needs no MapTiler key at all now — if one is
+              // still set as a secret it is unused, and deleting it is safe.
               googleGeocoding: !!env.GOOGLE_MAPS_API_KEY,
               // Absent means connecting a CRM is refused rather than storing a
               // customer's token in plaintext — a deliberate refusal, but one

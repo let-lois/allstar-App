@@ -80,27 +80,42 @@ Blocked on a decision, not on engineering: this needs either a scheduled job wit
 a Cloudflare API token, or a calendar reminder and a person. Which is appropriate
 is a question about who holds that token.
 
-### 4. The MapTiler key is exposed, and origin-unlocked by design
-**Owner: Curtis (rotate) + me (close it properly) · Severity: blocker**
+### 4. The MapTiler key is exposed — two console steps left, both yours
+**Owner: Curtis · Severity: blocker until the key is rotated**
 
-Two separate problems that resolve together.
+Two problems that resolved together. **The code half is done.**
 
-*Exposed:* the browser key appeared in a screenshot during a working session. It
-has not been rotated.
+*Origin-unlocked (fixed in code):* `Allowed HTTP Origins` includes `?`, which
+permits requests arriving with no `Origin` header. That was deliberate — the free
+plan allows one key, the browser needs it origin-locked, and the Worker sends no
+`Origin` — but it meant anyone who read the key out of the JavaScript bundle
+could use it from a script or `curl`. MapTiler has now been removed from the
+geocoding chain, which was the Worker's only use for the key, so the key is
+browser-only and can be fully origin-locked.
 
-*Origin-unlocked:* `Allowed HTTP Origins` includes `?`, which permits requests
-arriving with no `Origin` header. That is deliberate — the free plan allows one
-key, the browser needs it origin-locked, and the Worker sends no `Origin` — but
-it means anyone who reads the key out of the JavaScript bundle can use it from a
-script or `curl`. Another website embedding it is still blocked; a script is not.
+*Exposed (still open):* the browser key appeared in a screenshot during a working
+session and has not been rotated.
 
-What it is worth today: the free tier is a hard 100k/month cap with no overage
-billing, so the worst case is a blank map until the month rolls over — an outage,
-not an invoice.
+**Your two steps, both in the MapTiler console:**
 
-Preferred fix is to move geocoding into the browser (~half a day), which lets the
-key be fully origin-locked and drops the Worker's need for one. Remove `?`
-afterwards and confirm with `/api/selftest/geocode`.
+1. **Rotate the key**, and put the new one in `VITE_MAPTILER_KEY`.
+2. **Remove `?` from Allowed HTTP Origins**, listing only the app's origins.
+
+Then confirm with `/api/selftest/geocode` — `attempts` should name `google`
+and/or `census` and never MapTiler. `MAPTILER_API_KEY` on the Worker is unused
+now; deleting that secret is safe.
+
+What it is worth until then: the free tier is a hard 100k/month cap with no
+overage billing, so the worst case is a blank map until the month rolls over — an
+outage, not an invoice.
+
+**What the fix cost.** MapTiler was the third link in the geocoding chain and is
+gone. It was already last because it guesses — asked about a house it cannot
+resolve it returns a fuzzy street match with the house number discarded and the
+ZIP ignored. Addresses neither Google nor Census can place now come back unplaced
+instead of carrying a flagged street-level guess. That is the honest answer and
+the visible one, but it is a real reduction in fallback coverage and is recorded
+here rather than glossed.
 
 ### 5. Brief every company on geocoding cost before they connect a key
 **Owner: Curtis · Severity: blocker · Tracked as #45**
@@ -331,8 +346,9 @@ collected to make it work.
 2. **Write the geocoding cost briefing** (item 5) before any company connects a
    key. Nothing in the app stops a surprise bill; right now that conversation is
    the only thing that does.
-3. **Rotate the MapTiler key** (item 4). Minutes of dashboard work; something is
-   currently exposed.
+3. **Rotate the MapTiler key and remove `?` from its Allowed HTTP Origins**
+   (item 4). Minutes of dashboard work; something is currently exposed, and the
+   code change that lets the key be locked down is already in.
 4. **Decide who holds a Cloudflare API token** (item 3), which unblocks scheduled
    backups.
 5. **Say whether GHL is in scope for customer one** (item 9), which decides
@@ -342,6 +358,6 @@ Add to that list, now that the code is done: **generate the backup key** (item
 2). One `openssl` command, and until it happens there is no production backup at
 all.
 
-Everything on that list is yours. While it moves, the code I can pick up without
-input is moving geocoding into the browser (item 4) and the `ALLOWED_ORIGINS` fix
-(item 14).
+Everything on that list is yours. The engineering behind items 2 and 4 is now
+done, so both are waiting on a console step rather than on code. The only thing
+left that I can pick up without input is the `ALLOWED_ORIGINS` fix (item 14).
