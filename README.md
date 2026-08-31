@@ -1674,6 +1674,10 @@ Deliberate compromises taken to keep the prototype moving. Each is fine for
 building and testing and each is a real defect at launch, so they are written
 down here rather than left in a chat log.
 
+**[`LEGAL.md`](LEGAL.md) is the legal review list** — the five questions for
+counsel, the facts behind each, and where data goes. Three of them were blockers
+already; two were found by writing it.
+
 **[`LAUNCH.md`](LAUNCH.md) is the checklist.** This section holds the reasoning —
 what was measured, what was tried, why each compromise was taken. `LAUNCH.md`
 holds the severity and the owner, and adds the items that were never written down

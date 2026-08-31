@@ -11,8 +11,9 @@ also in the README is recorded here for the first time.
 **Owner** is who can actually move it — several of these cannot be closed by
 writing code, which is the main thing this document is for.
 
-The code itself is in good shape: 40 verification gates, all passing. Almost
-nothing below is a coding problem.
+The code itself is in good shape: 43 verification gates, all passing. Almost
+nothing below is a coding problem — and the two blockers added most recently
+(items 8 and 9) were found by writing a document, not by writing code.
 
 ---
 
@@ -38,9 +39,10 @@ Three ways out, none free: get it reviewed by counsel and accept it; use Google
 for display and a storable geocoder for storage; or store Place IDs and resolve
 online, which costs the offline map entirely.
 
-Full reasoning: README → *Google's terms and the offline map are in direct
-conflict*. The constraint is also recorded next to the code it governs, in
-`api/src/geocode-google.ts` and `api/wrangler.toml`.
+Scoped for counsel in [`LEGAL.md`](LEGAL.md) question 4, which is the version to
+hand to a lawyer. Full engineering reasoning: README → *Google's terms and the
+offline map are in direct conflict*. The constraint is also recorded next to the
+code it governs, in `api/src/geocode-google.ts` and `api/wrangler.toml`.
 
 ### 2. Backups are encrypted — one command left, and it is yours
 **Owner: Curtis (generate the key) · Severity: blocker until the key exists**
@@ -153,34 +155,93 @@ the one that improves accuracy without the 30-day recurring trap.
 This is a blocker because it cannot be fixed after the fact. A customer who
 discovers a surprise bill from a vendor they were pointed at by us is a support
 problem and a trust problem at the same time, and the app currently has nothing
-that would have stopped it — see item 13.
+that would have stopped it — see item 15.
 
-### 6. DNC / TCPA review
-**Owner: counsel · Severity: blocker · Not tracked anywhere until now**
+### 6. DNC / TCPA review — and Do Not Contact is not enforced
+**Owner: counsel (the rules) + me (the defect) · Severity: blocker · Tracked as #50**
 
-The app stores phone numbers and reps contact people from it. The README assumes
-a "DNC/TCPA review" exists as a thing that will happen; nothing has scoped one,
-and no task tracks it.
+Scoped in [`LEGAL.md`](LEGAL.md) question 2, with the facts counsel needs.
 
-Flagged here as an open question rather than an assessment — whether and how
-these rules apply to this use is exactly what counsel is for.
+Preparing that brief turned up a defect. A rep can close a visit with the outcome
+`do_not_contact`; it is terminal, marked ⊘, and excluded from pipeline counts. But
+`CommActions.tsx` renders one-tap Call, Text and Email and **never reads
+`property.status`** — so a Do Not Contact household still shows live contact
+buttons on the property screen, the map bottom sheet and Visit Mode.
+`PropertyRow.tsx` offers swipe-left-to-Call from any list, also unchecked.
 
-### 7. Photo retention
+**Marking a household Do Not Contact changes the reports and nothing else.** The
+flag is also per-property while phone numbers are per-contact, so nothing
+suppresses a person or a number.
+
+That is a defect whatever counsel says, and a small fix. The granularity —
+property, person or number — and whether it must survive re-import are questions
+for them.
+
+### 7. Photo retention — and nothing in the product can delete anything
 **Owner: counsel + Curtis · Severity: blocker · Tracked as #18**
 
-Reps photograph private property. There is no retention policy, no deletion path,
-and no stated answer to how long the photos are kept or who can see them.
+Scoped in [`LEGAL.md`](LEGAL.md) question 3.
 
-Task #18 says to put this on the legal review list. **There is no legal review
-list.** Items 1, 6 and 7 are all waiting on the same conversation that has never
-been scheduled — creating that list is probably the single highest-leverage thing
-on this page.
+Task #18 said to put this on the legal review list, and **there was no legal
+review list** — items 1, 6 and 7 were all waiting on the same conversation, which
+made creating that list the highest-leverage thing on this page. It now exists as
+[`LEGAL.md`](LEGAL.md): five questions, the verifiable facts behind each, and a
+sub-processor table. A shareable version is published as an artifact.
+
+Writing it turned up something worse than "no retention policy." Every
+`DELETE FROM` in `api/src/` was enumerated: deletions exist for config rows,
+sessions, rate-limit counters, route stops and users, and **nothing deletes a
+photo, property, contact, note, visit or activity record.** There is no
+data-subject deletion path in the product at all, and nothing expires on a
+schedule. Copies of photos also persist in each rep's phone storage, outside any
+server-side deletion.
+
+This is the largest engineering item behind the legal review, and it does not
+exist in any form yet.
+
+### 8. Personal data about people who never agreed to anything
+**Owner: counsel · Severity: blocker · Tracked as #51 · Not recorded until now**
+
+Scoped in [`LEGAL.md`](LEGAL.md) question 1.
+
+The database holds, about homeowners who never signed up for anything: street
+address and precise coordinates, plus `owner_occupied`, `roof_age_years`,
+`square_feet`, a dollar `opportunity_value` and a lead `score`; a contact's name,
+phone, email and relationship to the property; and `notes.body`, free text a rep
+types about the household with no structure and no restriction on what goes in
+it. Records arrive by CSV from lists the customer supplies, and we do not know
+how those lists were assembled.
+
+There is no consent field, no list-provenance field, and no lawful-basis field.
+
+Found while preparing the counsel brief. It had not been written down anywhere,
+which is the argument for having written that brief: two of the five legal
+blockers had never been articulated.
+
+### 9. The app also tracks the reps using it
+**Owner: counsel · Severity: blocker · Tracked as #52 · Not recorded until now**
+
+Scoped in [`LEGAL.md`](LEGAL.md) question 5.
+
+`visits` records `start_lat`, `start_lng` and `start_accuracy` — where the rep
+physically was when each visit began. Every photo is geotagged. `daily_stats`
+holds per-rep daily knocks, conversations, appointments, quotes, sales and
+pipeline value; `activity` logs individual actions; a leaderboard ranks reps
+against each other.
+
+Location is requested once per session rather than tracked continuously (#28), so
+there is no movement trail — but nothing tells a rep their position is recorded
+and there is no way to decline.
+
+These are the customer's employees, not our users. Whether the notice obligation
+is ours or the employing company's decides whether this is a code change or a
+contract term, and that is a question for counsel rather than a defect.
 
 ---
 
 ## High — real defects, not blockers
 
-### 8. Pins are block-level, not rooftop
+### 10. Pins are block-level, not rooftop
 **Owner: Curtis (pricing) + me (implementation) · Severity: high**
 
 Every lead's pin is interpolated along a street, not placed on a building. A rep
@@ -201,7 +262,7 @@ allowance.
 preview is already honest about it — a guessed match is flagged "close match —
 check this one" — and that honesty is the mitigation.
 
-### 9. Is GHL sync part of what the customer is buying?
+### 11. Is GHL sync part of what the customer is buying?
 **Owner: Curtis · Severity: high (product decision) · Tracked as #33–#37**
 
 The foundation is built and merged (#33). Push (#34) and pull (#35) are not, and
@@ -219,7 +280,7 @@ decision on which side wins when both have changed a lead's pipeline stage.
 
 ## Medium
 
-### 10. `react-router-dom` open redirect — a watch item, not a finding
+### 12. `react-router-dom` open redirect — a watch item, not a finding
 **Owner: me · Severity: medium (today: none)**
 
 An open redirect via a backslash in `<Link>`/`useNavigate`, advisory range
@@ -232,7 +293,7 @@ It becomes reachable the moment anyone adds a redirect parameter, a deep link
 from an email, or navigation to a stored URL. That is the trigger to revisit, and
 it is the sort of thing that arrives quietly.
 
-### 11. `npm audit` — 11 findings, all development-only
+### 13. `npm audit` — 11 findings, all development-only
 **Owner: me · Severity: medium**
 
 5 in the app, 6 in `api/`. All eleven were read and none are reachable in
@@ -245,7 +306,7 @@ bumped.
 browser session that is also visiting untrusted sites. That is the whole exposure,
 and it costs nothing to avoid.
 
-### 12. Reporting history has not been rebuilt on production
+### 14. Reporting history has not been rebuilt on production
 **Owner: Curtis · Severity: medium · Tracked as #41**
 
 Historical figures on the live account are still wrong until this runs. Use
@@ -274,7 +335,7 @@ another company's user existence does not leak.
 anything other than us, it would show as geocoding spend with no matching
 import. Worth a glance at the Google console for the last week.
 
-### 13. Spend guardrail — the estimate is in, a running total is not
+### 15. Spend guardrail — the estimate is in, a running total is not
 **Owner: me · Severity: medium · Tracked as #46 (partly done)**
 
 **Done:** the address-lookup step states what the batch will cost before it runs
@@ -303,7 +364,7 @@ than a total.
 it can see; it cannot see the same key being used from somewhere else, and no
 amount of code changes that. The briefing is what covers the rest.
 
-### 14. `ALLOWED_ORIGINS` rejects preview deployments
+### 16. `ALLOWED_ORIGINS` rejects preview deployments
 **Owner: me · Severity: medium (friction)**
 
 CORS is an exact match, so per-deployment Pages hostnames — the hashed
@@ -341,8 +402,12 @@ collected to make it work.
 
 ## What to do first
 
-1. **Book the legal conversation.** Items 1, 6 and 7 all wait on it, and it is
-   the only thing here where the calendar is the bottleneck rather than the work.
+1. **Book the legal conversation.** Now items 1, 6, 7, 8 and 9 — five of the nine
+   blockers — and it is the only thing here where the calendar is the bottleneck
+   rather than the work. The brief is written: [`LEGAL.md`](LEGAL.md) has the
+   five questions, the facts behind each one and a sub-processor table, and a
+   shareable version is published as an artifact. Nothing is waiting on
+   preparation any more.
 2. **Write the geocoding cost briefing** (item 5) before any company connects a
    key. Nothing in the app stops a surprise bill; right now that conversation is
    the only thing that does.
@@ -351,7 +416,7 @@ collected to make it work.
    code change that lets the key be locked down is already in.
 4. **Decide who holds a Cloudflare API token** (item 3), which unblocks scheduled
    backups.
-5. **Say whether GHL is in scope for customer one** (item 9), which decides
+5. **Say whether GHL is in scope for customer one** (item 11), which decides
    whether it is a blocker or a roadmap item.
 
 Add to that list, now that the code is done: **generate the backup key** (item
@@ -359,5 +424,12 @@ Add to that list, now that the code is done: **generate the backup key** (item
 all.
 
 Everything on that list is yours. The engineering behind items 2 and 4 is now
-done, so both are waiting on a console step rather than on code. The only thing
-left that I can pick up without input is the `ALLOWED_ORIGINS` fix (item 14).
+done, so both are waiting on a console step rather than on code.
+
+Two things I can pick up without input. The **Do Not Contact enforcement defect**
+(item 6) — a household marked Do Not Contact still shows live Call, Text and
+Email buttons, which is wrong whatever counsel says about the rules. And the
+`ALLOWED_ORIGINS` fix (item 16).
+
+Writing the counsel brief also found the two new blockers, items 8 and 9. Neither
+had been recorded anywhere. That is the argument for having written it.
