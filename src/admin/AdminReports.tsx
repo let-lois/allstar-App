@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AdminPage, FilterBar } from './AdminLayout'
+import { DataList } from './DataList'
 import { TrendChart } from './charts/TrendChart'
 import { Bars } from './charts/Bars'
 import { StatTile } from './charts/StatTile'
@@ -179,69 +180,81 @@ export function AdminReports() {
         </section>
       </div>
 
-      <section className="mt-4 overflow-hidden card">
-        <h2 className="px-5 pb-2 pt-4 text-sm font-bold">Full breakdown</h2>
-        <table className="w-full text-sm">
-          <thead className="bg-surface-sunk text-xs text-ink-mute">
-            <tr>
-              <th className="px-5 py-2.5 text-left font-semibold">Rep</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Doors</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Conversations</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Contact rate</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Appointments</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Quotes</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Won</th>
-              <th className="px-5 py-2.5 text-right font-semibold">Closed value</th>
-            </tr>
-          </thead>
-          <tbody>
-            {repRows.map((r) => (
-              <tr key={r.id} className="border-t border-line-soft hover:bg-surface-field">
-                <td className="px-5 py-2.5 font-medium">{r.name}</td>
-                <td className="nums px-3 py-2.5 text-right">{r.knocks.toLocaleString()}</td>
-                <td className="nums px-3 py-2.5 text-right">{r.conversations}</td>
-                <td className="nums px-3 py-2.5 text-right font-semibold">{r.contactRate}%</td>
-                <td className="nums px-3 py-2.5 text-right">{r.appointments}</td>
-                <td className="nums px-3 py-2.5 text-right">{r.quotes}</td>
-                <td className="nums px-3 py-2.5 text-right">{r.sold}</td>
-                <td className="nums px-5 py-2.5 text-right font-semibold text-good">
-                  {money(r.closedValue)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-line bg-surface-sunk font-semibold">
-              <td className="px-5 py-2.5">Team</td>
-              <td className="nums px-3 py-2.5 text-right">
-                {repRows.reduce((a, r) => a + r.knocks, 0).toLocaleString()}
-              </td>
-              <td className="nums px-3 py-2.5 text-right">
-                {repRows.reduce((a, r) => a + r.conversations, 0)}
-              </td>
-              <td className="nums px-3 py-2.5 text-right">
-                {Math.round(
-                  (repRows.reduce((a, r) => a + r.conversations, 0) /
-                    Math.max(1, repRows.reduce((a, r) => a + r.knocks, 0))) *
-                    100,
-                )}
-                %
-              </td>
-              <td className="nums px-3 py-2.5 text-right">
-                {repRows.reduce((a, r) => a + r.appointments, 0)}
-              </td>
-              <td className="nums px-3 py-2.5 text-right">
-                {repRows.reduce((a, r) => a + r.quotes, 0)}
-              </td>
-              <td className="nums px-3 py-2.5 text-right">
-                {repRows.reduce((a, r) => a + r.sold, 0)}
-              </td>
-              <td className="nums px-5 py-2.5 text-right text-good">
-                {money(repRows.reduce((a, r) => a + r.closedValue, 0))}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+      {/*
+        The breakdown was a plain eight-column table inside `overflow-hidden`,
+        which on a phone meant columns three onward were clipped with no
+        scrollbar and no hint they existed — a manager checking closed value
+        from a truck saw a name and two numbers. DataList renders the same data
+        as cards there and keeps the table on a desktop, where eight columns
+        lining up across every rep is the whole point of it.
+
+        The team totals moved with it rather than being dropped: `footer` was
+        added to DataList for this, because a list component that could not
+        carry them would have meant trading the team's own numbers for a phone
+        layout.
+      */}
+      <section className="mt-4">
+        <h2 className="mb-2 text-sm font-bold">Full breakdown</h2>
+        <DataList
+          rows={repRows}
+          keyOf={(r) => r.id}
+          empty="No rep activity in this period."
+          columns={[
+            { header: 'Rep', cell: (r) => r.name, phone: 'title', className: 'font-medium' },
+            {
+              header: 'Doors',
+              cell: (r) => r.knocks.toLocaleString(),
+              align: 'right',
+            },
+            { header: 'Conversations', cell: (r) => r.conversations, align: 'right' },
+            {
+              header: 'Contact rate',
+              // The one a manager scans for, so it rides beside the name on a
+              // phone instead of waiting in the grid below.
+              cell: (r) => `${r.contactRate}%`,
+              align: 'right',
+              phone: 'trailing',
+              className: 'font-semibold',
+            },
+            { header: 'Appointments', cell: (r) => r.appointments, align: 'right' },
+            { header: 'Quotes', cell: (r) => r.quotes, align: 'right' },
+            { header: 'Won', cell: (r) => r.sold, align: 'right' },
+            {
+              header: 'Closed value',
+              cell: (r) => <span className="text-good">{money(r.closedValue)}</span>,
+              align: 'right',
+              className: 'font-semibold',
+            },
+          ]}
+          footer={{
+            label: 'Team',
+            cell: (c) => {
+              const sum = (pick: (r: (typeof repRows)[number]) => number) =>
+                repRows.reduce((a, r) => a + pick(r), 0)
+              switch (c.header) {
+                case 'Doors':
+                  return sum((r) => r.knocks).toLocaleString()
+                case 'Conversations':
+                  return sum((r) => r.conversations)
+                case 'Contact rate':
+                  // Recomputed from the totals, never averaged from the rows:
+                  // a mean of per-rep rates weights a rep who knocked four
+                  // doors the same as one who knocked four hundred.
+                  return `${Math.round((sum((r) => r.conversations) / Math.max(1, sum((r) => r.knocks))) * 100)}%`
+                case 'Appointments':
+                  return sum((r) => r.appointments)
+                case 'Quotes':
+                  return sum((r) => r.quotes)
+                case 'Won':
+                  return sum((r) => r.sold)
+                case 'Closed value':
+                  return <span className="text-good">{money(sum((r) => r.closedValue))}</span>
+                default:
+                  return null
+              }
+            },
+          }}
+        />
       </section>
     </AdminPage>
   )

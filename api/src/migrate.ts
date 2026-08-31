@@ -215,6 +215,18 @@ const MIGRATIONS: Migration[] = [
          ON client_geocoders(client_id) WHERE active = 1`,
     ],
   },
+  {
+    id: '009-geocode-usage',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS geocode_usage (
+         client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+         provider  TEXT NOT NULL,
+         day       TEXT NOT NULL,
+         lookups   INTEGER NOT NULL DEFAULT 0,
+         PRIMARY KEY (client_id, provider, day)
+       )`,
+    ],
+  },
 ]
 
 async function hasColumn(

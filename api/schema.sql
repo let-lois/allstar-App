@@ -415,6 +415,31 @@ CREATE TABLE IF NOT EXISTS client_geocoders (
 CREATE UNIQUE INDEX IF NOT EXISTS client_geocoders_active
   ON client_geocoders(client_id) WHERE active = 1;
 
+-- ---------------------------------------------------------------------------
+-- How many addresses we have sent to a company's own geocoding provider.
+--
+-- Counted because the cost estimate on the import screen is otherwise a lie by
+-- omission: without it, every batch is priced as though the free allowance were
+-- untouched, so three medium imports in a day cross the vendor's daily cap and
+-- nothing warns anybody. One row per client, provider and day; a monthly figure
+-- is the sum of that month's rows, so one table answers both kinds of allowance.
+--
+-- The day is a UTC date, and that is a deliberate approximation. Vendors reset
+-- their allowances on their own boundary — UTC for some, a billing month for
+-- others — and this app cannot know which. What it can state honestly is what
+-- IT sent and when, which is a floor on what the vendor has counted: the same
+-- key used from anywhere else adds to their number and not to ours. The wording
+-- on screen says "we have sent", never "you have left".
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS geocode_usage (
+  client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  provider  TEXT NOT NULL,               -- matches GEOCODE_PROVIDERS[].id
+  day       TEXT NOT NULL,               -- YYYY-MM-DD, UTC
+  lookups   INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (client_id, provider, day)
+);
+
 CREATE TABLE IF NOT EXISTS integration_links (
   client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   provider    TEXT NOT NULL,

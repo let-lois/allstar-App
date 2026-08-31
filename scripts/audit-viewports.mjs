@@ -160,6 +160,131 @@ for (const vp of VIEWPORTS) {
     })
     if (res.horizontal) problems.push(`${vp.name} ${label}: horizontal overflow ${res.sw}>${res.cw} :: ${res.wide.join(' | ')}`)
     for (const p of res.panes) problems.push(`${vp.name} ${label}: the page pans sideways — ${p}`)
+
+    /*
+      Called from in here rather than beside each of the sixteen call sites.
+
+      The clipping check was added next to two of them and the other fourteen
+      screens went unchecked — which is the same shape as the bug it was written
+      to find: a rule that has to be remembered in sixteen places is a rule that
+      holds in two. Anywhere overflow is measured, clipping is now measured too.
+    */
+    await auditClipped(label, target)
+  }
+
+  /*
+    Tables that are clipped rather than scrollable.
+
+    A distinct failure from everything above, and invisible to all of it. The
+    console's screens were built as tables inside `overflow-hidden` cards, which
+    on a phone does not produce overflow — the card simply cuts the table off.
+    Nothing is wider than the viewport, no pane pans, the document measures
+    clean, and columns three onward do not exist as far as the device is
+    concerned. Reports shipped that way with eight columns: a manager checking
+    closed value from a truck saw a name and two numbers.
+
+    So this asks the only question that matters: the table cannot show all of
+    itself, and can the person reach the rest? A table wider than its box is
+    fine when an ancestor scrolls horizontally. It is a bug when nothing does.
+
+    The fix is usually DataList, which renders cards at this width instead. A
+    horizontal scroller is the right answer for the screens where the grid
+    itself is the point — an import preview, a settings editor — and this check
+    accepts either.
+  */
+  /*
+    Anything cut off rather than scrollable — not only tables.
+
+    Two failures met here, and the second is why this is general.
+
+    A table inside `overflow-hidden` does not produce overflow: the card cuts it
+    off. Nothing is wider than the viewport, no pane pans, the document measures
+    clean, and columns three onward do not exist as far as the device is
+    concerned. Four of the console's screens shipped that way.
+
+    And `checkOverflow` above could not have told anyone. It collects every
+    element wider than the viewport — but only *reports* that list when the
+    document itself scrolls sideways. An element that is too wide and then
+    clipped by a parent is silent by construction: the collection happens, the
+    reporting does not. That is why this was found by reading rather than by the
+    audit that had been running over these screens all along.
+
+    So the question asked here is the one that matters: something cannot fit,
+    and can the person reach the rest of it? Wider than the viewport is fine
+    when an ancestor scrolls. It is a bug when the nearest boundary clips.
+  */
+  const auditClipped = async (label, target = page) => {
+    const clipped = await target.evaluate(() => {
+      const offenders = []
+      const reported = []
+
+      for (const el of document.querySelectorAll('body *')) {
+        /*
+          Nothing inside an <svg>.
+
+          A path wider than its own svg is not clipped content, it is how SVG
+          works — the viewBox is a window onto a drawing that is usually bigger
+          than it. The map's roads and graticule tripped this on the first run
+          at three widths. (The `className` of an SVG element is also an
+          SVGAnimatedString rather than a string, which is what made those
+          findings unreadable and gave the false positive away.)
+        */
+        if (el.namespaceURI === 'http://www.w3.org/2000/svg') continue
+
+        const r = el.getBoundingClientRect()
+        if (r.width === 0 || r.height === 0) continue
+        if (r.width <= window.innerWidth + 2) continue
+
+        /*
+          The FIRST ancestor that is not `visible` decides, and the walk stops
+          there.
+
+          An earlier version kept climbing past a clipping parent looking for
+          any scroller, found the app's own `.scroll-pane` two levels up, and
+          declared every one of these tables reachable. It is not: the section
+          has already cut the table off at 356px, so scrolling the pane reveals
+          nothing. Whichever boundary is nearest is the one the content is
+          actually trapped behind.
+        */
+        let a = el.parentElement
+        let reachable = false
+        let clipper = null
+        while (a && a !== document.body) {
+          const ox = getComputedStyle(a).overflowX
+          if (ox !== 'visible') {
+            reachable = ox === 'auto' || ox === 'scroll'
+            clipper = a
+            break
+          }
+          a = a.parentElement
+        }
+        // No boundary at all means it runs off the document, which is the
+        // horizontal-overflow case checked separately and reported there.
+        if (reachable || !clipper) continue
+
+        /*
+          Only the outermost offender in a subtree. A clipped table drags every
+          cell in it over the same line, and eight hundred identical findings
+          for one bug is a report nobody reads to the end of.
+        */
+        if (reported.some((seen) => seen.contains(el))) continue
+        reported.push(el)
+
+        const tag = el.tagName.toLowerCase()
+        let what = `${tag}.${(el.className || '').toString().split(' ').filter(Boolean).slice(0, 2).join('.')}`
+        if (tag === 'table') {
+          const headers = [...el.querySelectorAll('th')].map((h) => h.textContent?.trim()).filter(Boolean)
+          what = `a table (${headers.length} cols, last is "${headers[headers.length - 1] ?? '?'}")`
+        }
+        offenders.push(
+          `${what} — ${Math.round(r.width)}px in a ${window.innerWidth}px viewport, clipped by ${clipper.tagName.toLowerCase()}.${(clipper.className || '').toString().split(' ').filter(Boolean).slice(0, 2).join('.')}`,
+        )
+      }
+      return offenders.slice(0, 6)
+    })
+    for (const c of clipped) {
+      problems.push(`${vp.name} ${label}: cut off with no way to scroll it — ${c}`)
+    }
   }
 
   // Touch target audit: every interactive element must be >= 44px in its
@@ -387,6 +512,50 @@ for (const vp of VIEWPORTS) {
       await admin.waitForTimeout(800)
       await checkOverflow(`console-${label}`, admin)
     }
+
+    /*
+      The super-admin screens, which a client admin cannot reach at all.
+
+      This gap cost something real: /admin/clients had a six-column table
+      clipped at every phone width and this audit never saw it, because the
+      console pass signs in as Nadia Petrov and the route 403s for her. It was
+      found by reading the source, which is not a system.
+
+      Its own context rather than switching accounts in the existing one: a
+      session lives in the context, and signing out and back in would take the
+      rest of this pass with it.
+    */
+    const superCtx = await browser.newContext(ctxOpts)
+    const superPage = await superCtx.newPage()
+    superPage.on('pageerror', (e) => errors.push(String(e)))
+    await superPage.route(/maps\.googleapis\.com/, (r) => r.abort())
+    await superPage.goto(BASE, { waitUntil: 'domcontentloaded' })
+    await superPage.waitForTimeout(1200)
+    await superPage.getByRole('button', { name: /Try the demo/ }).click()
+    await superPage.getByRole('button', { name: /Curtis Lane/ }).click()
+    await dismissTour(superPage)
+    await superPage.waitForTimeout(1200)
+
+    await superPage.goto(`${BASE}/admin/clients`, { waitUntil: 'domcontentloaded' })
+    await superPage.waitForTimeout(900)
+    /*
+      Prove the pass is actually on the screen before measuring it. A 403 or a
+      redirect renders a page that is narrow, tidy and completely clean — which
+      would report as a pass and quietly restore the gap this exists to close.
+    */
+    const onClients = await superPage
+      .getByText('Seat utilization')
+      .first()
+      .isVisible()
+      .catch(() => false)
+    if (!onClients) {
+      problems.push(
+        `${vp.name} console-clients: the super-admin pass never reached /admin/clients, so nothing was measured`,
+      )
+    } else {
+      await checkOverflow('console-clients', superPage)
+    }
+    await superCtx.close()
 
     /*
       Each Settings tab, not just the one that loads first. The row is the wide

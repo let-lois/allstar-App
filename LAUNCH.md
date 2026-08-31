@@ -42,16 +42,33 @@ Full reasoning: README → *Google's terms and the offline map are in direct
 conflict*. The constraint is also recorded next to the code it governs, in
 `api/src/geocode-google.ts` and `api/wrangler.toml`.
 
-### 2. Backups are unencrypted
-**Owner: me (code) + Curtis (where the key lives) · Severity: blocker**
+### 2. Backups are encrypted — one command left, and it is yours
+**Owner: Curtis (generate the key) · Severity: blocker until the key exists**
 
-`npm run backup` produces plain SQL holding every customer's addresses, contact
-names and phone numbers, plus password hashes. `backups/` is git-ignored, so it
-stays off GitHub — but the file is unencrypted the moment it is copied anywhere,
-which is the entire point of having it.
+The code is done. `npm run backup` now writes AES-256-GCM
+(`api/backups/*.sql.enc`), the restore drill decrypts on its own, and
+`npm run verify:backups` holds it up. **It refuses to export production until a
+key exists** rather than writing the plaintext — so right now there is no
+production backup at all, which is why this is still a blocker.
 
-The README already says the file "wants encrypting before it goes anywhere." That
-sentence has been true and unactioned for a while.
+Your part, once:
+
+```bash
+openssl rand -base64 32
+```
+
+Then either export it as `BACKUP_KEY` in the shell you run backups from, or save
+it to `api/.backup-key` (git-ignored). Do not paste it into chat.
+
+**Two things about that key.** It must go somewhere that is not the same disk as
+the backups — a password manager. And it must never be lost: unlike
+`INTEGRATION_KEY`, where a rotation costs every customer a reconnect, losing this
+makes every backup written with it permanently unreadable. Keep old keys forever
+rather than replacing them; a file from before a rotation still wants the key it
+was written with.
+
+Until it exists, the recovery window is Cloudflare Time Travel's thirty days —
+which is the same position as item 3 below, for the same reason.
 
 ### 3. Nothing runs a backup on a schedule
 **Owner: Curtis · Severity: blocker · Tracked as #39**
@@ -219,22 +236,57 @@ and it costs nothing to avoid.
 Historical figures on the live account are still wrong until this runs. Use
 `db:rebuild-stats` — **not** `db:rebuild-closed`.
 
+### 12b. Diagnostic endpoints were open to the internet — fixed
+**Owner: me · Severity: was a blocker · Tracked as #47**
+
+`/api/selftest/geocode` sat in front of authentication, accepted an arbitrary
+address, and handed it to a paid geocoder — so anyone with curl could spend the
+deployment's Google quota in a loop at $5/1,000. `/api/selftest` was open the
+same way and burns a password hash per call.
+
+Both now require `SETUP_TOKEN`, and refuse outright on a deployment that has not
+set one. `npm run verify:api-access` holds all 27 routes to a declared access
+level, and fails on any route that does not name one.
+
+The sweep also covered the six `/api/users/:id/*` operations — set password,
+reset link, role change, deactivate, delete, footprint — which the first version
+of the gate had never looked at. All six are correctly guarded: one shared
+`guard()` requires admin rights, scopes the target to the caller's own company,
+blocks a lesser role acting on a super admin, and returns 404 rather than 403 so
+another company's user existence does not leak.
+
+**Nothing to do — listed because it was live.** If that endpoint was ever hit by
+anything other than us, it would show as geocoding spend with no matching
+import. Worth a glance at the Google console for the last week.
+
 ### 13. Spend guardrail — the estimate is in, a running total is not
 **Owner: me · Severity: medium · Tracked as #46 (partly done)**
 
-**Done:** the address-lookup step now states what the batch will cost before it
-runs — the number of lookups, the provider being billed, the free allowance, and
-an estimated charge when the batch exceeds it. Silent on Census, so the warning
-means something when it appears. Rounds up, never quotes a figure for a
-volume-priced vendor, and says an allowance may already be partly spent.
+**Done:** the address-lookup step states what the batch will cost before it runs
+— the number of lookups, the provider being billed, the free allowance, and an
+estimated charge when the batch exceeds it. Past the allowance the one-click
+lookup is withheld and replaced by a confirmation carrying the figure, so
+nothing reaches the vendor until someone agrees to be charged. Silent and
+uninterrupted on a free provider, so the prompt still means something when it
+appears. Rounds up, never quotes a figure for a volume-priced vendor, and says
+an allowance may already be partly spent.
 
-**Still missing:** a running lookup count, so nobody can see what has been spent
-this day or month, and a ceiling an admin can set with a hard stop at it. Both
-need usage tracking the app does not do yet, and neither can be inferred from
-the vendor — this app cannot read their meter.
+**Also done:** every batch sent on a company's key is now counted, so the
+allowance is measured as it stands rather than as it started — three 1,000-row
+imports against a 2,500/day tier no longer each read as free while the day
+crosses the cap. And the picker is now actually wired to the geocoder: it
+shipped in the previous PR without being connected, so a company could select a
+provider, be told they would be billed for it, and have every import run on the
+deployment's keys instead.
 
-That gap is why **item 5 stays a blocker**. The estimate makes a surprise bill
-much less likely; only a real total and a cap would make it impossible.
+**Still missing:** a ceiling an admin can set with a hard stop at it. Not built,
+and arguably should not be — any limit this app enforced would be guesswork,
+because it cannot see the vendor's meter and its own count is a floor rather
+than a total.
+
+**Item 5 stays a blocker** regardless. The app now warns accurately about what
+it can see; it cannot see the same key being used from somewhere else, and no
+amount of code changes that. The briefing is what covers the rest.
 
 ### 14. `ALLOWED_ORIGINS` rejects preview deployments
 **Owner: me · Severity: medium (friction)**
@@ -286,6 +338,10 @@ collected to make it work.
 5. **Say whether GHL is in scope for customer one** (item 9), which decides
    whether it is a blocker or a roadmap item.
 
+Add to that list, now that the code is done: **generate the backup key** (item
+2). One `openssl` command, and until it happens there is no production backup at
+all.
+
 Everything on that list is yours. While it moves, the code I can pick up without
-input is backup encryption (item 2), moving geocoding into the browser (item 4),
-and the `ALLOWED_ORIGINS` fix (item 14).
+input is moving geocoding into the browser (item 4) and the `ALLOWED_ORIGINS` fix
+(item 14).

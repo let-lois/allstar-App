@@ -140,7 +140,17 @@ export function AdminSettings() {
               frequent outcome at the top.
             </p>
           </div>
-          <table className="w-full text-sm">
+          {/*
+            Scrolls rather than becoming cards, unlike the console's data
+            screens. This is an editor: the "#" column is the order reps see,
+            the arrows beside it move a row, and the value of the grid is that
+            you can compare six outcomes' settings down a column. Cards would
+            keep the data and lose the thing being edited. What it must not do
+            is what it did — sit at 745px inside an `overflow-hidden` card,
+            where "Visible" was off the right edge with no way to reach it.
+          */}
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-surface-sunk text-xs text-ink-mute">
               <tr>
                 <th className="w-12 px-5 py-2.5 text-left font-semibold">#</th>
@@ -237,6 +247,7 @@ export function AdminSettings() {
               ))}
             </tbody>
           </table>
+          </div>
           <div className="flex items-center justify-between border-t border-line-soft px-5 py-3">
             <p className="text-xs text-ink-mute">
               The code is permanent. Reports and pipeline rules key off it, so a renamed

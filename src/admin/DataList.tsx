@@ -50,6 +50,7 @@ export function DataList<T>({
   isSelected,
   rowLabel,
   empty,
+  footer,
   className = '',
 }: {
   columns: Column<T>[]
@@ -81,6 +82,20 @@ export function DataList<T>({
   /** Accessible name for the card button — the visible title is usually markup. */
   rowLabel?: (row: T) => string
   empty: ReactNode
+  /**
+   * A totals row, rendered in both shapes.
+   *
+   * Added because Reports has one and a list component without it would have
+   * meant deleting the team's own numbers to gain a phone layout — a trade
+   * nobody would take. `label` names the row ("Team"); `cell` returns the total
+   * for a column, or null for one that does not sum.
+   *
+   * On a phone it is a card like any other, marked as the total rather than
+   * looking like a thirteenth rep. Columns that return null are simply absent
+   * there, which is why the label is separate from the columns: a card with no
+   * title would be an anonymous grid of numbers.
+   */
+  footer?: { label: ReactNode; cell: (column: Column<T>) => ReactNode }
   className?: string
 }) {
   if (rows.length === 0) {
@@ -165,6 +180,26 @@ export function DataList<T>({
             </li>
           )
         })}
+        {footer && (
+          <li>
+            <div data-testid="datalist-total" className="card border-2 border-line p-4">
+              <div className="text-[15px] font-semibold text-ink">{footer.label}</div>
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-line-soft pt-3">
+                {columns
+                  .map((c) => [c, footer.cell(c)] as const)
+                  .filter(([, v]) => v !== null && v !== undefined)
+                  .map(([c, v]) => (
+                    <div key={c.header} className="min-w-0">
+                      <dt className="truncate text-[11.5px] font-medium text-ink-mute">
+                        {c.header}
+                      </dt>
+                      <dd className="mt-0.5 truncate text-[14px] font-semibold text-ink">{v}</dd>
+                    </div>
+                  ))}
+              </dl>
+            </div>
+          </li>
+        )}
       </ul>
 
       {/* --- desktop: the table it always was --------------------------- */}
@@ -211,6 +246,23 @@ export function DataList<T>({
               </tr>
             ))}
           </tbody>
+          {footer && (
+            <tfoot>
+              <tr data-testid="datalist-total" className="border-t-2 border-line bg-surface-sunk font-semibold">
+                {leading && <td className="px-3 py-2.5 pl-5" />}
+                {columns.map((c, i) => (
+                  <td
+                    key={c.header}
+                    className={`py-2.5 ${i === 0 ? 'px-5' : i === columns.length - 1 ? 'px-5' : 'px-3'} ${
+                      c.align === 'right' ? 'nums text-right' : ''
+                    } ${c.className ?? ''}`}
+                  >
+                    {i === 0 ? footer.label : footer.cell(c)}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </>

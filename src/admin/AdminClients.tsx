@@ -1,3 +1,4 @@
+import { DataList } from './DataList'
 import { AdminPage } from './AdminLayout'
 import { StatTile } from './charts/StatTile'
 import { Bars } from './charts/Bars'
@@ -6,6 +7,18 @@ import { moneyFull } from '../lib/format'
 
 /**
  * Platform view — Super Admin only.
+ *
+ * Enforced by AdminLayout, from the same NAV table that hides the link — not
+ * here. A second check on the screen would be a second source of truth, and two
+ * sources of truth disagreeing is exactly how this went wrong.
+ *
+ * That line was a comment and nothing else for a while. The console's nav hides
+ * this entry from everyone below super admin, which hides the door without
+ * locking it: `AdminLayout` admits managers and client admins, so typing the
+ * URL rendered the whole screen. Nothing real leaked, because the numbers below
+ * are a hardcoded illustration — but a company's own admin seeing what looks
+ * like other customers' seat counts and revenue is wrong on its face, and it
+ * would have become an actual leak on the day this is wired to an API.
  *
  * Deliberately thin, and honest about why: with a single-tenant local dataset
  * there is no second client's data to aggregate. The shape is real (accounts,
@@ -41,42 +54,47 @@ export function AdminClients() {
       </div>
 
       <section className="mt-4 overflow-hidden card">
-        <table className="w-full text-sm">
-          <thead className="bg-surface-sunk text-xs text-ink-mute">
-            <tr>
-              <th className="px-5 py-2.5 text-left font-semibold">Client</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Seats</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Active reps</th>
-              <th className="px-3 py-2.5 text-right font-semibold">Utilization</th>
-              <th className="px-3 py-2.5 text-right font-semibold">MRR</th>
-              <th className="px-5 py-2.5 text-left font-semibold">Health</th>
-            </tr>
-          </thead>
-          <tbody>
-            {CLIENTS.map((c) => (
-              <tr key={c.name} className="border-t border-line-soft hover:bg-surface-field">
-                <td className="px-5 py-3 font-medium">{c.name}</td>
-                <td className="nums px-3 py-3 text-right">{c.seats}</td>
-                <td className="nums px-3 py-3 text-right">{c.activeReps}</td>
-                <td className="nums px-3 py-3 text-right">
-                  {Math.round((c.activeReps / c.seats) * 100)}%
-                </td>
-                <td className="nums px-3 py-3 text-right">{moneyFull(c.mrr)}</td>
-                <td className="px-5 py-3">
-                  {/* Status ships with a word, never color alone. */}
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium">
-                    <span
-                      aria-hidden
-                      className="h-2 w-2 rounded-full"
-                      style={{ backgroundColor: STATUS[c.health] }}
-                    />
-                    {HEALTH_LABEL[c.health]}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {/*
+          Cards on a phone, table on a desktop — the same clipping fix as the
+          Dashboard and Reports. This one is worth noting: the viewport audit
+          never caught it, because /admin/clients is super-admin only and the
+          audit signs in as a client admin, so the route is not measured at all.
+          It was found by reading rather than by a gate.
+        */}
+        <DataList
+          rows={CLIENTS}
+          keyOf={(c) => c.name}
+          empty="No clients yet."
+          className="px-5 pb-5 lg:px-0 lg:pb-0"
+          columns={[
+            { header: 'Client', cell: (c) => c.name, phone: 'title', className: 'font-medium' },
+            { header: 'Seats', cell: (c) => c.seats, align: 'right' },
+            { header: 'Active reps', cell: (c) => c.activeReps, align: 'right' },
+            {
+              // The churn signal, so it rides beside the name rather than
+              // waiting in the grid below.
+              header: 'Utilization',
+              cell: (c) => `${Math.round((c.activeReps / c.seats) * 100)}%`,
+              align: 'right',
+              phone: 'trailing',
+            },
+            { header: 'MRR', cell: (c) => moneyFull(c.mrr), align: 'right' },
+            {
+              header: 'Health',
+              // Status ships with a word, never colour alone.
+              cell: (c) => (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                  <span
+                    aria-hidden
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: STATUS[c.health] }}
+                  />
+                  {HEALTH_LABEL[c.health]}
+                </span>
+              ),
+            },
+          ]}
+        />
       </section>
 
       <section className="mt-4 card p-5">

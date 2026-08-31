@@ -542,14 +542,75 @@ protects is not a backup.
 
 ```bash
 cd api
-npm run backup            # → api/backups/allstar-db-<utc>.sql
+npm run backup            # → api/backups/allstar-db-<utc>.sql.enc
 ```
 
-Plain SQL, so it restores into D1, into SQLite, or into anything that speaks the
-dialect — "we can restore" should not depend on one vendor still being willing
-to serve you. The file holds every customer's addresses, contact names and phone
-numbers plus password hashes; `backups/` is git-ignored and the file wants
-encrypting before it goes anywhere.
+Under the encryption it is plain SQL, so it restores into D1, into SQLite, or
+into anything that speaks the dialect — "we can restore" should not depend on one
+vendor still being willing to serve you.
+
+### The key, and why there is no backup without one
+
+The file holds every customer's addresses, contact names and phone numbers, plus
+password hashes. `backups/` being git-ignored keeps it off GitHub and does
+nothing whatsoever about the copy on a laptop, in a Downloads folder, or in
+whatever cloud drive that laptop syncs to — and the file exists in order to be
+copied somewhere else. Encryption is the only control that survives it leaving
+the machine it was made on.
+
+So `npm run backup` **refuses to export production until a key exists.** It does
+not write the plaintext "for now": that is how every one of these ends up
+unencrypted, and the file would be synced, indexed and forgotten long before
+anybody came back to it. Same posture as `INTEGRATION_KEY` in the Worker — no
+key, no operation.
+
+```bash
+openssl rand -base64 32          # once, ever
+```
+
+Then either export it as `BACKUP_KEY`, or save it to `api/.backup-key` (which is
+git-ignored). Committing it would put the key and the ciphertext in the same
+place, which is the one arrangement that makes the encryption worth nothing.
+
+**Losing it is unrecoverable, and that is worse than it sounds.** This is not
+`INTEGRATION_KEY`, where a rotation costs every customer a reconnect, and not
+`SESSION_PEPPER`, where a rotation signs everyone out. Lose this and every backup
+written with it is permanently unreadable — the disaster the backups existed to
+prevent, arriving by a different road. It belongs in a password manager, not only
+on the disk that holds the backups, and old keys are kept forever rather than
+replaced: a file from before a rotation still wants the key it was written with.
+
+`--plaintext` exists for the local dev database, which holds generated seed data,
+and is refused against production.
+
+### Reading them back
+
+```bash
+cd api
+npm run backup:list                        # no key needed
+npm run backup:open backups/<file>.sql.enc # writes plaintext — for a real recovery
+```
+
+The header — when it was taken, which database, how much SQL is inside — is
+stored in the clear on purpose, and `backup:list` reads it without the key. A
+directory of files that cannot be told apart without opening each one is a
+directory where a recovery starts by guessing, and the only thing worse than no
+backup is restoring last month's over this morning's. The header carries no
+secret, and it is fed to AES-GCM as additional authenticated data so it cannot be
+edited either.
+
+`backup:open` is for an actual restore, not for testing one — the drill below
+decrypts on its own and cleans up after itself.
+
+**The format.** AES-256-GCM, key derived with scrypt over a per-file salt, tag as
+a trailer over the whole stream (`api/scripts/lib/backup-crypto.mjs`). GCM rather
+than a plain cipher for tamper detection, and for the case that comes up far more
+often: truncation. An export into a full disk, an interrupted copy, a sync client
+that uploaded half a file — every one of those produces a dump that restores
+cleanly *up to the cut*, and the tag turns all of them into a refusal at the
+door. scrypt rather than the single SHA-256 that `secretbox.ts` uses, because
+this runs twice in the life of a file rather than on every request, so slow costs
+nothing, and the secret is one a human may have shortened or typed from memory.
 
 ### The drill
 
@@ -560,8 +621,16 @@ at nothing.
 
 ```bash
 cd api
-npm run verify:restore backups/allstar-db-<utc>.sql
+npm run verify:restore backups/allstar-db-<utc>.sql.enc
 ```
+
+An encrypted backup is decrypted by the drill itself, into the same scratch
+directory it deletes at the end. That is not convenience: the alternative is
+running `backup:open` to test a file and leaving the plaintext sitting next to
+the encrypted copy, which would undo the encryption every single time the drill
+was run. Proving a backup works must not be the thing that exposes it. A file
+that fails to authenticate is reported as a failed drill, because that is what it
+is — wrong key, damaged, or altered, and the file cannot say which.
 
 It restores into a scratch database in a temp directory with its own name and its
 own state — it cannot reach the database the backup came from, because a restore
@@ -595,6 +664,30 @@ Proved by feeding it bad backups: a dump truncated mid-write, an auth error save
 with a `.sql` extension, a dump missing its users, one missing its ledger, and one
 with an orphaned foreign key. Each fails, and each fails in a way that says what
 is wrong.
+
+### The encryption has its own gate
+
+```bash
+npm run verify:backups     # from the repo root
+```
+
+The round trip is the half that does not matter — if encrypt-then-decrypt were
+broken it would be obvious the first time anyone tried it. Every failure that
+costs something is a refusal that did not happen, and each of those passes a
+round-trip test happily. So `api/scripts/verify-backup-crypto.mjs` asserts the
+refusals: the wrong key, a single flipped byte, a truncated file, a missing tag,
+an edited header, edited scrypt parameters, a key short enough to guess, a
+production export with no key configured, `--plaintext` aimed at production, and
+a failed export leaving staged plaintext behind. Each one also asserts that
+nothing was written, because a decrypt that throws *after* writing a partial file
+gives a dump that restores cleanly up to the cut.
+
+Confirmed by breaking the code seven ways and watching it fail each time. Two of
+those first passed anyway, and both are the same lesson: "it exited non-zero" is
+not evidence of a refusal when the test environment makes everything exit
+non-zero, and `indexOf('loadBackupKey')` matches the import statement at the top
+of the file, so the check that the key is consulted *before* the export could not
+fail. Both now assert the reason rather than the symptom.
 
 ### What is still missing
 
@@ -1247,6 +1340,11 @@ row next to the button that selects it — `Keeps coordinates`, `Conditional`,
 key. A company choosing a thirty-day provider is choosing to carry that conflict
 under their own contract, and the screen says so before they do.
 
+A company's choice **replaces** the paid providers rather than joining them.
+Falling back to our key when theirs misses would mean us paying for lookups the
+screen has just told them they are paying for. Census stays underneath either
+way, which is what keeps a deployment with no keys at all a working product.
+
 Ten providers are listed. **Census is the default and needs no account at all**,
 which is the property that matters most: a company that signed up this afternoon
 gets working pins without talking to a vendor. Everything else is an upgrade
@@ -1277,7 +1375,15 @@ not as a quote.
 npm run verify:geocoders
 ```
 
-...runs in two halves. The registry half drives no browser and imports the
+...also checks that the picker is *connected*. `activeGeocoderFor` shipped once
+written, exported, covered by the screen and described here — and never called,
+so a company could save a key, select a provider, be told they would be billed,
+and have every import run on the deployment's keys anyway. A feature entirely
+present except for being wired up, which testing the parts cannot find. The gate
+now reads the endpoint that spends the money and insists it goes through the two
+functions that make the choice real.
+
+The rest runs in two halves. The registry half drives no browser and imports the
 Worker's own registry rather than a copy, so it cannot pass against a
 description that has drifted from the thing described: ids are unique, at least
 one provider needs no account, every provider states its storage terms, and
@@ -1320,6 +1426,248 @@ The estimate is arithmetic on data that already existed: the preview knows the
 row count, the registry knows the price and the free tier. Nothing multiplied
 them until now.
 
+**A chargeable batch asks before it spends.** Past the free allowance the
+one-click lookup is withheld and replaced by a confirmation carrying the figure
+— *Look up anyway — about $12.40* — so the amount and the action are the same
+button rather than a warning above a button that ignores it. Nothing reaches the
+vendor until it is pressed.
+
+**And it knows what has already gone.** Every batch sent on a company's key is
+counted in `geocode_usage`, one row per client, provider and day, so the
+allowance is measured as it stands rather than as it started. Without that, each
+of three 1,000-address imports on a 2,500/day allowance reads as free while the
+day quietly crosses the cap and nobody is warned on any of them.
+
+The count is deliberately phrased as *what we have sent*, never *what you have
+left*. The same key used from anywhere else adds to the vendor's total and not
+to ours, and vendors reset on their own boundary — UTC for some, a billing month
+for others — which this app cannot see. A floor we can stand behind beats a
+remaining balance that would be wrong in the direction that costs money.
+
+Deliberately a confirmation and not a cap. A ceiling this app enforced would be
+guesswork dressed as a limit, for the same reason: it cannot see the vendor's
+meter. What it can do is put the
+decision in front of the person whose account is being billed, at the moment it
+is billed. Inside the allowance nothing is interrupted at all — a prompt that
+appears on every lookup is one people click through without reading, which would
+make it worthless on the batch that actually costs money.
+
+### Tables that were clipped rather than scrollable
+
+Four of the console's screens were tables sitting inside `overflow-hidden`
+cards. On a phone that does not produce overflow — the card simply cuts the
+table off. Nothing is wider than the viewport, no pane pans, the document
+measures clean, and the columns past the second do not exist as far as the
+device is concerned. The Dashboard's was 622px in a 390px viewport with its last
+column, "Closed", rendered at x=639.
+
+Reports, Dashboard and Clients now render through `DataList`: cards at phone
+width, the table kept on a desktop where comparing reps down a column is the
+whole point of it. Settings' outcome editor scrolls horizontally instead —
+that one is an editor rather than a data screen, its `#` column is the order
+reps see, and cards would keep the data while losing the thing being edited.
+
+`audit:viewports` now refuses the pattern, on **every** screen it measures — the
+check runs from inside `checkOverflow` rather than beside it. It was first added
+next to two of sixteen call sites, so the console was covered and the fourteen
+field-app screens were not: the same shape as the bug it was written to find, a
+rule that has to be remembered in sixteen places holding in two.
+
+That also closed the reporting gap underneath all of this. `checkOverflow`
+collects every element wider than the viewport, and only ever *reported* that
+list when the document itself scrolled sideways — so an element that is too wide
+and then clipped by a parent was silent by construction. The collection happened;
+the reporting did not. It is why four clipped tables survived an audit that had
+been running over those screens all along, and why they were eventually found by
+reading instead.
+
+Elements inside an `<svg>` are skipped. A path wider than its own `<svg>` is not
+clipped content, it is how SVG works — the viewBox is a window onto a drawing
+that is usually bigger than it, and the map's roads tripped this at three widths
+on the first run.
+
+Three mistakes were made writing that check, and the first two are the same
+mistake in different places:
+
+- It first compared a table against **its own** `clientWidth` and found nothing.
+  A clipped table is laid out at its full natural width and is perfectly happy;
+  `scrollWidth` equals `clientWidth`. Nothing overflows — the box is simply
+  bigger than the hole it is shown through. It compares against the viewport now.
+- It then walked **past** the clipping parent looking for any scroller, found
+  the app's own `.scroll-pane` two levels up, and declared every one of these
+  tables reachable. The walk stops at the first ancestor that is not `visible`,
+  because whichever boundary is nearest is the one the content is trapped
+  behind.
+
+With all three fixed it names every offender at every width — verified by
+planting a clipped element on Leads, a field-app screen that had no coverage at
+all until the check moved inside `checkOverflow`.
+
+That gap is closed too. The audit now opens a second context as the demo's
+super admin and measures `/admin/clients`, which is how the table there should
+have been found in the first place — it was found by reading, which is not a
+system.
+
+Closing it turned up something else. The pass, run deliberately as a client
+admin to check it would notice, reported nothing: **`/admin/clients` had no role
+check at all.** Its own docstring said "Super Admin only" and the console's nav
+hides the entry, which hides the door without locking it — `AdminLayout` admits
+managers and client admins, so typing the URL rendered the whole screen. Nothing
+real leaked, because the figures on it are a hardcoded illustration; a company's
+own admin seeing what looks like other customers' seat counts and revenue is
+still wrong on its face, and it would have become a real leak the day that
+screen is wired to an API. The screen enforces the role now.
+
+The pass will not silently skip, either: it confirms it is actually on the
+Clients screen before measuring, because a 403 renders a page that is narrow,
+tidy and completely clean — which would report as a pass and quietly restore the
+gap. That guard is what caught the missing role check.
+
+### Who may call each API route
+
+The console fix above was only cosmetic because the server refused those
+requests anyway. That is the boundary that actually protects anything, so it
+should not be the layer nobody has read end to end. Reading all 27 routes found
+one that was open and should not have been.
+
+**`/api/selftest/geocode` sat in front of authentication, took an arbitrary
+address off the query string, and handed it to a paid geocoder.** Anyone with
+curl could spend the deployment's Google quota in a loop, at list price. CORS
+does not help — it is a browser rule and a script ignores it. `/api/selftest`
+was open the same way and burns a password hash per call, which on a
+per-CPU-second platform is its own small bill.
+
+Both are diagnostics, and both are deliberately in front of sign-in: the
+questions they answer — *is password hashing working on this deployment, does
+the geocoder still parse an address the way it used to* — are exactly the ones
+worth asking when nobody can sign in. So they are gated on `SETUP_TOKEN`, the
+secret the first-run page already uses, held by exactly the people with reason
+to run a diagnostic. A deployment with no token configured **refuses** rather
+than defaulting open, because the deployment that forgot to set one is the one
+least able to notice the bill.
+
+```bash
+npm run verify:api-access
+```
+
+...is a table, not a heuristic, and it covers **all three ways this router
+matches a path**: an equality check, `path.startsWith(...)`, and a regular
+expression. Every route names how it is guarded — `public`, `token`, `session`,
+an inline `can*()` call, or a delegate that checks for itself — and **a route in
+the source that is not in the table fails the gate.**
+
+Three styles because the first two versions each missed one, and each time the
+thing it had never looked at was the thing worth looking at. Version one knew
+only about equality checks, printed "every API route has decided who may call
+it", and had never seen `/api/users/:id/*` — the six most privileged operations
+in the product: set a password, mint a reset link, change a role, deactivate,
+delete. Version two learned about `startsWith` and still could not see
+`/api/properties/:id/photos`, which is matched with a regex.
+
+Those six turned out to be correctly guarded. Every one resolves its target
+through a single `guard()` in `users.ts`, which requires `canInvite` unless you
+are acting on your own account, loads the target scoped to the caller's own
+company, refuses to let a lesser role act on a super admin, and answers **404
+rather than 403** for another company's user so existence does not leak. Six
+operations resting on one function makes it the highest-leverage thing on the
+server, so the gate asserts those four properties individually rather than
+trusting that a function called `guard` guards.
+That is the part that matters: the point is not that every route is locked,
+because several are deliberately open. It is that somebody decided and wrote the
+decision down, since a forgotten route and a deliberately public one look
+identical in code.
+
+Delegates are read rather than trusted. A function that takes `user` looks
+guarded from the call site whether or not it is, so the gate opens the file and
+checks the function itself.
+
+Proved by breaking it six ways: removing the diagnostics guard, adding an
+undeclared route in each of the three matcher styles, stripping a role check out
+of a delegate, and weakening `guard()` itself.
+
+Two of those attempts initially reported a pass for the wrong reason, and both
+are worth recording. One was a no-op edit — "the check did not fire" and "the
+edit did not apply" look identical from outside, and only one means the check is
+broken. The other was worse: the regex enumeration matched nothing, so *"every
+regex route is declared"* passed on an empty array. A vacuous pass inside the
+very check added to close the previous vacuous pass. The give-away was the
+enumeration line naming two families and no regex route while a regex route
+plainly existed — which is the argument for having checks print what they
+found, not just whether they liked it.
+
+### The console's role gate is one table, not nine screens
+
+`NAV` in `AdminLayout.tsx` names which roles may see each section. It used to do
+only that — *see*. The sidebar hid what a role should not have, and nothing
+stopped anyone typing the URL: a manager could open the activity log and the
+settings editor, and anybody who could reach the console at all could open the
+platform Clients view. Its own docstring said "Super Admin only" the whole time.
+
+The layout now derives both facts from the same list. A route in `NAV` is
+navigable by exactly the roles it names, matched longest-prefix-first so
+`/admin/settings` resolves to its own entry rather than to `/admin`, and
+`/admin/team/:id` inherits Team's roles. No screen guards itself, which is the
+point: a screen cannot forget to do something it does not do.
+
+**What was actually exposed, stated plainly:** almost nothing. The server was
+holding the whole time — `/api/audit` and every settings write check
+`canInvite`, so a manager reached those screens and saw furniture with no rows
+and an editor that would refuse to save. The Clients view was the real gap,
+because it renders a hardcoded illustration and calls no API at all, so there
+was no server check standing behind it. The lesson is not that data leaked; it
+is that the UI told three different stories about who was allowed where.
+
+`npm run verify:console` now navigates rather than reading the sidebar. For
+every restricted route, each role that should not have it goes straight to the
+URL and must be refused *visibly* and with none of the screen's content on the
+page — both halves, because "refused" alone passes on a screen that renders its
+furniture and shows nothing, and "not rendered" alone passes on a blank page.
+
+That sweep is what found the two manager routes. The check that existed before
+it asserted a manager could not *see* the Clients and Settings links, which is a
+different claim from being unable to open them, and the difference is the whole
+bug.
+
+### Tap targets on the theme control
+
+The three-way appearance control shipped at 32px per button. Three small glyphs
+looked right and measured wrong: `audit:viewports` flagged them at every width
+against this project's own 44px rule, and a rep changing theme outdoors in
+gloves is exactly who that rule is for. They are 44px now, with the pill's own
+padding removed so the group does not grow into the profile row beside it.
+
+## Running the gates
+
+```bash
+npm run verify:all              # every gate
+npm run verify:all -- theme     # only gates whose name contains "theme"
+npm run verify:all -- --bail    # stop at the first failure
+```
+
+Not CI. Nothing schedules it, nothing triggers it on push, and it bills nobody —
+it is the same by-hand suite that has always been here, with the two ways of
+fooling yourself removed. Both cost a full run on the day it was written.
+
+**A failed build leaves the last one on disk.** `npm run build` is
+`tsc -b && vite build`, so a type error means Vite never runs and `dist/` still
+holds the previous bundle. Every browser gate then tests code that is not the
+code you just wrote — and passes. So the build runs first and a failure aborts
+everything loudly, rather than scrolling past above a wall of green.
+
+**A dead preview server looks like broken code.** When `vite preview` stopped
+partway through a run, 28 browser gates failed with `ERR_CONNECTION_REFUSED` and
+the summary read as 28 bugs. The only clue was that every pure-Node gate passed
+— failures do not distribute that way. So the server is checked *before every
+gate*, not once at the start, and if it stops the run ends naming the server
+instead of producing a list of failures that are all the same failure.
+
+It starts a preview server if none is running and stops that one afterwards. A
+server you started yourself is left alone, because you are probably using it.
+
+Both behaviours were tested rather than assumed: the build path by introducing a
+type error, and the server path by running against a stand-in server stopped
+mid-run, which reported the server and named the gate it stopped before.
+
 ## Before this goes to a paying customer
 
 Deliberate compromises taken to keep the prototype moving. Each is fine for
@@ -1329,8 +1677,9 @@ down here rather than left in a chat log.
 **[`LAUNCH.md`](LAUNCH.md) is the checklist.** This section holds the reasoning —
 what was measured, what was tried, why each compromise was taken. `LAUNCH.md`
 holds the severity and the owner, and adds the items that were never written down
-anywhere: the legal review that has no list, unencrypted backups, and the
-question of whether GHL sync is part of what customer one is buying. Read that
+anywhere: the legal review that has no list, the backup key that has to be
+generated before there is a production backup at all, and the question of whether
+GHL sync is part of what customer one is buying. Read that
 one to decide what to do next; read this one to understand why.
 
 ### The MapTiler key allows unknown origins

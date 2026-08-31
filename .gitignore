@@ -18,6 +18,14 @@ viewport-audit
 api/backups
 backups
 
+# The key those exports are encrypted with. Committing it would put the key and
+# the ciphertext in the same place, which is the one arrangement that makes the
+# encryption worth nothing. It also must never be LOST: every backup written
+# with it becomes unreadable, so it belongs in a password manager and not only
+# on this disk.
+api/.backup-key
+.backup-key
+
 # Worker local state and the generated seed.
 # seed.sql is produced by scripts/make-seed.mjs and contains password hashes —
 # it is regenerated per environment with that environment's pepper, and must
@@ -30,3 +38,11 @@ api/seed.sql
 # silently, and a .lnk committed in place of an asset fails in a way that is very
 # hard to read (it looks like the file is there and is simply corrupt).
 *.lnk
+
+# Weekly build reports.
+#
+# A deliverable, not source: each is written for a particular week and handed
+# over, and committing them would accumulate a binary per week that nothing in
+# the app reads. Ignored rather than deleted, so one can sit here while it is
+# being sent without showing up as a change to the app.
+Allstar-week*.pdf

@@ -1,4 +1,4 @@
-import type { GeocodeProviderDTO } from './http'
+import type { GeocodeProviderDTO, GeocodeUsageDTO } from './http'
 
 /**
  * What an address lookup batch will cost, before it runs.
@@ -36,8 +36,11 @@ export type SpendEstimate =
       kind: 'within-allowance'
       lookups: number
       provider: string
+      /** What is LEFT of the allowance, not what it started at. */
       freeCount: number
       freePeriod: 'day' | 'month'
+      /** What we have already sent this period. A floor, not a total. */
+      alreadySpent: number
     }
   /** Past the allowance, or there is no allowance. Carries a dollar figure. */
   | {
@@ -47,17 +50,22 @@ export type SpendEstimate =
       billableLookups: number
       /** USD, rounded up to the cent. Never rounded down. */
       estimateUsd: number
+      /** What is LEFT of the allowance, not what it started at. */
       freeCount: number | null
       freePeriod: 'day' | 'month' | null
+      /** What we have already sent this period. A floor, not a total. */
+      alreadySpent: number
     }
 
 /**
  * @param provider the company's active geocoding provider, or null for none
  * @param lookups how many addresses this batch will send
+ * @param usage what we have already sent on this key — see the note below
  */
 export function estimateLookupSpend(
   provider: GeocodeProviderDTO | null,
   lookups: number,
+  usage?: GeocodeUsageDTO | null,
 ): SpendEstimate {
   // No provider configured means the free Census lookup, which bills nobody.
   if (!provider || provider.pricePerThousandUsd === 0 || !provider.needsKey) {
@@ -68,11 +76,31 @@ export function estimateLookupSpend(
     return { kind: 'unknown', lookups, provider: provider.label }
   }
 
-  const free = provider.freeCount ?? 0
+  const full = provider.freeCount ?? 0
   const period = provider.freePeriod
 
+  /*
+    The allowance as it stands, not as it started.
+    
+    Without subtracting what has already gone, every batch is priced against a
+    fresh allowance — so three medium imports in a day each read as free while
+    together they cross the vendor's daily cap, and nobody is warned on any of
+    them. `spent` is a floor rather than a total: the same key used from
+    anywhere else adds to the vendor's count and not to ours, which is why the
+    wording never claims to know what is left.
+  */
+  const spent = period === 'day' ? (usage?.today ?? 0) : period === 'month' ? (usage?.month ?? 0) : 0
+  const free = Math.max(0, full - spent)
+
   if (free > 0 && period && lookups <= free) {
-    return { kind: 'within-allowance', lookups, provider: provider.label, freeCount: free, freePeriod: period }
+    return {
+      kind: 'within-allowance',
+      lookups,
+      provider: provider.label,
+      freeCount: free,
+      freePeriod: period,
+      alreadySpent: spent,
+    }
   }
 
   const billableLookups = Math.max(0, lookups - free)
@@ -86,8 +114,9 @@ export function estimateLookupSpend(
     provider: provider.label,
     billableLookups,
     estimateUsd,
-    freeCount: provider.freeCount,
+    freeCount: provider.freeCount === null ? null : free,
     freePeriod: provider.freePeriod,
+    alreadySpent: spent,
   }
 }
 
@@ -115,17 +144,27 @@ export function describeSpend(e: SpendEstimate): { tone: 'muted' | 'warn'; text:
         text: `This will use ${count(e.lookups)} address lookup${e.lookups === 1 ? '' : 's'} on ${e.provider}, which prices by volume — check your ${e.provider} account before running a batch this size.`,
       }
 
-    case 'within-allowance':
-      return {
-        tone: 'muted',
-        text: `This will use ${count(e.lookups)} of your ${count(e.freeCount)} free ${e.provider} lookups per ${e.freePeriod}. Anything you have already used ${e.freePeriod === 'day' ? 'today' : 'this month'} counts against the same allowance.`,
-      }
+    case 'within-allowance': {
+      const when = e.freePeriod === 'day' ? 'today' : 'this month'
+      // Two sentences, because the honest caveat only applies once something has
+      // actually been sent — stating it on a fresh allowance is noise.
+      const head =
+        e.alreadySpent > 0
+          ? `This will use ${count(e.lookups)} of the ${count(e.freeCount)} free ${e.provider} lookups left ${when} — we have sent ${count(e.alreadySpent)} already.`
+          : `This will use ${count(e.lookups)} of your ${count(e.freeCount)} free ${e.provider} lookups per ${e.freePeriod}.`
+      const caveat =
+        e.alreadySpent > 0
+          ? ` That count is ours: this key used anywhere else adds to ${e.provider}'s total and not to this one.`
+          : ''
+      return { tone: 'muted', text: `${head}${caveat}` }
+    }
 
     case 'billable': {
       const head = `This will use ${count(e.lookups)} address lookup${e.lookups === 1 ? '' : 's'} on ${e.provider}.`
+      const when = e.freePeriod === 'day' ? 'today' : 'this month'
       const body =
-        e.freeCount && e.freePeriod
-          ? ` That is ${count(e.billableLookups)} past your ${count(e.freeCount)} free per ${e.freePeriod} — an estimated ${money(e.estimateUsd)}, billed to your ${e.provider} account. More will be billable if you have already used part of ${e.freePeriod === 'day' ? "today's" : "this month's"} allowance.`
+        e.freePeriod && e.freeCount !== null
+          ? ` That is ${count(e.billableLookups)} past the ${count(e.freeCount)} free you have left ${when}${e.alreadySpent > 0 ? ` (we have sent ${count(e.alreadySpent)} already)` : ''} — an estimated ${money(e.estimateUsd)}, billed to your ${e.provider} account.`
           : ` ${e.provider} has no free allowance, so the estimate is ${money(e.estimateUsd)}, billed to your ${e.provider} account.`
       return { tone: 'warn', text: `${head}${body} Estimate only — check the rate on your account.` }
     }

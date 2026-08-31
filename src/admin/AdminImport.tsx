@@ -18,6 +18,7 @@ import {
   apiUsers,
   apiGeocoders,
   type GeocodeProviderDTO,
+  type GeocodeUsageDTO,
   type ImportResultDTO,
   type TeamUserDTO,
 } from '../lib/http'
@@ -81,6 +82,15 @@ export default function AdminImport() {
     could not read is one we must not put a price on.
   */
   const [geocoder, setGeocoder] = useState<GeocodeProviderDTO | null>(null)
+  /** What the server says we have already sent on this company's key. */
+  const [geocodeUsage, setGeocodeUsage] = useState<GeocodeUsageDTO | null>(null)
+  /*
+    Set once the operator has seen the cost and said go. Only ever consulted
+    when the batch is actually billable — a free or within-allowance lookup is
+    never interrupted, because a confirmation everyone clicks through is worth
+    nothing when the expensive one finally arrives.
+  */
+  const [spendOk, setSpendOk] = useState(false)
   const [assignRepId, setAssignRepId] = useState('')
 
   /*
@@ -206,6 +216,7 @@ export default function AdminImport() {
     try {
       const res = await apiGeocoders(token)
       setGeocoder(res.providers.find((p) => p.id === res.active) ?? null)
+      setGeocodeUsage(res.usage ?? null)
     } catch {
       /*
         Left null rather than guessed. Without knowing the provider there is no
@@ -300,6 +311,16 @@ export default function AdminImport() {
     [prepared],
   )
   const noAddress = useMemo(() => prepared.filter((r) => !r.values.address1), [prepared])
+
+  /*
+    Whether the operator still has to agree to be charged.
+
+    False for a free provider, false inside a free allowance, and false once
+    they have agreed — so the ordinary path is one click, exactly as before.
+  */
+  const spendEstimate = estimateLookupSpend(geocoder, unplaced.length, geocodeUsage)
+  const needsSpendConfirm = spendEstimate.kind === 'billable' && !spendOk
+
 
   async function runImport() {
     const token = liveToken()
@@ -570,14 +591,51 @@ export default function AdminImport() {
                 see LAUNCH.md item 5. It says nothing at all on the free Census
                 lookup, so when it does appear it means something.
               */}
-              <SpendNotice provider={geocoder} lookups={unplaced.length} />
+              <SpendNotice provider={geocoder} lookups={unplaced.length} usage={geocodeUsage} />
 
-              <div className="mt-3 flex items-center gap-3">
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                {/*
+                  A batch that will be billed asks first.
+
+                  Not a hard cap: this app cannot see the vendor's meter, so any
+                  ceiling it enforced would be guesswork dressed as a limit. What
+                  it can do is make sure the person spending the money is the one
+                  who decides, at the moment they spend it — and the free path is
+                  left uninterrupted so this prompt still means something when it
+                  does appear.
+                */}
+                {needsSpendConfirm ? (
+                  <>
+                    {/*
+                      One click, and it carries the figure being agreed to.
+
+                      An earlier version revealed the real button instead of
+                      running, which made the operator click twice and put the
+                      number on the first button and the action on the second —
+                      the two things that need to be in the same place.
+                    */}
+                    <Button
+                      onClick={() => {
+                        setSpendOk(true)
+                        void runGeocode()
+                      }}
+                      disabled={busy !== null || mode === 'demo'}
+                    >
+                      {spendEstimate.kind === 'billable'
+                        ? `Look up anyway — about $${spendEstimate.estimateUsd.toFixed(2)}`
+                        : 'Look up anyway'}
+                    </Button>
+                    <p className="text-sm text-ink-soft">
+                      Nothing is charged until you press this.
+                    </p>
+                  </>
+                ) : (
                 <Button onClick={() => void runGeocode()} disabled={busy !== null || mode === 'demo'}>
                   {busy === 'geocode'
                     ? `Looking up… ${progress?.done ?? 0}/${progress?.total ?? 0}`
                     : `Look up ${unplaced.length.toLocaleString()} address${unplaced.length === 1 ? '' : 'es'}`}
                 </Button>
+                )}
                 {prepared.some((r) => r.geocodeStatus && r.geocodeStatus !== 'match') && (
                   <p className="text-sm text-ink-mute">
                     {prepared.filter((r) => r.geocodeStatus && r.geocodeStatus !== 'match').length}{' '}
@@ -893,11 +951,13 @@ function Tally({
 function SpendNotice({
   provider,
   lookups,
+  usage,
 }: {
   provider: GeocodeProviderDTO | null
   lookups: number
+  usage: GeocodeUsageDTO | null
 }) {
-  const note = describeSpend(estimateLookupSpend(provider, lookups))
+  const note = describeSpend(estimateLookupSpend(provider, lookups, usage))
   if (!note || lookups === 0) return null
   return (
     <p

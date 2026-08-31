@@ -212,6 +212,17 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   ok(/Google/.test(spend), `the lookup names the provider that will be billed — saw "${spend.slice(0, 90)}"`)
   ok(/free/i.test(spend), 'and says the batch draws on a free allowance')
 
+  /*
+    Three addresses is inside Google's free allowance, so nothing is being
+    charged and the operator must not be asked to approve a charge. A
+    confirmation that appears on every lookup is one people click through
+    without reading, which would make it useless on the batch that costs money.
+  */
+  ok(
+    (await page.getByRole('button', { name: /Look up anyway/ }).count()) === 0,
+    'a lookup inside the free allowance is not interrupted by a confirmation',
+  )
+
   await page.getByRole('button', { name: /Look up 3 addresses/ }).click()
   await page.waitForTimeout(1200)
 
@@ -765,6 +776,98 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
     'a field rep reaching the import URL directly is refused',
   )
   ok((await page.locator('textarea').count()) === 0, 'no import form is rendered for a rep')
+  await ctx.close()
+}
+
+/* ========== a chargeable lookup asks before it spends ==================== */
+//
+// The case the whole guardrail exists for. This company is on a provider with
+// no free allowance at all, so every one of these three addresses is billable —
+// and nothing may be sent to the vendor until a human has seen the figure and
+// agreed to it.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 } })
+  const page = await ctx.newPage()
+
+  let geocodeCalls = 0
+
+  await page.route('**/api/**', json(200, {}))
+  await page.route('**/api/auth/login', json(200, { token: 'tok_spend', user: ADMIN }))
+  await page.route('**/api/bootstrap', json(200, EMPTY_BOOTSTRAP))
+  await page.route('**/api/geocoders', json(200, {
+    providers: [
+      {
+        id: 'esri',
+        label: 'Esri ArcGIS',
+        needsKey: true,
+        adapter: 'live',
+        storage: 'conditional',
+        storageNote: 'Paid plan only.',
+        price: '~$4.00 per 1,000',
+        pricePerThousandUsd: 4,
+        free: 'None for stored results',
+        freeCount: null,
+        freePeriod: null,
+        accuracy: 'Strong US coverage.',
+        signup: '',
+      },
+    ],
+    configured: [{ provider: 'esri', active: true, hint: 'AAPK…7t2Q', status: 'active' }],
+    active: 'esri',
+  }))
+  // Counted, not fulfilled with a match — what matters is whether the vendor is
+  // called at all before the operator agrees.
+  //
+  // The real path is /api/import/geocode. An earlier version of this watched a
+  // pattern ending in /api/geocode, which never matches it, so the counter could
+  // not move and "nothing is sent before agreeing" was true no matter what the
+  // app did — the assertion would have passed on a build that spent the money.
+  //
+  // (Line comments, not a block: a glob containing a star-slash closes a block
+  // comment early, which is what broke this file the first time.)
+  await page.route('**/api/import/geocode', (route) => {
+    geocodeCalls++
+    return json(200, { matches: [] })(route)
+  })
+
+  await page.goto(BASE, { waitUntil: 'networkidle' })
+  await page.locator('input[type="email"]').fill(ADMIN.email)
+  await page.locator('input[autocomplete="current-password"]').fill('a-real-password')
+  await page.getByRole('button', { name: /^Sign in$/ }).click()
+  await page.waitForTimeout(1400)
+  await dismissTour(page)
+  await page.goto(`${BASE}/admin/import`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(800)
+
+  await page.locator('textarea').fill(MESSY_CSV)
+  await page.getByRole('button', { name: /^Continue$/ }).click()
+  await page.waitForTimeout(400)
+  await page.getByRole('button', { name: /^Continue$/ }).click()
+  await page.waitForTimeout(900)
+
+  const notice = await page.getByTestId('spend-notice').innerText().catch(() => '')
+  ok(/Esri ArcGIS/.test(notice), `a chargeable batch names the provider — saw "${notice.slice(0, 80)}"`)
+  ok(/\$/.test(notice), 'and states a figure')
+
+  // The plain lookup button must be gone: there is no path that spends money
+  // without passing the confirmation.
+  ok(
+    (await page.getByRole('button', { name: /^Look up 3 addresses$/ }).count()) === 0,
+    'the one-click lookup is withheld while the batch is chargeable',
+  )
+
+  const confirm = page.getByRole('button', { name: /Look up anyway/ })
+  ok((await confirm.count()) === 1, 'a confirmation is offered instead')
+  ok(
+    /\$0?\.?\d/.test(await confirm.innerText()),
+    `and the amount is on the button being pressed — "${await confirm.innerText()}"`,
+  )
+  ok(geocodeCalls === 0, `nothing is sent to the vendor before agreeing (${geocodeCalls} calls)`)
+
+  await confirm.click()
+  await page.waitForTimeout(1200)
+  ok(geocodeCalls > 0, `and the lookup runs once agreed (${geocodeCalls} calls)`)
+
   await ctx.close()
 }
 

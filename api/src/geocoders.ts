@@ -75,12 +75,21 @@ export async function listGeocoders(env: Env, clientId: string) {
     })
   }
 
+  const active = configured.find((c) => c.active)?.provider ?? 'census'
+
   return {
     /** The catalogue, so the screen can state the terms it is asking about. */
     providers: GEOCODE_PROVIDERS,
     configured,
     /** Census when nothing is chosen — the free default, not an error state. */
-    active: configured.find((c) => c.active)?.provider ?? 'census',
+    active,
+    /*
+      What we have already sent on the active key, so an estimate can be made
+      against the allowance as it stands rather than a fresh one. Without this
+      the import screen prices every batch as though nothing had been used
+      today, and three medium imports cross a daily cap in silence.
+    */
+    usage: await usageFor(env, clientId, active),
   }
 }
 
@@ -216,4 +225,111 @@ export async function activeGeocoderFor(
   const key = await open(env, row.api_key).catch(() => null)
   if (!key) return null
   return { provider: row.provider, key }
+}
+
+/* --- what actually runs, and what it has already cost ---------------------- */
+
+/**
+ * The keys the geocoder chain should use for this company.
+ *
+ * This is the wiring that makes the picker mean something. Without it a company
+ * could save a key, select a provider, be told on screen that they would be
+ * billed for it — and every import would quietly run on the deployment's own
+ * keys instead. The screen would have been describing something that was not
+ * happening, which is the failure this whole area is built to avoid.
+ *
+ * A company's choice REPLACES the paid providers rather than joining them.
+ * Falling back to our key when theirs misses would mean us paying for lookups
+ * they think they are paying for, and it would contradict the screen. Census
+ * stays underneath either way — it is free, needs no account, and is what makes
+ * a deployment with no keys at all a working product rather than a broken one.
+ */
+export async function geocodeKeysFor(
+  env: Env,
+  clientId: string,
+): Promise<{ keys: { google?: string; maptiler?: string }; provider: string }> {
+  const own = await activeGeocoderFor(env, clientId)
+  if (!own) {
+    return {
+      keys: { maptiler: env.MAPTILER_API_KEY, google: env.GOOGLE_MAPS_API_KEY },
+      provider: env.GOOGLE_MAPS_API_KEY ? 'google' : 'census',
+    }
+  }
+  // Only providers with an adapter can be active, so this map covers every
+  // selectable one. A provider added to the registry without a case here cannot
+  // be selected in the first place — `isSelectable` refuses it.
+  if (own.provider === 'google') return { keys: { google: own.key }, provider: 'google' }
+  return { keys: {}, provider: own.provider }
+}
+
+/** The UTC date, which is the boundary this app counts against. See schema.sql. */
+function utcDay(at: number = Date.now()): string {
+  return new Date(at).toISOString().slice(0, 10)
+}
+
+/**
+ * Add to what we have sent on this company's key today.
+ *
+ * Never throws into the caller: the addresses have already been looked up and
+ * the money already spent by the time this runs, so failing the request over a
+ * bookkeeping write would lose the rep's work to protect a counter.
+ */
+export async function recordLookups(
+  env: Env,
+  clientId: string,
+  provider: string,
+  lookups: number,
+): Promise<void> {
+  if (lookups <= 0) return
+  try {
+    await env.DB.prepare(
+      `INSERT INTO geocode_usage (client_id, provider, day, lookups)
+       VALUES (?1, ?2, ?3, ?4)
+       ON CONFLICT(client_id, provider, day) DO UPDATE SET lookups = lookups + ?4`,
+    )
+      .bind(clientId, provider, utcDay(), lookups)
+      .run()
+  } catch (err) {
+    console.error('geocode usage write failed', err)
+  }
+}
+
+export interface GeocodeUsage {
+  /** Sent on this key since 00:00 UTC. */
+  today: number
+  /** Sent on this key since the first of the month, UTC. */
+  month: number
+}
+
+/**
+ * What we have sent, which is a floor on what the vendor has counted.
+ *
+ * Deliberately not "what is left". The same key used from anywhere else adds to
+ * the vendor's number and not to ours, and their allowance may reset on a
+ * boundary we cannot see. A number we can stand behind, phrased as one, beats a
+ * remaining-balance that would be wrong in the direction that costs money.
+ */
+export async function usageFor(
+  env: Env,
+  clientId: string,
+  provider: string,
+): Promise<GeocodeUsage> {
+  const day = utcDay()
+  const monthPrefix = day.slice(0, 7)
+  try {
+    const row = await env.DB.prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN day = ?3 THEN lookups END), 0) AS today,
+         COALESCE(SUM(lookups), 0) AS month
+       FROM geocode_usage
+        WHERE client_id = ?1 AND provider = ?2 AND day LIKE ?4`,
+    )
+      .bind(clientId, provider, day, `${monthPrefix}%`)
+      .first<{ today: number; month: number }>()
+    return { today: row?.today ?? 0, month: row?.month ?? 0 }
+  } catch {
+    // A counter we cannot read is reported as zero, which makes the estimate
+    // read low — so the wording on screen never promises it is complete.
+    return { today: 0, month: 0 }
+  }
 }

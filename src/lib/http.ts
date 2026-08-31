@@ -620,10 +620,18 @@ export interface GeocoderRowDTO {
   lastErrorAt?: number
 }
 
+export interface GeocodeUsageDTO {
+  /** Lookups we have sent on the active key since 00:00 UTC. */
+  today: number
+  /** Lookups we have sent on it since the first of the month, UTC. */
+  month: number
+}
+
 export interface GeocodersDTO {
   providers: GeocodeProviderDTO[]
   configured: GeocoderRowDTO[]
   active: string
+  usage: GeocodeUsageDTO
 }
 
 export function apiGeocoders(token: string) {

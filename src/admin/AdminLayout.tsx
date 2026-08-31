@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { Button } from '../components/ui/Button'
 import { IconBack } from '../components/nav/icons'
@@ -57,6 +57,7 @@ export const ADMIN_ROLES: Role[] = ['manager', 'client_admin', 'super_admin']
 export function AdminLayout() {
   const user = useAppStore((s) => s.user)
   const nav = useNavigate()
+  const location = useLocation()
 
   if (!user) return null
 
@@ -77,6 +78,27 @@ export function AdminLayout() {
   }
 
   const items = NAV.filter((i) => i.roles.includes(user.role))
+
+  /*
+    The door is locked by the same table that hides the link.
+
+    These were two separate facts for a long time, and they disagreed: NAV said
+    Clients was super-admin only, the sidebar dutifully hid it, and the screen
+    itself checked nothing — so typing the URL rendered the whole thing. Its own
+    docstring said "Super Admin only" the entire time. A manager could reach the
+    activity log and the settings editor the same way.
+
+    Deriving both from one list is what stops that recurring: a route added to
+    NAV is navigable by exactly the roles it names, and a screen cannot forget
+    to guard itself because it is not the screen doing the guarding.
+
+    Longest match first, so /admin/settings resolves to its own entry rather
+    than to /admin, and /admin/team/:id inherits Team's roles.
+  */
+  const entry = [...NAV]
+    .sort((a, b) => b.to.length - a.to.length)
+    .find((i) => location.pathname === i.to || location.pathname.startsWith(`${i.to}/`))
+  const permitted = !entry || entry.roles.includes(user.role)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface-sunk md:flex-row">
@@ -164,7 +186,21 @@ export function AdminLayout() {
       {/* min-w-0: without it the pane's widest table sets a floor on the flex
           item and pushes the whole console sideways on a phone. */}
       <main className="scroll-pane min-w-0 flex-1">
-        <Outlet />
+        {permitted ? (
+          <Outlet />
+        ) : (
+          <div className="grid flex-1 place-items-center p-8 text-center">
+            <div className="max-w-sm">
+              <p className="text-lg font-semibold">Not available for your role</p>
+              <p className="mt-1 text-sm text-ink-mute">
+                Ask an administrator if you need access to this section.
+              </p>
+              <Button className="mt-4" onClick={() => nav('/admin')}>
+                Back to the console
+              </Button>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

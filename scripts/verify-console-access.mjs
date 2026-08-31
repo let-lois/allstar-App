@@ -219,6 +219,60 @@ for (const width of [390, 412]) {
   await ctx.close()
 }
 
+/* --- every restricted route, reached by URL, by every role ---------------- */
+//
+// The checks above assert a manager cannot SEE the Clients and Settings links.
+// That is a different claim from "cannot open them", and the difference is not
+// academic: /admin/clients had no role check at all and was reachable by typing
+// the URL for as long as it has existed. The nav hid the door; nothing locked
+// it. Its own docstring said "Super Admin only" the whole time.
+//
+// So this navigates. For every route the console declares narrower than the
+// console itself, each role that should not have it goes straight there and has
+// to be refused — and refused *visibly*, not by rendering the screen with an
+// empty table because the API happened to 403.
+{
+  // Mirrors the `roles` column of NAV in AdminLayout.tsx. A route added there
+  // without a line here is a route nobody checks, which is how this started.
+  const RESTRICTED = [
+    { path: '/admin/audit', allowed: ['client_admin', 'super_admin'], proof: /Activity log|Everything/i },
+    { path: '/admin/settings', allowed: ['client_admin', 'super_admin'], proof: /Visit outcomes/i },
+    { path: '/admin/clients', allowed: ['super_admin'], proof: /Seat utilization/i },
+  ]
+  const WHO = [
+    { role: 'manager', name: /Ray Okafor/ },
+    { role: 'client_admin', name: /Nadia Petrov/ },
+    { role: 'super_admin', name: /Curtis Lane/ },
+  ]
+
+  for (const who of WHO) {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+    const page = await signIn(ctx, who.name, `${BASE}/admin`)
+
+    for (const route of RESTRICTED) {
+      await page.goto(`${BASE}${route.path}`, { waitUntil: 'domcontentloaded' })
+      await page.waitForTimeout(900)
+      const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+      const rendered = route.proof.test(body)
+      const refused = /Not available for your role/i.test(body)
+
+      if (route.allowed.includes(who.role)) {
+        ok(rendered, `${who.role}: ${route.path} opens`)
+      } else {
+        /*
+          Both halves. "Refused" alone would pass on a screen that renders its
+          furniture and quietly shows nothing; "not rendered" alone would pass
+          on a blank page or a crash. The screen has to say no, and the thing
+          behind it must not be on the page.
+        */
+        ok(refused, `${who.role}: ${route.path} says no`)
+        ok(!rendered, `${who.role}: and ${route.path} renders none of its content`)
+      }
+    }
+    await ctx.close()
+  }
+}
+
 /* --- a super admin sees everything ---------------------------------------- */
 {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
