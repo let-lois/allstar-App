@@ -231,6 +231,13 @@ Both now require `SETUP_TOKEN`, and refuse outright on a deployment that has not
 set one. `npm run verify:api-access` holds all 27 routes to a declared access
 level, and fails on any route that does not name one.
 
+The sweep also covered the six `/api/users/:id/*` operations — set password,
+reset link, role change, deactivate, delete, footprint — which the first version
+of the gate had never looked at. All six are correctly guarded: one shared
+`guard()` requires admin rights, scopes the target to the caller's own company,
+blocks a lesser role acting on a super admin, and returns 404 rather than 403 so
+another company's user existence does not leak.
+
 **Nothing to do — listed because it was live.** If that endpoint was ever hit by
 anything other than us, it would show as geocoding spend with no matching
 import. Worth a glance at the Google console for the last week.

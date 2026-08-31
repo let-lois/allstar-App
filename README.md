@@ -1457,9 +1457,28 @@ least able to notice the bill.
 npm run verify:api-access
 ```
 
-...is a table, not a heuristic. Every route names how it is guarded — `public`,
-`token`, `session`, an inline `can*()` call, or a delegate that checks for
-itself — and **a route in the source that is not in the table fails the gate.**
+...is a table, not a heuristic, and it covers **all three ways this router
+matches a path**: an equality check, `path.startsWith(...)`, and a regular
+expression. Every route names how it is guarded — `public`, `token`, `session`,
+an inline `can*()` call, or a delegate that checks for itself — and **a route in
+the source that is not in the table fails the gate.**
+
+Three styles because the first two versions each missed one, and each time the
+thing it had never looked at was the thing worth looking at. Version one knew
+only about equality checks, printed "every API route has decided who may call
+it", and had never seen `/api/users/:id/*` — the six most privileged operations
+in the product: set a password, mint a reset link, change a role, deactivate,
+delete. Version two learned about `startsWith` and still could not see
+`/api/properties/:id/photos`, which is matched with a regex.
+
+Those six turned out to be correctly guarded. Every one resolves its target
+through a single `guard()` in `users.ts`, which requires `canInvite` unless you
+are acting on your own account, loads the target scoped to the caller's own
+company, refuses to let a lesser role act on a super admin, and answers **404
+rather than 403** for another company's user so existence does not leak. Six
+operations resting on one function makes it the highest-leverage thing on the
+server, so the gate asserts those four properties individually rather than
+trusting that a function called `guard` guards.
 That is the part that matters: the point is not that every route is locked,
 because several are deliberately open. It is that somebody decided and wrote the
 decision down, since a forgotten route and a deliberately public one look
@@ -1469,11 +1488,19 @@ Delegates are read rather than trusted. A function that takes `user` looks
 guarded from the call site whether or not it is, so the gate opens the file and
 checks the function itself.
 
-Proved three ways: removing the diagnostics guard, adding an undeclared route,
-and stripping a role check out of a delegate. The first attempt at the first of
-those was a no-op edit that reported a pass — worth saying, because "the check
-did not fire" and "the edit did not apply" look the same from the outside, and
-only one of them means the check is broken.
+Proved by breaking it six ways: removing the diagnostics guard, adding an
+undeclared route in each of the three matcher styles, stripping a role check out
+of a delegate, and weakening `guard()` itself.
+
+Two of those attempts initially reported a pass for the wrong reason, and both
+are worth recording. One was a no-op edit — "the check did not fire" and "the
+edit did not apply" look identical from outside, and only one means the check is
+broken. The other was worse: the regex enumeration matched nothing, so *"every
+regex route is declared"* passed on an empty array. A vacuous pass inside the
+very check added to close the previous vacuous pass. The give-away was the
+enumeration line naming two families and no regex route while a regex route
+plainly existed — which is the argument for having checks print what they
+found, not just whether they liked it.
 
 ### The console's role gate is one table, not nine screens
 

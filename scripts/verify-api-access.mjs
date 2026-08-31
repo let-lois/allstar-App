@@ -81,6 +81,54 @@ const ROUTES = {
   "/api/territories|POST": { how: 'delegate', fn: 'createTerritory', file: 'territories.ts' },
 }
 
+/**
+ * Route families matched with `startsWith` rather than an equality check.
+ *
+ * These were the hole in the first version of this gate. It matched
+ * `path === '/api/...'` literals only, printed "every API route has decided who
+ * may call it", and had never looked at /api/users/:id/* — the six most
+ * privileged operations in the product: set a password, mint a reset link,
+ * change a role, deactivate, delete. A gate whose claim is broader than its
+ * coverage is worse than no gate, because it answers the question people would
+ * otherwise go and check by hand.
+ */
+const FAMILIES = {
+  '/api/users/': {
+    // Every action resolves its target through one `guard`, which is checked
+    // separately below. Listing them individually so a new action added to the
+    // subtree has to be added here too.
+    actions: ['footprint', 'password', 'reset-link', 'role', 'active', ''],
+    file: 'users.ts',
+    fns: {
+      footprint: 'footprint',
+      password: 'setPassword',
+      'reset-link': 'createResetLink',
+      role: 'setRole',
+      active: 'setActive',
+      '': 'deleteUser',
+    },
+  },
+  // Scoped by `client_id` in the query itself, so one company's device cannot
+  // fetch or overwrite another's photo by guessing an id.
+  '/api/photos/': { match: "path.startsWith('/api/photos/", scopedBy: 'client_id = ?2' },
+}
+
+/**
+ * And routes matched by a regular expression, which is a third style again.
+ *
+ * The first version of this gate knew about equality checks. The second learned
+ * about `startsWith`. Both times the thing it had never looked at was the thing
+ * worth looking at. `/api/properties/:id/photos` is matched with a regex, so it
+ * was invisible to both — hence enumerating every matcher style below rather
+ * than adding a third special case and hoping that is the last one.
+ */
+const REGEX_ROUTES = {
+  '/^\\/api\\/properties\\/[^/]+\\/photos$/': {
+    match: "/^\\/api\\/properties\\/[^/]+\\/photos$/.test(path)",
+    scopedBy: 'client_id = ?2',
+  },
+}
+
 /* ---- what the source actually has ------------------------------------- */
 
 const lines = src.split('\n')
@@ -165,7 +213,115 @@ for (const route of found) {
   }
 }
 
-/* ---- 3. the diagnostics cannot default open ---------------------------- */
+/* ---- 3. every matcher style, so nothing can hide in a fourth ---------- */
+{
+  const byStartsWith = [
+    ...new Set([...src.matchAll(/path\.startsWith\('(\/api\/[^']*)'\)/g)].map((m) => m[1])),
+  ]
+  /*
+    Captured from `.test(path)` backwards, not by trying to describe a regex
+    with a regex.
+
+    The clever version matched nothing, so `byRegex` was empty and "every regex
+    route is declared" passed on an empty array — the exact vacuous pass this
+    gate exists to prevent, in the part of the gate added to close the previous
+    vacuous pass. The give-away was the enumeration message listing two families
+    and no regex route while a regex route plainly exists.
+  */
+  const byRegex = [
+    ...new Set([...src.matchAll(/(\/\^[^\n]*?\/)\.test\(path\)/g)].map((m) => m[1])),
+  ]
+  ok(
+    byStartsWith.length + byRegex.length > 0,
+    `dynamic routes were found (${[...byStartsWith, ...byRegex].join(', ')})`,
+  )
+
+  const undeclaredPrefix = byStartsWith.filter((f) => !FAMILIES[f])
+  ok(
+    undeclaredPrefix.length === 0,
+    `every startsWith family is declared${undeclaredPrefix.length ? ` — undeclared: ${undeclaredPrefix.join(', ')}` : ''}`,
+  )
+
+  const undeclaredRegex = byRegex.filter((r) => !REGEX_ROUTES[r])
+  ok(
+    undeclaredRegex.length === 0,
+    `every regex route is declared${undeclaredRegex.length ? ` — undeclared: ${undeclaredRegex.join(', ')}` : ''}`,
+  )
+
+  // The users subtree: every action in the source is declared, and every
+  // declared one still resolves through the shared guard.
+  const usersAt = src.indexOf("path.startsWith('/api/users/')")
+  if (usersAt < 0) throw new Error('the /api/users/ subtree moved — update this gate')
+  const subtree = src.slice(usersAt, usersAt + 2600)
+  const inSource = [...subtree.matchAll(/action === '([^']*)'/g)].map((m) => m[1])
+  if (/!action && req\.method === 'DELETE'/.test(subtree)) inSource.push('')
+
+  const declaredActions = FAMILIES['/api/users/'].actions
+  const missing = inSource.filter((a) => !declaredActions.includes(a))
+  ok(
+    missing.length === 0,
+    `every /api/users/ action is declared${missing.length ? ` — missing: ${missing.map((a) => a || 'DELETE').join(', ')}` : ''}`,
+  )
+
+  const usersSrc = readFileSync(new URL('../api/src/users.ts', import.meta.url), 'utf8')
+  for (const action of declaredActions) {
+    const fn = FAMILIES['/api/users/'].fns[action]
+    const at = usersSrc.indexOf(`export async function ${fn}`)
+    if (at < 0) throw new Error(`${fn} is gone from users.ts — update this gate`)
+    ok(
+      /guard\(a,/.test(usersSrc.slice(at, at + 700)),
+      `/api/users/:id/${action || '(DELETE)'} resolves its target through guard`,
+    )
+  }
+
+  /*
+    Tenant scoping on the routes whose whole authorization is the tenant check.
+
+    Anchored on the matcher text so a missing block fails loudly instead of
+    slicing from index -1, which is what happened when a family was declared
+    that the source did not actually match that way — the check then read the
+    wrong 2,600 characters and reported a scoping failure that was really a
+    bookkeeping error in the gate.
+  */
+  for (const decl of [...Object.values(FAMILIES), ...Object.values(REGEX_ROUTES)]) {
+    if (!decl.scopedBy || !decl.match) continue
+    const at = src.indexOf(decl.match)
+    if (at < 0) throw new Error(`the matcher \`${decl.match}\` is gone — update this gate`)
+    ok(
+      src.slice(at, at + 2600).includes(decl.scopedBy),
+      `${decl.match.slice(0, 44)}… scopes its query by ${decl.scopedBy}`,
+    )
+  }
+}
+
+/* ---- 4. the one guard the whole subtree rests on ---------------------- */
+{
+  /*
+    Six operations share it, so weakening it weakens all six at once — which
+    makes it the highest-leverage thing on the server and worth asserting
+    property by property rather than trusting that it is "the guard".
+  */
+  const usersSrc = readFileSync(new URL('../api/src/users.ts', import.meta.url), 'utf8')
+  const at = usersSrc.indexOf('async function guard(')
+  if (at < 0) throw new Error('users.ts no longer has a shared guard — update this gate')
+  const g = usersSrc.slice(at, at + 2200)
+
+  ok(/!canInvite\(actor\)/.test(g), 'guard requires canInvite unless acting on your own account')
+  ok(
+    /WHERE id = \?1 AND client_id = \?2/.test(g),
+    'and loads the target scoped to the caller’s own company',
+  )
+  ok(
+    /actor\.role !== 'super_admin'/.test(g),
+    'and refuses to let a lesser role act on a super admin',
+  )
+  ok(
+    /fail\('No such person on this team\.', 404\)/.test(g),
+    'and answers 404 for another company’s user, so existence does not leak',
+  )
+}
+
+/* ---- 5. the diagnostics cannot default open ---------------------------- */
 {
   const at = src.indexOf('function diagnosticsAllowed')
   ok(at > 0, 'the diagnostics guard exists')
