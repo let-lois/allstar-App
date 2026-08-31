@@ -486,3 +486,57 @@ export async function noteSuccess(
     .bind(clientId, provider, Date.now())
     .run()
 }
+
+/* --- what the app pushes, and the promise it makes to the rep ------------- */
+
+/**
+ * The events this app sends outward, as a closed set.
+ *
+ * A string union rather than free-form text so a typo becomes a compile error
+ * instead of a row that queues forever and drains into nothing — the outbox
+ * would accept `contct.upsert` quite happily and no one would find out until a
+ * customer asked why their CRM was empty.
+ */
+export type CrmEvent = 'contact.upsert' | 'appointment.create'
+
+/**
+ * Queue an event for a customer's CRM, and never fail the rep's sync doing it.
+ *
+ * This is called from inside `applyOne`, and `applyMutations` treats a throw
+ * from there as the mutation being **rejected** — it releases the idempotency
+ * claim and hands the phone back an error. So a CRM queue write that failed
+ * would not merely lose a CRM update: it would tell a rep standing on a doorstep
+ * that their visit did not save, and the phone would retry the whole mutation.
+ *
+ * That trade is never worth making. The rep's work is the product; the CRM copy
+ * is a convenience for the office. So every failure here is swallowed and
+ * reported, and the visit is saved either way.
+ *
+ * `enqueue` already returns false rather than throwing for the ordinary case —
+ * a company with no CRM connected — which is most of them. This exists for the
+ * genuine failures underneath that: the database refusing the write, a
+ * constraint nobody anticipated.
+ */
+export async function queueForCrm(
+  env: Env,
+  clientId: string,
+  event: CrmEvent,
+  payload: unknown,
+  dedupeKey?: string,
+): Promise<void> {
+  try {
+    await enqueue(env, clientId, { event, payload, dedupeKey })
+  } catch (err) {
+    /*
+      Logged, not rethrown, and deliberately not written to `client_integrations`
+      either — that row is the *connection's* health, and a failure to queue is
+      ours. Recording it there would show an admin a broken CRM when what is
+      broken is us.
+    */
+    console.error('crm queue failed', {
+      clientId,
+      event,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+}

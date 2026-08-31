@@ -27,6 +27,7 @@
     "backup:list": "node scripts/backup-open.mjs --list",
     "verify:restore": "node scripts/verify-restore.mjs",
     "smoke:integrations": "node scripts/smoke-integrations.mjs",
+    "smoke:crm-push": "node scripts/smoke-crm-push.mjs",
     "smoke:money": "node scripts/smoke-closed-value.mjs",
     "db:rebuild-closed": "node scripts/rebuild-closed-value.mjs",
     "smoke:daybreak": "node scripts/smoke-daybreak.mjs",

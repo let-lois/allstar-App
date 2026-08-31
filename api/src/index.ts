@@ -53,6 +53,7 @@ import {
 } from './observe'
 import { applyMutations } from './mutations'
 import { readSettings, writeSettings, writeTimezone } from './settings'
+import { drainOutbox } from './crm-push'
 import {
   canManageIntegrations,
   connectIntegration,
@@ -184,6 +185,31 @@ async function requireUser(req: Request, env: Env): Promise<SessionUser | null> 
 }
 
 export default {
+  /**
+   * The scheduled drain.
+   *
+   * Queued CRM work needs something to push it, and the alternative — draining
+   * inside whatever request happened to be passing — makes a rep's sync pay for
+   * a third party being slow. This runs on Cloudflare's clock instead, on every
+   * customer's queue at once, and it is the only thing in this Worker that runs
+   * without somebody asking for it.
+   *
+   * Failures are swallowed on purpose. A scheduled handler that throws is a
+   * retry Cloudflare decides the timing of, on top of the backoff the outbox
+   * already implements — two retry schedules fighting each other over the same
+   * customer's API quota. `drainOutbox` records every failure against its own
+   * row and against the customer's integration, which is where an admin looks.
+   */
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      drainOutbox(env, { limit: 100 })
+        .then((r: { claimed: number }) => {
+          if (r.claimed) console.log('crm drain', r)
+        })
+        .catch((err: unknown) => console.error('crm drain failed', String(err))),
+    )
+  },
+
   async fetch(req: Request, env: Env): Promise<Response> {
     const cors = corsHeaders(req, env)
 
@@ -648,6 +674,25 @@ export default {
         })
         if (!result.ok) return json({ error: result.error }, result.status, cors)
         return json({ integration: result.status, locationName: result.locationName }, 200, cors)
+      }
+
+      /*
+        Send what is queued, now, rather than waiting for the schedule.
+
+        Here because "did my leads reach the CRM?" is a question an admin asks
+        while somebody is on the phone to them, and "wait up to five minutes" is
+        not an answer. It is also what makes the push path testable end to end
+        without a cron: the gate calls this.
+
+        Same permission as connecting, and bounded the same way as the scheduled
+        run — an admin holding the button down cannot turn this into an
+        unbounded loop against the customer's API quota.
+      */
+      if (path === '/api/integrations/ghl/drain' && req.method === 'POST') {
+        if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const report = await drainOutbox(env, { clientId: user.clientId })
+        const queue = await queueDepth(env, user.clientId)
+        return json({ ...report, queue }, 200, cors)
       }
 
       if (path === '/api/integrations/ghl' && req.method === 'DELETE') {

@@ -273,16 +273,27 @@ check this one" — and that honesty is the mitigation.
 ### 11. Is GHL sync part of what the customer is buying?
 **Owner: Curtis · Severity: high (product decision) · Tracked as #33–#37**
 
-The foundation is built and merged (#33). Push (#34) and pull (#35) are not, and
-#37 — connecting the live account — is paused at step 5.
+The foundation is built and merged (#33). **Push (#34) is now built too**: a
+rep's outcome queues, a scheduled drain sends it, and `npm run smoke:crm-push`
+holds the whole path up against a real Worker and a GoHighLevel stand-in. Pull
+(#35) is not built, and #37 — connecting the live account — is still paused at
+step 5.
 
 This is on the list because its severity is entirely a product question. If the
 first customer expects their leads to flow into GoHighLevel, this is a blocker.
 If they don't, it is a roadmap item. Nobody has said which.
 
-Note for when it resumes: #34 is blocked in this environment because GHL's
-documentation is egress-blocked from the container, and #35 additionally needs a
-decision on which side wins when both have changed a lead's pipeline stage.
+**One thing to know before the first live send.** GHL's documentation hosts are
+still egress-blocked from the build container, so the contact request *shape* in
+`crm-push.ts` is written from knowledge of their API rather than from their docs,
+and is marked as such in the file. Everything around it — the transport, the auth,
+the retry rules, the queue — is verified. If the shape is wrong, GHL answers 4xx,
+the row fails permanently with their own words recorded against the customer's
+integration, and nothing is written incorrectly on their side. **Step 5 of #37 is
+what settles it**, and it is now the cheapest way to settle it.
+
+Note for when #35 resumes: it needs a decision on which side wins when both have
+changed a lead's pipeline stage.
 
 ---
 
