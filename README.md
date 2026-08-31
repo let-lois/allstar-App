@@ -1774,6 +1774,34 @@ does not*, which have no local copy to disagree with.
 Do Not Contact is the same rule with no exception: sticky, one-way, unreversible
 by anything inbound.
 
+**One carve-out, which is a case the rule never covered rather than an exception
+to it: winning requires something to win with.** Where Allstar holds no value at
+all, there is no disagreement — an empty phone number is not our position on what
+the phone number is. `api/src/crm-merge.ts` decides that, `npm run verify:merge`
+holds it, and it is a pure function so the rule can be reasoned about without a
+webhook or a database in the way.
+
+Fillable: a property's `city`, `state` and `zip`; a contact's `phone` and `email`;
+and a contact row itself, where the property has none. Never fillable — and
+*unexpressible* in the plan the function returns, which is a stronger guarantee
+than refusing them at runtime: lead state, Do Not Contact, `address1` (the
+identity of the lead; quietly moving one puts a rep at the wrong door), and
+coordinates. Those last look fillable, because `lat`/`lng` are NOT NULL with a
+default of `0` so an unplaced lead sits at 0,0 and reads as blank. They are
+excluded anyway: coordinates are ours to derive, and taking theirs would bypass
+the company's chosen geocoder, the spend estimate shown before a lookup runs, and
+the storage-terms question in `LEGAL.md` question 4.
+
+The case that pays for the whole file: a lead with no phone and no email cannot be
+pushed at all, so an address-only row — the common shape in a door-to-door list —
+is unsendable until something arrives. A phone number coming inbound is exactly
+what turns it into a lead the office can work.
+
+Proved by breaking it six ways, and the two that matter most are opposites: making
+an inbound value overwrite one we already hold, and making the function fill
+nothing at all. A merge that did nothing would pass every assertion about not
+overwriting, which is why the gate asserts both directions.
+
 The customer has to be told this before it bites them, and the note to send is
 written out in `LAUNCH.md` item 11a.
 

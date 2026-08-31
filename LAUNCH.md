@@ -319,10 +319,24 @@ with, so they simply arrive. Everything else inbound is recorded and ignored.
 Smaller to build, far smaller to get wrong, and there is no timestamp comparison
 anywhere — which also disposes of clock skew between the two systems.
 
-One sub-question left open rather than decided quietly: when Allstar holds *no
-value at all* for a field and GoHighLevel has one, is filling the blank a
-conflict? It is not, on any reading — but "absolutely" was the instruction, so it
-is flagged here rather than assumed either way.
+**The one carve-out, now decided and built.** Winning requires something to win
+with. Where Allstar holds no value at all for a field, there is no disagreement
+to resolve — an empty phone number is not our position on what the phone number
+is. So a blank is filled and a value is never replaced.
+
+`api/src/crm-merge.ts` is that rule as a pure function, and
+`npm run verify:merge` holds it. Fillable: a property's `city`, `state`, `zip`;
+a contact's `phone` and `email`; and a contact row itself where the property has
+none. Never fillable, and unreachable from the plan the function returns rather
+than merely refused by it: lead state, Do Not Contact, `address1`, and
+coordinates — those last are ours to geocode, and taking GoHighLevel's would
+bypass the company's chosen provider, the spend estimate shown before a lookup,
+and the storage-terms question in `LEGAL.md` question 4.
+
+The case this pays for: a lead with no phone and no email **cannot be pushed at
+all** — GoHighLevel matches an upsert on one of those — so an address-only row,
+which door-to-door lists are full of, is unsendable until something arrives. A
+phone number coming the other way is what makes it sendable.
 
 ### 11a. Tell the customer how sync conflicts resolve
 **Owner: Curtis · Severity: high, once GHL sync is live · Tracked as #54**
@@ -354,6 +368,12 @@ The note, ready to send:
 >
 > Leads that exist only in GoHighLevel are a different case — there is nothing in
 > Allstar to disagree with, so they come across normally.
+>
+> There is one more case where GoHighLevel does reach us: **a field Allstar has
+> never had a value for.** If a lead is in Allstar with no phone number and
+> GoHighLevel has one, we take it — there is nothing of ours to disagree with, and
+> a lead we can reach is worth more than one we cannot. Filling a gap is not the
+> same as changing an answer.
 >
 > One rule with no exception: **Do Not Contact only ever travels outward.** Once a
 > household has asked a rep to stop, nothing in GoHighLevel can undo that in
