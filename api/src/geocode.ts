@@ -19,7 +19,6 @@
  */
 
 import { googleGeocode } from './geocode-google'
-import { maptilerGeocode } from './geocode-maptiler'
 
 const CENSUS_BATCH_URL = 'https://geocoding.geo.census.gov/geocoder/locations/addressbatch'
 
@@ -68,7 +67,7 @@ export interface GeocodeMatch {
   precision?: 'rooftop' | 'interpolated' | 'approximate'
   /** The provider answered a misspelled or incomplete address by guessing. */
   partial?: boolean
-  provider?: 'maptiler' | 'google' | 'census'
+  provider?: 'google' | 'census'
 }
 
 /** CSV field splitter for the response — quoted, comma-separated, one row. */
@@ -178,7 +177,6 @@ async function batch(rows: GeocodeRequest[]): Promise<GeocodeMatch[]> {
 }
 
 export interface GeocodeKeys {
-  maptiler?: string
   google?: string
 }
 
@@ -192,7 +190,7 @@ export interface GeocodeKeys {
  * and the operator has no way to tell. This is what makes that visible.
  */
 export interface GeocodeAttempt {
-  provider: 'maptiler' | 'google' | 'census'
+  provider: 'google' | 'census'
   asked: number
   matched: number
   errors: number
@@ -203,25 +201,29 @@ export interface GeocodeAttempt {
 /**
  * Geocode a batch, using the best provider available.
  *
- * An ordered chain — MapTiler, then Google, then Census — where each provider
- * only ever sees what the one before it could not place. The ordering is the
- * whole design:
+ * An ordered chain — Google, then Census — where each provider only ever sees
+ * what the one before it could not place. The ordering is the whole design:
  *
- *   - **MapTiler first, and not because it is the most accurate.** This app
- *     draws its basemap from MapTiler tiles, and Google's platform terms
- *     generally expect Google-derived content to be displayed on a Google map.
- *     Geocoding with the provider that supplies the imagery removes that
- *     question instead of leaving it for a paying customer to inherit.
- *   - **Precision before thrift.** Both paid providers return rooftops; Census
- *     interpolates a house number along a block. Reaching for the free one
- *     first would mean discarding the precision on every address that would
- *     have resolved anyway.
+ *   - **Precision before thrift.** Google returns rooftops where it has them and
+ *     says so; Census interpolates a house number along a block. Reaching for
+ *     the free one first would mean discarding the precision on every address
+ *     that would have resolved anyway.
  *   - **An outage degrades, it never fails.** Expired key, exhausted quota,
  *     provider down — the batch falls through to the next link and the import
  *     still completes, rather than returning a page of red rows.
- *   - **No keys changes nothing.** With neither configured this is exactly the
+ *   - **No key changes nothing.** With Google unconfigured this is exactly the
  *     Census-only path it has always been, which is what makes the whole
  *     feature safe to ship before anyone has an account.
+ *
+ * **MapTiler used to sit at the bottom of this chain and was removed.** Not for
+ * quality — it was already last, because asked about a house it cannot resolve
+ * it returns a fuzzy street match with the house number discarded and the ZIP
+ * ignored. It was removed because MapTiler's free plan allows one key, this
+ * Worker sends no `Origin` header, and a key a Worker uses therefore cannot be
+ * origin-locked. That one key is also the browser's basemap key, so geocoding
+ * here was what kept it readable out of the JavaScript bundle and usable from
+ * `curl`. Dropping it means the key is browser-only and can be locked to the
+ * app's origin. Tiles are still MapTiler; only geocoding left.
  */
 /**
  * How good a result is, for choosing between two answers about the same address.
@@ -252,7 +254,7 @@ const CONFIDENT = 40
 
 const PRECISION_RANK: Record<string, number> = { rooftop: 20, interpolated: 10, approximate: 0 }
 
-function rank(m: GeocodeMatch): number {
+export function rank(m: GeocodeMatch): number {
   if (m.status === 'match') {
     const p = PRECISION_RANK[m.precision ?? 'approximate'] ?? 0
     // A guess sits below every honest answer, however coarse that answer is —
@@ -309,19 +311,15 @@ export async function geocode(
    *             the house number to interpolate along the right block. This is
    *             what keeps an import working on a fresh deployment, when a card
    *             expires, and when a paid provider is down.
-   *   maptiler  last, because of how it fails rather than what it covers. Asked
-   *             about an address it cannot resolve, it returns a fuzzy street
-   *             match with the house number discarded and the ZIP ignored —
-   *             "704 W 40th St, Austin, 78751" comes back as West 40th Street in
-   *             78756, with Texarkana and Mission behind it at 0.62. Census
-   *             answers the same address with an honest no-match. A wrong pin is
-   *             worse than an absent one because an absent one is visible, so the
-   *             provider that guesses goes last. Kept rather than removed so it
-   *             can still offer an operator something to look at, flagged.
    *
-   * With no keys at all this is Census alone, which is a working product rather
+   * With no key at all this is Census alone, which is a working product rather
    * than a degraded one. That property is the reason the free provider is never
    * removed from the bottom of this list.
+   *
+   * MapTiler was a third link here, below both, and is gone — see the note on
+   * `geocode` above for why. What is lost is a flagged street-level guess on
+   * addresses neither of these can place; those rows now come back unplaced,
+   * which is the honest answer and the visible one.
    */
   const chain: {
     name: GeocodeAttempt['provider']
@@ -331,9 +329,6 @@ export async function geocode(
     chain.push({ name: 'google', run: (b) => googleGeocode(b, keys.google as string) })
   }
   chain.push({ name: 'census', run: censusGeocode })
-  if (keys.maptiler) {
-    chain.push({ name: 'maptiler', run: (b) => maptilerGeocode(b, keys.maptiler as string) })
-  }
 
   for (const provider of chain) {
     const batch = pending()

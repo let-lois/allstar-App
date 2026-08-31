@@ -44,20 +44,23 @@ ALLOWED_ORIGINS = "https://allstar.letlois.com,https://allstar-app.pages.dev,htt
 #
 #   SESSION_PEPPER        — mixed into password hashing. Never change it once
 #                           accounts exist; it would invalidate every password.
-#   MAPTILER_API_KEY      — optional. First choice for geocoding.
+#   MAPTILER_API_KEY      — NO LONGER USED. MapTiler was the third link in the
+#                           geocoding chain and has been removed. The Worker
+#                           needs no MapTiler key; if one is still set as a
+#                           secret it does nothing, and deleting it is safe.
 #
-#                           Currently the *same* key as the front-end's
-#                           VITE_MAPTILER_KEY, which is not the intended shape:
-#                           the free plan allows one active key, and the browser
-#                           needs it origin-locked while a Worker needs it
-#                           origin-free. The key's allowed-origins list carries
-#                           `?` to permit header-less requests, which is what
-#                           makes one key serve both.
+#                           Why it went: the free plan allows one active key, and
+#                           it was the *same* key as the front-end's
+#                           VITE_MAPTILER_KEY. The browser needs that key
+#                           origin-locked; a Worker sends no `Origin` header and
+#                           so needs it origin-free. `?` was in the allowed-origins
+#                           list to make one key serve both, which also let anyone
+#                           who read it out of the bundle use it from `curl`.
+#                           With geocoding gone the key is browser-only and can be
+#                           locked to the app's origin, and `?` comes out.
 #
-#                           That is a knowing compromise for the prototype, not
-#                           a design. See "Before this goes to a paying
-#                           customer" in the root README for what it costs and
-#                           the two ways to close it.
+#                           Tiles are still MapTiler — that is VITE_MAPTILER_KEY
+#                           in the front-end build, not a Worker variable.
 #   GOOGLE_MAPS_API_KEY   — optional, and tried FIRST when set. The only
 #                           provider here that returns a rooftop rather than a
 #                           point on a block.

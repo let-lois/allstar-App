@@ -1674,6 +1674,10 @@ Deliberate compromises taken to keep the prototype moving. Each is fine for
 building and testing and each is a real defect at launch, so they are written
 down here rather than left in a chat log.
 
+**[`LEGAL.md`](LEGAL.md) is the legal review list** — the five questions for
+counsel, the facts behind each, and where data goes. Three of them were blockers
+already; two were found by writing it.
+
 **[`LAUNCH.md`](LAUNCH.md) is the checklist.** This section holds the reasoning —
 what was measured, what was tried, why each compromise was taken. `LAUNCH.md`
 holds the severity and the owner, and adds the items that were never written down
@@ -1682,41 +1686,49 @@ generated before there is a production backup at all, and the question of whethe
 GHL sync is part of what customer one is buying. Read that
 one to decide what to do next; read this one to understand why.
 
-### The MapTiler key allows unknown origins
+### The MapTiler key allowed unknown origins — the code half is fixed
 
 `Allowed HTTP Origins` on the MapTiler key includes `?`, which permits requests
 that arrive with no `Origin` header.
 
-It is there because the key has two incompatible jobs and the free plan allows
+It was there because the key had two incompatible jobs and the free plan allows
 only one active key. The browser needs it origin-locked, because Vite compiles it
-into the bundle where anyone can read it. The Worker needs it origin-free,
+into the bundle where anyone can read it. The Worker needed it origin-free,
 because a Worker sends no `Origin` and MapTiler rejects header-less requests when
-any origin is listed. `?` satisfies both.
+any origin is listed. `?` satisfied both.
 
-What it costs: another website embedding the key is still blocked, because a
-browser always sends an `Origin`. A script or `curl` is not. Anyone who reads the
-key out of the JavaScript bundle can use it.
+What it cost: another website embedding the key was still blocked, because a
+browser always sends an `Origin`. A script or `curl` was not. Anyone who read the
+key out of the JavaScript bundle could use it.
 
-What that is worth today: the free tier is a hard 100k/month cap with no overage
-billing, so the worst case is the map going blank until the month rolls over —
+What that was worth: the free tier is a hard 100k/month cap with no overage
+billing, so the worst case was the map going blank until the month rolled over —
 an outage, not an invoice.
 
-Two ways to close it, in order of preference:
+**Resolved by removing MapTiler from the geocoding chain**, which was the
+Worker's only use for the key. The README used to offer two ways to close this:
+move geocoding into the browser (~half a day) or pay for a plan with two keys.
+Both were written before Google and Census covered geocoding on their own, and
+both are now more work than the answer that was available: delete the third link.
+MapTiler was already last in the chain because it guesses — asked about a house
+it cannot resolve, it returns a fuzzy street match with the house number
+discarded — so what is lost is a flagged street-level guess on addresses neither
+Google nor Census can place. Those rows now come back unplaced, which is the
+honest answer and, more usefully, the visible one.
 
-1. **Move geocoding into the browser.** The import screen runs on the app's own
-   origin, so a fully origin-locked key works there, and the Worker stops needing
-   a MapTiler key at all. Census stays on the Worker as the fallback. Roughly
-   half a day, and the key goes back to being properly locked.
-2. **Pay for a plan that allows two keys**, and split them: origin-locked for the
-   browser, origin-free for the Worker. No code change.
+The key is now browser-only, used for tiles through `VITE_MAPTILER_KEY`. That
+means it can be fully origin-locked.
 
-Whichever is chosen, remove `?` afterwards and confirm with
-`/api/selftest/geocode` — its `attempts` array names the provider that answered
-and the reason any provider refused.
+**Two steps remain, and both are Curtis's:**
 
-Note that this compromise buys less than it was meant to. MapTiler is now last in
-the chain rather than first (see below), so a rejected key costs almost nothing —
-which makes option 1 cheaper to justify and less urgent to fund.
+1. **Rotate the key.** It appeared in a screenshot during a working session.
+2. **Remove `?` from Allowed HTTP Origins** and list only the app's origins.
+   Nothing sends a header-less request for a MapTiler resource any more.
+
+Confirm afterwards with `/api/selftest/geocode` — its `attempts` array names the
+provider that answered and the reason any provider refused. It should list
+`google` and/or `census` and never MapTiler. `MAPTILER_API_KEY` on the Worker is
+now unused; deleting that secret is safe.
 
 ### The npm audit findings, assessed rather than counted
 
@@ -1759,9 +1771,15 @@ Every lead's pin is interpolated along a street, not placed on a building. A rep
 walking a route gets the right block and the right side of the street; they do not
 get the right house from the map alone.
 
-This was meant to be fixed by geocoding with MapTiler, and is not. What was
-measured, against two addresses from a live test list with the key working and the
-request correct:
+This was meant to be fixed by geocoding with MapTiler, and was not — the
+measurement below is why MapTiler was put last in the chain, and eventually why
+it was taken out of it. Google now leads and returns a rooftop where it has one,
+so this section describes the floor rather than the ceiling: what a pin looks
+like on a deployment with no Google key, and on the addresses Google cannot
+place.
+
+What was measured, against two addresses from a live test list with the MapTiler
+key working and the request correct:
 
 | Sent | Returned |
 | --- | --- |
@@ -1779,17 +1797,19 @@ names with *plausible* house numbers — a house that does not exist cannot be f
 by anyone, so the test cannot tell thin coverage apart from a bad address.
 Settling that needs a verified address, and it is still open.
 
-**What it does establish** is the failure mode, which is what the chain order is
-built on. Census answers an address it cannot resolve with a no-match. MapTiler
-answers with a confident-looking street in the wrong ZIP. A wrong pin is worse
-than an absent one, because an absent one is visible — so Census is first and
-MapTiler is last, and a guessed match never ends the search.
+**What it does establish** is the failure mode, and that outlived the provider.
+Census answers an address it cannot resolve with a no-match. MapTiler answered
+with a confident-looking street in the wrong ZIP. A wrong pin is worse than an
+absent one, because an absent one is visible. That is why MapTiler went last, why
+a guessed match never ends the search, and why the same rule now governs Google:
+a `partial_match` is held as a fallback rather than accepted, and a state
+centroid is refused outright.
 
-`GET /api/selftest/geocode?raw=1&address=...&city=...&state=...&zip=...` shows the
-raw provider response, and takes `language`, `types`, `limit`, `autocomplete`,
-`fuzzyMatch`, `proximity` and `bbox` off the query string so a hypothesis costs a
-page reload rather than a deploy. Use a verified address with it — a synthetic one
-cannot answer a coverage question.
+`GET /api/selftest/geocode` geocodes a known address through the live chain and
+reports every provider's attempt — which was asked, what it placed, and its own
+words when it refused. The `?raw=1` variant and its tunable query parameters
+went with the MapTiler adapter; they existed because MapTiler answered a house
+with a street and the parsed output could not show why.
 
 ### Navigate stays in the app
 

@@ -382,7 +382,7 @@ export interface GeocodeMatchDTO {
   precision?: 'rooftop' | 'interpolated' | 'approximate'
   /** The provider answered a misspelled address by guessing. */
   partial?: boolean
-  provider?: 'maptiler' | 'google' | 'census'
+  provider?: 'google' | 'census'
 }
 
 export function apiGeocode(token: string, rows: GeocodeRequestDTO[]) {

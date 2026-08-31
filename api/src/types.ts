@@ -18,13 +18,6 @@ export interface Env {
    */
   GOOGLE_MAPS_API_KEY?: string
   /*
-   * Separate from the client's VITE_MAPTILER_KEY on purpose. That one is
-   * compiled into the bundle and locked to the site's origin, which a Worker
-   * request does not carry — so it would be rejected here. This is a second key
-   * with no origin restriction, which is why it has to live as a secret.
-   */
-  MAPTILER_API_KEY?: string
-  /*
    * Encrypts third-party credentials at rest — see secretbox.ts.
    *
    * Optional, and its absence is a refusal rather than a fallback: with no key
