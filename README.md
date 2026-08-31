@@ -542,14 +542,75 @@ protects is not a backup.
 
 ```bash
 cd api
-npm run backup            # → api/backups/allstar-db-<utc>.sql
+npm run backup            # → api/backups/allstar-db-<utc>.sql.enc
 ```
 
-Plain SQL, so it restores into D1, into SQLite, or into anything that speaks the
-dialect — "we can restore" should not depend on one vendor still being willing
-to serve you. The file holds every customer's addresses, contact names and phone
-numbers plus password hashes; `backups/` is git-ignored and the file wants
-encrypting before it goes anywhere.
+Under the encryption it is plain SQL, so it restores into D1, into SQLite, or
+into anything that speaks the dialect — "we can restore" should not depend on one
+vendor still being willing to serve you.
+
+### The key, and why there is no backup without one
+
+The file holds every customer's addresses, contact names and phone numbers, plus
+password hashes. `backups/` being git-ignored keeps it off GitHub and does
+nothing whatsoever about the copy on a laptop, in a Downloads folder, or in
+whatever cloud drive that laptop syncs to — and the file exists in order to be
+copied somewhere else. Encryption is the only control that survives it leaving
+the machine it was made on.
+
+So `npm run backup` **refuses to export production until a key exists.** It does
+not write the plaintext "for now": that is how every one of these ends up
+unencrypted, and the file would be synced, indexed and forgotten long before
+anybody came back to it. Same posture as `INTEGRATION_KEY` in the Worker — no
+key, no operation.
+
+```bash
+openssl rand -base64 32          # once, ever
+```
+
+Then either export it as `BACKUP_KEY`, or save it to `api/.backup-key` (which is
+git-ignored). Committing it would put the key and the ciphertext in the same
+place, which is the one arrangement that makes the encryption worth nothing.
+
+**Losing it is unrecoverable, and that is worse than it sounds.** This is not
+`INTEGRATION_KEY`, where a rotation costs every customer a reconnect, and not
+`SESSION_PEPPER`, where a rotation signs everyone out. Lose this and every backup
+written with it is permanently unreadable — the disaster the backups existed to
+prevent, arriving by a different road. It belongs in a password manager, not only
+on the disk that holds the backups, and old keys are kept forever rather than
+replaced: a file from before a rotation still wants the key it was written with.
+
+`--plaintext` exists for the local dev database, which holds generated seed data,
+and is refused against production.
+
+### Reading them back
+
+```bash
+cd api
+npm run backup:list                        # no key needed
+npm run backup:open backups/<file>.sql.enc # writes plaintext — for a real recovery
+```
+
+The header — when it was taken, which database, how much SQL is inside — is
+stored in the clear on purpose, and `backup:list` reads it without the key. A
+directory of files that cannot be told apart without opening each one is a
+directory where a recovery starts by guessing, and the only thing worse than no
+backup is restoring last month's over this morning's. The header carries no
+secret, and it is fed to AES-GCM as additional authenticated data so it cannot be
+edited either.
+
+`backup:open` is for an actual restore, not for testing one — the drill below
+decrypts on its own and cleans up after itself.
+
+**The format.** AES-256-GCM, key derived with scrypt over a per-file salt, tag as
+a trailer over the whole stream (`api/scripts/lib/backup-crypto.mjs`). GCM rather
+than a plain cipher for tamper detection, and for the case that comes up far more
+often: truncation. An export into a full disk, an interrupted copy, a sync client
+that uploaded half a file — every one of those produces a dump that restores
+cleanly *up to the cut*, and the tag turns all of them into a refusal at the
+door. scrypt rather than the single SHA-256 that `secretbox.ts` uses, because
+this runs twice in the life of a file rather than on every request, so slow costs
+nothing, and the secret is one a human may have shortened or typed from memory.
 
 ### The drill
 
@@ -560,8 +621,16 @@ at nothing.
 
 ```bash
 cd api
-npm run verify:restore backups/allstar-db-<utc>.sql
+npm run verify:restore backups/allstar-db-<utc>.sql.enc
 ```
+
+An encrypted backup is decrypted by the drill itself, into the same scratch
+directory it deletes at the end. That is not convenience: the alternative is
+running `backup:open` to test a file and leaving the plaintext sitting next to
+the encrypted copy, which would undo the encryption every single time the drill
+was run. Proving a backup works must not be the thing that exposes it. A file
+that fails to authenticate is reported as a failed drill, because that is what it
+is — wrong key, damaged, or altered, and the file cannot say which.
 
 It restores into a scratch database in a temp directory with its own name and its
 own state — it cannot reach the database the backup came from, because a restore
@@ -595,6 +664,30 @@ Proved by feeding it bad backups: a dump truncated mid-write, an auth error save
 with a `.sql` extension, a dump missing its users, one missing its ledger, and one
 with an orphaned foreign key. Each fails, and each fails in a way that says what
 is wrong.
+
+### The encryption has its own gate
+
+```bash
+npm run verify:backups     # from the repo root
+```
+
+The round trip is the half that does not matter — if encrypt-then-decrypt were
+broken it would be obvious the first time anyone tried it. Every failure that
+costs something is a refusal that did not happen, and each of those passes a
+round-trip test happily. So `api/scripts/verify-backup-crypto.mjs` asserts the
+refusals: the wrong key, a single flipped byte, a truncated file, a missing tag,
+an edited header, edited scrypt parameters, a key short enough to guess, a
+production export with no key configured, `--plaintext` aimed at production, and
+a failed export leaving staged plaintext behind. Each one also asserts that
+nothing was written, because a decrypt that throws *after* writing a partial file
+gives a dump that restores cleanly up to the cut.
+
+Confirmed by breaking the code seven ways and watching it fail each time. Two of
+those first passed anyway, and both are the same lesson: "it exited non-zero" is
+not evidence of a refusal when the test environment makes everything exit
+non-zero, and `indexOf('loadBackupKey')` matches the import statement at the top
+of the file, so the check that the key is consulted *before* the export could not
+fail. Both now assert the reason rather than the symptom.
 
 ### What is still missing
 
@@ -1584,8 +1677,9 @@ down here rather than left in a chat log.
 **[`LAUNCH.md`](LAUNCH.md) is the checklist.** This section holds the reasoning —
 what was measured, what was tried, why each compromise was taken. `LAUNCH.md`
 holds the severity and the owner, and adds the items that were never written down
-anywhere: the legal review that has no list, unencrypted backups, and the
-question of whether GHL sync is part of what customer one is buying. Read that
+anywhere: the legal review that has no list, the backup key that has to be
+generated before there is a production backup at all, and the question of whether
+GHL sync is part of what customer one is buying. Read that
 one to decide what to do next; read this one to understand why.
 
 ### The MapTiler key allows unknown origins

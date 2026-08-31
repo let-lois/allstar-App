@@ -18,6 +18,14 @@ viewport-audit
 api/backups
 backups
 
+# The key those exports are encrypted with. Committing it would put the key and
+# the ciphertext in the same place, which is the one arrangement that makes the
+# encryption worth nothing. It also must never be LOST: every backup written
+# with it becomes unreadable, so it belongs in a password manager and not only
+# on this disk.
+api/.backup-key
+.backup-key
+
 # Worker local state and the generated seed.
 # seed.sql is produced by scripts/make-seed.mjs and contains password hashes —
 # it is regenerated per environment with that environment's pepper, and must

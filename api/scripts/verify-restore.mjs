@@ -4,6 +4,14 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
+import {
+  decryptFile,
+  isEncryptedBackup,
+  keySetupHelp,
+  loadBackupKey,
+  NoBackupKey,
+  readBackupHeader,
+} from './lib/backup-crypto.mjs'
 
 /**
  * Restore a backup and prove it came back whole.
@@ -20,6 +28,14 @@ import { fileURLToPath } from 'node:url'
  * disaster waiting behind the first.
  *
  *   node scripts/verify-restore.mjs backups/allstar-db-....sql
+ *   node scripts/verify-restore.mjs backups/allstar-db-....sql.enc
+ *
+ * An encrypted backup is decrypted here rather than by hand first, and into the
+ * same scratch directory that gets deleted at the end. That is not convenience:
+ * the alternative is an operator running `backup-open` to test a file and
+ * leaving the plaintext next to the encrypted copy, which undoes the encryption
+ * every time the drill is run. Proving a backup works must not be the thing that
+ * exposes it.
  *
  * What it asserts, in the order the failures actually happen:
  *
@@ -47,7 +63,72 @@ if (!dump) {
   process.exit(2)
 }
 
-const sql = readFileSync(resolve(dump), 'utf8')
+/*
+  Created before the file is read, because an encrypted backup is decrypted into
+  it. Everything below then works on plaintext regardless of which kind of file
+  was handed in, and the plaintext lives only inside a directory this script
+  removes — on the success path, on every failure path, and on a crash.
+*/
+const scratch = mkdtempSync(join(tmpdir(), 'allstar-restore-'))
+process.on('exit', () => rmSync(scratch, { recursive: true, force: true }))
+
+let dumpPath = resolve(dump)
+
+if (isEncryptedBackup(dumpPath)) {
+  let key
+  try {
+    key = loadBackupKey()
+  } catch (err) {
+    if (err instanceof NoBackupKey) {
+      console.error(`\n${err.message}`)
+      process.exit(2)
+    }
+    throw err
+  }
+  if (!key) {
+    console.error(
+      `\nThat backup is encrypted and no key is configured, so the drill cannot read\n` +
+        `it.\n\n${keySetupHelp()}\n`,
+    )
+    process.exit(2)
+  }
+
+  const { header } = readBackupHeader(dumpPath)
+  console.log(
+    `Encrypted backup, taken ${header.created} (${header.source ?? 'unknown source'}).\n` +
+      `Decrypting with the key from ${key.where} into a scratch directory.\n`,
+  )
+  const plain = join(scratch, 'decrypted.sql')
+  try {
+    await decryptFile({ path: dumpPath, outPath: plain, secret: key.secret })
+  } catch (err) {
+    /*
+      A refusal here is a result, not an error in the drill: the file did not
+      authenticate, which means it is the wrong key, damaged, or altered. Reported
+      as a failed drill so a scheduled run treats it the way it treats a
+      truncated dump — as a backup that cannot be relied on.
+    */
+    console.log(`FAIL  the backup decrypts and authenticates`)
+    console.log(`\n${err.message}`)
+    console.log(`\nThis backup is not one you can rely on. Find out why before trusting the next.`)
+    process.exit(1)
+  }
+  ok(true, 'the backup decrypts and authenticates', 'AES-256-GCM tag verified')
+  dumpPath = plain
+} else {
+  /*
+    Not a failure — the local dev database is exported in the clear on purpose —
+    but worth one line, because a plaintext dump of *production* in a directory
+    somebody syncs is the exposure this is all built around, and it would
+    otherwise pass this drill silently.
+  */
+  console.log(
+    `NOTE  this backup is not encrypted. Fine for the local dev database; if it came\n` +
+      `      from production, that file is readable by anyone who gets a copy.\n`,
+  )
+}
+
+const sql = readFileSync(dumpPath, 'utf8')
 
 /* --- is it a database at all? ---------------------------------------------- */
 //
@@ -69,7 +150,6 @@ ok(tail === ';', 'the last statement is terminated, so the write completed', `en
 
 /* --- restore it, somewhere harmless ---------------------------------------- */
 
-const scratch = mkdtempSync(join(tmpdir(), 'allstar-restore-'))
 const RESTORED = 'allstar-restore-drill'
 const cfg = join(scratch, 'wrangler.toml')
 
@@ -142,7 +222,7 @@ function findSqlite(root) {
 
 let restored = false
 try {
-  d1(['--file', resolve(dump)])
+  d1(['--file', dumpPath])
   restored = true
 } catch (err) {
   const detail = (err.stderr || err.stdout || String(err)).toString().split('\n').slice(-6).join('\n')

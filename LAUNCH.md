@@ -42,16 +42,33 @@ Full reasoning: README → *Google's terms and the offline map are in direct
 conflict*. The constraint is also recorded next to the code it governs, in
 `api/src/geocode-google.ts` and `api/wrangler.toml`.
 
-### 2. Backups are unencrypted
-**Owner: me (code) + Curtis (where the key lives) · Severity: blocker**
+### 2. Backups are encrypted — one command left, and it is yours
+**Owner: Curtis (generate the key) · Severity: blocker until the key exists**
 
-`npm run backup` produces plain SQL holding every customer's addresses, contact
-names and phone numbers, plus password hashes. `backups/` is git-ignored, so it
-stays off GitHub — but the file is unencrypted the moment it is copied anywhere,
-which is the entire point of having it.
+The code is done. `npm run backup` now writes AES-256-GCM
+(`api/backups/*.sql.enc`), the restore drill decrypts on its own, and
+`npm run verify:backups` holds it up. **It refuses to export production until a
+key exists** rather than writing the plaintext — so right now there is no
+production backup at all, which is why this is still a blocker.
 
-The README already says the file "wants encrypting before it goes anywhere." That
-sentence has been true and unactioned for a while.
+Your part, once:
+
+```bash
+openssl rand -base64 32
+```
+
+Then either export it as `BACKUP_KEY` in the shell you run backups from, or save
+it to `api/.backup-key` (git-ignored). Do not paste it into chat.
+
+**Two things about that key.** It must go somewhere that is not the same disk as
+the backups — a password manager. And it must never be lost: unlike
+`INTEGRATION_KEY`, where a rotation costs every customer a reconnect, losing this
+makes every backup written with it permanently unreadable. Keep old keys forever
+rather than replacing them; a file from before a rotation still wants the key it
+was written with.
+
+Until it exists, the recovery window is Cloudflare Time Travel's thirty days —
+which is the same position as item 3 below, for the same reason.
 
 ### 3. Nothing runs a backup on a schedule
 **Owner: Curtis · Severity: blocker · Tracked as #39**
@@ -321,6 +338,10 @@ collected to make it work.
 5. **Say whether GHL is in scope for customer one** (item 9), which decides
    whether it is a blocker or a roadmap item.
 
+Add to that list, now that the code is done: **generate the backup key** (item
+2). One `openssl` command, and until it happens there is no production backup at
+all.
+
 Everything on that list is yours. While it moves, the code I can pick up without
-input is backup encryption (item 2), moving geocoding into the browser (item 4),
-and the `ALLOWED_ORIGINS` fix (item 14).
+input is moving geocoding into the browser (item 4) and the `ALLOWED_ORIGINS` fix
+(item 14).

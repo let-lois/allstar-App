@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Allstar field sales API — Cloudflare Workers + D1 + R2",
+  "description": "Allstar field sales API \u2014 Cloudflare Workers + D1 + R2",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -23,6 +23,8 @@
     "verify:geocode:fallback": "node scripts/verify-geocode-fallback.mjs",
     "smoke:photos": "node scripts/smoke-photos.mjs",
     "backup": "node scripts/backup.mjs",
+    "backup:open": "node scripts/backup-open.mjs",
+    "backup:list": "node scripts/backup-open.mjs --list",
     "verify:restore": "node scripts/verify-restore.mjs",
     "smoke:integrations": "node scripts/smoke-integrations.mjs",
     "smoke:money": "node scripts/smoke-closed-value.mjs",
