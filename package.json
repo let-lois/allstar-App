@@ -26,6 +26,7 @@
     "verify:boot": "node scripts/verify-boot.mjs",
     "verify:geocoders": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-geocoders.mjs",
     "verify:csv": "node scripts/verify-csv.mjs",
+    "verify:merge": "node scripts/verify-crm-merge.mjs",
     "verify:import": "node scripts/verify-import-ui.mjs",
     "verify:route": "node scripts/verify-route.mjs",
     "verify:maptiles": "node scripts/verify-map-tiles.mjs",

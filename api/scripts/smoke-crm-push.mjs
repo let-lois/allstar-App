@@ -91,6 +91,8 @@ const ghl = createServer((req, res) => {
     if (mockMode === 'bad-token') return send(401, { message: 'Invalid token' })
 
     if (req.url === '/contacts/upsert') return send(200, { contact: { id: 'ghl_contact_9001' } })
+    if (req.url === '/calendars/events/appointments')
+      return send(200, { event: { id: 'ghl_appt_7001' } })
     send(404, { message: 'no such endpoint' })
   })
 })
@@ -465,7 +467,147 @@ try {
     ok(links.length === 1 && links[0]?.local_id === P1, 'and the link stays with the lead that claimed it first')
   }
 
-  /* ===== 10. a dead credential marks the connection broken ============== */
+  /* ===== 10. appointments: off until a calendar is named ================ */
+  //
+  // The defect this closes. GoHighLevel has no default calendar, so without an
+  // id there is nowhere to book — and every appointment a rep booked used to
+  // queue an event the drain could never send. It failed permanently, and the
+  // Integrations screen reads the failed count and shows it in red, so the
+  // number climbed forever with no action available that would clear it.
+  //
+  // Not queueing is the honest answer to "we were not asked to do this".
+  {
+    await query(`DELETE FROM integration_outbox WHERE client_id = '${q(clientId)}'`)
+    const appt = `a_${stamp}_1`
+    await call('/api/mutations', {
+      method: 'POST',
+      body: JSON.stringify({
+        mutations: [{
+          id: `m_${stamp}_appt1`, kind: 'appointment.create', createdAt: Date.now(),
+          payload: { id: appt, propertyId: P1, startsAt: Date.now() + 86_400_000, title: 'Roof estimate' },
+        }],
+      }),
+    }, session)
+    const rows = await query(
+      `SELECT COUNT(*) AS n FROM integration_outbox WHERE client_id = '${q(clientId)}'`,
+    )
+    ok(Number(rows[0]?.n) === 0, 'with no calendar configured, an appointment queues nothing at all', `${rows[0]?.n} rows`)
+  }
+
+  /* ===== 11. a calendar can be set, and then it books =================== */
+  {
+    const bad = await call('/api/integrations/ghl/calendar', {
+      method: 'PUT', body: JSON.stringify({ calendarId: 'https://app.gohighlevel.com/calendars/abc' }),
+    }, session)
+    ok(bad.status === 400, 'a pasted URL is refused rather than stored', `${bad.status}`)
+
+    const res = await call('/api/integrations/ghl/calendar', {
+      method: 'PUT', body: JSON.stringify({ calendarId: 'cal_summit_main' }),
+    }, session)
+    ok(res.ok, `the calendar id saves (${res.status})`)
+    const cfg = await query(`SELECT config FROM client_integrations WHERE client_id = '${q(clientId)}'`)
+    ok(/cal_summit_main/.test(cfg[0]?.config ?? ''), 'and lands in config', cfg[0]?.config)
+
+    // The lead has to be in GoHighLevel first, so push it before booking.
+    await requeue(P1, 'appointment')
+    await call('/api/integrations/ghl/drain', { method: 'POST' }, session)
+
+    seen.length = 0
+    const appt = `a_${stamp}_2`
+    await call('/api/mutations', {
+      method: 'POST',
+      body: JSON.stringify({
+        mutations: [{
+          id: `m_${stamp}_appt2`, kind: 'appointment.create', createdAt: Date.now(),
+          payload: { id: appt, propertyId: P1, startsAt: Date.now() + 86_400_000, durationMin: 45, title: 'Roof estimate' },
+        }],
+      }),
+    }, session)
+    const queued = await query(
+      `SELECT event FROM integration_outbox
+        WHERE client_id = '${q(clientId)}' AND status = 'pending' AND event = 'appointment.create'`,
+    )
+    ok(queued.length === 1, 'with a calendar set, the appointment does queue', `${queued.length}`)
+
+    await call('/api/integrations/ghl/drain', { method: 'POST' }, session)
+    const booked = seen.find((x) => x.url === '/calendars/events/appointments')
+    ok(!!booked, 'and is booked into GoHighLevel')
+    ok(booked?.body?.calendarId === 'cal_summit_main', 'into the calendar that was named', booked?.body?.calendarId)
+    ok(booked?.body?.contactId === 'ghl_contact_9001', 'against the linked contact, not our own id')
+  }
+
+  /* ===== 12. an appointment ahead of its lead waits, not fails ========== */
+  //
+  // A rep booking at the door queues the contact upsert AND the appointment in
+  // one batch, and the drain takes them in next_attempt_at order — so roughly
+  // half the time the appointment is reached first and the contact is not linked
+  // yet. That used to fail permanently: an appointment silently missing from the
+  // customer's calendar, for a condition one tick of waiting resolves.
+  {
+    const P4 = `p_push_${stamp}_d`
+    await query(
+      `INSERT INTO properties (id, client_id, address1, city, state, zip, lat, lng, status, score, updated_at)
+       VALUES ('${P4}','${q(clientId)}','77 Willowfen Ct','Round Rock','TX','78664',30.5,-97.6,'new',50,${Date.now()})`,
+    )
+    await query(
+      `INSERT INTO contacts (id, property_id, name, phone, is_primary)
+       VALUES ('c_${stamp}_d','${P4}','Oleander Bexley','512-555-0199',1)`,
+    )
+    await query(`DELETE FROM integration_outbox WHERE client_id = '${q(clientId)}'`)
+    seen.length = 0
+
+    // Only the appointment — the lead has never been pushed, so nothing is linked.
+    const appt = `a_${stamp}_3`
+    await call('/api/mutations', {
+      method: 'POST',
+      body: JSON.stringify({
+        mutations: [{
+          id: `m_${stamp}_appt3`, kind: 'appointment.create', createdAt: Date.now(),
+          payload: { id: appt, propertyId: P4, startsAt: Date.now() + 86_400_000, title: 'Roof estimate' },
+        }],
+      }),
+    }, session)
+    await call('/api/integrations/ghl/drain', { method: 'POST' }, session)
+
+    ok(
+      seen.filter((x) => x.url === '/calendars/events/appointments').length === 0,
+      'nothing is booked for a lead GoHighLevel has never seen',
+    )
+    const rows = await query(
+      `SELECT status, attempts, last_error FROM integration_outbox
+        WHERE client_id = '${q(clientId)}' AND event = 'appointment.create'`,
+    )
+    ok(rows[0]?.status === 'pending', 'the appointment waits rather than failing permanently', rows[0]?.status)
+    ok(Number(rows[0]?.attempts) >= 1, 'with the attempt counted', `attempts=${rows[0]?.attempts}`)
+    ok(/waiting for the lead/i.test(rows[0]?.last_error ?? ''), 'and says what it is waiting for', rows[0]?.last_error)
+  }
+
+  /* ===== 13. clearing the calendar turns appointments off ============== */
+  {
+    const res = await call('/api/integrations/ghl/calendar', {
+      method: 'PUT', body: JSON.stringify({ calendarId: '' }),
+    }, session)
+    ok(res.ok, `the calendar can be cleared (${res.status})`)
+    const cfg = await query(`SELECT config FROM client_integrations WHERE client_id = '${q(clientId)}'`)
+    ok(!/calendarId/.test(cfg[0]?.config ?? ''), 'and the setting is gone, not blanked', cfg[0]?.config)
+
+    await query(`DELETE FROM integration_outbox WHERE client_id = '${q(clientId)}'`)
+    await call('/api/mutations', {
+      method: 'POST',
+      body: JSON.stringify({
+        mutations: [{
+          id: `m_${stamp}_appt4`, kind: 'appointment.create', createdAt: Date.now(),
+          payload: { id: `a_${stamp}_4`, propertyId: P1, startsAt: Date.now() + 86_400_000, title: 'Roof estimate' },
+        }],
+      }),
+    }, session)
+    const rows = await query(
+      `SELECT COUNT(*) AS n FROM integration_outbox WHERE client_id = '${q(clientId)}'`,
+    )
+    ok(Number(rows[0]?.n) === 0, 'after clearing, appointments stop queueing again', `${rows[0]?.n} rows`)
+  }
+
+  /* ===== 14. a dead credential marks the connection broken ============== */
   {
     mockMode = 'bad-token'
     await requeue(P1, 'quote_requested')

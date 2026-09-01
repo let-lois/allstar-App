@@ -4,6 +4,7 @@ import {
   backoffMs,
   linkIds,
   localIdFor,
+  readGhlConfig,
   noteFailure,
   noteSuccess,
   remoteIdFor,
@@ -40,6 +41,26 @@ interface Unsendable {
   reason: string
 }
 
+/**
+ * Not sendable *yet* — try again later.
+ *
+ * The distinction from `unsendable` is the whole point of having three outcomes
+ * rather than two. An appointment cannot be booked until the lead it belongs to
+ * exists in GoHighLevel, and a rep booking at the door queues both in the same
+ * batch: the contact upsert and the appointment. The drain takes them in
+ * `next_attempt_at` order, so roughly half the time the appointment is reached
+ * first and the contact is not linked yet.
+ *
+ * Treated as `unsendable`, that failed permanently — an appointment silently
+ * absent from the customer's calendar, for a condition that one tick of waiting
+ * resolves. It retries instead, and the ordinary retry cap still stops it if the
+ * contact genuinely never arrives.
+ */
+interface Deferred {
+  kind: 'defer'
+  reason: string
+}
+
 interface Sendable {
   kind: 'send'
   method: string
@@ -49,7 +70,7 @@ interface Sendable {
   linkAs?: { kind: 'contact' | 'appointment'; localId: string }
 }
 
-type Plan = Sendable | Unsendable
+type Plan = Sendable | Unsendable | Deferred
 
 interface PropertyRow {
   id: string
@@ -168,23 +189,13 @@ async function plan(
     const propertyId = typeof payload.propertyId === 'string' ? payload.propertyId : ''
     if (!appointmentId) return { kind: 'unsendable', reason: 'no appointment id on the queued event' }
 
-    const cfg = await env.DB.prepare(
-      `SELECT config FROM client_integrations WHERE client_id = ?1 AND provider = 'ghl'`,
-    )
-      .bind(clientId)
-      .first<{ config: string }>()
-    let calendarId = ''
-    try {
-      calendarId = (JSON.parse(cfg?.config ?? '{}') as { calendarId?: string }).calendarId ?? ''
-    } catch {
-      calendarId = ''
-    }
+    const { calendarId } = await readGhlConfig(env, clientId)
 
     /*
-      Not a failure of ours and not something a retry fixes. An appointment needs
-      a calendar to land in, calendars are per-account, and nobody has told us
-      which one. Said plainly so the admin who reads it knows the fix is a
-      setting rather than a bug.
+      Reachable only for a row queued while a calendar *was* configured and then
+      cleared — `queueForCrm` refuses to queue appointments without one, so this
+      is no longer the ordinary case it used to be. Still a permanent failure:
+      nothing about waiting supplies a calendar nobody has named.
     */
     if (!calendarId) {
       return {
@@ -198,8 +209,8 @@ async function plan(
       : null
     if (!contactRemoteId) {
       return {
-        kind: 'unsendable',
-        reason: 'the lead has not reached GoHighLevel yet, so there is nobody to book',
+        kind: 'defer',
+        reason: 'waiting for the lead itself to reach GoHighLevel first',
       }
     }
 
@@ -371,6 +382,12 @@ export async function drainOutbox(
       if (step.kind === 'unsendable') {
         // Never retried: nothing about waiting makes it sendable.
         await fail(row.id, step.reason)
+        continue
+      }
+      if (step.kind === 'defer') {
+        // Waiting genuinely fixes this one, and the retry cap still applies, so
+        // a lead that never arrives does not queue forever.
+        await retry(row.id, row.attempts, step.reason)
         continue
       }
 

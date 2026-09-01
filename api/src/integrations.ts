@@ -487,6 +487,96 @@ export async function noteSuccess(
     .run()
 }
 
+/* --- the bits of `config` that change behaviour --------------------------- */
+
+/**
+ * A company's GoHighLevel settings, parsed.
+ *
+ * `config` is a JSON blob so a new setting costs no migration. The cost of that
+ * is that nothing validates its shape, so it is read through here rather than
+ * parsed at each call site — there were two of those and they had already
+ * drifted into slightly different error handling.
+ */
+export interface GhlConfig {
+  /** Which calendar an appointment is booked into. Absent means do not sync them. */
+  calendarId?: string
+}
+
+export async function readGhlConfig(
+  env: Env,
+  clientId: string,
+  provider: Provider = 'ghl',
+): Promise<GhlConfig> {
+  const row = await env.DB.prepare(
+    `SELECT config FROM client_integrations WHERE client_id = ?1 AND provider = ?2`,
+  )
+    .bind(clientId, provider)
+    .first<{ config: string }>()
+  try {
+    const parsed = JSON.parse(row?.config ?? '{}') as GhlConfig
+    const calendarId = typeof parsed.calendarId === 'string' ? parsed.calendarId.trim() : ''
+    return calendarId ? { calendarId } : {}
+  } catch {
+    // A blob we cannot read is treated as no settings at all, which fails
+    // closed: appointments stop syncing rather than being sent somewhere odd.
+    return {}
+  }
+}
+
+/**
+ * Set — or clear — the calendar appointments are booked into.
+ *
+ * Merged into `config` rather than replacing it, because that column is shared
+ * with any future mapping and clobbering it to write one key is the kind of bug
+ * that only shows up once a second setting exists.
+ *
+ * An empty value clears it, and clearing is a real choice rather than an error:
+ * a company that does not want its appointments in GoHighLevel turns them off
+ * this way, and `queueForCrm` then stops queueing them at all.
+ */
+export async function setGhlCalendar(
+  env: Env,
+  clientId: string,
+  calendarId: string,
+  provider: Provider = 'ghl',
+): Promise<{ ok: boolean; error?: string; status: number; calendarId?: string }> {
+  const wanted = calendarId.trim()
+  // Their ids are opaque, so this only rejects what obviously cannot be one —
+  // enough to catch a pasted URL or a whole JSON blob, not enough to pretend we
+  // know their format.
+  if (wanted && !/^[A-Za-z0-9_-]{6,64}$/.test(wanted)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "That does not look like a calendar ID. Copy just the ID, not the whole URL.",
+    }
+  }
+
+  const row = await env.DB.prepare(
+    `SELECT config FROM client_integrations WHERE client_id = ?1 AND provider = ?2`,
+  )
+    .bind(clientId, provider)
+    .first<{ config: string }>()
+  if (!row) return { ok: false, status: 404, error: 'No CRM is connected.', }
+
+  let current: Record<string, unknown> = {}
+  try {
+    current = JSON.parse(row.config ?? '{}') as Record<string, unknown>
+  } catch {
+    current = {}
+  }
+  if (wanted) current.calendarId = wanted
+  else delete current.calendarId
+
+  await env.DB.prepare(
+    `UPDATE client_integrations SET config = ?3 WHERE client_id = ?1 AND provider = ?2`,
+  )
+    .bind(clientId, provider, JSON.stringify(current))
+    .run()
+
+  return { ok: true, status: 200, calendarId: wanted || undefined }
+}
+
 /* --- what the app pushes, and the promise it makes to the rep ------------- */
 
 /**
@@ -525,6 +615,25 @@ export async function queueForCrm(
   dedupeKey?: string,
 ): Promise<void> {
   try {
+    /*
+      An appointment needs a calendar to land in, and nobody has to give us one.
+
+      Without this, every appointment a rep booked queued an event the drain
+      could never send — GoHighLevel has no default calendar to fall back on —
+      and it failed permanently with "no calendar is configured". The Integrations
+      screen reads the failed count and shows it in red, so a customer who simply
+      does not want their appointments synced watched that number climb forever
+      with no action available that would clear it.
+
+      Not queueing is the honest answer to "we were not asked to do this". The
+      screen says appointments are off, which is true and fixable, rather than
+      showing failures for work nobody wanted.
+    */
+    if (event === 'appointment.create') {
+      const { calendarId } = await readGhlConfig(env, clientId)
+      if (!calendarId) return
+    }
+
     await enqueue(env, clientId, { event, payload, dedupeKey })
   } catch (err) {
     /*

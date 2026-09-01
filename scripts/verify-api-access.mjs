@@ -70,6 +70,7 @@ const ROUTES = {
   "/api/integrations/ghl|POST": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/integrations/ghl|DELETE": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/integrations/ghl/drain|POST": { how: 'inline', guard: 'canManageIntegrations' },
+  "/api/integrations/ghl/calendar|PUT": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/geocoders|GET": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/geocoders/key|POST": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/geocoders/key|DELETE": { how: 'inline', guard: 'canManageIntegrations' },
