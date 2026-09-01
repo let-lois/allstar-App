@@ -304,6 +304,18 @@ the row fails permanently with their own words recorded against the customer's
 integration, and nothing is written incorrectly on their side. **Step 5 of #37 is
 what settles it**, and it is now the cheapest way to settle it.
 
+**Pull is built (#35).** `POST /api/webhooks/ghl/<secret>` receives contacts,
+creates leads, and fills blanks under the rule below. The URL is the credential —
+a 64-character secret per company, rotatable from the Integrations screen — and
+that secret, never the payload, decides whose data a webhook touches. Inbound
+leads are geocoded with the free Census geocoder only, never a paid key, because a
+webhook has nobody to show a spend estimate to; the cost is block-level precision
+rather than rooftop. Proved by `npm run smoke:crm-inbound`.
+
+Still not built and undecided: **no backfill in either direction.** Sync starts at
+the moment of connection, and leads already sitting in either system do not flow
+across. Worth telling the customer at the same time as the conflict rule.
+
 **The conflict rule for #35 is decided (Curtis): Allstar wins, absolutely.**
 
 Not split by field. On any lead the two systems both know about, **Allstar's copy
