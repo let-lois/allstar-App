@@ -6,6 +6,7 @@ import {
   apiConnectGhl,
   apiDisconnectGhl,
   apiIntegrations,
+  apiSetGhlCalendar,
   type IntegrationDTO,
   type IntegrationQueueDTO,
 } from '../lib/http'
@@ -47,6 +48,8 @@ export function IntegrationsPanel() {
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [calendarId, setCalendarId] = useState('')
+  const [savingCalendar, setSavingCalendar] = useState(false)
 
   async function load() {
     const t = liveToken()
@@ -58,6 +61,10 @@ export function IntegrationsPanel() {
       const res = await apiIntegrations(t)
       setIntegration(res.integration)
       setQueue(res.queue)
+      // Pre-filled, unlike the token: this is a setting rather than a secret, and
+      // an admin changing it needs to see what it is now.
+      const cfg = res.integration?.config as { calendarId?: string } | undefined
+      setCalendarId(typeof cfg?.calendarId === 'string' ? cfg.calendarId : '')
     } catch {
       // A failure to read the status is not worth an alarm on this screen —
       // the connect form still works, and the next load will say.
@@ -190,6 +197,67 @@ export function IntegrationsPanel() {
           </p>
         )}
       </section>
+
+      {/*
+        Appointments are opt-in, and the absence of a calendar is a real setting
+        rather than an incomplete one.
+
+        GoHighLevel has no default calendar to fall back on, so without an id
+        there is nowhere to book. The app therefore does not queue appointments
+        at all when this is empty — which is why the copy says they are off
+        rather than implying something is broken. Before this field existed every
+        appointment queued an event that could never send, and the failed count
+        above climbed forever with nothing an admin could do about it.
+      */}
+      {connected && (
+        <section className="card p-5">
+          <h2 className="text-sm font-bold">Appointments</h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-ink-mute">
+            {calendarId
+              ? 'Appointments your reps book are added to this GoHighLevel calendar.'
+              : 'Appointments are not being sent to GoHighLevel. Add a calendar ID to turn that on.'}
+          </p>
+          <form
+            className="mt-4"
+            onSubmit={async (e) => {
+              e.preventDefault()
+              const t = liveToken()
+              if (!t) return
+              setSavingCalendar(true)
+              setError(null)
+              setNotice(null)
+              try {
+                const res = await apiSetGhlCalendar(t, calendarId.trim())
+                setNotice(
+                  res.calendarId
+                    ? 'Saved. Appointments your reps book will be added to that calendar.'
+                    : 'Cleared. Appointments will not be sent to GoHighLevel.',
+                )
+                await load()
+              } catch (err) {
+                setError(err instanceof ApiError ? err.message : 'Could not save the calendar.')
+              } finally {
+                setSavingCalendar(false)
+              }
+            }}
+          >
+            <Field
+              label="Calendar ID"
+              autoComplete="off"
+              spellCheck={false}
+              value={calendarId}
+              onChange={(e) => setCalendarId(e.target.value)}
+              placeholder="Not set — appointments stay in Allstar"
+              hint="In GoHighLevel: Calendars, then the one you want. Copy just the ID. Leave it empty to stop sending appointments."
+            />
+            <div className="mt-3 flex justify-end">
+              <Button type="submit" disabled={savingCalendar}>
+                {savingCalendar ? 'Saving…' : 'Save calendar'}
+              </Button>
+            </div>
+          </form>
+        </section>
+      )}
 
       {/*
         Shown whether or not something is already connected: rotating a token is

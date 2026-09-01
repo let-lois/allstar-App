@@ -575,6 +575,21 @@ export function apiConnectGhl(token: string, input: { token: string; locationId:
   )
 }
 
+/**
+ * Which calendar appointments are booked into — or clear it to stop syncing them.
+ *
+ * Separate from connecting because it is a setting rather than a credential, and
+ * a company may reasonably never set one. With no calendar the app does not
+ * queue appointments at all, rather than queueing work it cannot send.
+ */
+export function apiSetGhlCalendar(token: string, calendarId: string) {
+  return request<{ calendarId: string | null }>('/api/integrations/ghl/calendar', {
+    method: 'PUT',
+    token,
+    body: { calendarId },
+  })
+}
+
 export function apiDisconnectGhl(token: string) {
   return request<{ ok: true; dropped: number }>('/api/integrations/ghl', {
     method: 'DELETE',

@@ -1751,6 +1751,32 @@ side. **The first send against a real account is what turns this from probable
 into known** — that is step 5 of connecting the live account, and it is the
 reason that step exists.
 
+#### Appointments are opt-in
+
+GoHighLevel has no default calendar, so without a calendar id there is nowhere to
+book an appointment. The first version of push queued one for every appointment
+anyway, and the drain then failed each of them permanently — while the
+Integrations screen, which reads the failed count and shows it in red, climbed
+forever with nothing an admin could do about it. A customer who never wanted
+appointment sync got a permanently broken-looking screen for a feature they had
+not asked for.
+
+So the calendar is a setting (`PUT /api/integrations/ghl/calendar`, and a field on
+the Integrations screen), and **with no calendar set the app does not queue
+appointments at all.** Silence is the honest answer to "we were not asked to do
+this"; a red counter is not. Clearing the field is how a company turns appointment
+sync off, and it removes the key rather than blanking it.
+
+The subtler half: an appointment cannot be booked until the lead it belongs to
+exists in GoHighLevel, and a rep booking at the door queues both in the same
+batch — the contact upsert and the appointment. The drain takes them in
+`next_attempt_at` order, so roughly half the time the appointment is reached
+first and the contact is not linked yet. That used to be a permanent failure: an
+appointment silently missing from the customer's calendar, for a condition that
+one tick of waiting resolves. The plan a queued event resolves to now has three
+outcomes rather than two — send, never, and **not yet** — and the ordinary retry
+cap still stops a lead that genuinely never arrives.
+
 #### The rule for when both sides disagree
 
 Decided ahead of the pull side being built, because it shapes what pull can do:

@@ -60,6 +60,7 @@ import {
   disconnectIntegration,
   queueDepth,
   readIntegration,
+  setGhlCalendar,
 } from './integrations'
 import { checkLoginRate, clearFailures, recordFailure } from './ratelimit'
 import { directions } from './directions'
@@ -688,6 +689,26 @@ export default {
         run — an admin holding the button down cannot turn this into an
         unbounded loop against the customer's API quota.
       */
+      /*
+        Which calendar appointments are booked into.
+
+        Separate from connecting, because it is a setting rather than a
+        credential and a company may reasonably never set it — with no calendar,
+        appointments are not queued at all rather than queued and failed. An
+        empty value clears it, which is how appointment sync gets turned off.
+      */
+      if (path === '/api/integrations/ghl/calendar' && req.method === 'PUT') {
+        if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await setGhlCalendar(
+          env,
+          user.clientId,
+          typeof body.calendarId === 'string' ? body.calendarId : '',
+        )
+        if (!result.ok) return json({ error: result.error }, result.status, cors)
+        return json({ calendarId: result.calendarId ?? null }, 200, cors)
+      }
+
       if (path === '/api/integrations/ghl/drain' && req.method === 'POST') {
         if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
         const report = await drainOutbox(env, { clientId: user.clientId })

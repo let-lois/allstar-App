@@ -338,6 +338,23 @@ all** — GoHighLevel matches an upsert on one of those — so an address-only r
 which door-to-door lists are full of, is unsendable until something arrives. A
 phone number coming the other way is what makes it sendable.
 
+**Appointments are opt-in, and were briefly broken.** GoHighLevel has no default
+calendar, so without an id there is nowhere to book. Push shipped queueing an
+`appointment.create` for every appointment regardless — which then failed
+permanently with "no calendar is configured", and the Integrations screen reads
+the failed count and shows it in red. A customer who simply did not want their
+appointments synced would have watched that number climb forever with no action
+available that would clear it.
+
+Fixed three ways, tracked as #55: a **Calendar ID** field on the Integrations
+screen; no queueing at all when it is empty, because silence is the honest answer
+to "we were not asked to do this"; and a third drain outcome so an appointment
+queued ahead of its own lead **waits** instead of failing. That last one was the
+subtler half — a rep booking at the door queues the contact upsert and the
+appointment together, and the drain takes them in order, so roughly half the time
+the appointment was reached first and died for a condition one tick of waiting
+resolves.
+
 ### 11a. Tell the customer how sync conflicts resolve
 **Owner: Curtis · Severity: high, once GHL sync is live · Tracked as #54**
 
@@ -400,26 +417,7 @@ It becomes reachable the moment anyone adds a redirect parameter, a deep link
 from an email, or navigation to a stored URL. That is the trigger to revisit, and
 it is the sort of thing that arrives quietly.
 
-### 13. `npm audit` — 11 findings, all development-only
-**Owner: me · Severity: medium**
-
-5 in the app, 6 in `api/`. All eleven were read and none are reachable in
-production: `vite`/`esbuild` bite the dev server, `playwright` downloads browsers
-this project never downloads, and the `wrangler` tree is not bundled into the
-deployed Worker. Every available fix is a major upgrade, so nothing has been
-bumped.
-
-**The one habit worth keeping:** do not run `npm run dev` or `wrangler dev` in a
-browser session that is also visiting untrusted sites. That is the whole exposure,
-and it costs nothing to avoid.
-
-### 14. Reporting history has not been rebuilt on production
-**Owner: Curtis · Severity: medium · Tracked as #41**
-
-Historical figures on the live account are still wrong until this runs. Use
-`db:rebuild-stats` — **not** `db:rebuild-closed`.
-
-### 12b. Diagnostic endpoints were open to the internet — fixed
+### 12a. Diagnostic endpoints were open to the internet — fixed
 **Owner: me · Severity: was a blocker · Tracked as #47**
 
 `/api/selftest/geocode` sat in front of authentication, accepted an arbitrary
@@ -441,6 +439,26 @@ another company's user existence does not leak.
 **Nothing to do — listed because it was live.** If that endpoint was ever hit by
 anything other than us, it would show as geocoding spend with no matching
 import. Worth a glance at the Google console for the last week.
+
+### 13. `npm audit` — 11 findings, all development-only
+**Owner: me · Severity: medium**
+
+5 in the app, 6 in `api/`. All eleven were read and none are reachable in
+production: `vite`/`esbuild` bite the dev server, `playwright` downloads browsers
+this project never downloads, and the `wrangler` tree is not bundled into the
+deployed Worker. Every available fix is a major upgrade, so nothing has been
+bumped.
+
+**The one habit worth keeping:** do not run `npm run dev` or `wrangler dev` in a
+browser session that is also visiting untrusted sites. That is the whole exposure,
+and it costs nothing to avoid.
+
+### 14. Reporting history has not been rebuilt on production
+**Owner: Curtis · Severity: medium · Tracked as #41**
+
+Historical figures on the live account are still wrong until this runs. Use
+`db:rebuild-stats` — **not** `db:rebuild-closed`.
+
 
 ### 15. Spend guardrail — the estimate is in, a running total is not
 **Owner: me · Severity: medium · Tracked as #46 (partly done)**
@@ -488,7 +506,7 @@ merge.
 | Item | Owner | Note |
 | --- | --- | --- |
 | iOS "Add to Home Screen" hint (#22) | me | Parked deliberately. |
-| Reports, Import and Settings onto `DataList` | me | The last three screens rendering their own lists. Internal consistency only. |
+| Reports, Import and Settings onto `DataList` | me | **Mostly moot.** Reports is done. Import's preview table and Settings' key/value panels are not really lists, so converting them buys nothing — rewritten here rather than left reading as pending work. |
 | Per-client lead-score point weights | Curtis, then me | Needs a product decision on what the weights should be before it is codeable. |
 
 ---
