@@ -111,6 +111,7 @@ const TESTS = [
   { script: 'smoke:crm-push', kind: 'hosted', port: 8811 },
   { script: 'smoke:crm-inbound', kind: 'hosted', port: 8821 },
   { script: 'smoke:erase', kind: 'hosted', port: 8831 },
+  { script: 'smoke:stale', kind: 'hosted', port: 8834 },
 
   // --- manual -----------------------------------------------------------
   {

@@ -17,6 +17,7 @@ import {
   type RangeKey,
   useUnassigned,
 } from './useAdminData'
+import { SyncConflictsPanel } from './SyncConflictsPanel'
 import { STATUS_LABEL, outcomeByCode } from '../data/outcomes'
 import { money, moneyFull, relative } from '../lib/format'
 
@@ -105,6 +106,13 @@ export function AdminDashboard() {
         assigned to them, so an unassigned lead is work that exists nowhere a
         rep can see it, while every total above counts it as healthy.
       */}
+      {/*
+        Sits beside the unassigned-leads banner and for the same reason: neither
+        is a number, both are a job somebody has to do today. See
+        SyncConflictsPanel.
+      */}
+      <SyncConflictsPanel />
+
       {unassigned.count > 0 && (
         <button
           onClick={() => nav('/admin/leads')}

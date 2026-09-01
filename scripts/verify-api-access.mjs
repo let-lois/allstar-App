@@ -79,6 +79,13 @@ const ROUTES = {
     the function wherever it is called from.
   */
   "/api/leads/erase|DELETE": { how: 'delegate', fn: 'eraseProperty', file: 'erase.ts' },
+  /*
+    Sync collisions. Managers included, unlike erasure — the record exists so
+    that whoever runs the board day to day sees it, and admin-only would mean
+    nobody reads it.
+  */
+  "/api/sync-conflicts|GET": { how: 'inline', guard: 'canReviewConflicts' },
+  "/api/sync-conflicts/review|POST": { how: 'inline', guard: 'canReviewConflicts' },
   "/api/integrations/ghl/calendar|PUT": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/geocoders|GET": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/geocoders/key|POST": { how: 'inline', guard: 'canManageIntegrations' },
