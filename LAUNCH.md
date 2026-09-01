@@ -11,7 +11,9 @@ also in the README is recorded here for the first time.
 **Owner** is who can actually move it — several of these cannot be closed by
 writing code, which is the main thing this document is for.
 
-The code itself is in good shape: 44 verification gates, all passing. Almost
+The code itself is in good shape: **45 browser gates and 17 API tests**, each
+with a runner — `npm run verify:all` and `cd api && npm run smoke:all` — and all
+passing. Almost
 nothing below is a coding problem — and the two blockers added most recently
 (items 8 and 9) were found by writing a document, not by writing code.
 

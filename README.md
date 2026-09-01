@@ -665,6 +665,49 @@ with a `.sql` extension, a dump missing its users, one missing its ledger, and o
 with an orphaned foreign key. Each fails, and each fails in a way that says what
 is wrong.
 
+### Running the API tests
+
+```bash
+cd api && npm run smoke:all          # everything
+cd api && npm run smoke:all -- --fast   # the pure checks only, seconds
+cd api && npm run smoke:all -- crm      # only names containing "crm"
+```
+
+There were seventeen API-side tests and nothing that ran them. The browser suite
+has had `verify:all` for a while; the API side meant typing seventeen names and
+knowing which need a server, which need an administrator to exist first, and
+which cannot run unattended at all. That knowledge lived in one person's head,
+which is the same as it not existing — and it is why the newest and most
+security-sensitive tests here, the CRM push, the CRM webhook and erasure, were
+written, proved, and then left somewhere nobody would run them.
+
+**They are not uniform, and the runner does not pretend they are.** Four kinds,
+because treating them alike is how a runner reports setup problems as failures:
+
+| | |
+|---|---|
+| **pure** | no server. Parsing, arithmetic, structure. Run first, so a broken build costs seconds rather than four minutes of Worker startup |
+| **hosted** | brings its own Worker, port and database. Strictly serial — two at once collide on `.wrangler` state and the second silently tests the first one's data |
+| **shared** | expects a Worker on 8787 *and an administrator to exist*. `smoke:onboarding` creates that administrator, so these are ordered, not merely grouped |
+| **manual** | `verify:restore` needs a backup file. Reported as skipped **with the reason** — a suite that quietly runs sixteen of seventeen lies about its own coverage |
+
+**The failure it is shaped around** is the one the browser runner learned the hard
+way: when that suite's preview server died, 28 gates failed with connection errors
+and the summary read as 28 bugs. It is worse here, because the shared Worker takes
+a minute to come up and everything behind it fails identically. So the server is
+checked before *each* shared test, and if it has gone the run says so and stops
+rather than printing a list of failures that are all one failure. Hosted tests
+free their port first, because a Worker left behind by a crashed run would make
+the next test exercise the previous test's database — and pass.
+
+**The runner checks that it knows about every test.** A script in `package.json`
+that nobody added to its list would never run and nobody would find out, which is
+exactly the failure it was built to end. A missing one, or a listed one that no
+longer exists, stops the run before anything else happens.
+
+It is slow — most of the time is Workers starting — so it is a thing to run before
+a release rather than between edits. `--fast` is for between edits.
+
 ### The encryption has its own gate
 
 ```bash
