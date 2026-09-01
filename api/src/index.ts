@@ -54,6 +54,7 @@ import {
 import { applyMutations } from './mutations'
 import { readSettings, writeSettings, writeTimezone } from './settings'
 import { drainOutbox } from './crm-push'
+import { applyInbound, clientForSecret, webhookSecret } from './crm-inbound'
 import {
   canManageIntegrations,
   connectIntegration,
@@ -518,6 +519,43 @@ export default {
         return json({ ok: true }, 200, cors)
       }
 
+      /*
+        Leads arriving from GoHighLevel.
+
+        Above the session boundary on purpose: GoHighLevel has no Allstar login
+        and never will. The URL itself is the credential — a 64-character secret,
+        per company, rotatable — and that secret is what decides whose data this
+        is. The payload's `locationId` is checked against the one on file but is
+        never used to choose a tenant, because every byte of a webhook body is
+        controlled by whoever sent it.
+
+        Answers 200 for anything it declines to act on. A webhook that returns an
+        error gets retried by the sender, and retrying a payload we have decided
+        to ignore is load on both sides with no outcome either way. Only a bad
+        secret is refused outright, and it is refused without saying why.
+      */
+      {
+        const hook = /^\/api\/webhooks\/ghl\/([a-f0-9]{64})$/.exec(path)
+        if (hook && req.method === 'POST') {
+          const owner = await clientForSecret(env, hook[1])
+          if (!owner) return json({ error: 'Not found.' }, 404, cors)
+          const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+          try {
+            const outcome = await applyInbound(env, owner, body)
+            return json(outcome, 200, cors)
+          } catch (err) {
+            /*
+              A 500 here would have GoHighLevel retry, which is right — this is
+              the one case where losing the lead is worse than repeating the
+              work, and the handler is idempotent: the property id is derived
+              from the address, so a replay updates rather than duplicating.
+            */
+            console.error('inbound webhook failed', String(err))
+            return json({ error: 'Could not apply that update.' }, 500, cors)
+          }
+        }
+      }
+
       /* --- everything below needs a session ------------------------------ */
       const user = await requireUser(req, env)
       if (!user) return json({ error: 'Not signed in.' }, 401, cors)
@@ -725,6 +763,29 @@ export default {
         appointments are not queued at all rather than queued and failed. An
         empty value clears it, which is how appointment sync gets turned off.
       */
+      /*
+        The webhook URL an admin pastes into GoHighLevel.
+
+        A GET would be tidier, but creating the secret on first request is a
+        write, and a GET that writes is the kind of thing a browser prefetch or a
+        link scanner triggers by accident. POST, with `rotate` to replace it —
+        which is also the revocation story, since the URL is the credential.
+      */
+      if (path === '/api/integrations/ghl/webhook' && req.method === 'POST') {
+        if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const secret = await webhookSecret(env, user.clientId, { rotate: body.rotate === true })
+        if (!secret) return json({ error: 'No CRM is connected.' }, 404, cors)
+        /*
+          Absolute, and taken from this request's own origin rather than a
+          configured one. An admin pastes this into GoHighLevel, so a relative
+          path is useless to them — and APP_URL is the *front-end* address, which
+          is a different host from the Worker that has to receive the call.
+        */
+        const origin = new URL(req.url).origin
+        return json({ url: `${origin}/api/webhooks/ghl/${secret}` }, 200, cors)
+      }
+
       if (path === '/api/integrations/ghl/calendar' && req.method === 'PUT') {
         if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
