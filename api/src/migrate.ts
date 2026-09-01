@@ -227,6 +227,38 @@ const MIGRATIONS: Migration[] = [
        )`,
     ],
   },
+  {
+    /*
+      Erasures, kept so they cannot be undone by accident.
+
+      A deleted lead has to stay deleted. `properties.id` is derived from the
+      client and the normalised address, so the same address always resolves to
+      the same id — which means one row here blocks every route back in: a CSV
+      containing that address again, a GoHighLevel webhook for the same contact,
+      a rep adding it at the door. Without that, a deletion made on Monday is
+      undone by Tuesday's import and nobody notices.
+
+      What is kept is deliberately the minimum that makes the block work and the
+      act accountable: the id, who did it, when, and their stated reason. No
+      address, no name, no phone — a table of erased people's details would
+      defeat the erasure.
+    */
+    id: '010-deletions',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS deletions (
+         client_id    TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+         entity       TEXT NOT NULL,
+         entity_id    TEXT NOT NULL,
+         actor_id     TEXT,
+         actor_name   TEXT,
+         reason       TEXT,
+         photos       INTEGER NOT NULL DEFAULT 0,
+         at           INTEGER NOT NULL,
+         PRIMARY KEY (client_id, entity, entity_id)
+       )`,
+      `CREATE INDEX IF NOT EXISTS deletions_by_client ON deletions(client_id, at)`,
+    ],
+  },
 ]
 
 async function hasColumn(

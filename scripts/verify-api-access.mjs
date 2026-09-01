@@ -72,6 +72,13 @@ const ROUTES = {
   "/api/integrations/ghl/drain|POST": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/integrations/ghl/calendar|PUT": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/integrations/ghl/webhook|POST": { how: 'inline', guard: 'canManageIntegrations' },
+  /*
+    Erasure. The one destructive action in the product with no undo, and the
+    permission is deliberately narrower than importing — `canErase` is checked
+    inside `eraseProperty` rather than at the route, so the guard travels with
+    the function wherever it is called from.
+  */
+  "/api/leads/erase|DELETE": { how: 'delegate', fn: 'eraseProperty', file: 'erase.ts' },
   "/api/integrations/ghl/calendar|PUT": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/geocoders|GET": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/geocoders/key|POST": { how: 'inline', guard: 'canManageIntegrations' },

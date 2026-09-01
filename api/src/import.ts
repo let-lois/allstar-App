@@ -1,5 +1,6 @@
 import { record } from './audit'
 import { parseBoundary, polygonAreaSqMiles, territoryFor, type TerritoryShape } from './geo'
+import { erasedAmong } from './erase'
 import type { Env, Role, SessionUser } from './types'
 
 /**
@@ -240,6 +241,21 @@ export async function importProperties(
   const ids: string[] = []
   const seen = new Set<string>()
 
+  /*
+    Which of these addresses have been erased.
+
+    Asked once for the whole file rather than per row: an import is a thousand
+    rows and this is one query. It has to happen at all because a property's id
+    is derived from its address, so a CSV containing an erased address would
+    otherwise recreate the lead — an erasure undone by the next upload, silently,
+    by somebody who had no idea they were doing it.
+  */
+  const erased = await erasedAmong(
+    env,
+    user.clientId,
+    await Promise.all(rows.map((r) => propertyIdFor(user.clientId, r))),
+  )
+
   for (const row of rows) {
     const address1 = (row.address1 ?? '').toString().trim()
     if (!address1) {
@@ -258,6 +274,21 @@ export async function importProperties(
     seen.add(key)
 
     const id = await propertyIdFor(user.clientId, row)
+
+    /*
+      Rejected rather than skipped, and named as a reason the operator sees. A
+      row that silently vanished from an import would send somebody hunting for
+      a parsing bug; "erased" tells them what actually happened and that it was
+      deliberate.
+    */
+    if (erased.has(id)) {
+      rejected.push({
+        ref: row.ref,
+        reason: 'This address was erased — importing it again would undo that',
+      })
+      continue
+    }
+
     ids.push(id)
 
     /*
