@@ -162,6 +162,21 @@ continuously (task #28) — a position stamp per visit and per photo, no movemen
 trail. Nothing tells the rep their location is recorded, and there is no way to
 decline.
 
+**What is mitigating, offered so the question is not answered on a worse version
+of the facts than the real one.** There is no beacon and no breadcrumb trail. A
+position is stored when a rep logs a visit and at no other time, so the record is
+silent about anyone outside working activity and goes stale the moment they stop
+logging. A manager sees the last door a rep logged and when; the rep sees the
+same screen about themselves. And nothing here is collected *in order to* monitor
+anybody — every field exists for the sales work, and is monitoring only as a side
+effect.
+
+For a while this reasoning had the question filed under "no action needed" in
+`LAUNCH.md`. It was reopened when the schema was enumerated to write this
+document, because "there is no continuous tracking" and "we store an employee's
+GPS position at each visit and never mention it" are both true, and only the
+first had been written down.
+
 **For counsel.** Whether employee-monitoring notice or consent obligations attach
 and in which states; whether that is ours or the employing company's, and so
 whether it is a contract term rather than a code change; whether something must
