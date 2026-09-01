@@ -1,5 +1,6 @@
 import { dayKeyIn, dayRangeIn } from './day'
 import { queueForCrm } from './integrations'
+import { noteIfStale, snapshotUpdatedAt } from './stale'
 import type { Env, Mutation, MutationResult, SessionUser } from './types'
 
 /**
@@ -55,6 +56,11 @@ export async function applyMutations(
   // Ordering is the client's. Sort defensively in case a batch arrives shuffled.
   const ordered = [...mutations].sort((a, b) => a.createdAt - b.createdAt)
 
+  // Taken before a single mutation is applied. Comparing against the live row
+  // would make a rep's own first mutation in this batch look like somebody
+  // else's interference on their second. See stale.ts.
+  const before = await snapshotUpdatedAt(env, user.clientId, ordered)
+
   for (const m of ordered) {
     if (!m?.id || !m.kind) {
       results.push({ id: m?.id ?? 'unknown', status: 'rejected', error: 'malformed mutation' })
@@ -80,6 +86,9 @@ export async function applyMutations(
     try {
       await applyOne(env, user, m)
       results.push({ id: m.id, status: 'applied' })
+      // Bookkeeping only, and deliberately after the result is recorded: the
+      // outcome above stands whatever this does.
+      await noteIfStale(env, user, m, before)
     } catch (err) {
       // Release the claim so a genuine retry can succeed — otherwise a
       // transient failure would be permanently recorded as "done".

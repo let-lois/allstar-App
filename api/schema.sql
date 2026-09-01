@@ -468,6 +468,35 @@ CREATE TABLE IF NOT EXISTS deletions (
 );
 CREATE INDEX IF NOT EXISTS deletions_by_client ON deletions(client_id, at);
 
+-- ---------------------------------------------------------------------------
+-- Work that arrived late and landed on something that had moved.
+--
+-- The conflict rule is that Allstar wins, and it still does — nothing recorded
+-- here changes an outcome. What changes is that somebody finds out. A rep works
+-- a rural route with no signal on Monday and syncs on Friday; if the office
+-- moved one of those leads on Wednesday, the rep's Monday answer overwrites it,
+-- correctly and silently. Silently is the part worth fixing: the office edit
+-- does not come back and nobody knows it went.
+--
+-- A record, not a queue. Nothing blocks and nothing waits for approval — a rep
+-- on a doorstep is never held up by this.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS sync_conflicts (
+  id          TEXT PRIMARY KEY,
+  client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+  rep_id      TEXT REFERENCES users(id) ON DELETE SET NULL,
+  kind        TEXT NOT NULL,               -- the mutation that arrived late
+  acted_at    INTEGER NOT NULL,            -- when the rep did it, their clock
+  arrived_at  INTEGER NOT NULL,            -- when it reached us
+  changed_at  INTEGER NOT NULL,            -- the lead's updated_at before this
+  detail      TEXT,
+  reviewed_at INTEGER                      -- null until a manager has looked
+);
+CREATE INDEX IF NOT EXISTS sync_conflicts_open
+  ON sync_conflicts(client_id, reviewed_at, arrived_at);
+
 
 CREATE TABLE IF NOT EXISTS integration_links (
   client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,

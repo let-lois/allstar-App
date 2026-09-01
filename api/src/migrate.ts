@@ -259,6 +259,38 @@ const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS deletions_by_client ON deletions(client_id, at)`,
     ],
   },
+  {
+    /*
+      Work that arrived late and landed on something that had moved.
+
+      The conflict rule is that Allstar wins, and it still does — nothing here
+      changes an outcome. What changes is that somebody finds out. A rep works a
+      rural route with no signal on Monday and syncs on Friday; if the office
+      moved one of those leads on Wednesday, the rep's Monday answer overwrites
+      it, correctly and silently. Silently is the part worth fixing: the office
+      edit does not come back and nobody knows it went.
+
+      Deliberately a record and not a queue. Nothing blocks, nothing waits for
+      approval, and a rep on a doorstep is never held up by it.
+    */
+    id: '011-sync-conflicts',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS sync_conflicts (
+         id          TEXT PRIMARY KEY,
+         client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+         property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+         rep_id      TEXT REFERENCES users(id) ON DELETE SET NULL,
+         kind        TEXT NOT NULL,
+         acted_at    INTEGER NOT NULL,
+         arrived_at  INTEGER NOT NULL,
+         changed_at  INTEGER NOT NULL,
+         detail      TEXT,
+         reviewed_at INTEGER
+       )`,
+      `CREATE INDEX IF NOT EXISTS sync_conflicts_open
+         ON sync_conflicts(client_id, reviewed_at, arrived_at)`,
+    ],
+  },
 ]
 
 async function hasColumn(

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AdminPage, FilterBar } from './AdminLayout'
 import { Chip } from '../components/ui/Chip'
 import { Button } from '../components/ui/Button'
@@ -34,7 +35,11 @@ export default function AdminLeads() {
   const mode = useAppStore((s) => s.mode)
   const refreshFromServer = useAppStore((s) => s.refreshFromServer)
 
-  const [query, setQuery] = useState('')
+  // Seeded from the URL so another screen can send somebody here pointed at one
+  // house — the sync-conflict panel does. It seeds rather than controls: the
+  // search box stays the manager's the moment they type in it.
+  const [params] = useSearchParams()
+  const [query, setQuery] = useState(() => params.get('q') ?? '')
   const [status, setStatus] = useState<LeadStatus | 'all'>('all')
   const [repFilter, setRepFilter] = useState<string>('all')
   const [sort, setSort] = useState<SortKey>('address')

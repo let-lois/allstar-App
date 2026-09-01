@@ -447,6 +447,15 @@ Also worth telling them at the same time: **connecting does not backfill.** Sync
 starts from the moment the connection is made; leads already in either system do
 not flow across on their own.
 
+**One paragraph to add to that note now that the flagging is built:**
+
+> When a rep has been out of signal for days, their work can land on a lead
+> somebody moved in the meantime. Their answer still wins — they were at the
+> door. But the console now says so: the dashboard lists those leads for a
+> manager, with the rep's name and how late the work arrived, so somebody can
+> make the call instead of finding out from the homeowner. Nothing to approve
+> or undo; it is a short list of people worth ringing.
+
 ---
 
 ## Medium
@@ -456,9 +465,15 @@ not flow across on their own.
 
 An open redirect via a backslash in `<Link>`/`useNavigate`, advisory range
 6.0.0–7.17.0. **Unreachable in this codebase**: every navigation target is an
-internal literal path with an app-generated id interpolated, and nothing reads
-`searchParams` to navigate. The fix is a semver major on the library the whole
-app navigates through, for a bug the code cannot reach.
+internal literal path with an app-generated id interpolated, and nothing
+navigates to a value read out of the URL. The fix is a semver major on the
+library the whole app navigates through, for a bug the code cannot reach.
+
+The wording above used to say "nothing reads `searchParams`", which is no longer
+true — the Leads screen reads `?q=` so the sync-conflict panel can send a manager
+there pointed at one house. That value seeds a *search box*, never a navigation
+target, so the advisory is still out of reach. Recorded here rather than quietly
+reworded, because it is one step closer than it was.
 
 It becomes reachable the moment anyone adds a redirect parameter, a deep link
 from an email, or navigation to a stored URL. That is the trigger to revisit, and

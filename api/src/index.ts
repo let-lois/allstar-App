@@ -55,6 +55,7 @@ import { applyMutations } from './mutations'
 import { readSettings, writeSettings, writeTimezone } from './settings'
 import { drainOutbox } from './crm-push'
 import { eraseProperty } from './erase'
+import { canReviewConflicts, listConflicts, reviewConflict } from './stale'
 import { applyInbound, clientForSecret, webhookSecret } from './crm-inbound'
 import {
   canManageIntegrations,
@@ -792,6 +793,35 @@ export default {
         )
         if (!result.ok) return json({ error: result.error }, result.status, cors)
         return json(result, 200, cors)
+      }
+
+      /*
+        Work that arrived days late onto a lead somebody had since moved.
+
+        The rep's answer already won — that is the rule and it is not in
+        question here. This is the record of it, so a manager can go and ask
+        rather than find out from the homeowner. See stale.ts.
+      */
+      if (path === '/api/sync-conflicts' && req.method === 'GET') {
+        if (!canReviewConflicts(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const q = new URL(req.url).searchParams
+        const conflicts = await listConflicts(env, user.clientId, {
+          includeReviewed: q.get('all') === '1',
+          limit: Number(q.get('limit')) || undefined,
+        })
+        return json({ conflicts }, 200, cors)
+      }
+
+      if (path === '/api/sync-conflicts/review' && req.method === 'POST') {
+        if (!canReviewConflicts(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await reviewConflict(
+          env,
+          user.clientId,
+          typeof body.id === 'string' ? body.id : '',
+        )
+        if (!result.ok) return json({ error: result.error }, result.status, cors)
+        return json({ ok: true }, 200, cors)
       }
 
       if (path === '/api/integrations/ghl/webhook' && req.method === 'POST') {

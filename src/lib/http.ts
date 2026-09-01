@@ -554,6 +554,42 @@ export interface IntegrationQueueDTO {
   oldestPendingAt?: number
 }
 
+export interface SyncConflictDTO {
+  id: string
+  propertyId: string
+  address: string
+  repId: string | null
+  repName: string | null
+  kind: string
+  actedAt: number
+  arrivedAt: number
+  changedAt: number
+  lateByHours: number
+  detail: Record<string, unknown>
+  reviewedAt: number | null
+}
+
+/**
+ * Work that reached us days after a rep did it, onto a lead that had moved.
+ *
+ * The rep's answer already won — that is the rule and this does not change it.
+ * These are the ones a human should look at.
+ */
+export function apiSyncConflicts(token: string, opts: { all?: boolean } = {}) {
+  return request<{ conflicts: SyncConflictDTO[] }>(
+    `/api/sync-conflicts${opts.all ? '?all=1' : ''}`,
+    { token },
+  )
+}
+
+export function apiReviewSyncConflict(token: string, id: string) {
+  return request<{ ok: true }>('/api/sync-conflicts/review', {
+    method: 'POST',
+    token,
+    body: { id },
+  })
+}
+
 export function apiIntegrations(token: string) {
   return request<{ integration: IntegrationDTO; queue: IntegrationQueueDTO }>(
     '/api/integrations',
