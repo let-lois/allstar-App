@@ -1777,6 +1777,51 @@ one tick of waiting resolves. The plan a queued event resolves to now has three
 outcomes rather than two — send, never, and **not yet** — and the ordinary retry
 cap still stops a lead that genuinely never arrives.
 
+#### Leads coming the other way
+
+`POST /api/webhooks/ghl/<secret>` — above the authentication boundary, because
+GoHighLevel has no Allstar login and never will.
+
+**The URL is the credential.** A 64-character secret per company, rotatable, and
+*that* is what decides whose data a payload touches. The body's `locationId` is
+compared against the one on file as a sanity check and is never used to select a
+tenant — every byte of a webhook body is controlled by whoever sent it, so
+resolving a tenant from one would let anybody write leads into any company's
+account by guessing an id. `verify:api-access` asserts this structurally: it finds
+the variable the URL match is bound to and requires the tenant lookup to use that
+variable's capture.
+
+A signature would be better. GoHighLevel's documentation is unreachable from this
+build environment, so rather than invent a signing scheme and give it the
+appearance of verification, this uses the pattern that is correct for a vendor
+that does not sign. If their signing is confirmed later it belongs alongside this,
+not instead of it.
+
+**Inbound leads are geocoded with the free Census geocoder and nothing else** —
+never a paid key, even when the company has one and a rooftop pin would be better.
+The guardrail on the import screen exists because this app does not spend a
+customer's money without showing an estimate and having somebody agree to it, and
+a webhook has nobody to ask. Wiring inbound leads to a paid provider would let a
+stranger's traffic, or a bad month at GoHighLevel, bill a customer for lookups
+nobody authorised. The cost is accepted and real: block-level precision instead of
+rooftop, and a lead Census cannot place arrives unplaced and shows in the
+console's unassigned count.
+
+The property id is derived from the address, tenant-scoped, exactly as an import
+derives it — so a lead arriving by webhook and the same address arriving in a CSV
+are one row, and a replayed webhook updates rather than duplicating. A contact
+with no street address is ignored outright: there is no door to knock on.
+
+Everything it declines to act on answers 200. A webhook that returns an error gets
+retried, and retrying a payload we have decided to ignore is load on both sides
+with no outcome either way. Only a bad secret is refused, and without saying why.
+
+`cd api && npm run smoke:crm-inbound` proves it against a real Worker, a real
+database and a stand-in geocoder: the secret decides the tenant, a rotated secret
+kills the old URL, a foreign `locationId` is refused, blanks fill and values do
+not, a replay creates nothing, and a lead the geocoder cannot place is still
+created and honestly reported as unplaced.
+
 #### The rule for when both sides disagree
 
 Decided ahead of the pull side being built, because it shapes what pull can do:

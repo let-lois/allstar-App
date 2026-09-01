@@ -71,6 +71,8 @@ const ROUTES = {
   "/api/integrations/ghl|DELETE": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/integrations/ghl/drain|POST": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/integrations/ghl/calendar|PUT": { how: 'inline', guard: 'canManageIntegrations' },
+  "/api/integrations/ghl/webhook|POST": { how: 'inline', guard: 'canManageIntegrations' },
+  "/api/integrations/ghl/calendar|PUT": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/geocoders|GET": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/geocoders/key|POST": { how: 'inline', guard: 'canManageIntegrations' },
   "/api/geocoders/key|DELETE": { how: 'inline', guard: 'canManageIntegrations' },
@@ -128,6 +130,15 @@ const REGEX_ROUTES = {
   '/^\\/api\\/properties\\/[^/]+\\/photos$/': {
     match: "/^\\/api\\/properties\\/[^/]+\\/photos$/.test(path)",
     scopedBy: 'client_id = ?2',
+  },
+  /*
+    The inbound GoHighLevel webhook. Public by necessity — GoHighLevel has no
+    Allstar login — so the URL is the credential, and the only thing worth
+    asserting is that the URL, and nothing else, decides whose data it touches.
+  */
+  '/^\\/api\\/webhooks\\/ghl\\/([a-f0-9]{64})$/': {
+    match: "/^\\/api\\/webhooks\\/ghl\\/([a-f0-9]{64})$/.exec(path)",
+    credential: 'clientForSecret',
   },
 }
 
@@ -230,8 +241,20 @@ for (const route of found) {
     vacuous pass. The give-away was the enumeration message listing two families
     and no regex route while a regex route plainly exists.
   */
+  /*
+    Both `.test(path)` and `.exec(path)`. This captured only `.test` until the
+    next regex route added to the router used `.exec` — a public webhook sitting
+    *above* the authentication boundary, the most security-sensitive shape a
+    route can have, and it was invisible here.
+
+    A matcher style this does not enumerate is a route the gate silently exempts,
+    which is worse than no gate at all: the passing line claims every route was
+    examined.
+  */
   const byRegex = [
-    ...new Set([...src.matchAll(/(\/\^[^\n]*?\/)\.test\(path\)/g)].map((m) => m[1])),
+    ...new Set(
+      [...src.matchAll(/(\/\^[^\n]*?\/)\.(?:test|exec)\(path\)/g)].map((m) => m[1]),
+    ),
   ]
   ok(
     byStartsWith.length + byRegex.length > 0,
@@ -249,6 +272,47 @@ for (const route of found) {
     undeclaredRegex.length === 0,
     `every regex route is declared${undeclaredRegex.length ? ` — undeclared: ${undeclaredRegex.join(', ')}` : ''}`,
   )
+
+  /*
+    Declaring a route is not checking it, and a declaration field nothing reads
+    is worse than no field: it reads as a guarantee.
+
+    `credential` is tied to the URL structurally rather than by forbidding words.
+    The first attempt asserted the lookup function was called, and separately
+    that the text `body.` did not appear nearby. Both passed on a deliberate
+    sabotage reading the tenant from `clientForSecret(env, String(body0.locationId))`
+    — the variable was named `body0`, so the blocklist missed it, and the
+    positive check was satisfied merely by the function being called at all. The
+    gate printed "resolves the tenant through clientForSecret, not from the
+    payload" over code doing exactly the opposite.
+
+    So: find the variable the path match is bound to, and require that this
+    variable's capture is what the tenant is looked up by. Nothing else can
+    satisfy that, and it does not depend on guessing what a mistake would be
+    named.
+  */
+  for (const [pattern, decl] of Object.entries(REGEX_ROUTES)) {
+    const at = src.indexOf(decl.match)
+    ok(at >= 0, `the matcher for ${pattern} is present exactly as declared`)
+    if (at < 0) continue
+    const region = src.slice(Math.max(0, at - 200), at + 1600)
+
+    if (decl.scopedBy) {
+      ok(region.includes(decl.scopedBy), `${pattern} scopes its query by ${decl.scopedBy}`)
+    }
+
+    if (decl.credential) {
+      const escaped = decl.match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const bind = new RegExp(`const\\s+([A-Za-z0-9_]+)\\s*=\\s*${escaped}`).exec(region)
+      ok(!!bind, `${pattern} binds its path match to a variable`)
+      if (bind) {
+        ok(
+          new RegExp(`${decl.credential}\\(\\s*env\\s*,\\s*${bind[1]}\\[`).test(region),
+          `${pattern} looks its tenant up from the URL capture, via ${decl.credential}(env, ${bind[1]}[…])`,
+        )
+      }
+    }
+  }
 
   // The users subtree: every action in the source is declared, and every
   // declared one still resolves through the shared guard.

@@ -18,6 +18,11 @@ export interface Env {
    */
   GOOGLE_MAPS_API_KEY?: string
   /*
+   * Points the free Census geocoder at a stand-in, so the inbound path can be
+   * exercised end to end. Unset in every real deployment.
+   */
+  CENSUS_BASE_URL?: string
+  /*
    * Encrypts third-party credentials at rest — see secretbox.ts.
    *
    * Optional, and its absence is a refusal rather than a fallback: with no key

@@ -23,6 +23,23 @@ import { googleGeocode } from './geocode-google'
 const CENSUS_BATCH_URL = 'https://geocoding.geo.census.gov/geocoder/locations/addressbatch'
 
 /**
+ * Where the free geocoder lives, unless a deployment says otherwise.
+ *
+ * `CENSUS_BASE_URL` overrides it, for the same reason `GHL_BASE_URL` exists: so
+ * the path can be exercised end to end against a stand-in. Without it the only
+ * testable outcome is "the geocoder was unreachable", which proves the fallback
+ * and nothing about the case that matters — a lead arriving with a real pin and
+ * landing in the right territory.
+ *
+ * A Worker variable, settable only by whoever deploys, defaulting to the real
+ * service when unset.
+ */
+let censusBase = CENSUS_BATCH_URL
+export function useCensusBase(url: string | undefined): void {
+  censusBase = url || CENSUS_BATCH_URL
+}
+
+/**
  * The service's own documented ceiling is 10,000; we chunk far below it so a
  * single slow request can't hold a whole import hostage.
  */
@@ -171,7 +188,7 @@ async function batch(rows: GeocodeRequest[]): Promise<GeocodeMatch[]> {
   form.append('benchmark', 'Public_AR_Current')
   form.append('addressFile', new Blob([toCensusCsv(rows)], { type: 'text/csv' }), 'addresses.csv')
 
-  const res = await fetch(CENSUS_BATCH_URL, { method: 'POST', body: form })
+  const res = await fetch(censusBase, { method: 'POST', body: form })
   if (!res.ok) throw new Error(`Geocoder returned ${res.status}`)
   return parseCensusResponse(await res.text())
 }

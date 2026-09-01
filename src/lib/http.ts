@@ -590,6 +590,22 @@ export function apiSetGhlCalendar(token: string, calendarId: string) {
   })
 }
 
+/**
+ * The webhook URL to paste into GoHighLevel — created on first request.
+ *
+ * POST rather than GET because creating the secret is a write, and a GET that
+ * writes is the kind of thing a link scanner or a browser prefetch triggers by
+ * accident. `rotate` replaces it, which is also how it is revoked: the URL is
+ * the credential.
+ */
+export function apiGhlWebhook(token: string, rotate = false) {
+  return request<{ url: string }>('/api/integrations/ghl/webhook', {
+    method: 'POST',
+    token,
+    body: { rotate },
+  })
+}
+
 export function apiDisconnectGhl(token: string) {
   return request<{ ok: true; dropped: number }>('/api/integrations/ghl', {
     method: 'DELETE',

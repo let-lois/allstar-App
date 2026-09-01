@@ -241,6 +241,18 @@ Location is requested once per session rather than tracked continuously (#28), s
 there is no movement trail — but nothing tells a rep their position is recorded
 and there is no way to decline.
 
+**What is genuinely mitigating, and counsel should hear it too.** There is no
+beacon and no breadcrumb: a position is stored when a rep logs a visit and at no
+other time, so the record is silent about anyone outside working activity and
+goes stale the moment they stop logging. `RepDetail` shows a manager the last
+door a rep logged and when — a fact about the work — and the rep sees the same
+screen about themselves. Nothing is collected solely to enable the monitoring.
+
+This was, for a while, filed under "closed by design — no action" on exactly that
+reasoning. It was reopened when the schema was enumerated for `LEGAL.md`, because
+"no continuous tracking" and "we store the employee's GPS position at each visit
+and never mention it" are both true, and only the first had been written down.
+
 These are the customer's employees, not our users. Whether the notice obligation
 is ours or the employing company's decides whether this is a code change or a
 contract term, and that is a question for counsel rather than a defect.
@@ -291,6 +303,18 @@ the retry rules, the queue — is verified. If the shape is wrong, GHL answers 4
 the row fails permanently with their own words recorded against the customer's
 integration, and nothing is written incorrectly on their side. **Step 5 of #37 is
 what settles it**, and it is now the cheapest way to settle it.
+
+**Pull is built (#35).** `POST /api/webhooks/ghl/<secret>` receives contacts,
+creates leads, and fills blanks under the rule below. The URL is the credential —
+a 64-character secret per company, rotatable from the Integrations screen — and
+that secret, never the payload, decides whose data a webhook touches. Inbound
+leads are geocoded with the free Census geocoder only, never a paid key, because a
+webhook has nobody to show a spend estimate to; the cost is block-level precision
+rather than rooftop. Proved by `npm run smoke:crm-inbound`.
+
+Still not built and undecided: **no backfill in either direction.** Sync starts at
+the moment of connection, and leads already sitting in either system do not flow
+across. Worth telling the customer at the same time as the conflict rule.
 
 **The conflict rule for #35 is decided (Curtis): Allstar wins, absolutely.**
 
@@ -528,13 +552,48 @@ testable before merge, and is the fix if this is ever worth doing.
 
 Recorded so they are not re-raised.
 
-**Rep location tracking.** Carried on an informal legal list for a while; it does
-not belong there. There is no beacon and no breadcrumb trail. `RepDetail` shows
-the last door a rep *logged* and when — a fact about the work, not about the
-person. It goes stale the moment they stop logging and by construction says
-nothing about anyone outside working activity. The screen states this in front of
-the manager, and the rep sees the same screen about themselves. Nothing new is
-collected to make it work.
+**A CAPTCHA on the login screen.** Considered and declined, August 2026.
+
+`api/src/ratelimit.ts` already holds two buckets — 8 failed attempts per email
+and 40 per IP in a 15-minute window — checked *before* password hashing, so a
+guess already decided against costs no CPU. That stops someone grinding one
+account and someone spraying one password from one address.
+
+The gap a CAPTCHA would close is distributed credential stuffing: many addresses,
+each trying a few emails a few times, slipping under both buckets. Real, but not
+the threat this app faces — a handful of accounts per company, no consumer
+signup, nothing worth a botnet.
+
+Against that: a rep signs in outdoors, one-handed, in sunlight, on bad
+connectivity. Cloudflare Turnstile is the right choice if this is ever revisited
+— already our platform, no new sub-processor, usually invisible — but it needs a
+network round trip before the form can be submitted, and on a poor connection or
+an odd-looking IP it becomes an interactive challenge. That is a new way for the
+one screen that must work to fail, aimed squarely at the user everything else
+here is built around.
+
+**Revisit if:** actual attack traffic appears, or a customer's procurement asks
+for one. If it is built, it must fail open — no Turnstile, no verification, let
+the attempt through and lean on the rate limiter, exactly as the limiter itself
+already fails open.
+
+**Rep location tracking — REOPENED, see item 9.** This entry used to say the
+question did not belong on a legal list: no beacon, no breadcrumb trail, and
+`RepDetail` showing the last door a rep *logged* is a fact about the work rather
+than about the person. All of that is still true and still worth knowing.
+
+It was written before anybody enumerated the columns. `visits` stores
+`start_lat`, `start_lng` and `start_accuracy` — the rep's GPS position at each
+visit — `photos` carries `captured_lat`/`captured_lng`, and `daily_stats` holds
+per-rep daily performance. A stored position per visit is not a breadcrumb trail,
+but it is not nothing either, and nothing in the app tells a rep it is recorded or
+offers a way to decline.
+
+So the question is live again as item 9 and `LEGAL.md` question 5, with the
+mitigating facts above carried into it: there is no continuous tracking, and the
+rep sees the same screen about themselves that a manager sees. Two entries in one
+document disagreeing about a legal item is worse than either answer, which is why
+this says so rather than being deleted.
 
 ---
 
