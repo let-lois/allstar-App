@@ -143,7 +143,8 @@ export async function drain(): Promise<void> {
       }
 
       // The server's verdict is authoritative, and `duplicate` means a previous
-      // attempt landed and we only lost the response. Both are done.
+      // attempt landed and we only lost the response. Both are done, and so is
+      // `obsolete`.
       const verdict = new Map(results.map((r) => [r.id, r]))
       let settled = 0
       let worst = 0
@@ -153,7 +154,12 @@ export async function drain(): Promise<void> {
         // resolve from here. Leave it alone and let the next pass carry it.
         if (!r) continue
         settled += 1
-        if (r.status === 'applied' || r.status === 'duplicate') {
+        // `obsolete` sits with the successes deliberately. The lead was erased
+        // while this row waited, so the work has nowhere to land and never
+        // will — treating it as a rejection would leave a row retrying until it
+        // hit the attempt ceiling and then sat in the failed pile forever,
+        // telling a rep something is broken when nothing is.
+        if (r.status === 'applied' || r.status === 'duplicate' || r.status === 'obsolete') {
           await store.del('outbox', row.id)
           lastSyncedAt = Date.now()
           continue

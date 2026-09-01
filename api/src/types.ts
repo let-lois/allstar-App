@@ -64,7 +64,13 @@ export interface Mutation {
   createdAt: number
 }
 
-export type MutationOutcome = 'applied' | 'duplicate' | 'rejected'
+/**
+ * `obsolete` is not a failure. The mutation was well-formed and the rep was
+ * entitled to make it — its target was erased while it sat in the outbox, so
+ * there is nothing left to apply it to. The phone must drop it rather than
+ * retry it, which is why this is a status of its own and not a rejection.
+ */
+export type MutationOutcome = 'applied' | 'duplicate' | 'rejected' | 'obsolete'
 
 export interface MutationResult {
   id: string

@@ -187,7 +187,7 @@ later list; whether a rep may reverse one; and the DNC-registry and TCPA
 questions in `LEGAL.md`. The code no longer contradicts what it records, which is
 a different thing from the rules being settled.
 
-### 7. Photo retention — and nothing in the product can delete anything
+### 7. Photo retention — the deletion path now exists; how long to keep things does not
 **Owner: counsel + Curtis · Severity: blocker · Tracked as #18**
 
 Scoped in [`LEGAL.md`](LEGAL.md) question 3.
@@ -215,15 +215,26 @@ from its address, so without it the next CSV or the next GoHighLevel webhook wou
 recreate the lead and undo the erasure with nobody noticing. Narrower permission
 than importing: owner and above, not managers. Proved by `npm run smoke:erase`.
 
-**Two halves deliberately not built.**
+**The copies on reps' phones now go too (task #56).** Every device holds a full
+offline copy by design, and deleting server-side does not touch it — so the
+erased ids ride out on `/api/bootstrap` and each device purges its own copies.
+The stores that matter are the three bootstrap never returns: visits, notes and
+photographs. Those are deliberately never replaced by a refresh, so a rep's own
+work cannot vanish under them — which also meant nothing in an ordinary refresh
+could ever have removed one, however long the lead had been erased. The
+photograph is the row, so deleting the row is deleting the picture.
 
-*The copies on reps' phones.* Every device holds a full offline copy by design,
-and deleting server-side does not touch it. Until that lands an erasure is
-complete on the server and incomplete on the devices — which is a real gap and is
-the next piece of work, not a detail.
+Two things came out of building it. A phone could **undo an erasure**: a queued
+"new lead at the door" mutation is an INSERT, and the sync path had no tombstone
+check where the CSV and webhook paths both did — so the address came back under
+the same derived id with nobody told. That is closed, and queued work for an
+erased lead is now discarded rather than refused, so it does not sit in an outbox
+retrying forever. Proved by `npm run smoke:erase` and, in a real browser against
+a real IndexedDB, `npm run verify:erasure-reach`.
 
-*Scheduled retention expiry.* How long photographs of private property may be kept
-is exactly what question 3 asks counsel. Picking a number now means writing it
+**Still deliberately not built: scheduled retention expiry.** How long
+photographs of private property may be kept is exactly what question 3 asks
+counsel. Picking a number now means writing it
 twice, so nothing expires on a schedule yet.
 
 Backups are unchanged and unchangeable: every encrypted dump still holds the

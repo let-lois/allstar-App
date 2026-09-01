@@ -467,6 +467,16 @@ export interface BootstrapDTO {
    * long as the two are out of step.
    */
   team?: { id: string; name: string; role: string; active: boolean }[]
+  /**
+   * Leads that have been erased, so this device can erase its copies too.
+   *
+   * The only field here that describes what is *not* in the response. Optional
+   * for the same reason as `team`: an older Worker does not send it, and the
+   * client must not treat its absence as "nothing has been erased" — it means
+   * "this server cannot tell me", which is a different thing and is why the
+   * purge runs on a list rather than on a diff.
+   */
+  erased?: string[]
   settings?: Record<string, unknown>
   /**
    * The company's IANA timezone — the calendar its reporting days are cut on.

@@ -39,6 +39,7 @@ export async function bootstrap(env: Env, user: SessionUser) {
     stats,
     territories,
     roster,
+    erased,
   ] = await Promise.all([
       env.DB.prepare(
         `SELECT * FROM properties WHERE client_id = ?1 ${scope} ORDER BY address1`,
@@ -132,6 +133,39 @@ export async function bootstrap(env: Env, user: SessionUser) {
       )
         .bind(user.clientId)
         .all(),
+
+      /*
+        Leads that have been erased, so the phones can erase their copies too.
+
+        This is the only part of bootstrap that describes what is *not* here.
+        Every other list is "what you should have"; a device can work out
+        removals by comparing that against what it holds — except for the three
+        stores bootstrap never sends. Visits, notes and photographs are the work
+        a rep did on their own phone and the server does not return them, so
+        nothing in a normal refresh ever removes one. Those are also the rows
+        that hold the actual personal data: the free text a rep typed about a
+        household, and the pictures of their house. Without this list an erasure
+        stops at the server and the photographs stay in a pocket.
+
+        Not scoped to the rep, unlike almost everything else here. A lead can be
+        reassigned and then erased, and the phone that worked it in March still
+        holds the notes in June — narrowing this to the current assignee would
+        leave exactly those copies behind.
+
+        Every one, with no window and no watermark. The tempting version keeps a
+        cursor and sends only what is new, and its failure mode is a device that
+        misses its window and keeps the data forever, silently. An id is about
+        thirty bytes: a thousand erasures is 30KB against the 200KB of profile
+        photographs already in this response. If a company ever erases enough
+        leads for that to matter, the answer is a watermark done carefully — not
+        a cap, which is the same silent failure with a friendlier name.
+      */
+      env.DB.prepare(
+        `SELECT entity_id FROM deletions
+          WHERE client_id = ?1 AND entity = 'property' ORDER BY at`,
+      )
+        .bind(user.clientId)
+        .all<{ entity_id: string }>(),
     ])
 
   const contactsByProperty = new Map<string, unknown[]>()
@@ -173,6 +207,7 @@ export async function bootstrap(env: Env, user: SessionUser) {
   return {
     user,
     settings,
+    erased: (erased.results ?? []).map((r) => r.entity_id),
     properties: (properties.results as Record<string, unknown>[]).map((p) => ({
       id: p.id,
       address1: p.address1,

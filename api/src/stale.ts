@@ -1,3 +1,4 @@
+import { propertyIdOf } from './mutation-target'
 import type { Env, Mutation, SessionUser } from './types'
 
 /**
@@ -64,8 +65,7 @@ export async function snapshotUpdatedAt(
   const ids = new Set<string>()
   for (const m of mutations) {
     if (!WATCHED.has(m.kind)) continue
-    const p = (m.payload ?? {}) as Record<string, unknown>
-    const id = typeof p.propertyId === 'string' ? p.propertyId : typeof p.id === 'string' ? p.id : ''
+    const id = propertyIdOf(m)
     if (id) ids.add(id)
   }
 
@@ -101,12 +101,7 @@ export async function noteIfStale(
     if (!WATCHED.has(m.kind)) return
 
     const payload = (m.payload ?? {}) as Record<string, unknown>
-    const propertyId =
-      typeof payload.propertyId === 'string'
-        ? payload.propertyId
-        : typeof payload.id === 'string'
-          ? payload.id
-          : ''
+    const propertyId = propertyIdOf(m)
     if (!propertyId) return
 
     const actedAt = Number(m.createdAt)

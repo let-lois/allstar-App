@@ -53,6 +53,7 @@
     "verify:geo-parity": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-geo-parity.mjs",
     "verify:day-parity": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-day-parity.mjs",
     "verify:persistence": "node scripts/verify-persistence.mjs",
+    "verify:erasure-reach": "node scripts/verify-erasure-reach.mjs",
     "verify:charts": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-charts.mjs",
     "verify:basemap": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-basemap.mjs",
     "verify:periods": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-periods.mjs",

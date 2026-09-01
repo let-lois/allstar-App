@@ -62,7 +62,13 @@ export function online(): boolean {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-export type PushOutcome = 'applied' | 'duplicate' | 'rejected'
+/**
+ * `obsolete` mirrors the server's own status and is a *settled* outcome, not a
+ * failure: the lead this work was about was erased while the row sat here, so
+ * there is nothing left to apply it to. Grouped with the successes on purpose —
+ * retrying it would only ask the server to refuse it again, forever.
+ */
+export type PushOutcome = 'applied' | 'duplicate' | 'rejected' | 'obsolete'
 
 export interface PushResult {
   id: string
@@ -85,7 +91,8 @@ export const BATCH_SIZE = 40
 /**
  * Push a batch. Returns a per-mutation verdict — the server is the authority on
  * which ones landed, and `duplicate` is a success: it means a previous attempt
- * got through and the response is what we lost.
+ * got through and the response is what we lost. `obsolete` is settled too — see
+ * PushOutcome.
  *
  * Throws OfflineError when there's no link (rows keep their place),
  * AuthExpiredError when the session is dead, and a plain Error on a server-side

@@ -1,4 +1,6 @@
 import { dayKeyIn, dayRangeIn } from './day'
+import { erasedAmong } from './erase'
+import { propertyIdOf } from './mutation-target'
 import { queueForCrm } from './integrations'
 import { noteIfStale, snapshotUpdatedAt } from './stale'
 import type { Env, Mutation, MutationResult, SessionUser } from './types'
@@ -61,6 +63,26 @@ export async function applyMutations(
   // else's interference on their second. See stale.ts.
   const before = await snapshotUpdatedAt(env, user.clientId, ordered)
 
+  /*
+    Leads erased while this batch sat in an outbox.
+
+    A phone that was in a dead zone when an erasure happened is still carrying
+    work for that lead, and two of those kinds would each do the wrong thing.
+    `property.status` with `created` is an INSERT: it would put the erased
+    address back, under the same derived id, with nobody told — the import and
+    webhook paths are both guarded against exactly this and the sync path was
+    not. Every other kind would throw in `assertPropertyInTenant`, be reported
+    as rejected, and retry forever: the permanently-failing outbox row again.
+
+    So the batch is checked once, up front, and anything aimed at an erased lead
+    is discarded rather than applied or refused.
+  */
+  const erased = await erasedAmong(
+    env,
+    user.clientId,
+    [...new Set(ordered.map(propertyIdOf).filter(Boolean))],
+  )
+
   for (const m of ordered) {
     if (!m?.id || !m.kind) {
       results.push({ id: m?.id ?? 'unknown', status: 'rejected', error: 'malformed mutation' })
@@ -80,6 +102,23 @@ export async function applyMutations(
 
     if (!claimed.meta.changes) {
       results.push({ id: m.id, status: 'duplicate' })
+      continue
+    }
+
+    /*
+      Claimed first, then discarded. Doing it in this order rather than before
+      the ledger insert means a retry of the same mutation gets `duplicate`
+      instead of being re-evaluated, so the outcome cannot change if the batch
+      is sent twice.
+
+      Reported as `obsolete`, not `applied`: nothing was applied, and calling it
+      applied would put a lie in the one record that says what happened to a
+      rep's work. The phone treats it as settled and drops it, the same as an
+      applied row.
+    */
+    const target = propertyIdOf(m)
+    if (target && erased.has(target)) {
+      results.push({ id: m.id, status: 'obsolete' })
       continue
     }
 
