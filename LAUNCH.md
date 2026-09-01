@@ -494,10 +494,23 @@ amount of code changes that. The briefing is what covers the rest.
 
 CORS is an exact match, so per-deployment Pages hostnames — the hashed
 `*.allstar-app.pages.dev` URLs — are always rejected and sign-in fails on them.
-This is CORS working as designed, and the wildcard is not an option: it would let
-any site on the internet drive this API with a rep's credentials. Allowing the
-`*.allstar-app.pages.dev` suffix specifically would make previews testable before
-merge.
+This is CORS working as designed.
+
+The wildcard is still not the answer, but **not for the reason this document
+used to give.** It said a wildcard "would let any site on the internet drive this
+API with a rep's credentials" — that is the cookie-authentication argument, and
+this API is `Authorization: Bearer` with no cookies anywhere. A browser never
+attaches a rep's credential to a request from somebody else's page, and
+cross-origin script cannot read the token out of this app's storage. A wildcard
+would not hand anyone a session.
+
+What it would actually cost: everything reachable *without* a token becomes
+readable by any page on the internet, and the blast radius grows the day
+authentication changes shape. Worth keeping correct; not worth the sentence that
+was there.
+
+Allowing the `*.allstar-app.pages.dev` suffix specifically would make previews
+testable before merge, and is the fix if this is ever worth doing.
 
 ---
 

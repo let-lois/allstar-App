@@ -130,8 +130,36 @@ const reply = (ctx: RequestContext) =>
 function corsHeaders(req: Request, env: Env): Record<string, string> {
   const origin = req.headers.get('origin') ?? ''
   const allowed = (env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim())
-  // Echo only an origin we know. A wildcard would let any site on the internet
-  // drive this API with a rep's credentials.
+  /*
+    Echo only an origin we know.
+
+    This comment used to say a wildcard "would let any site on the internet
+    drive this API with a rep's credentials." That is the argument for a
+    cookie-authenticated API, and it is wrong for this one. Sessions here are
+    `Authorization: Bearer` and nothing else — no cookies anywhere — so a
+    browser never attaches a rep's credential to a request from someone else's
+    page, and cross-origin script cannot read the token out of this app's
+    storage either. A wildcard would not hand anybody a session.
+
+    The reasoning mattered enough to fix, because a security rule defended by an
+    argument that does not hold is a rule the next person talks themselves out
+    of. What the allowlist actually buys:
+
+      Everything reachable *without* a token becomes readable by any page on the
+      internet under a wildcard — sign-in responses, health, the setup and invite
+      pages. Individually small, collectively a free reconnaissance surface.
+
+      It bounds the damage if authentication ever changes. The day anything moves
+      to a cookie, or a token lands somewhere cross-origin script can reach, a
+      wildcard turns a contained mistake into a general one. This costs nothing
+      to keep correct now and is expensive to retrofit under pressure.
+
+    What it does NOT buy, and must not be mistaken for: protection against a
+    script. CORS is a rule browsers apply to themselves; curl ignores it
+    entirely. Anything that needs to be closed to a script has to be closed by
+    authentication — see `diagnosticsAllowed` below, which exists because that
+    distinction was got wrong once already.
+  */
   if (!origin || !allowed.includes(origin)) return {}
   return {
     'access-control-allow-origin': origin,
