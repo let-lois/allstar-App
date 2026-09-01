@@ -54,6 +54,7 @@ import {
 import { applyMutations } from './mutations'
 import { readSettings, writeSettings, writeTimezone } from './settings'
 import { drainOutbox } from './crm-push'
+import { eraseProperty } from './erase'
 import { applyInbound, clientForSecret, webhookSecret } from './crm-inbound'
 import {
   canManageIntegrations,
@@ -771,6 +772,28 @@ export default {
         link scanner triggers by accident. POST, with `rotate` to replace it —
         which is also the revocation story, since the URL is the credential.
       */
+      /*
+        Erasing a lead and everything attached to it.
+
+        DELETE with a body, which is unusual but correct here: a reason is
+        required and there is nowhere else to put it. The alternative — a reason
+        in the query string — writes the customer's stated grounds for an erasure
+        into every access log between here and the browser.
+
+        Narrower than importing on purpose. See `canErase`.
+      */
+      if (path === '/api/leads/erase' && req.method === 'DELETE') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await eraseProperty(
+          env,
+          user,
+          typeof body.propertyId === 'string' ? body.propertyId : '',
+          typeof body.reason === 'string' ? body.reason : '',
+        )
+        if (!result.ok) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
+      }
+
       if (path === '/api/integrations/ghl/webhook' && req.method === 'POST') {
         if (!canManageIntegrations(user)) return json({ error: 'Not permitted.' }, 403, cors)
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>

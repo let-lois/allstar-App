@@ -440,6 +440,35 @@ CREATE TABLE IF NOT EXISTS geocode_usage (
   PRIMARY KEY (client_id, provider, day)
 );
 
+-- ---------------------------------------------------------------------------
+-- Erasures, kept so they cannot be undone by accident.
+--
+-- A deleted lead has to stay deleted. `properties.id` is derived from the client
+-- and the normalised address, so the same address always resolves to the same
+-- id — one row here blocks every route back in: a CSV containing that address
+-- again, a GoHighLevel webhook for the same contact, a rep adding it at the
+-- door. Without it, a deletion made on Monday is undone by Tuesday's import.
+--
+-- What is kept is the minimum that makes the block work and the act
+-- accountable: the id, who did it, when, and their stated reason. No address,
+-- no name, no phone — a table of erased people's details would defeat the
+-- erasure.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS deletions (
+  client_id    TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  entity       TEXT NOT NULL,               -- 'property'
+  entity_id    TEXT NOT NULL,
+  actor_id     TEXT,
+  actor_name   TEXT,
+  reason       TEXT,
+  photos       INTEGER NOT NULL DEFAULT 0,  -- how many files went with it
+  at           INTEGER NOT NULL,
+  PRIMARY KEY (client_id, entity, entity_id)
+);
+CREATE INDEX IF NOT EXISTS deletions_by_client ON deletions(client_id, at);
+
+
 CREATE TABLE IF NOT EXISTS integration_links (
   client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   provider    TEXT NOT NULL,

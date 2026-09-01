@@ -3,6 +3,7 @@ import { territoryFor, parseBoundary, polygonAreaSqMiles, type TerritoryShape } 
 import { planInboundFill, isNoop, type InboundContact, type LocalLead } from './crm-merge'
 import { propertyIdFor } from './import'
 import { linkIds, localIdFor } from './integrations'
+import { isErased } from './erase'
 import type { Env } from './types'
 
 /**
@@ -284,6 +285,16 @@ export async function applyInbound(
     on anybody remembering to check.
   */
   const propertyId = await propertyIdFor(clientId, { ref: 'inbound', ...row })
+
+  /*
+    An erased address does not come back through the other door either. Without
+    this, erasing a lead and leaving GoHighLevel connected means the next webhook
+    for that contact recreates it — which is the same failure as the CSV path,
+    arriving on its own without anybody pressing anything.
+  */
+  if (await isErased(env, clientId, propertyId)) {
+    return { status: 'ignored', reason: 'that address was erased, and is not being recreated' }
+  }
 
   const existing = await env.DB.prepare(
     `SELECT id FROM properties WHERE id = ?1 AND client_id = ?2`,

@@ -248,6 +248,20 @@ function describe(e: AuditRowDTO): React.ReactNode {
           {String(d.updated ?? 0)} updated
         </>
       )
+    /*
+      Erasure reads differently from everything else on this screen, and should.
+      It is the only entry describing something that no longer exists anywhere,
+      so it carries the address it had and the reason that was given — this row
+      is the record, not a pointer to one.
+    */
+    case 'lead.erased':
+      return (
+        <>
+          {who} <span className="font-semibold text-bad">erased</span> {target}
+          {d.photos ? ` and ${String(d.photos)} photo${d.photos === 1 ? '' : 's'}` : ''}
+          {d.reason ? ` — “${String(d.reason)}”` : ''}
+        </>
+      )
     default:
       return (
         <>

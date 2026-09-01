@@ -115,6 +115,13 @@ expires on a schedule.
 Backups compound it: every dump holds all of it, and copies persist on reps'
 phones outside any server-side deletion.
 
+**What has changed since this was written.** A deletion path now exists —
+`DELETE /api/leads/erase` removes a lead and everything attached to it, including
+the photo files, requires a stated reason, records the act, and blocks the address
+from being re-created by an import or a CRM sync. So the answer to "can you comply
+with a deletion request" is now yes for the server. It is **not** yet yes for the
+copies on reps' phones, and it will never be yes for existing backups.
+
 **For counsel.** How long photographs of private property may be kept; whether
 consent is required to photograph from the street or the doorstep; whether a
 deletion request must reach reps' phones and encrypted backups or only the server

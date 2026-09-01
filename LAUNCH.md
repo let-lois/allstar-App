@@ -204,8 +204,29 @@ data-subject deletion path in the product at all, and nothing expires on a
 schedule. Copies of photos also persist in each rep's phone storage, outside any
 server-side deletion.
 
-This is the largest engineering item behind the legal review, and it does not
-exist in any form yet.
+**The machinery now exists (task #53).** `DELETE /api/leads/erase` erases a lead
+and everything hanging off it — contacts, notes, visits, photo rows and files,
+appointments, tasks, activity — takes a required reason, records the act in the
+audit log with the address it had, and writes a tombstone so the address cannot
+come back. That last part matters more than it looks: a property's id is derived
+from its address, so without it the next CSV or the next GoHighLevel webhook would
+recreate the lead and undo the erasure with nobody noticing. Narrower permission
+than importing: owner and above, not managers. Proved by `npm run smoke:erase`.
+
+**Two halves deliberately not built.**
+
+*The copies on reps' phones.* Every device holds a full offline copy by design,
+and deleting server-side does not touch it. Until that lands an erasure is
+complete on the server and incomplete on the devices — which is a real gap and is
+the next piece of work, not a detail.
+
+*Scheduled retention expiry.* How long photographs of private property may be kept
+is exactly what question 3 asks counsel. Picking a number now means writing it
+twice, so nothing expires on a schedule yet.
+
+Backups are unchanged and unchangeable: every encrypted dump still holds the
+erased lead, and nobody rewrites backups. Whether "erased going forward" satisfies
+a request is counsel's, not ours.
 
 ### 8. Personal data about people who never agreed to anything
 **Owner: counsel · Severity: blocker · Tracked as #51 · Not recorded until now**

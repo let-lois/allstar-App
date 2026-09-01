@@ -40,10 +40,18 @@ export type AuditAction =
   | 'geocoder.connected'
   | 'geocoder.disconnected'
   | 'geocoder.changed'
+  /*
+    Erasure. Kept in the audit log deliberately and permanently: the whole point
+    of a destructive action with no undo is that somebody can afterwards say who
+    did it, when, and why. This is the one record of an erased lead that
+    survives, and it holds the address as it read at the time — an erasure nobody
+    can identify afterwards cannot be checked by an auditor or by the customer.
+  */
+  | 'lead.erased'
 
 export interface AuditEntry {
   action: AuditAction
-  targetType?: 'user' | 'territory' | 'import' | 'settings' | 'integration' | 'geocoder'
+  targetType?: 'user' | 'territory' | 'import' | 'settings' | 'integration' | 'geocoder' | 'lead'
   targetId?: string
   /** The name as it read at the time. Never resolved later. */
   targetLabel?: string

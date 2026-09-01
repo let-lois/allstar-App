@@ -1,0 +1,267 @@
+import { record } from './audit'
+import type { Env, SessionUser } from './types'
+
+/**
+ * Erasing a lead, and everything that hangs off it.
+ *
+ * Until this existed the product could not delete a homeowner's data at all —
+ * not slowly, not by hand. Every `DELETE FROM` in the API was configuration,
+ * bookkeeping, or a staff account. Addresses, contact details, the free-text
+ * notes a rep typed about a household, and the photographs of their house had
+ * no way out. `LEGAL.md` question 3 asks counsel how long those may be kept;
+ * this is the machinery that makes any answer executable.
+ *
+ * ## Four places, and only the first is easy
+ *
+ * **D1.** Deleting the property is enough: every child table declares
+ * `ON DELETE CASCADE` on `property_id`, and D1 enforces it — tested rather than
+ * assumed, because if it did not, this would delete the property and leave
+ * orphaned contacts, notes and photo rows. Data that *looks* erased and is not
+ * is worse than data that was never erased, since nobody goes looking again.
+ *
+ * **R2.** The photo files are a separate store and go separately. Their keys are
+ * read and written into the tombstone *before* anything is deleted, so a failure
+ * half way through leaves a record of what was meant rather than orphaned
+ * objects nobody can find.
+ *
+ * **Every rep's phone.** Not handled here. Each device holds a full offline copy
+ * by design, and deleting server-side does not touch it. That is the next piece
+ * of work and it is called out rather than glossed: **until it lands, an erasure
+ * is complete on the server and incomplete on the devices.**
+ *
+ * **Backups.** Every encrypted dump still contains the erased lead, and nobody
+ * rewrites backups. Whether "erased going forward" satisfies a request is a
+ * question for counsel, not an engineering decision to make quietly.
+ *
+ * ## It has to stay erased
+ *
+ * `properties.id` is derived from the client and the normalised address, so the
+ * same address always resolves to the same id. The `deletions` row therefore
+ * blocks every route back in — a CSV carrying that address again, a GoHighLevel
+ * webhook for the same contact, a rep adding it at the door. An erasure that
+ * Tuesday's import quietly undoes is not an erasure.
+ */
+
+/**
+ * Who may erase.
+ *
+ * Deliberately narrower than who may import. A manager runs the day and can
+ * already reassign, re-route and close a lead; none of that destroys anything.
+ * Erasure is the one action with no undo, and it exists to serve a legal
+ * obligation the account owner carries — so it sits with the owner and with us,
+ * not with whoever is running this week's crew.
+ */
+export function canErase(user: SessionUser): boolean {
+  return user.role === 'client_admin' || user.role === 'super_admin'
+}
+
+export interface EraseResult {
+  ok: true
+  propertyId: string
+  photos: number
+  /** True when the row was already gone and only the tombstone was written. */
+  alreadyGone: boolean
+}
+
+export type EraseFailure = { ok: false; error: string; status: number }
+
+export async function eraseProperty(
+  env: Env,
+  actor: SessionUser,
+  propertyId: string,
+  reason: string,
+): Promise<EraseResult | EraseFailure> {
+  if (!canErase(actor)) return { ok: false, error: 'Not permitted.', status: 403 }
+  if (!propertyId) return { ok: false, error: 'Which lead?', status: 400 }
+
+  /*
+    A reason is required, and not as ceremony. The one question asked afterwards
+    is always "why is this gone" — by an auditor, by the customer, or by whoever
+    is trying to work out whether it was a mistake. A blank field there makes
+    every erasure indistinguishable from an accident.
+  */
+  const why = reason.trim()
+  if (why.length < 3) {
+    return { ok: false, error: 'Say why this is being erased — it cannot be undone.', status: 400 }
+  }
+
+  // Tenant-scoped, like every id crossing this boundary. Erasing another
+  // company's lead would be the worst possible version of this bug.
+  const property = await env.DB.prepare(
+    `SELECT id, address1 FROM properties WHERE id = ?1 AND client_id = ?2`,
+  )
+    .bind(propertyId, actor.clientId)
+    .first<{ id: string; address1: string }>()
+
+  /*
+    Read the file keys before deleting anything. After the row is gone there is
+    no way to find the objects, and R2 does not know what a property is.
+  */
+  const photoRows = property
+    ? await env.DB.prepare(
+        `SELECT r2_key FROM photos WHERE property_id = ?1 AND client_id = ?2 AND r2_key IS NOT NULL`,
+      )
+        .bind(propertyId, actor.clientId)
+        .all<{ r2_key: string }>()
+    : { results: [] as { r2_key: string }[] }
+  const keys = (photoRows.results ?? []).map((r) => r.r2_key).filter(Boolean)
+
+  /*
+    An id that is neither ours nor already erased is refused.
+
+    Without this, `eraseProperty` wrote a tombstone for any id at all — so an
+    admin could fill their own block-list with ids that were never theirs, and
+    every such call left an audit entry saying a lead had been erased when
+    nothing had. Found because the gate counted two audit rows where it expected
+    one.
+
+    404 rather than 403, and the same wording whether the id belongs to another
+    company or to nobody: "not yours" is all an answer here should reveal. It
+    does not leak whether another tenant holds that id, which is the same
+    reasoning the user endpoints use.
+  */
+  const tombstoned = await env.DB.prepare(
+    `SELECT 1 AS yes FROM deletions
+      WHERE client_id = ?1 AND entity = 'property' AND entity_id = ?2`,
+  )
+    .bind(actor.clientId, propertyId)
+    .first<{ yes: number }>()
+  if (!property && !tombstoned) {
+    return { ok: false, error: 'No such lead on this team.', status: 404 }
+  }
+
+  /*
+    The tombstone goes in first, before a single byte is destroyed.
+
+    If the delete fails half way — R2 unavailable, the Worker killed — what is
+    left is a record saying this lead was meant to be erased, which somebody can
+    act on. The other order leaves destroyed data and no record of intent, and
+    the block on re-import would not exist either, so the next CSV would bring
+    the lead back.
+
+    `OR REPLACE` because erasing something already erased is not an error: the
+    honest response to "erase this" when it is already gone is to confirm it.
+  */
+  await env.DB.prepare(
+    `INSERT OR REPLACE INTO deletions
+       (client_id, entity, entity_id, actor_id, actor_name, reason, photos, at)
+     VALUES (?1,'property',?2,?3,?4,?5,?6,?7)`,
+  )
+    .bind(actor.clientId, propertyId, actor.id, actor.name, why.slice(0, 500), keys.length, Date.now())
+    .run()
+
+  if (!property) {
+    // Nothing to destroy, but the block is now in place — which is the part that
+    // matters for an address that could otherwise be re-imported.
+    await record(env, actor, {
+      action: 'lead.erased',
+      targetType: 'lead',
+      targetId: propertyId,
+      targetLabel: 'already erased',
+      detail: { reason: why, photos: 0, alreadyGone: true },
+    })
+    return { ok: true, propertyId, photos: 0, alreadyGone: true }
+  }
+
+  /*
+    Files before rows. If R2 refuses, the photo rows still point at objects that
+    exist and the erasure can be retried; the reverse leaves rows pointing at
+    nothing, which the app renders as broken images and nobody can clean up.
+
+    One failure does not stop the rest: a key that will not delete is worth
+    knowing about, but it must not leave the addresses and phone numbers in
+    place.
+  */
+  let filesLeft = 0
+  if (env.PHOTOS) {
+    for (const key of keys) {
+      try {
+        await env.PHOTOS.delete(key)
+      } catch (err) {
+        filesLeft += 1
+        console.error('erase: R2 delete failed', key, String(err))
+      }
+    }
+  }
+
+  /*
+    The link to GoHighLevel goes too. Left behind, an inbound webhook for that
+    contact would find the link, look for a property that no longer exists, and
+    quietly do nothing forever — so the lead could never be re-created even
+    deliberately, and the failure would be invisible.
+  */
+  await env.DB.prepare(
+    `DELETE FROM integration_links WHERE client_id = ?1 AND kind = 'contact' AND local_id = ?2`,
+  )
+    .bind(actor.clientId, propertyId)
+    .run()
+
+  /*
+    One statement, and the cascade does the rest: contacts, visits, notes,
+    photos, appointments, tasks, activity and route stops all declare
+    `ON DELETE CASCADE` on `property_id`. That D1 honours it was verified against
+    a real local database rather than taken from the schema — the schema declaring
+    a cascade and the engine performing one are different claims.
+  */
+  await env.DB.prepare(`DELETE FROM properties WHERE id = ?1 AND client_id = ?2`)
+    .bind(propertyId, actor.clientId)
+    .run()
+
+  await record(env, actor, {
+    action: 'lead.erased',
+    targetType: 'lead',
+    targetId: propertyId,
+    // The address as it read at the time. This is the audit log, whose job is to
+    // say what was done; an erasure nobody can identify afterwards cannot be
+    // checked, and it is the one record deliberately kept.
+    targetLabel: property.address1,
+    detail: { reason: why, photos: keys.length, filesLeft: filesLeft || undefined },
+  })
+
+  return { ok: true, propertyId, photos: keys.length, alreadyGone: false }
+}
+
+/**
+ * Which of these ids have been erased, so nothing brings them back.
+ *
+ * Takes a batch because the caller that matters most is a CSV import with a
+ * thousand rows in it, and asking once per row would be a thousand round trips
+ * to answer a question one query covers.
+ */
+export async function erasedAmong(
+  env: Env,
+  clientId: string,
+  propertyIds: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>()
+  if (propertyIds.length === 0) return out
+
+  /*
+    Chunked because SQLite has a bound-parameter ceiling and an import is not
+    bounded by anything except what somebody dragged onto the page. 200 is well
+    inside the limit and keeps the number of queries small.
+  */
+  for (let i = 0; i < propertyIds.length; i += 200) {
+    const slice = propertyIds.slice(i, i + 200)
+    const holes = slice.map((_, n) => `?${n + 2}`).join(',')
+    const rows = await env.DB.prepare(
+      `SELECT entity_id FROM deletions
+        WHERE client_id = ?1 AND entity = 'property' AND entity_id IN (${holes})`,
+    )
+      .bind(clientId, ...slice)
+      .all<{ entity_id: string }>()
+    for (const r of rows.results ?? []) out.add(r.entity_id)
+  }
+  return out
+}
+
+/** One id, for the inbound webhook path where rows arrive singly. */
+export async function isErased(env: Env, clientId: string, propertyId: string): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT 1 AS yes FROM deletions
+      WHERE client_id = ?1 AND entity = 'property' AND entity_id = ?2`,
+  )
+    .bind(clientId, propertyId)
+    .first<{ yes: number }>()
+  return !!row
+}
