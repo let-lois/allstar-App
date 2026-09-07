@@ -41,6 +41,7 @@
     "verify:streetview": "node scripts/verify-streetview.mjs",
     "verify:mapsearch": "node scripts/verify-mapsearch.mjs",
     "verify:newlead": "node scripts/verify-newlead.mjs",
+    "verify:droppin": "node scripts/verify-droppin.mjs",
     "verify:googlemap": "node scripts/verify-googlemap.mjs",
     "verify:routelist": "node scripts/verify-routelist.mjs",
     "verify:offlinemaps": "node scripts/verify-offline-maps.mjs",

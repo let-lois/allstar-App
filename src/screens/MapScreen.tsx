@@ -7,6 +7,7 @@ import { MapSearch } from '../components/map/MapSearch'
 import { gmapsConfigured, type GmapsError } from '../lib/gmaps'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { PropertyPeek } from '../components/property/PropertyPeek'
+import { DropPinSheet } from '../components/property/DropPinSheet'
 import { Chip } from '../components/ui/Chip'
 import { SyncBadge } from '../components/sync/SyncBadge'
 import { useAppStore, useScopedProperties } from '../store/useAppStore'
@@ -62,6 +63,21 @@ export function MapScreen() {
     than a map, and until now the app had no answer for them on a phone.
   */
   const [view, setView] = useState<'map' | 'list'>('map')
+
+  /*
+    Pinning mode.
+
+    `pinning` is armed by the rep and disarms itself on the first tap, which is
+    the entire safety design: this map is panned and tapped all day, and a mode
+    that stayed on would turn a mis-tap into a lead. One tap, one pin, back to
+    normal — and the button says which state it is in, because a map that
+    silently behaves differently is worse than one that cannot pin at all.
+
+    `dropped` is the coordinate waiting to be confirmed. Held here rather than in
+    the sheet so cancelling throws it away and nothing is written.
+  */
+  const [pinning, setPinning] = useState(false)
+  const [dropped, setDropped] = useState<{ lat: number; lng: number } | null>(null)
 
   /*
     Why the Google map could not be shown, if it could not.
@@ -241,6 +257,14 @@ export function MapScreen() {
     onSelect: setSelectedId,
     handleRef: mapHandle,
     initialCenter: route?.stops.length ? properties[route.stops[0].propertyId] : undefined,
+    onMapPick: pinning
+      ? (at: { lat: number; lng: number }) => {
+          setPinning(false)
+          setSelectedId(null)
+          setDropped(at)
+          mapHandle.current?.flyTo(at.lat, at.lng, 19)
+        }
+      : undefined,
     overlay: (
       <>
         {/* Floating filter rail — scrolls horizontally, never wraps. */}
@@ -281,22 +305,68 @@ export function MapScreen() {
           )}
         </div>
 
+        {/*
+          Said over the map while the mode is armed, and only then. The rep has
+          one tap to spend and needs to know it, and the same block is how they
+          get out of the mode without spending it.
+        */}
+        {pinning && (
+          <div
+            role="status"
+            className="pointer-events-auto mx-3 mt-2 flex items-center gap-3 rounded-field bg-surface-tint px-3 py-2 text-[12.5px] text-accent-strong shadow-card"
+          >
+            <span className="flex-1">
+              <span className="font-semibold">Tap the house.</span> Zoom in first — the pin
+              lands exactly where you tap.
+            </span>
+            <button
+              onClick={() => setPinning(false)}
+              className="focusable min-h-tap shrink-0 rounded-lg px-2 font-semibold underline"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
         {/* Nearest-door shortcut, bottom-left, opposite the zoom controls. */}
-        {!selected && nearest && (
-          <button
-            onClick={() => {
-              const p = properties[nearest.id]
-              mapHandle.current?.flyTo(p.lat, p.lng, 18)
-              setSelectedId(nearest.id)
-            }}
-            className="metal metal-quiet press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-pill px-4 text-[14px] font-semibold !text-accent-strong"
+        {!selected && !dropped && (
+          <div
+            className="pointer-events-auto absolute left-3 flex flex-col items-start gap-2"
             style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
           >
-            Nearest door
-            <span className="nums font-medium text-ink-mute">
-              {(nearest.d * 5280).toFixed(0)} ft
-            </span>
-          </button>
+            {nearest && (
+              <button
+                onClick={() => {
+                  const p = properties[nearest.id]
+                  mapHandle.current?.flyTo(p.lat, p.lng, 18)
+                  setSelectedId(nearest.id)
+                }}
+                className="metal metal-quiet press focusable flex min-h-[48px] items-center gap-2 rounded-pill px-4 text-[14px] font-semibold !text-accent-strong"
+              >
+                Nearest door
+                <span className="nums font-medium text-ink-mute">
+                  {(nearest.d * 5280).toFixed(0)} ft
+                </span>
+              </button>
+            )}
+            {/*
+              Bottom-left with the other thumb controls, not in the header: this
+              is something a rep does standing at a kerb, one-handed, and the top
+              of a phone is the one place that hand cannot reach.
+            */}
+            <button
+              onClick={() => {
+                setPinning((v) => !v)
+                setSelectedId(null)
+              }}
+              aria-pressed={pinning}
+              className={`press focusable flex min-h-[48px] items-center gap-2 rounded-pill px-4 text-[14px] font-semibold ${
+                pinning ? 'metal metal-brand' : 'metal metal-quiet !text-accent-strong'
+              }`}
+            >
+              {pinning ? 'Tap a house…' : 'Drop a pin'}
+            </button>
+          </div>
         )}
       </>
     ),
@@ -405,6 +475,34 @@ export function MapScreen() {
           />
         </div>
       )}
+
+      {/*
+        The new pin's own sheet, and a separate one from the property peek on
+        purpose: this is a confirmation with an unsaved coordinate behind it, and
+        sharing a surface with the "look at this existing lead" sheet is how a
+        dismiss ends up saving something or a save ends up dismissed.
+
+        Keyed on the coordinate so a second pin gets a clean sheet rather than
+        the previous house's address still sitting in the field.
+      */}
+      <BottomSheet
+        open={!!dropped}
+        onClose={() => setDropped(null)}
+        detents={[0.56, 0.86]}
+        scrim={false}
+      >
+        {dropped && (
+          <DropPinSheet
+            key={`${dropped.lat},${dropped.lng}`}
+            at={dropped}
+            onCancel={() => setDropped(null)}
+            onSaved={(id) => {
+              setDropped(null)
+              nav(`/property/${id}`)
+            }}
+          />
+        )}
+      </BottomSheet>
 
       {/* Scrim off: the rep should still be able to pan the map behind the sheet. */}
       <BottomSheet

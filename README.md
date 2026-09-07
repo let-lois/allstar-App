@@ -323,6 +323,61 @@ and fails on any disagreement. Also covers the malformed boundaries that must be
 dropped rather than repaired, since guessing what a manager meant puts real leads
 in a patch nobody drew.
 
+## Pinning a house from the map
+
+A rep standing in front of a house that is not on their list had one way in: a
+form, and an address they had to type or pick. That is the right screen when you
+know the address. It is the wrong one when you are looking at the roof — you
+know precisely *which house*, and nothing else about it.
+
+**Map → Drop a pin → tap the house.** The pin lands where the tap landed, the
+address is reverse-geocoded from Google and offered, and Save opens the property
+ready for the conversation.
+
+**The mode is armed for exactly one tap.** This map is panned and tapped all
+day, and a tap-to-place that stayed on would turn a mis-tap into a lead — a lead
+nobody made, in a list a rep is meant to trust. So arming it is deliberate, it
+says on screen that it is armed, and it spends itself on the first tap. Tapping
+a pin that is already there opens that door instead and leaves the mode armed,
+because a rep aiming at a house the app already knows about wants the house, not
+a duplicate of it.
+
+**The address is a suggestion; the coordinate is the answer.** Reverse geocoding
+on a duplex, a corner lot or a long driveway is regularly one house out, and the
+rep is standing in front of the right one — so it lands in an editable field, and
+editing it does not move the pin. This is the exact inverse of the add-lead form,
+where picking an address *sets* the pin, and the difference is which of the two
+the rep chose on purpose.
+
+**A failed lookup is not a failed pin.** No signal, an unlisted address, or the
+Geocoding API not enabled on the key all resolve to `null`, and the sheet says so
+and takes a typed address instead. Blocking a pin on a lookup would put a network
+dependency on the one screen that exists for having no network. City, state and
+ZIP stay blank rather than guessed, the same rule the add-lead form follows.
+
+`lib/reverse.ts` is the only call in the app that uses the **Geocoding API** —
+autocomplete is Places, the basemap is Maps JavaScript. A browser key restricted
+to the three APIs this app needed before answers `REQUEST_DENIED` here, and the
+symptom is every pin dropping with a blank address rather than anything that
+looks like a misconfiguration. That is written down in `docs/QUICKSTART.md`
+because it is not guessable from the screen.
+
+```bash
+npm run verify:droppin
+```
+
+Google is unreachable for the whole of that gate, on purpose: there is no key in
+CI, and a key that worked in CI would be a key committed somewhere — so every run
+exercises the lookup-failed path, and the assertions are about what the app does
+on its own. That a tap creates nothing unarmed, that the mode spends itself, that
+cancelling writes nothing, and that a saved pin carries a real coordinate rather
+than the 0,0 a dropped one degrades to.
+
+The empty spot it taps is **found rather than hardcoded**: the demo neighbourhood
+is dense, a marker tap is deliberately not a pin drop, and a fixed fraction of the
+viewport made the gate pass or fail on the arrangement of the seed data instead of
+on the feature.
+
 ## Planning a day
 
 Imported leads are a list, not a plan. **Today → Plan N doors** turns a rep's

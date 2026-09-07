@@ -110,6 +110,20 @@ interface Props {
    * because "grey rectangle" is not information.
    */
   onUnavailable?: (err: GmapsError) => void
+  /**
+   * Tap-to-place. When set, a tap on the basemap reports its coordinate instead
+   * of clearing the selection, and the cursor becomes a crosshair.
+   *
+   * Armed by the caller rather than always on, and that is the whole safety
+   * story: a rep pans and taps this map constantly, and a stray tap that
+   * silently created a lead would be worse than not having the feature. The
+   * screen turns it on for one tap and turns it off again.
+   *
+   * Marker taps are unaffected — `gmp-click` fires on the marker and the map
+   * click never reaches here, so pinning mode cannot swallow a rep's attempt to
+   * open a door that is already on the map.
+   */
+  onMapPick?: (at: { lat: number; lng: number }) => void
 }
 
 /** One pin, as DOM. Sized for a thumb rather than a cursor. */
@@ -209,6 +223,7 @@ export function GoogleFieldMap({
   path,
   pathKind = 'route',
   onUnavailable,
+  onMapPick,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
@@ -338,6 +353,25 @@ export function GoogleFieldMap({
   useEffect(() => {
     mapRef.current?.setMapTypeId(satellite ? 'hybrid' : 'roadmap')
   }, [satellite])
+
+  /* --- tap to place a pin -------------------------------------------------- */
+  /*
+    Attached and detached with the mode rather than left on and gated inside the
+    handler. Google keeps the listener for the life of the map otherwise, and a
+    handler that decides whether to act by reading a ref is one refactor away
+    from acting when it shouldn't — on a map where acting means creating a lead.
+  */
+  const onMapPickRef = useRef(onMapPick)
+  onMapPickRef.current = onMapPick
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || !map || !onMapPick) return
+    const listener = map.addListener('click', (e: google.maps.MapMouseEvent) => {
+      if (!e.latLng) return
+      onMapPickRef.current?.({ lat: e.latLng.lat(), lng: e.latLng.lng() })
+    })
+    return () => listener.remove()
+  }, [ready, !!onMapPick])
 
   /* --- markers ------------------------------------------------------------ */
   useEffect(() => {
@@ -589,6 +623,7 @@ export function GoogleFieldMap({
         aria-label="Map of your leads"
         role="application"
         data-tour="map-canvas"
+        style={onMapPick ? { cursor: 'crosshair' } : undefined}
       />
 
       {/* Thumb-sized controls, bottom-right, matching the self-rendered map. */}

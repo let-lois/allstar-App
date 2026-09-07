@@ -114,6 +114,18 @@ interface Props {
     points: { lat: number; lng: number }[]
     onAddPoint: (point: { lat: number; lng: number }) => void
   }
+  /**
+   * Tap-to-place, matching `GoogleFieldMap`'s prop of the same name so the
+   * screen above does not have to know which renderer it got.
+   *
+   * Worth having here even though this renderer draws an invented street grid
+   * when there is no imagery: the coordinate a tap produces is true regardless
+   * of what is painted underneath it, and with MapTiler tiles loaded — or
+   * already saved through Offline maps — the rep is pointing at a real roof
+   * with no connection at all. Reverse geocoding is what will be missing then,
+   * and that path already falls back to an address the rep types.
+   */
+  onMapPick?: (at: { lat: number; lng: number }) => void
 }
 
 interface View {
@@ -137,6 +149,7 @@ export function FieldMap({
   path,
   pathKind = 'route',
   draw,
+  onMapPick,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -318,6 +331,18 @@ export function FieldMap({
     if (draw) {
       const box = boxRef.current?.getBoundingClientRect()
       if (box) draw.onAddPoint(toLatLng(e.clientX - box.left, e.clientY - box.top))
+      return
+    }
+
+    /*
+      Pinning mode, and after the marker hit-test rather than before it: a tap
+      that lands on an existing pin is a rep opening that door, not a rep asking
+      for a second lead on top of it. Same order as the Google renderer, where
+      the marker's own click handler consumes the event before the map sees it.
+    */
+    if (onMapPick && !hit) {
+      const box = boxRef.current?.getBoundingClientRect()
+      if (box) onMapPick(toLatLng(e.clientX - box.left, e.clientY - box.top))
       return
     }
 

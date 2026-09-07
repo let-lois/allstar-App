@@ -144,50 +144,48 @@ Already-knocked-today, closed, and coordinate-less leads are excluded.
 
 ## 4. Rep: pinning a house
 
-This is the part where the app does **not** currently do what you described, so
-here it is plainly.
+Two paths into a lead, and which one you use decides which half Google supplies.
 
-### What exists today
+### Two ways, and they set the pin differently
 
-**There is no tap-to-drop-a-pin on the map.** `MapScreen` and both renderers
-wire map taps to *selecting an existing pin* only — `GoogleFieldMap` attaches
-`gmp-click` to markers, and neither renderer has a map-surface click, long-press
-or double-tap handler that creates a property. The only drawing surface that
-takes taps is the console's territory tool.
+**A. Tap the house on the map** — what you asked for, and now built.
 
-The way a rep adds a house in the field is **Add lead**, reached from:
+1. On the **Map**, zoom in until you can see the roof. Satellite (**SAT**) helps.
+2. Tap **Drop a pin**, bottom-left with the other thumb controls. A banner
+   confirms the map is armed.
+3. **Tap the house.** The pin lands exactly where you tapped, the map flies to
+   zoom 19, and a sheet rises with the address **looked up from Google** and
+   filled in for you.
+4. Correct the address if the lookup is a house out — editing the text does
+   **not** move the pin.
+5. **Save & open** drops you straight into the property, where contacts, notes,
+   conversation and status live.
 
-- **More → Add a lead**
-- the **quick actions** button in the nav
-- **Today**, when there is nothing to do
+The mode is armed for **one tap and disarms itself**, deliberately: you pan and
+tap this map all day, and a mode left on turns a mis-tap into a lead. Tapping an
+existing pin while armed opens that door instead — it is already on the map —
+and leaves the mode armed for your next try.
 
-`/lead/new` sets the pin one of two ways, and the difference matters:
+**B. Add lead form** (`More → Add a lead`) — unchanged, and still the better
+path when you know the address and not the roof. Pick from the suggestions and
+the pin is set from the address; type it without picking and the pin is your GPS.
 
-| | How the pin is set | Address quality |
-| --- | --- | --- |
-| **Pick from the address suggestions** (Google Places) | The **rooftop coordinates that come with the address** | Real city / state / ZIP |
-| **Type the address, no pick** | **The rep's own GPS position** | City / state / ZIP saved **blank** — deliberately, rather than guessed wrong |
+The difference in one line: **on the map you choose the pin and Google suggests
+the address; on the form you choose the address and Google sets the pin.**
 
-So the Google-Maps-address-lookup half of what you want is already there — it is
-just on a form, not on the map. Picking from suggestions is also the better pin:
-on a wide lot or a shared driveway, the rep's GPS is a different house than the
-one they are standing in front of.
+### When the lookup cannot answer
 
-Then contact name and phone (both optional — the intent is to fill the rest in
-during the visit), **Save lead**, and it opens straight into the property detail
-where notes, contacts, conversation and status live. The write is
-IndexedDB-first: saved instantly, queued, uploaded when there is signal.
+The pin still drops, the sheet still opens, and the address field says so:
+*"Couldn't look it up — no signal, or the address isn't listed. Type it and the
+pin still saves."* The coordinate is the part you cannot type, and it is already
+correct. City, state and ZIP save **blank** rather than guessed.
 
-### What you asked for, and what it would take
-
-"Tap a house on the map and it becomes a pin with the address filled in from
-Google" is a real gap, not a hidden feature. The pieces all exist —
-`GoogleFieldMap` has the map instance, the app already loads the `places` library,
-and `NewLead.save()` is the write path. The missing piece is a map-surface
-handler that turns a tap's `latLng` into a reverse-geocoded address and hands it
-to that save path. Say the word and I will build it.
-
----
+**This needs the Geocoding API enabled on your browser key.** It is the only
+call in the app that uses it — autocomplete is Places, the basemap is Maps
+JavaScript — so a key restricted to the three APIs the app needed before will
+answer `REQUEST_DENIED` and every pin will drop with a blank address. Enable
+**Geocoding API** on the same key in Google Cloud console; leave the referrer
+restrictions alone.
 
 ## 5. Rep: work the door
 
@@ -224,17 +222,23 @@ npm run dev
    Google build the pins sit on rooftops; if the streets underneath look invented,
    you are on `FieldMap` and your env vars did not take — check the console for
    the half-configured warning.
-5. **More → Add a lead.** Type `700 W 41st St`, **pick it from the suggestions**,
-   save. It should land on the map at the rooftop, at zoom 18, in the right place.
-   Then try the same address *typed without picking* — the pin lands on your GPS
-   and the city/ZIP save blank. That contrast is the pinning model in one test.
-6. **Today → Plan N doors** → **Start visit** → `No Answer`. Watch the sync chip.
+5. **Pin a house.** On the Map, tap **SAT**, zoom to a roof, tap **Drop a pin**,
+   tap the house. The sheet should open with the address filled in. If it is
+   always blank, the Geocoding API is not enabled on your key — the pin is still
+   correct. Save & open, then check the new pin sits on that roof.
+6. **More → Add a lead.** Type `700 W 41st St`, **pick it from the suggestions**,
+   save. Then try the same address *typed without picking* — the pin lands on
+   your GPS and the city/ZIP save blank. That contrast is the other pinning path.
+7. **Today → Plan N doors** → **Start visit** → `No Answer`. Watch the sync chip.
    Turn off the network and do another; it still completes.
 
-## Known gaps this guide found
+```bash
+npm run verify:droppin    # the whole tap-to-place path, in a browser
+```
 
-1. **No tap-to-add-pin on the map.** Section 4.
-2. **The console draws territories over a synthetic grid**, because
+## Known gaps
+
+1. **The console draws territories over a synthetic grid**, because
    `AdminTerritories` uses `FieldMap` unconditionally. On a Google-configured
    deployment this is now a downgrade rather than an offline fallback.
-3. **Reps cannot see their territory boundary** anywhere in the app.
+2. **Reps cannot see their territory boundary** anywhere in the app.
