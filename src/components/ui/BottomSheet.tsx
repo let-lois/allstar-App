@@ -13,6 +13,14 @@ interface Props {
 }
 
 /**
+ * How long after opening a scrim click is treated as the tail of the click that
+ * opened the sheet rather than a dismissal. The entrance animation's own length
+ * (`.anim-sheet`, 190ms) rounded up — before it finishes there is nothing on
+ * screen for the person to have decided about.
+ */
+const GRACE_MS = 200
+
+/**
  * Drag-to-resize bottom sheet — the primary surface for anything that appears
  * *over* the map or a list. Detents let the same sheet be a peek card and a
  * full detail view without a navigation push, which is what keeps
@@ -33,8 +41,42 @@ export function BottomSheet({
   const dragging = useRef(false)
   const sheetRef = useRef<HTMLDivElement>(null)
 
+  /*
+    When this sheet appeared, and whether the press that is closing it started
+    on the scrim. Both exist to answer the same question — did the person mean
+    to dismiss this? — and both were needed because of one bug.
+
+    **The scrim opens underneath the pointer and eats the next click.** Whatever
+    opened the sheet is a control the person just clicked, and the scrim now
+    covers that exact spot. Double-click the console's "Manage", or click it
+    twice because the panel took a moment, and the second click lands on a
+    dismiss button that was not there when the first one did: the panel appears
+    and vanishes, with the scrim's fade as a flash across the screen. Reported as
+    "it pops up for a moment and then I can't see that panel" — nothing errors,
+    nothing is logged, and the person is left clicking a button that appears to
+    do nothing.
+
+    So a scrim dismissal has to be a *deliberate* one, and there are two halves
+    to that:
+
+    A click within the entrance animation is not a decision about a sheet the
+    person has not seen yet. The window is the animation's own length, which is
+    the honest number: before it finishes, there is nothing on screen to have
+    judged.
+
+    And the press has to have *started* on the scrim. Drag a selection out of
+    the sheet, or release a slider past its edge, and the click lands on the
+    scrim having begun somewhere that meant the opposite.
+  */
+  const openedAt = useRef(0)
+  const pressedScrim = useRef(false)
+
   useEffect(() => {
-    if (open) setDetent(initialDetent)
+    if (open) {
+      setDetent(initialDetent)
+      openedAt.current = Date.now()
+      pressedScrim.current = false
+    }
   }, [open, initialDetent])
 
   // Hardware back / Esc should dismiss the sheet, not leave the screen.
@@ -104,7 +146,21 @@ export function BottomSheet({
       {scrim && (
         <button
           aria-label="Close"
-          onClick={onClose}
+          onPointerDown={() => {
+            pressedScrim.current = true
+          }}
+          onClick={(e) => {
+            const startedHere = pressedScrim.current
+            pressedScrim.current = false
+            /*
+              A keyboard activation reports no coordinates and never sends a
+              pointerdown, so it is always deliberate — Tab to the close button
+              and press Enter, and it closes whatever the timer says.
+            */
+            const byPointer = e.detail > 0
+            if (byPointer && (!startedHere || Date.now() - openedAt.current < GRACE_MS)) return
+            onClose()
+          }}
           className="anim-fade absolute inset-0 bg-ink/35"
         />
       )}

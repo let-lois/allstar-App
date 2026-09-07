@@ -378,6 +378,49 @@ is dense, a marker tap is deliberately not a pin drop, and a fixed fraction of t
 viewport made the gate pass or fail on the arrangement of the seed data instead of
 on the feature.
 
+## The scrim that ate the click
+
+Reported from the console: open **Team → Manage** and the panel appears for a
+moment, the screen flashes, and it is gone — with nothing in the console, no
+error, and a button that appears to do nothing when you try again.
+
+A sheet opens *because* someone clicked a control, and its scrim then covers
+that exact spot. So the very next click lands on a full-screen dismiss button
+that did not exist when the person started clicking. Double-click the row, or
+click twice because the first one seemed not to take, and the second click
+closes what the first one opened.
+
+Two things made it hard to see for what it was. The scrim is `bg-ink/35`, and
+`--ink` is near-white in the dark theme — so the failure *looks* like the screen
+washing out rather than like a dismissal. And the app is doing exactly what it
+was asked: there is no error to log, because nothing went wrong.
+
+So a scrim dismissal now has to be a deliberate one, in two parts:
+
+- **Not during the entrance animation.** A click inside 200ms — `.anim-sheet`'s
+  own length — is the tail of the click that opened the sheet, not a judgement
+  about a panel nobody has seen yet.
+- **The press has to have started on the scrim.** Drag a selection out of a
+  sheet and release past its edge and the click lands on the scrim having begun
+  somewhere that meant the opposite.
+
+Keyboard activation skips both: it sends no pointerdown and reports no
+coordinates, so Tab-and-Enter on the close button is always taken at its word.
+
+Fixed in `BottomSheet` rather than at the call site, because every scrimmed sheet
+in the app opens from a control underneath it — the console's Manage panel was
+where somebody happened to double-click first.
+
+```bash
+npm run verify:sheet
+```
+
+Both halves are asserted, and the second is the one that matters more: a guard
+that simply stopped the scrim from closing sheets would pass the bug's own test
+and ship a modal nobody can leave. So the gate also checks that a deliberate
+scrim click still dismisses, that Escape still does, and that a drag out of the
+panel does not.
+
 ## Planning a day
 
 Imported leads are a list, not a plan. **Today → Plan N doors** turns a rep's

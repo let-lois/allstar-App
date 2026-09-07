@@ -26,6 +26,13 @@ backups
 api/.backup-key
 .backup-key
 
+# The Worker's local secrets. `wrangler dev` reads SETUP_TOKEN, SESSION_PEPPER
+# and INTEGRATION_KEY from here, so anyone running the API locally creates one —
+# it is the local twin of the Worker's production secrets, and the one file in
+# `api/` most likely to be written casually and committed with everything else.
+api/.dev.vars
+.dev.vars
+
 # Worker local state and the generated seed.
 # seed.sql is produced by scripts/make-seed.mjs and contains password hashes —
 # it is regenerated per environment with that environment's pepper, and must
