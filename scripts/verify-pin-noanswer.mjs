@@ -1,6 +1,7 @@
 import { chromium } from 'playwright'
 import { chromiumPath } from './lib/browser.mjs'
 import { dismissTour } from './lib/tour.mjs'
+import { withFilters, showAll } from './lib/mapfilters.mjs'
 
 /**
  * A door already knocked does not look like a door nobody has walked up to.
@@ -165,7 +166,7 @@ async function pass(me, state) {
   await page.waitForTimeout(1800)
   // "All" because the map opens on "My route" whenever the rep has a day
   // planned — which showed the route instead of the fixture.
-  await page.getByRole('button', { name: /^All$/ }).click()
+  await showAll(page)
   await page.waitForTimeout(600)
   // Zoomed in, or nearby pins merge into counts and there is no marker to read.
   const zoomIn = page.getByLabel('Zoom in')
@@ -235,7 +236,7 @@ try {
       leftovers rather than on the filter. States do not carry over here.
     */
     await pass(me, { status: 'new', lastOutcome: 'no_answer', lastVisitAt: 3_600_000 })
-    await page.getByRole('button', { name: /^No answer$/ }).click()
+    await withFilters(page, 'No answer')
     await page.waitForTimeout(900)
     const open = await page.evaluate(() => {
       const pins = [...document.querySelectorAll('[data-marker="pin"]')]
@@ -254,7 +255,7 @@ try {
     // And the other way: with nothing unanswered, the filter is empty rather
         // than quietly showing everything.
     await pass(me, { status: 'won', lastOutcome: 'sold', lastVisitAt: 86_400_000 })
-    await page.getByRole('button', { name: /^No answer$/ }).click()
+    await withFilters(page, 'No answer')
     await page.waitForTimeout(900)
     const none = await page.evaluate(
       () => document.querySelectorAll('[data-marker="pin"],[data-marker="cluster"]').length,

@@ -154,14 +154,25 @@ const ctxOpts = {
     a real bug where a new rep's map showed nothing at all, and "does not say
     zero" is the part that must keep holding.
   */
-  const mapText = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
   const hint =
     (await page
       .getByRole('searchbox', { name: /Search leads and addresses/i })
       .getAttribute('placeholder')) ?? ''
   ok(!/Search 0 leads/.test(hint), 'the map does not claim zero leads when five are assigned')
   ok(/Search 5 leads/.test(hint), `the map shows the assigned leads ("${hint}")`)
-  ok(!mapText.includes('My route'), 'the "My route" filter is hidden while there is no route')
+  /*
+    Asked of the control, not of the page's text.
+
+    `innerText` was the old way and it was about to become a gate that passes
+    without testing anything: the filters moved into a sheet, and text inside a
+    closed sheet is not in `innerText` — so this would have read as green
+    whether or not the rule still held. Counting the button keeps it honest, and
+    the count must be exactly zero rather than merely falsy.
+  */
+  ok(
+    (await page.getByRole('button', { name: /^My route$/ }).count()) === 0,
+    'the "My route" filter is hidden while there is no route',
+  )
 
   /* ---- plan the day ---------------------------------------------------- */
   await page.goto(`${BASE}/today`, { waitUntil: 'domcontentloaded' })

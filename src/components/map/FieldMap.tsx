@@ -711,7 +711,13 @@ export function FieldMap({
 
         {/* route */}
         {routePaths && (
-          <>
+          /*
+            Named so a gate can ask whether the line is drawn at all. The scope
+            control is a filter *and* the switch that feeds the route to both
+            renderers, and a restructure that kept the filtering while dropping
+            the line would look right on every other count.
+          */
+          <g data-route-line="">
             <path
               d={routePaths.todo}
               stroke="#20C4D3"
@@ -729,7 +735,7 @@ export function FieldMap({
               fill="none"
               opacity={0.7}
             />
-          </>
+          </g>
         )}
 
         {/*

@@ -1,6 +1,7 @@
 import { chromium } from 'playwright'
 import { chromiumPath } from './lib/browser.mjs'
 import { dismissTour } from './lib/tour.mjs'
+import { withFilters, showAll } from './lib/mapfilters.mjs'
 
 /**
  * The visit-window filters, wired to the screens.
@@ -204,17 +205,20 @@ try {
     await write(me, 40)
     await page.goto(`${BASE}/map`, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(1600)
-    await page.getByRole('button', { name: /^All$/ }).click()
-    await page.waitForTimeout(500)
+    /*
+      The windows moved into the map's Filters sheet when the fourteen-chip rail
+      was retired; their labels are unchanged and so is everything asserted
+      below. `showAll` clears the route scope, which the map opens on whenever
+      the rep has a day planned — the fixture is invisible until it does.
+    */
+    await showAll(page)
     const all = await pinCount()
     ok(all > 0, 'the map has markers to filter', `${all}`)
 
-    await page.getByRole('button', { name: /^Over 30 days ago$/ }).click()
-    await page.waitForTimeout(700)
+    await withFilters(page, 'Over 30 days ago')
     ok((await pinCount()) === all, 'the map keeps them all under "Over 30 days ago"', `${await pinCount()}`)
 
-    await page.getByRole('button', { name: /^Today$/ }).click()
-    await page.waitForTimeout(700)
+    await withFilters(page, 'Today')
     ok((await pinCount()) === 0, 'and clears the map under "Today"', `${await pinCount()}`)
   }
 
