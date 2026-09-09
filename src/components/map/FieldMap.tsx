@@ -14,6 +14,17 @@ import {
 /** brand-500 — the one place on the map that is allowed to be teal by default. */
 const SELECTED_PIN = '#20C4D3'
 
+/*
+  The centre of a pin whose position is an estimate.
+
+  A literal, like every other colour in this file: the map draws into an SVG
+  over its own self-rendered basemap, and the CSS custom properties here hold
+  raw RGB triples for Tailwind rather than usable colour values. This matches
+  the basemap's own land tone, so a hollow pin reads as an outline on the map
+  rather than as a white sticker on top of it.
+*/
+const ESTIMATED_FILL = '#0F1828'
+
 /**
  * Touch-first map renderer.
  *
@@ -755,6 +766,29 @@ export function FieldMap({
           */
           const color = selected ? SELECTED_PIN : STATUS_COLOR[pin.property.status]
           const r = selected ? 13 : 9
+          /*
+            Whether we actually know which house this is.
+
+            The geocoders have always reported this and the map has always drawn
+            every pin the same, which is the one version of this that misleads
+            somebody: an estimated position rendered with exactly the confidence
+            of a surveyed one. A rep walks to the dot, knocks, and finds out at
+            the door that the app was guessing.
+
+            `interpolated` means a house number estimated along a block — right
+            street, right side, quite possibly the wrong house. So it gets a ring
+            roughly the width of that uncertainty and a hollow centre: the pin
+            still says "a lead is about here", and stops claiming "a lead is
+            *here*".
+
+            Undefined is left alone deliberately. A lead imported before this was
+            recorded has no verdict either way, and drawing thousands of them as
+            uncertain would be its own false claim — this marks what we know to
+            be estimated, not everything we have not checked.
+          */
+          const estimated =
+            pin.property.geoPrecision === 'interpolated' ||
+            pin.property.geoPrecision === 'approximate'
           return (
             <g key={pin.id} data-marker="pin" data-index={i} className="cursor-pointer">
               {/* Invisible 44px hit area — the visible dot is far too small to
@@ -763,12 +797,31 @@ export function FieldMap({
               {selected && (
                 <circle cx={pin.x} cy={pin.y} r={22} fill={color} opacity={0.2} />
               )}
+              {estimated && (
+                /*
+                  Dashed rather than a second solid ring, and under the dot so it
+                  never competes with it. A solid halo reads as emphasis — the
+                  selected pin already uses one — and this is the opposite claim.
+                */
+                <circle
+                  cx={pin.x}
+                  cy={pin.y}
+                  r={r + 8}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={1.5}
+                  strokeDasharray="3 3"
+                  opacity={0.7}
+                />
+              )}
               <circle
                 cx={pin.x}
                 cy={pin.y}
                 r={r}
-                fill={color}
-                stroke="#fff"
+                // Hollow when the position is estimated: the colour still carries
+                // the lead's status, the emptiness carries the doubt.
+                fill={estimated ? ESTIMATED_FILL : color}
+                stroke={estimated ? color : '#fff'}
                 strokeWidth={selected ? 3.5 : 2.5}
               />
             </g>

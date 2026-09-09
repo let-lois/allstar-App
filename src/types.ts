@@ -92,6 +92,19 @@ export interface Property {
   territoryId?: string
   assignedRepId?: string
   tags?: string[]
+  /**
+   * How well `lat`/`lng` above are actually known.
+   *
+   * `rooftop` is on the building. `interpolated` is a house number estimated
+   * along a block — right street, right side, probably not the right house.
+   * `approximate` is coarser still.
+   *
+   * Undefined means *unknown*, not bad: leads imported before this was recorded
+   * have no answer either way, and the map says so rather than accusing them of
+   * being wrong. Treating "we don't know" as "it's approximate" would put a
+   * warning on thousands of pins that may well be exact.
+   */
+  geoPrecision?: 'rooftop' | 'interpolated' | 'approximate'
 }
 
 export type NoteTag =

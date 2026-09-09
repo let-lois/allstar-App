@@ -291,6 +291,35 @@ const MIGRATIONS: Migration[] = [
          ON sync_conflicts(client_id, reviewed_at, arrived_at)`,
     ],
   },
+  /*
+    How well we actually know where a lead is.
+
+    The geocoders have always computed this and the import preview has always
+    shown it — Google reports a rooftop, Census interpolates a house number
+    along a block — and it was thrown away before the lead was saved. Every pin
+    then rendered identically, so a rep looking at the map could not tell a
+    house we know from a house we are estimating. That is the worst version of
+    this: not an inaccurate pin, but an inaccurate pin that looks exactly as
+    confident as an accurate one.
+
+    Nullable, and null means "imported before this existed" rather than
+    "approximate". Those are different claims and the map has to be able to say
+    "we do not know how good this is", which is not the same as saying it is bad.
+
+    The provider is stored beside it because the question that follows "is this
+    pin any good" is always "according to whom" — and because a re-geocoding
+    pass needs to know which rows came from which source.
+  */
+  {
+    id: '012-geo-precision',
+    statements: ['ALTER TABLE properties ADD COLUMN geo_precision TEXT'],
+    skipIfColumn: { table: 'properties', column: 'geo_precision' },
+  },
+  {
+    id: '013-geo-provider',
+    statements: ['ALTER TABLE properties ADD COLUMN geo_provider TEXT'],
+    skipIfColumn: { table: 'properties', column: 'geo_provider' },
+  },
 ]
 
 async function hasColumn(

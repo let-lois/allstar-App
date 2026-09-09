@@ -229,6 +229,9 @@ export async function bootstrap(env: Env, user: SessionUser) {
       territoryId: p.territory_id ?? undefined,
       assignedRepId: p.assigned_rep_id ?? undefined,
       tags: p.tags ? JSON.parse(String(p.tags)) : undefined,
+      // How well the pin is known. Sent to the phone because the honesty has to
+      // reach the person standing on the pavement, not just the office.
+      geoPrecision: p.geo_precision ?? undefined,
       contacts: contactsByProperty.get(String(p.id)) ?? [],
     })),
     routes: (routes.results as Record<string, unknown>[]).map((r) => ({

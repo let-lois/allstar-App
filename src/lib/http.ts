@@ -409,6 +409,16 @@ export interface ImportRowDTO {
   opportunityValue?: number
   roofAgeYears?: number
   squareFeet?: number
+  /**
+   * The geocoder's own verdict on the coordinates above, passed straight back
+   * from `/api/import/geocode`.
+   *
+   * The preview already showed this to the operator and then dropped it here,
+   * which meant the app knew which houses it was estimating and forgot the
+   * moment the lead was saved.
+   */
+  precision?: 'rooftop' | 'interpolated' | 'approximate'
+  geoProvider?: string
 }
 
 export interface ImportResultDTO {

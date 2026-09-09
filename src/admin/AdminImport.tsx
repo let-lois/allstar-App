@@ -54,6 +54,7 @@ interface PreparedRow {
   matchedAddress?: string
   /** How precisely it was placed — the thing rooftop geocoding is paid for. */
   precision?: 'rooftop' | 'interpolated' | 'approximate'
+  provider?: string
   /** The geocoder answered a misspelled address by guessing at it. */
   partial?: boolean
 }
@@ -281,6 +282,7 @@ export default function AdminImport() {
             row.lng = m.lng
             row.matchedAddress = m.matchedAddress
             row.precision = m.precision
+            row.provider = m.provider
             row.partial = m.partial
           }
         }
@@ -355,6 +357,14 @@ export default function AdminImport() {
             opportunityValue: num(r.values.opportunityValue),
             roofAgeYears: num(r.values.roofAgeYears),
             squareFeet: num(r.values.squareFeet),
+            /*
+              The geocoder's verdict, sent on rather than shown and discarded.
+              The preview has always told the operator which rows were guesses;
+              until now the app forgot the moment they were saved, so a rep on
+              the doorstep saw an estimated pin drawn exactly like an exact one.
+            */
+            precision: r.precision,
+            geoProvider: r.provider,
           })),
           assignRepId: assignRepId || undefined,
           territoryName: territoryName.trim() || undefined,
