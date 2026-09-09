@@ -55,10 +55,61 @@ export class NetworkError extends Error {
    */
   readonly reason?: unknown
 
-  constructor(reason?: unknown) {
-    super('Could not reach the server')
+  /**
+   * The server answered and the browser threw the answer away.
+   *
+   * Almost always the allowed-origins list: this deployment's address is not on
+   * it, so every response arrives without `access-control-allow-origin` and the
+   * browser refuses to hand any of them to the app. The distinction matters
+   * because the two failures need opposite advice — a dead link is worth
+   * retrying and a configuration mismatch never is, and until now both said
+   * "try again in a moment".
+   *
+   * Undefined when it was not worth finding out; see `answeredButBlocked`.
+   */
+  readonly blocked?: boolean
+
+  constructor(reason?: unknown, blocked?: boolean) {
+    super(blocked ? 'The server answered but the browser blocked the reply' : 'Could not reach the server')
     this.name = 'NetworkError'
     this.reason = reason
+    this.blocked = blocked
+  }
+}
+
+/**
+ * Was the server actually there?
+ *
+ * `fetch` reports a dead network and a refused cross-origin reply as the same
+ * bare TypeError, deliberately — a page that could tell them apart could probe
+ * other people's servers. So this asks the one question a browser will answer:
+ * a `no-cors` request returns an opaque response whenever the host replied at
+ * all, and rejects when it did not. It cannot read the reply, which is the
+ * point; it only has to establish that there was one.
+ *
+ * Not run on every failure. A rep in a dead zone is the normal case in this
+ * app, and spending a second round trip to confirm what `navigator.onLine`
+ * already said would slow the one path that has to stay fast.
+ */
+async function answeredButBlocked(err: unknown): Promise<boolean> {
+  // A timeout is a timeout. The server may well be there and simply slow, and
+  // calling that a configuration problem sends somebody to the wrong console.
+  if (err instanceof DOMException && err.name === 'AbortError') return false
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false
+
+  const probe = new AbortController()
+  const timer = setTimeout(() => probe.abort(), 4000)
+  try {
+    await fetch(`${API_URL}/api/health`, {
+      mode: 'no-cors',
+      cache: 'no-store',
+      signal: probe.signal,
+    })
+    return true
+  } catch {
+    return false
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -89,8 +140,14 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       signal: controller.signal,
     })
   } catch (err) {
-    // A refusal, a DNS failure, an abort — all "unreachable" from here.
-    throw new NetworkError(err)
+    /*
+      A refusal, a DNS failure, an abort — and one more that used to hide in
+      here: a reply the browser would not let the app read. They are the same
+      exception, so the probe is what tells them apart. It costs a round trip
+      only on a failure, and only when the device believes it is online.
+    */
+    clearTimeout(timer)
+    throw new NetworkError(err, await answeredButBlocked(err))
   } finally {
     clearTimeout(timer)
   }

@@ -102,6 +102,7 @@ const TESTS = [
   { script: 'smoke:import', kind: 'shared' },
   { script: 'smoke:migrate', kind: 'shared' },
   { script: 'smoke:observe', kind: 'shared' },
+  { script: 'smoke:cors', kind: 'shared' },
 
   // --- hosted: brings its own Worker, its own port, its own database ----
   { script: 'smoke:photos', kind: 'hosted', port: 8799 },

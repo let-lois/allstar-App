@@ -296,6 +296,21 @@ export function Login() {
  */
 function messageFor(err: unknown): string {
   if (err instanceof NetworkError) {
+    /*
+      Three different failures, and they used to share one sentence.
+
+      `blocked` is the one that cost an afternoon: the server answers, the
+      browser discards the reply because this address is not in the API's
+      allowed origins, and the app said "try again in a moment" — which is
+      false, and sends whoever is reading it to look at the signal instead of
+      the configuration. Nobody in the field can act on this one, but nobody in
+      the field sees it either: it means the deployment is misconfigured and
+      *no* sign-in is working, so the person reading it is whoever just deployed.
+      Hence naming the variable.
+    */
+    if (err.blocked) {
+      return 'Reached the server, but the browser refused its reply. This address is probably missing from the API’s ALLOWED_ORIGINS — retrying will not fix it.'
+    }
     return navigator.onLine
       ? "Couldn't reach the server. Try again in a moment."
       : "You're offline. Sign in needs a connection — the demo works without one."

@@ -21,6 +21,7 @@
     "smoke:users": "node scripts/smoke-users.mjs",
     "smoke:migrate": "node scripts/smoke-migrate.mjs",
     "smoke:observe": "node scripts/smoke-observe.mjs",
+    "smoke:cors": "node scripts/smoke-cors.mjs",
     "verify:geocode:fallback": "node scripts/verify-geocode-fallback.mjs",
     "smoke:photos": "node scripts/smoke-photos.mjs",
     "backup": "node scripts/backup.mjs",
