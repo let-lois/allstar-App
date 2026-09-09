@@ -789,6 +789,24 @@ export function FieldMap({
           const estimated =
             pin.property.geoPrecision === 'interpolated' ||
             pin.property.geoPrecision === 'approximate'
+          /*
+            Knocked, and nobody came to the door.
+
+            `no_answer` deliberately does not move a lead's status — a miss is
+            not pipeline progress, and that rule is right. The consequence
+            nobody had noticed is that the map colours pins *by status only*, so
+            a door knocked three times looked exactly like a door nobody had
+            ever walked up to. For a canvasser that is close to the most useful
+            thing a pin can say, and it was the one thing it could not.
+
+            Status and visit history are two different questions, so they get two
+            different channels rather than one colour trying to answer both. The
+            mark is a bar across the dot, which is the same glyph the outcome
+            grid already uses for No Answer — a rep has seen "—" mean this since
+            their first knock. It is a shape rather than a shade, so it survives
+            sunlight and colourblindness the way the outcome buttons do.
+          */
+          const noAnswer = pin.property.lastOutcome === 'no_answer'
           return (
             <g key={pin.id} data-marker="pin" data-index={i} className="cursor-pointer">
               {/* Invisible 44px hit area — the visible dot is far too small to
@@ -824,6 +842,24 @@ export function FieldMap({
                 stroke={estimated ? color : '#fff'}
                 strokeWidth={selected ? 3.5 : 2.5}
               />
+              {noAnswer && (
+                /*
+                  Drawn over the dot, and its colour flips with the fill beneath
+                  it: dark ink reads on all eight status colours, which are
+                  mid-to-light by design, and the status colour reads on the dark
+                  centre of an estimated pin. One fixed colour would disappear
+                  against one of the two.
+                */
+                <line
+                  x1={pin.x - (selected ? 7 : 5)}
+                  y1={pin.y}
+                  x2={pin.x + (selected ? 7 : 5)}
+                  y2={pin.y}
+                  stroke={estimated ? color : ESTIMATED_FILL}
+                  strokeWidth={selected ? 3 : 2.5}
+                  strokeLinecap="round"
+                />
+              )}
             </g>
           )
         })}

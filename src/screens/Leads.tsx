@@ -25,6 +25,7 @@ const STATUS_FILTERS: (LeadStatus | 'all')[] = [
   'all',
   'new',
   'contacted',
+  'follow_up',
   'working',
   'appointment',
   'quoted',

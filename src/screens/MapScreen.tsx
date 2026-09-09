@@ -15,13 +15,28 @@ import { useIsWide } from '../lib/useMediaQuery'
 import type { LeadStatus } from '../types'
 import { STATUS_COLOR, STATUS_LABEL } from '../data/outcomes'
 
-type Filter = 'all' | 'route' | 'unvisited' | 'open' | LeadStatus
+type Filter = 'all' | 'route' | 'unvisited' | 'noanswer' | 'open' | LeadStatus
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'route', label: 'My route' },
   { key: 'all', label: 'All' },
   { key: 'unvisited', label: 'Not knocked' },
+  /*
+    The second pass.
+
+    "Not knocked" and "nobody answered" are different jobs on different days:
+    the first is virgin territory, the second is a street a rep has already
+    walked and should come back to at a different hour. Until the map could
+    tell them apart there was no way to ask for the second one at all.
+  */
+  { key: 'noanswer', label: 'No answer' },
   { key: 'open', label: 'Open leads' },
+  /*
+    Ahead of the sale stages on purpose. "Who asked me to come back" is the
+    question a rep opens the map with when planning an afternoon; an appointment
+    is already in their calendar.
+  */
+  { key: 'follow_up', label: STATUS_LABEL.follow_up },
   { key: 'appointment', label: STATUS_LABEL.appointment },
   { key: 'quoted', label: STATUS_LABEL.quoted },
   { key: 'working', label: STATUS_LABEL.working },
@@ -92,6 +107,16 @@ export function MapScreen() {
         return list.filter((p) => routeIds.has(p.id))
       case 'unvisited':
         return list.filter((p) => !p.lastVisitAt)
+      case 'noanswer':
+        /*
+          Still worth another knock. A door that answered and said no is not on
+          this list — `lastOutcome` is the *last* thing that happened, so a lead
+          that has since been sold or marked Do Not Contact has moved on and
+          must not be handed back to a rep as unfinished business.
+        */
+        return list.filter(
+          (p) => p.lastOutcome === 'no_answer' && !['won', 'lost', 'dnc'].includes(p.status),
+        )
       case 'open':
         return list.filter((p) => !['won', 'lost', 'dnc'].includes(p.status))
       default:

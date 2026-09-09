@@ -53,6 +53,15 @@ export interface OutcomeDef {
 export type LeadStatus =
   | 'new'
   | 'contacted'
+  /**
+   * Somebody asked us to come back.
+   *
+   * Distinct from `contacted`, which only says a conversation happened. This one
+   * carries an obligation, which is why it is worth its own colour on the map: a
+   * street full of follow-ups is a route, and a street full of "contacted" is
+   * just history.
+   */
+  | 'follow_up'
   | 'working'
   | 'appointment'
   | 'quoted'

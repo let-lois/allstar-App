@@ -23,10 +23,10 @@ import type { Env, Mutation, MutationResult, SessionUser } from './types'
  * wedge a rep's entire day behind it.
  */
 
-const OUTCOME_TO_STATUS: Record<string, string | undefined> = {
+export const OUTCOME_TO_STATUS: Record<string, string | undefined> = {
   no_answer: undefined,
   interested: 'working',
-  follow_up: 'contacted',
+  follow_up: 'follow_up',
   appointment: 'appointment',
   quote_requested: 'quoted',
   not_interested: 'lost',
