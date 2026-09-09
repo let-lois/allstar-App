@@ -235,7 +235,27 @@ const outcomes = fs.readFileSync(new URL('../src/data/outcomes.ts', import.meta.
 const toneBlock = outcomes.slice(outcomes.indexOf('STATUS_TONE'))
 const tonePairs = [...toneBlock.matchAll(/(\w+): \{ fg: '(#[0-9A-Fa-f]{6})', bg: '(#[0-9A-Fa-f]{6})' \}/g)]
 console.log('\n--- lead status pills ---')
-ok(tonePairs.length === 8, 'all eight lead statuses have a tone pair', `${tonePairs.length}`)
+/*
+  Counted against STATUS_LABEL rather than a number written here.
+
+  The literal `8` in this line was correct for a year and then wrong the moment a
+  ninth status was added — and it failed for the *bookkeeping*, while the new
+  pill itself measured fine. A hardcoded count turns "somebody added a status
+  without a tone pair", which is the real risk, into "somebody added a status",
+  which is not a problem at all. Reading the label table means a status with no
+  tone pair still fails, and one with a pair still passes, with nothing to edit
+  here either way.
+*/
+const labelBlock = outcomes.slice(outcomes.indexOf('STATUS_LABEL'), outcomes.indexOf('STATUS_COLOR'))
+const statuses = [...labelBlock.matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1])
+ok(statuses.length > 0, 'the status list could be read at all', `${statuses.length} statuses`)
+const toned = new Set(tonePairs.map(([, name]) => name))
+const untoned = statuses.filter((s) => !toned.has(s))
+ok(
+  untoned.length === 0,
+  'every lead status has a tone pair',
+  untoned.length ? `missing: ${untoned.join(', ')}` : `${statuses.length} statuses, all paired`,
+)
 for (const [, name, fg, bg] of tonePairs) at(fg, bg, AA_TEXT, `${name} pill`)
 
 const swatchBlock = outcomes.slice(outcomes.indexOf('STATUS_COLOR'), outcomes.indexOf('STATUS_TONE'))

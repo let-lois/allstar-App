@@ -26,6 +26,9 @@ import type { Env, Role, SessionUser } from './types'
 
 export const MAX_IMPORT_ROWS = 500
 
+/** What a geocoder is allowed to claim about a pin. Anything else is null. */
+const PRECISIONS = new Set(['rooftop', 'interpolated', 'approximate'])
+
 export interface ImportRow {
   /** The client's row reference, echoed back so errors point at a line number. */
   ref: string
@@ -35,6 +38,18 @@ export interface ImportRow {
   zip?: string
   lat?: number
   lng?: number
+  /**
+   * How well the coordinates above are known, as the geocoder reported it.
+   *
+   * Sent by the importer rather than recomputed here, because the geocoding
+   * already happened: the preview step calls `/api/import/geocode`, shows the
+   * operator which rows were guessed, and then posts the rows it was given. The
+   * precision was in that answer and was being dropped on this boundary — so
+   * the app knew which houses it was estimating and forgot before saving.
+   */
+  precision?: 'rooftop' | 'interpolated' | 'approximate'
+  /** Which geocoder said so. "According to whom" is the next question. */
+  geoProvider?: string
   ownerName?: string
   phone?: string
   email?: string
@@ -217,8 +232,8 @@ export async function importProperties(
     `INSERT INTO properties
        (id, client_id, address1, city, state, zip, lat, lng, status, score,
         opportunity_value, roof_age_years, square_feet, territory_id,
-        assigned_rep_id, updated_at)
-     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'new',?9,?10,?11,?12,?13,?14,?15)
+        assigned_rep_id, geo_precision, geo_provider, updated_at)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'new',?9,?10,?11,?12,?13,?14,?16,?17,?15)
      ON CONFLICT(id) DO UPDATE SET
        -- A re-import refreshes the list's own facts and leaves the field's work
        -- alone: status, last outcome and next action are the rep's, not the
@@ -229,6 +244,14 @@ export async function importProperties(
        zip = COALESCE(excluded.zip, properties.zip),
        lat = CASE WHEN excluded.lat != 0 THEN excluded.lat ELSE properties.lat END,
        lng = CASE WHEN excluded.lng != 0 THEN excluded.lng ELSE properties.lng END,
+       -- Precision travels with the coordinates it describes, under the same
+       -- condition. A re-import carrying no coordinates keeps the old pin, so it
+       -- has to keep the old pin's precision too — taking the new file's null
+       -- there would erase what we knew about a lead nobody re-geocoded.
+       geo_precision = CASE WHEN excluded.lat != 0
+         THEN excluded.geo_precision ELSE properties.geo_precision END,
+       geo_provider = CASE WHEN excluded.lat != 0
+         THEN excluded.geo_provider ELSE properties.geo_provider END,
        opportunity_value = COALESCE(excluded.opportunity_value, properties.opportunity_value),
        roof_age_years = COALESCE(excluded.roof_age_years, properties.roof_age_years),
        square_feet = COALESCE(excluded.square_feet, properties.square_feet),
@@ -337,6 +360,16 @@ export async function importProperties(
         rowTerritoryId,
         rowRepId,
         now,
+        /*
+          Validated against the three the geocoders can actually report rather
+          than trusted from the request body. This value decides how confident
+          the map looks about a house, so an importer that sent 'exact' or
+          'rooftop!!' must not have that rendered as certainty — an unrecognised
+          value becomes null, which the map reads as "unknown quality" and shows
+          honestly.
+        */
+        PRECISIONS.has(String(row.precision)) ? String(row.precision) : null,
+        row.geoProvider?.trim().slice(0, 40) || null,
       ),
     )
 

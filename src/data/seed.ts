@@ -187,6 +187,7 @@ export const DEMO_USERS: User[] = [
 const STATUS_POOL: LeadStatus[] = [
   'new', 'new', 'new', 'new',
   'contacted', 'contacted', 'contacted',
+  'follow_up', 'follow_up',
   'working', 'working',
   'appointment',
   'quoted',

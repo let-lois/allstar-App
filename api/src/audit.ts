@@ -33,6 +33,15 @@ export type AuditAction =
   | 'territory.assigned'
   | 'territory.created'
   | 'leads.imported'
+  /*
+    A status set from the office rather than earned at a door.
+
+    Recorded because it is the only thing that tells the two apart. Every other
+    status in the product has a visit behind it; these have a person who
+    selected some rows. Six months later "why is this lead New when we sold it
+    in March" has exactly one answer, and it is this row.
+  */
+  | 'leads.status_changed'
   | 'settings.changed'
   | 'settings.timezone'
   | 'integration.connected'

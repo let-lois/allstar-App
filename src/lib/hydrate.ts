@@ -8,6 +8,7 @@ import type {
   Territory,
 } from '../types'
 import * as db from './db'
+import { purgeErased } from './erase-local'
 import type { BootstrapDTO } from './http'
 import type { StoreName } from './db'
 
@@ -87,6 +88,26 @@ export async function applyBootstrap(dto: BootstrapDTO, mergeOnly = false): Prom
     replace('dailyStats', dto.dailyStats as DailyStat[], pending),
     replace('territories', (dto.territories ?? []) as Territory[], pending),
   ])
+
+  /*
+    Erasures last, and the order is not arbitrary.
+
+    Erasing a lead writes the tombstone *before* it destroys the row, on purpose:
+    a failure half way through then leaves a record of what was meant rather than
+    orphaned files nobody can find. The cost of that ordering is a window, a few
+    hundred milliseconds wide, in which a bootstrap sees the property in the
+    properties list *and* its id in the erased list. Purging first would write the
+    lead straight back and leave it on the phone until some later refresh; purging
+    afterwards settles it now. The window is narrow and this is the one mechanism
+    where "it corrects itself eventually" is not an acceptable answer.
+
+    It also sits outside the `pending` rule that governs every line above. A
+    queued outbox turns a replace into a merge because a row the server did not
+    mention might be work it has not seen yet — but an erased id is not
+    unmentioned, it is named, and an erasure does not wait for a queue to drain.
+    See erase-local.ts.
+  */
+  if (dto.erased?.length) await purgeErased(dto.erased)
 }
 
 /**

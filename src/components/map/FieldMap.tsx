@@ -14,6 +14,17 @@ import {
 /** brand-500 — the one place on the map that is allowed to be teal by default. */
 const SELECTED_PIN = '#20C4D3'
 
+/*
+  The centre of a pin whose position is an estimate.
+
+  A literal, like every other colour in this file: the map draws into an SVG
+  over its own self-rendered basemap, and the CSS custom properties here hold
+  raw RGB triples for Tailwind rather than usable colour values. This matches
+  the basemap's own land tone, so a hollow pin reads as an outline on the map
+  rather than as a white sticker on top of it.
+*/
+const ESTIMATED_FILL = '#0F1828'
+
 /**
  * Touch-first map renderer.
  *
@@ -113,6 +124,15 @@ interface Props {
   draw?: {
     points: { lat: number; lng: number }[]
     onAddPoint: (point: { lat: number; lng: number }) => void
+    /**
+     * What the drawing is for, announced to a screen reader.
+     *
+     * The gesture has two callers now — outlining a territory, and selecting a
+     * block of leads to act on — and while it was only ever the first, the label
+     * said "territory" unconditionally. Reusing the gesture without this made
+     * the map tell a screen reader the wrong thing about what a tap would do.
+     */
+    label?: string
   }
 }
 
@@ -534,7 +554,7 @@ export function FieldMap({
         a territory vertex, which makes it a control.
       */
       role="application"
-      aria-label={draw ? 'Outline a territory on the map' : 'Map of your leads'}
+      aria-label={draw ? (draw.label ?? 'Outline a territory on the map') : 'Map of your leads'}
       data-tour="map-canvas"
       className={`relative touch-none overflow-hidden bg-[#EDF1F3] ${className}`}
     >
@@ -755,6 +775,47 @@ export function FieldMap({
           */
           const color = selected ? SELECTED_PIN : STATUS_COLOR[pin.property.status]
           const r = selected ? 13 : 9
+          /*
+            Whether we actually know which house this is.
+
+            The geocoders have always reported this and the map has always drawn
+            every pin the same, which is the one version of this that misleads
+            somebody: an estimated position rendered with exactly the confidence
+            of a surveyed one. A rep walks to the dot, knocks, and finds out at
+            the door that the app was guessing.
+
+            `interpolated` means a house number estimated along a block — right
+            street, right side, quite possibly the wrong house. So it gets a ring
+            roughly the width of that uncertainty and a hollow centre: the pin
+            still says "a lead is about here", and stops claiming "a lead is
+            *here*".
+
+            Undefined is left alone deliberately. A lead imported before this was
+            recorded has no verdict either way, and drawing thousands of them as
+            uncertain would be its own false claim — this marks what we know to
+            be estimated, not everything we have not checked.
+          */
+          const estimated =
+            pin.property.geoPrecision === 'interpolated' ||
+            pin.property.geoPrecision === 'approximate'
+          /*
+            Knocked, and nobody came to the door.
+
+            `no_answer` deliberately does not move a lead's status — a miss is
+            not pipeline progress, and that rule is right. The consequence
+            nobody had noticed is that the map colours pins *by status only*, so
+            a door knocked three times looked exactly like a door nobody had
+            ever walked up to. For a canvasser that is close to the most useful
+            thing a pin can say, and it was the one thing it could not.
+
+            Status and visit history are two different questions, so they get two
+            different channels rather than one colour trying to answer both. The
+            mark is a bar across the dot, which is the same glyph the outcome
+            grid already uses for No Answer — a rep has seen "—" mean this since
+            their first knock. It is a shape rather than a shade, so it survives
+            sunlight and colourblindness the way the outcome buttons do.
+          */
+          const noAnswer = pin.property.lastOutcome === 'no_answer'
           return (
             <g key={pin.id} data-marker="pin" data-index={i} className="cursor-pointer">
               {/* Invisible 44px hit area — the visible dot is far too small to
@@ -763,14 +824,51 @@ export function FieldMap({
               {selected && (
                 <circle cx={pin.x} cy={pin.y} r={22} fill={color} opacity={0.2} />
               )}
+              {estimated && (
+                /*
+                  Dashed rather than a second solid ring, and under the dot so it
+                  never competes with it. A solid halo reads as emphasis — the
+                  selected pin already uses one — and this is the opposite claim.
+                */
+                <circle
+                  cx={pin.x}
+                  cy={pin.y}
+                  r={r + 8}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={1.5}
+                  strokeDasharray="3 3"
+                  opacity={0.7}
+                />
+              )}
               <circle
                 cx={pin.x}
                 cy={pin.y}
                 r={r}
-                fill={color}
-                stroke="#fff"
+                // Hollow when the position is estimated: the colour still carries
+                // the lead's status, the emptiness carries the doubt.
+                fill={estimated ? ESTIMATED_FILL : color}
+                stroke={estimated ? color : '#fff'}
                 strokeWidth={selected ? 3.5 : 2.5}
               />
+              {noAnswer && (
+                /*
+                  Drawn over the dot, and its colour flips with the fill beneath
+                  it: dark ink reads on all eight status colours, which are
+                  mid-to-light by design, and the status colour reads on the dark
+                  centre of an estimated pin. One fixed colour would disappear
+                  against one of the two.
+                */
+                <line
+                  x1={pin.x - (selected ? 7 : 5)}
+                  y1={pin.y}
+                  x2={pin.x + (selected ? 7 : 5)}
+                  y2={pin.y}
+                  stroke={estimated ? color : ESTIMATED_FILL}
+                  strokeWidth={selected ? 3 : 2.5}
+                  strokeLinecap="round"
+                />
+              )}
             </g>
           )
         })}

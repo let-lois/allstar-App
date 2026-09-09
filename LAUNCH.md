@@ -11,7 +11,7 @@ also in the README is recorded here for the first time.
 **Owner** is who can actually move it — several of these cannot be closed by
 writing code, which is the main thing this document is for.
 
-The code itself is in good shape: **45 browser gates and 17 API tests**, each
+The code itself is in good shape: **47 browser gates and 18 API tests**, each
 with a runner — `npm run verify:all` and `cd api && npm run smoke:all` — and all
 passing. Almost
 nothing below is a coding problem — and the two blockers added most recently
@@ -187,7 +187,7 @@ later list; whether a rep may reverse one; and the DNC-registry and TCPA
 questions in `LEGAL.md`. The code no longer contradicts what it records, which is
 a different thing from the rules being settled.
 
-### 7. Photo retention — and nothing in the product can delete anything
+### 7. Photo retention — the deletion path now exists; how long to keep things does not
 **Owner: counsel + Curtis · Severity: blocker · Tracked as #18**
 
 Scoped in [`LEGAL.md`](LEGAL.md) question 3.
@@ -215,15 +215,26 @@ from its address, so without it the next CSV or the next GoHighLevel webhook wou
 recreate the lead and undo the erasure with nobody noticing. Narrower permission
 than importing: owner and above, not managers. Proved by `npm run smoke:erase`.
 
-**Two halves deliberately not built.**
+**The copies on reps' phones now go too (task #56).** Every device holds a full
+offline copy by design, and deleting server-side does not touch it — so the
+erased ids ride out on `/api/bootstrap` and each device purges its own copies.
+The stores that matter are the three bootstrap never returns: visits, notes and
+photographs. Those are deliberately never replaced by a refresh, so a rep's own
+work cannot vanish under them — which also meant nothing in an ordinary refresh
+could ever have removed one, however long the lead had been erased. The
+photograph is the row, so deleting the row is deleting the picture.
 
-*The copies on reps' phones.* Every device holds a full offline copy by design,
-and deleting server-side does not touch it. Until that lands an erasure is
-complete on the server and incomplete on the devices — which is a real gap and is
-the next piece of work, not a detail.
+Two things came out of building it. A phone could **undo an erasure**: a queued
+"new lead at the door" mutation is an INSERT, and the sync path had no tombstone
+check where the CSV and webhook paths both did — so the address came back under
+the same derived id with nobody told. That is closed, and queued work for an
+erased lead is now discarded rather than refused, so it does not sit in an outbox
+retrying forever. Proved by `npm run smoke:erase` and, in a real browser against
+a real IndexedDB, `npm run verify:erasure-reach`.
 
-*Scheduled retention expiry.* How long photographs of private property may be kept
-is exactly what question 3 asks counsel. Picking a number now means writing it
+**Still deliberately not built: scheduled retention expiry.** How long
+photographs of private property may be kept is exactly what question 3 asks
+counsel. Picking a number now means writing it
 twice, so nothing expires on a schedule yet.
 
 Backups are unchanged and unchangeable: every encrypted dump still holds the
@@ -285,25 +296,49 @@ contract term, and that is a question for counsel rather than a defect.
 ## High — real defects, not blockers
 
 ### 10. Pins are block-level, not rooftop
-**Owner: Curtis (pricing) + me (implementation) · Severity: high**
+**Owner: Curtis (pricing) · Severity: high · the implementation half is done**
 
-Every lead's pin is interpolated along a street, not placed on a building. A rep
-gets the right block and the right side of the street; they do not get the right
-house from the map alone.
+A lead placed by the Census geocoder is interpolated along a street rather than
+put on a building. A rep gets the right block and the right side of the street;
+they do not get the right house from the map alone. Google, when a key is
+configured, does return rooftops — so this is a per-lead property, not a
+property of the product.
 
-MapTiler was supposed to fix this and does not — measured against two live test
-addresses, it discarded the house number, matched the street, and ignored the
-ZIP. That is why the geocoder chain puts Census first and MapTiler last: a wrong
-pin is worse than an absent one, because an absent one is visible.
+**Fixed: the app no longer hides which is which.** The geocoders had always
+reported precision per address and the import preview had always shown it, and it
+was dropped on the way into the database — so a lead's row lost the distinction
+and the map drew an estimate with exactly the confidence of a rooftop. It is now
+stored (`properties.geo_precision`, migration 012), sent to the phone, and shown:
+an estimated pin is hollow with a dashed ring, and the lead screen says *"Pin is
+estimated from the street — check the house number before you knock"* next to the
+Street View image a rep would use to settle it. Null means *unknown*, not
+approximate — leads imported before this existed are not accused of being wrong.
+Gated by `npm run verify:pin-precision` and the precision cases in
+`smoke:import`.
 
-Closing it needs a provider with a US address-point database. **Geocodio** is the
-candidate worth pricing — US/Canada only, rooftop-level, no requirement that
-results be shown on the provider's map, cheap per thousand with a free daily
-allowance.
+**Not fixed, and it needs a decision rather than code:** making every pin rooftop
+requires a provider with a US address-point database.
 
-**Until then: do not describe pins as rooftop-accurate to a customer.** The import
-preview is already honest about it — a guessed match is flagged "close match —
-check this one" — and that honesty is the mitigation.
+| | Rooftop | Price | Storage | Adapter |
+| --- | --- | --- | --- | --- |
+| **Census** (current fallback) | No — interpolated | Free | Permanent | Live |
+| **Google** | Yes, almost everywhere | $5.00/1,000 | **~30 days only** — conflicts with offline-first | Live |
+| **Geocodio** | Yes, most US addresses | $1.00/1,000, 2,500/day free | **Permanent, permitted** | **Not written** |
+
+Geocodio is the better fit and the recommendation: a fifth of Google's price and
+it is the only rooftop option whose terms allow keeping coordinates permanently,
+which is what an offline-first app actually needs. Google's 30-day caching limit
+is already recorded as a conflict this app knowingly violates on the customer's
+own account.
+
+Its adapter does not exist yet (task #44) and **cannot be built or tested from
+the current dev environment** — `api.geocod.io` is refused by the network policy,
+so there is no way to verify a response format against the real service from
+here. That is a genuine blocker on that specific piece of work, not a preference.
+
+**Until a rooftop provider is connected: do not describe pins as rooftop-accurate
+to a customer.** The mitigation is now in the product rather than only in the
+import preview — the map and the lead screen both say when a pin is a guess.
 
 ### 11. Is GHL sync part of what the customer is buying?
 **Owner: Curtis · Severity: high (product decision) · Tracked as #33–#37**

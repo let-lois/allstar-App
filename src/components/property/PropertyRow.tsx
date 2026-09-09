@@ -79,6 +79,17 @@ export function PropertyRow({
           onPreview ? onPreview(property.id) : nav(`/property/${property.id}`)
         }
         aria-current={active ? 'true' : undefined}
+        /*
+          A stable hook for the gates that need to open a lead.
+
+          Two of them used to find one with `button` filtered by "a number
+          followed by a word", which describes an address and also describes
+          "Last 7 days" — so adding a filter chip to the leads screen sent them
+          clicking a filter instead of a lead. The row is a button rather than a
+          link because it may open a preview pane instead of navigating, so
+          there is no href to aim at; this is the substitute.
+        */
+        data-testid="lead-row"
         className={`flex min-h-[84px] w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-field ${
           active ? 'bg-surface-tint' : ''
         }`}

@@ -159,6 +159,26 @@ export function PropertyDetail() {
           */}
           <StreetView lat={property.lat} lng={property.lng} address={property.address1} />
 
+          {/*
+            Said in words, next to the picture a rep would use to check.
+
+            The map draws an estimated pin as a hollow dashed dot, which is
+            enough to notice and not enough to act on — so the one screen where
+            somebody decides which door to knock says it plainly. Placed under
+            the Street View rather than above it because the image is the answer
+            to the doubt this sentence raises.
+
+            Nothing renders for a rooftop match, and nothing renders when we have
+            no verdict: a lead imported before this was recorded may well be
+            exact, and warning about it would be a guess dressed as information.
+          */}
+          {(property.geoPrecision === 'interpolated' ||
+            property.geoPrecision === 'approximate') && (
+            <p className="mt-2 text-[12.5px] text-warn" data-testid="pin-estimated">
+              Pin is estimated from the street — check the house number before you knock.
+            </p>
+          )}
+
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
             <StatusPill status={property.status} />
             <OutcomePill code={property.lastOutcome} />

@@ -55,6 +55,7 @@ import { applyMutations } from './mutations'
 import { readSettings, writeSettings, writeTimezone } from './settings'
 import { drainOutbox } from './crm-push'
 import { eraseProperty } from './erase'
+import { setLeadStatus } from './lead-edit'
 import { canReviewConflicts, listConflicts, reviewConflict } from './stale'
 import { applyInbound, clientForSecret, webhookSecret } from './crm-inbound'
 import {
@@ -1002,6 +1003,24 @@ export default {
         const result = await assignProperties(env, user, {
           propertyIds: Array.isArray(body.propertyIds) ? (body.propertyIds as string[]) : [],
           repId: typeof body.repId === 'string' && body.repId ? body.repId : null,
+        })
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
+      }
+
+      /*
+        Setting a status on a batch of leads, from the office.
+
+        Deliberately not reachable from the field app: a rep records what
+        happened at the door and the status follows, which is what makes every
+        status answerable. See lead-edit.ts — the permission and the Do Not
+        Contact guard both live in there, so they travel with the function.
+      */
+      if (path === '/api/leads/status' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await setLeadStatus(env, user, {
+          propertyIds: Array.isArray(body.propertyIds) ? (body.propertyIds as string[]) : [],
+          status: typeof body.status === 'string' ? body.status : '',
         })
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 200, cors)

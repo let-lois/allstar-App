@@ -26,10 +26,11 @@ import { fileURLToPath } from 'node:url'
  * **What this cannot see, stated rather than implied.** The R2 delete is asserted
  * by intent — the response reports how many files it found and went after — not
  * by observing the object gone. Local R2 is Miniflare's own store and there is no
- * way to interrogate it from out here that would not be testing Miniflare. And
- * the copies on reps' phones are not touched at all yet; that is the next piece
- * of work, and until it lands an erasure is complete on the server and incomplete
- * on the devices.
+ * way to interrogate it from out here that would not be testing Miniflare.
+ *
+ * The copies on reps' phones are covered — the server's half of that is cases 9
+ * to 11 below, and the device actually deleting them is `verify:erasure-reach`,
+ * which needs a real browser and a real IndexedDB and so cannot live here.
  */
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -217,6 +218,25 @@ try {
     ok(res.status === 404, "another company's lead is refused, not erased", `${res.status}`)
     const survived = n(await query(`SELECT COUNT(*) FROM properties WHERE id='${OTHER}'`))
     ok(survived === 1, 'and their row is untouched', `${survived} still there`)
+
+    /*
+      Bulk status, tested here rather than in `smoke:import` because this is
+      where a second tenant actually exists.
+
+      The version of this in the import smoke passed an id that existed nowhere
+      at all, which proves only that a missing row changes nothing — it passed
+      just as happily with the tenant predicate removed. A real row under
+      somebody else's client is the only fixture that can tell the difference,
+      and there is one right here.
+    */
+    const bulk = await call('/api/leads/status', {
+      method: 'POST',
+      body: JSON.stringify({ propertyIds: [OTHER], status: 'won' }),
+    }, session)
+    const bulkBody = await bulk.json()
+    ok(bulkBody.updated === 0, "and a bulk status change cannot reach it either", JSON.stringify(bulkBody))
+    const theirStatus = (await query(`SELECT status FROM properties WHERE id='${OTHER}'`))[0]?.status
+    ok(theirStatus === 'new', "with their lead still holding its own status", String(theirStatus))
     // No tombstone under our client either: an id that was never ours must not
     // end up on our block-list.
     const junk = n(await query(
@@ -312,6 +332,85 @@ try {
     const blob = JSON.stringify(rows[0] ?? {})
     ok(!blob.includes(ADDRESS), 'and it does not hold the address', blob.slice(0, 90))
     ok(!/Wilhelmina|512-555-0148|w@example.com/.test(blob), 'nor the name, phone or email')
+  }
+  /* ===== 9. a phone cannot undo an erasure ============================ */
+  //
+  // The hole this closes: a rep adds a lead at the door, the office erases it
+  // while the phone is in a dead zone, and the phone later syncs the queued
+  // `property.status` create. That is an INSERT, and it would have put the
+  // address straight back under the same derived id with nobody told. The CSV
+  // and webhook routes were both guarded against exactly this; the sync route
+  // was not.
+  {
+    const stale = {
+      id: `m_undo_${stamp}`,
+      kind: 'property.status',
+      createdAt: stamp,
+      payload: { id: P, created: true, address1: ADDRESS, city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.5, lng: -97.6 },
+    }
+    const res = await call('/api/mutations', { method: 'POST', body: JSON.stringify({ mutations: [stale] }) }, session)
+    const { results } = await res.json()
+    ok(results?.[0]?.status === 'obsolete',
+      "a queued create for an erased lead is discarded, not applied and not refused",
+      JSON.stringify(results?.[0]))
+
+    const back = n(await query(`SELECT COUNT(*) FROM properties WHERE id='${P}'`))
+    ok(back === 0, 'and the erased address did not come back through sync', `${back} properties`)
+
+    /*
+      Discarded, not rejected — and that distinction is the whole point of the
+      status. A rejection un-claims the mutation so the phone retries it, which
+      would leave the rep with a row failing forever against a lead that no
+      longer exists. The ledger keeping the claim is what proves it is settled.
+    */
+    const claimed = n(await query(
+      `SELECT COUNT(*) FROM applied_mutations WHERE id='m_undo_${stamp}'`))
+    ok(claimed === 1, 'and the phone will not be asked to send it again', `${claimed} ledger rows`)
+  }
+
+  /* ===== 10. and a control: work for a live lead still lands ========== */
+  //
+  // Without this, case 9 passes just as well on a server that discards every
+  // mutation it is given.
+  {
+    const live = (await query(
+      `SELECT id FROM properties WHERE client_id='${q(clientId)}' AND address1='5 Freshfield Way'`))[0]?.id
+    const m = {
+      id: `m_live_${stamp}`,
+      kind: 'property.status',
+      createdAt: stamp,
+      payload: { id: live, status: 'working' },
+    }
+    const res = await call('/api/mutations', { method: 'POST', body: JSON.stringify({ mutations: [m] }) }, session)
+    const { results } = await res.json()
+    ok(results?.[0]?.status === 'applied', 'a mutation for a lead that still exists is applied', JSON.stringify(results?.[0]))
+    const st = (await query(`SELECT status FROM properties WHERE id='${live}'`))[0]?.status
+    ok(st === 'working', 'and it took effect', `status=${st}`)
+  }
+
+  /* ===== 11. bootstrap tells the phones what was erased =============== */
+  //
+  // The list is what reaches the devices. Without it a rep's notes and
+  // photographs of the household stay in a pocket indefinitely: bootstrap never
+  // returns visits, notes or photos, so nothing in a refresh can ever remove
+  // one, and the phone has no way to infer a removal from an absence.
+  {
+    const res = await call('/api/bootstrap', {}, session)
+    const boot = await res.json()
+    ok(Array.isArray(boot.erased), 'bootstrap carries an erased list', typeof boot.erased)
+    ok(boot.erased?.includes(P), 'with the erased lead named in it', JSON.stringify(boot.erased))
+
+    // The control: a lead that is merely absent from this rep's scope must not
+    // appear here. An erased list that names everything would have the phone
+    // deleting a rep's own work on leads that were only reassigned.
+    const live = (await query(
+      `SELECT id FROM properties WHERE client_id='${q(clientId)}' AND address1='5 Freshfield Way'`))[0]?.id
+    // `Array.isArray` first, deliberately: `undefined?.includes(x)` is undefined,
+    // so the bare negation would pass on a server that sends no list at all —
+    // the exact failure this case exists to catch.
+    ok(Array.isArray(boot.erased) && !boot.erased.includes(live),
+      'and a live lead is not in it', `${boot.erased?.length} erased`)
+    ok(boot.erased?.length === 1, 'exactly the one erasure', `${boot.erased?.length}`)
   }
 } finally {
   await stop().catch(() => {})

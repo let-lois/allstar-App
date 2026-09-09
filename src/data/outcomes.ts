@@ -33,7 +33,11 @@ export const outcomeByCode = (code?: OutcomeCode): OutcomeDef | undefined =>
 export const OUTCOME_TO_STATUS: Record<OutcomeCode, LeadStatus | undefined> = {
   no_answer: undefined, // a miss doesn't change where the lead stands
   interested: 'working',
-  follow_up: 'contacted',
+  // Was `contacted`, which lost the obligation: "come back Tuesday" and "we
+  // spoke once" landed on the same status and the same pin colour. `contacted`
+  // is now reachable from the office and from GoHighLevel rather than from a
+  // doorstep, which is the honest split — a rep records what was agreed.
+  follow_up: 'follow_up',
   appointment: 'appointment',
   quote_requested: 'quoted',
   not_interested: 'lost',
@@ -44,6 +48,7 @@ export const OUTCOME_TO_STATUS: Record<OutcomeCode, LeadStatus | undefined> = {
 export const STATUS_LABEL: Record<LeadStatus, string> = {
   new: 'New',
   contacted: 'Contacted',
+  follow_up: 'Follow-up',
   working: 'Working',
   appointment: 'Appointment',
   quoted: 'Quoted',
@@ -63,6 +68,10 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
 export const STATUS_COLOR: Record<LeadStatus, string> = {
   new: '#94A3B8',
   contacted: '#38A8F0',
+  // Orange rather than another amber: `quoted` already owns yellow and the two
+  // sit side by side on a map, so this had to move a whole hue away rather than
+  // a shade.
+  follow_up: '#FB923C',
   working: '#2DD4BF',
   appointment: '#A78BFA',
   quoted: '#FBBF24',
@@ -87,6 +96,9 @@ export const STATUS_COLOR: Record<LeadStatus, string> = {
 export const STATUS_TONE: Record<LeadStatus, { fg: string; bg: string }> = {
   new: { fg: '#A9B6C9', bg: '#1E2637' },
   contacted: { fg: '#7DA6FF', bg: '#16213F' },
+  // 8.7:1 on its own tint, and the tint sits 1.13:1 off the card — measured the
+  // same way as every pair above it.
+  follow_up: { fg: '#FDBA74', bg: '#3A230C' },
   working: { fg: '#5FD3C4', bg: '#10302E' },
   appointment: { fg: '#C0A6FA', bg: '#241C3E' },
   quoted: { fg: '#FBBF24', bg: '#33260A' },
@@ -98,6 +110,7 @@ export const STATUS_TONE: Record<LeadStatus, { fg: string; bg: string }> = {
 export const PIPELINE_STAGES: LeadStatus[] = [
   'new',
   'contacted',
+  'follow_up',
   'working',
   'appointment',
   'quoted',

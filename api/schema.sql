@@ -88,6 +88,12 @@ CREATE TABLE IF NOT EXISTS properties (
   territory_id       TEXT REFERENCES territories(id) ON DELETE SET NULL,
   assigned_rep_id    TEXT REFERENCES users(id) ON DELETE SET NULL,
   tags               TEXT,          -- JSON array
+  -- How well the coordinates above are actually known: 'rooftop' (on the
+  -- building), 'interpolated' (a house number estimated along a block) or
+  -- 'approximate'. Null means the lead predates this column, which is a
+  -- different claim from 'approximate' and the map treats it as such.
+  geo_precision      TEXT,
+  geo_provider       TEXT,          -- who said so
   updated_at         INTEGER NOT NULL
 );
 -- The rep's bootstrap query is "my properties" — this is the index it rides.

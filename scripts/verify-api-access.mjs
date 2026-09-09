@@ -95,6 +95,12 @@ const ROUTES = {
   "/api/settings|POST": { how: 'delegate', fn: 'writeSettings', file: 'settings.ts' },
   "/api/settings/timezone|POST": { how: 'delegate', fn: 'writeTimezone', file: 'settings.ts' },
   "/api/properties/assign|POST": { how: 'delegate', fn: 'assignProperties', file: 'assign.ts' },
+  /*
+    Bulk status. Office-only, and the check lives in `setLeadStatus` rather than
+    at the route so it travels with the function — the same arrangement as
+    erasure, and for the same reason.
+  */
+  "/api/leads/status|POST": { how: 'delegate', fn: 'setLeadStatus', file: 'lead-edit.ts' },
   "/api/territories/assign|POST": { how: 'delegate', fn: 'assignTerritory', file: 'assign.ts' },
   "/api/territories|POST": { how: 'delegate', fn: 'createTerritory', file: 'territories.ts' },
 }

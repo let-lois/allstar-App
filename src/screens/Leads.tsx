@@ -6,6 +6,7 @@ import { PropertyRow } from '../components/property/PropertyRow'
 import { PropertyPeek } from '../components/property/PropertyPeek'
 import { VirtualList } from '../components/ui/VirtualList'
 import { useAppStore, useScopedProperties } from '../store/useAppStore'
+import { VISITED_WINDOWS, matchesRep, matchesVisited, type VisitedWindow } from '../lib/leadFilter'
 import { useIsDesktop } from '../lib/useMediaQuery'
 import { distanceMiles } from '../lib/geo'
 import { IconSearch } from '../components/nav/icons'
@@ -25,6 +26,7 @@ const STATUS_FILTERS: (LeadStatus | 'all')[] = [
   'all',
   'new',
   'contacted',
+  'follow_up',
   'working',
   'appointment',
   'quoted',
@@ -49,6 +51,21 @@ export function Leads() {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<LeadStatus | 'all'>('all')
   const [sort, setSort] = useState<Sort>('nearest')
+  const [visited, setVisited] = useState<VisitedWindow>('any')
+  /*
+    Whose leads. Meaningless to a field rep — the list is already only theirs —
+    so the control is only rendered for the office roles that see everybody's,
+    which is exactly who needs it.
+  */
+  const [repFilter, setRepFilter] = useState<string>('all')
+  const timezone = useAppStore((s) => s.timezone)
+  const team = useAppStore((s) => s.team)
+  const user = useAppStore((s) => s.user)
+  const seesEveryone = user?.role !== 'field_rep'
+  const reps = useMemo(
+    () => team.filter((m) => m.active && m.role !== 'super_admin'),
+    [team],
+  )
   const [previewId, setPreviewId] = useState<string | null>(null)
   // The preview pane needs a list *and* a readable detail column beside it —
   // that only fits from `lg`. Below it, rows push a full detail screen.
@@ -63,6 +80,10 @@ export function Leads() {
     let rows: Property[] = [...scoped]
 
     if (status !== 'all') rows = rows.filter((p) => p.status === status)
+    // Both through the shared predicates, so this list, the console and the map
+    // answer the same question the same way. See leadFilter.ts.
+    if (visited !== 'any') rows = rows.filter((p) => matchesVisited(p, visited, timezone))
+    if (seesEveryone && repFilter !== 'all') rows = rows.filter((p) => matchesRep(p, repFilter))
     if (q) {
       rows = rows.filter(
         (p) =>
@@ -87,7 +108,7 @@ export function Leads() {
       case 'recent':
         return rows.sort((a, b) => (b.lastVisitAt ?? 0) - (a.lastVisitAt ?? 0))
     }
-  }, [scoped, deferredQuery, status, sort, position])
+  }, [scoped, deferredQuery, status, visited, repFilter, seesEveryone, timezone, sort, position])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -129,6 +150,56 @@ export function Leads() {
                   {s === 'all' ? 'All' : STATUS_LABEL[s]}
                 </Chip>
               ))}
+            </div>
+            {/*
+              A second rail rather than more chips on the first.
+
+              The rail above is already long enough to scroll on a phone, and
+              burying "not knocked in a month" past six sort options and nine
+              statuses is the same as not having it. Two shorter rails each stay
+              readable at a glance, which is the whole reason they scroll rather
+              than wrap.
+            */}
+            <div className="snap-x-row" data-testid="leads-visited">
+              {VISITED_WINDOWS.map((w) => (
+                <Chip
+                  key={w.key}
+                  size="sm"
+                  selected={visited === w.key}
+                  onClick={() => setVisited(w.key)}
+                >
+                  {w.key === 'any' ? 'Any visit' : w.label}
+                </Chip>
+              ))}
+              {seesEveryone && reps.length > 0 && (
+                <>
+                  <span className="mx-1 w-px shrink-0 self-stretch bg-line" />
+                  <Chip
+                    size="sm"
+                    selected={repFilter === 'all'}
+                    onClick={() => setRepFilter('all')}
+                  >
+                    Everyone
+                  </Chip>
+                  <Chip
+                    size="sm"
+                    selected={repFilter === 'unassigned'}
+                    onClick={() => setRepFilter('unassigned')}
+                  >
+                    Unassigned
+                  </Chip>
+                  {reps.map((r) => (
+                    <Chip
+                      key={r.id}
+                      size="sm"
+                      selected={repFilter === r.id}
+                      onClick={() => setRepFilter(r.id)}
+                    >
+                      {r.name}
+                    </Chip>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         }

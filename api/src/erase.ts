@@ -24,10 +24,13 @@ import type { Env, SessionUser } from './types'
  * half way through leaves a record of what was meant rather than orphaned
  * objects nobody can find.
  *
- * **Every rep's phone.** Not handled here. Each device holds a full offline copy
- * by design, and deleting server-side does not touch it. That is the next piece
- * of work and it is called out rather than glossed: **until it lands, an erasure
- * is complete on the server and incomplete on the devices.**
+ * **Every rep's phone.** Not handled here, but handled: each device holds a full
+ * offline copy by design and deleting server-side does not touch it, so the
+ * erased ids ride out on `/api/bootstrap` and the device purges its own copies.
+ * That matters most for visits, notes and photographs, which bootstrap never
+ * returns — nothing in an ordinary refresh could ever have removed one. See
+ * `src/lib/erase-local.ts`, and `applyMutations`, which discards queued work
+ * aimed at an erased lead rather than letting a phone put it back.
  *
  * **Backups.** Every encrypted dump still contains the erased lead, and nobody
  * rewrites backups. Whether "erased going forward" satisfies a request is a

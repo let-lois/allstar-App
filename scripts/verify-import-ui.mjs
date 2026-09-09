@@ -607,16 +607,19 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await page.waitForTimeout(400)
 
   // Filtering by rep is how an office answers "what does Priya have".
-  await page.selectOption('select', 'u_rep_2')
+  // By label. A bare `select` selector matched one control when this was
+  // written and four by the time filters were added, at which point it aimed at
+  // the wrong one and timed out looking for a rep in a list of dates.
+  await page.getByLabel('Assigned to').selectOption('u_rep_2')
   await page.waitForTimeout(400)
   ok((await rowCount()) === 1, 'filtering by rep shows only their leads')
-  await page.selectOption('select', 'unassigned')
+  await page.getByLabel('Assigned to').selectOption('unassigned')
   await page.waitForTimeout(400)
   ok(
     (await rowCount()) === 1 && /5 Elm Ct/.test(await body()),
     'and unassigned leads can be found as a group — the ones nobody is working',
   )
-  await page.selectOption('select', 'all')
+  await page.getByLabel('Assigned to').selectOption('all')
   await page.waitForTimeout(400)
 
   /* ---- moving one house ---- */
@@ -628,7 +631,17 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await page.waitForTimeout(300)
   ok(/1 selected/.test(await body()), 'selecting a lead shows what will be acted on')
 
-  await page.locator('select').last().selectOption('u_rep_1')
+  /*
+    Selected by label rather than by position.
+
+    This read `select` `.last()`, which was the reassignment dropdown right up
+    until a second control — "Set status" — was added beside it. The gate then
+    hunted for a rep id in the status list and timed out sixty times over. A
+    positional locator in a bar that gains controls is a gate that breaks on
+    unrelated work, so both dropdowns now carry an aria-label and this asks for
+    the one it means.
+  */
+  await page.getByLabel('Reassign to').selectOption('u_rep_1')
   await page.getByRole('button', { name: /^Apply$/ }).click()
   await page.waitForTimeout(900)
 

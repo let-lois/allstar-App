@@ -60,7 +60,10 @@ async function toLead(opts = {}) {
   await page.waitForTimeout(1800)
   await page.locator('a[href="/leads"]:visible').first().click()
   await page.waitForTimeout(1200)
-  await page.locator('a[href^="/property/"], button').filter({ hasText: /\d+\s+\w/ }).first().click()
+  // The row itself, by its own hook. This used to be `button` filtered by "a
+  // number followed by a word" — which matches an address and also matches
+  // "Last 7 days", so a filter chip added to this screen was clicked instead.
+  await page.getByTestId('lead-row').first().click()
   await page.waitForTimeout(1500)
   return { ctx, page }
 }

@@ -209,6 +209,7 @@ export function useRepRangeRows(range: RangeKey): RepRangeRow[] {
 export const FUNNEL_STAGES: LeadStatus[] = [
   'new',
   'contacted',
+  'follow_up',
   'working',
   'appointment',
   'quoted',

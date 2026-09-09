@@ -461,6 +461,177 @@ ok(
 )
 ok((await imp({ rows: [] })).error !== undefined, 'an empty import is refused rather than reported as success')
 
+/* --- bulk status, and the one rule it must never break --------------------- */
+//
+// The office needs to move a batch of leads: a canvass comes back, a street
+// turns out to be rentals, a vendor file was mis-scored. Doing that one lead at
+// a time is not a workflow.
+//
+// The rule this is shaped around is Do Not Contact. Once a household has asked
+// a rep to stop, selecting four hundred rows and setting them to New must not
+// quietly undo it — the lead would look ordinary again with its history buried,
+// and the next rep on that street would knock.
+{
+  const bStreet = `Bulk Status Row ${stamp}`
+  const seed = await imp({
+    rows: [1, 2, 3, 4].map((n) => ({
+      ref: `B${n}`,
+      address1: `${n} ${bStreet}`,
+      lat: 30.5,
+      lng: -97.6,
+    })),
+  })
+  ok(seed.created === 4, `four leads to work on (created=${seed.created})`)
+
+  const boot0 = await (await api('/api/bootstrap', {}, admin.token)).json()
+  const at = (n, b) => b.properties.find((p) => p.address1 === `${n} ${bStreet}`)
+  const ids = [1, 2, 3, 4].map((n) => at(n, boot0).id)
+
+  const setStatus = (body, token = admin.token) =>
+    api('/api/leads/status', { method: 'POST', body: JSON.stringify(body) }, token).then(
+      async (r) => ({ status: r.status, body: await r.json() }),
+    )
+
+  /* the ordinary case */
+  const moved = await setStatus({ propertyIds: ids, status: 'follow_up' })
+  ok(moved.body.updated === 4, `all four move together (updated=${moved.body.updated})`)
+  const boot1 = await (await api('/api/bootstrap', {}, admin.token)).json()
+  ok(
+    [1, 2, 3, 4].every((n) => at(n, boot1).status === 'follow_up'),
+    'and the new status is what the device sees',
+    [1, 2, 3, 4].map((n) => at(n, boot1).status).join(','),
+  )
+
+  /* Do Not Contact is never overwritten */
+  ok((await setStatus({ propertyIds: [ids[0]], status: 'dnc' })).body.updated === 1,
+    'one of them is marked Do Not Contact')
+  const back = await setStatus({ propertyIds: ids, status: 'new' })
+  ok(back.body.updated === 3, `the other three move (updated=${back.body.updated})`)
+  ok(
+    back.body.protectedDnc === 1,
+    'and the operator is told one was held, rather than left to wonder why the count is short',
+    `protectedDnc=${back.body.protectedDnc}`,
+  )
+  const boot2 = await (await api('/api/bootstrap', {}, admin.token)).json()
+  ok(at(1, boot2).status === 'dnc', 'the Do Not Contact survived a bulk reset to New', at(1, boot2).status)
+  // The control: the same request really did change the others, so "it survived"
+  // is not just "the request did nothing".
+  ok(
+    [2, 3, 4].every((n) => at(n, boot2).status === 'new'),
+    'while the same request moved every lead beside it',
+    [2, 3, 4].map((n) => at(n, boot2).status).join(','),
+  )
+
+  /* setting dnc itself is the one safe direction */
+  ok(
+    (await setStatus({ propertyIds: ids, status: 'dnc' })).body.updated === 4,
+    'marking the whole selection Do Not Contact is allowed, including one already marked',
+  )
+
+  /* what it refuses */
+  ok((await setStatus({ propertyIds: ids, status: 'nonsense' })).status === 400,
+    'a status no lead can hold is refused')
+  ok((await setStatus({ propertyIds: [], status: 'new' })).status === 400,
+    'an empty selection is refused rather than reported as success')
+  ok((await setStatus({ propertyIds: ids, status: 'new' }, rep.token)).status === 403,
+    'a field rep cannot set a status in bulk — that is the whole point of the split')
+
+  /*
+    An id that matches nothing is a no-op rather than an error.
+
+    Worth pinning on its own — a 500 here would break a legitimate request that
+    happened to include a lead somebody else erased a moment earlier. It is
+    *not* a tenant-isolation test, and it was written as one: passing an id that
+    exists nowhere passes identically with the client_id predicate removed. The
+    real isolation case needs a row under another tenant and lives in
+    `smoke:erase`, where a rival company is already set up.
+  */
+  const missing = await setStatus({ propertyIds: ['p_no_such_lead_anywhere'], status: 'won' })
+  ok(
+    missing.status === 200 && missing.body.updated === 0 && missing.body.protectedDnc === 0,
+    'an id matching no lead is a no-op, not an error, and is not reported as protected',
+    JSON.stringify(missing.body),
+  )
+
+  /* and it is recorded as an office action rather than a visit */
+  const log = await (await api('/api/audit?limit=50', {}, admin.token)).json()
+  ok(
+    (log.entries ?? []).some((e) => e.action === 'leads.status_changed'),
+    'the bulk change is in the audit log, which is what tells it apart from a visit',
+  )
+}
+
+/* --- the geocoder's verdict survives the save ------------------------------ */
+//
+// The geocoders have always reported how well they know a position, the import
+// preview has always shown it, and it was dropped on the way into the database —
+// so every pin then rendered with identical confidence and a rep walked to an
+// estimate drawn like a certainty.
+//
+// Four rows, because the interesting cases are what happens to the values
+// nobody validated: a real verdict, a different real verdict, an invented one,
+// and none at all.
+{
+  const pStreet = `Precision Row ${stamp}`
+  const res = await imp({
+    rows: [
+      { ref: 'P1', address1: `1 ${pStreet}`, lat: 30.51, lng: -97.68, precision: 'rooftop', geoProvider: 'google' },
+      { ref: 'P2', address1: `2 ${pStreet}`, lat: 30.52, lng: -97.68, precision: 'interpolated', geoProvider: 'census' },
+      // Not a value any geocoder can return. This one decides how confident the
+      // map looks about a house, so an importer claiming 'exact' must not have
+      // that rendered as certainty.
+      { ref: 'P3', address1: `3 ${pStreet}`, lat: 30.53, lng: -97.68, precision: 'exact', geoProvider: 'x' },
+      { ref: 'P4', address1: `4 ${pStreet}`, lat: 30.54, lng: -97.68 },
+    ],
+  })
+  ok(res.created === 4, `four rows imported (created=${res.created})`)
+
+  const boot = await (await api('/api/bootstrap', {}, admin.token)).json()
+  const at = (n) => boot.properties.find((p) => p.address1 === `${n} ${pStreet}`)
+
+  ok(at(1)?.geoPrecision === 'rooftop', 'a rooftop match reaches the device as rooftop', at(1)?.geoPrecision)
+  ok(
+    at(2)?.geoPrecision === 'interpolated',
+    'and an interpolated one is not quietly upgraded',
+    at(2)?.geoPrecision,
+  )
+  ok(
+    at(3)?.geoPrecision === undefined,
+    'a precision no geocoder can report is refused rather than stored',
+    String(at(3)?.geoPrecision),
+  )
+  ok(
+    at(4)?.geoPrecision === undefined,
+    'and a row that never claimed one stays unknown, not "approximate"',
+    String(at(4)?.geoPrecision),
+  )
+
+  /*
+    A re-import with no coordinates must not erase what we knew.
+
+    Coordinates already survive this — the upsert only overwrites lat/lng when
+    the incoming pair is non-zero — and precision describes those coordinates,
+    so it has to survive under exactly the same condition. Taking the new file's
+    silence as "unknown" would blank the verdict on every lead in any vendor
+    file that happens to omit coordinates.
+
+    The re-import repeats the address *exactly*. A lead's id is derived from
+    address1 plus city, state and zip, so adding or changing any of those makes
+    a different id and a second lead — which is how the first version of this
+    case fooled itself: it added a city, the import created a new row beside the
+    old one, and the assertion read the untouched original and reported that the
+    verdict had survived. The refreshed field is `roofAgeYears`, which is not
+    part of the key, and the row count below is what would catch a repeat.
+  */
+  await imp({ rows: [{ ref: 'P1', address1: `1 ${pStreet}`, roofAgeYears: 17 }] })
+  const after = await (await api('/api/bootstrap', {}, admin.token)).json()
+  const all = after.properties.filter((p) => p.address1 === `1 ${pStreet}`)
+  ok(all.length === 1, 'the re-import updated the lead rather than creating a second', `${all.length} rows`)
+  const kept = all[0]
+  ok(kept?.geoPrecision === 'rooftop', 'a re-import carrying no coordinates keeps the old verdict', kept?.geoPrecision)
+  ok(kept?.roofAgeYears === 17, 'while still refreshing what it did carry', String(kept?.roofAgeYears))
+}
+
 /* --- the size ceiling ----------------------------------------------------- */
 const tooMany = Array.from({ length: 501 }, (_, i) => ({
   ref: `X${i}`,

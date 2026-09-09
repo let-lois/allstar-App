@@ -1,4 +1,4 @@
-import type { Role } from '../types'
+import type { LeadStatus, Role } from '../types'
 
 /**
  * The API client.
@@ -351,6 +351,21 @@ export function apiCreateTerritory(
 }
 
 /** Move specific leads to a rep, rather than a whole territory. */
+/**
+ * Set a status on a batch of leads.
+ *
+ * Office-only, and deliberately absent from the field app's surface: a rep
+ * records what happened at the door and the status follows from it. See
+ * `api/src/lead-edit.ts` for why that split is worth keeping.
+ */
+export function apiSetLeadStatus(token: string, input: { propertyIds: string[]; status: LeadStatus }) {
+  return request<{ updated: number; protectedDnc: number }>('/api/leads/status', {
+    method: 'POST',
+    token,
+    body: input,
+  })
+}
+
 export function apiAssignProperties(
   token: string,
   input: { propertyIds: string[]; repId: string | null },
@@ -409,6 +424,16 @@ export interface ImportRowDTO {
   opportunityValue?: number
   roofAgeYears?: number
   squareFeet?: number
+  /**
+   * The geocoder's own verdict on the coordinates above, passed straight back
+   * from `/api/import/geocode`.
+   *
+   * The preview already showed this to the operator and then dropped it here,
+   * which meant the app knew which houses it was estimating and forgot the
+   * moment the lead was saved.
+   */
+  precision?: 'rooftop' | 'interpolated' | 'approximate'
+  geoProvider?: string
 }
 
 export interface ImportResultDTO {
@@ -467,6 +492,16 @@ export interface BootstrapDTO {
    * long as the two are out of step.
    */
   team?: { id: string; name: string; role: string; active: boolean }[]
+  /**
+   * Leads that have been erased, so this device can erase its copies too.
+   *
+   * The only field here that describes what is *not* in the response. Optional
+   * for the same reason as `team`: an older Worker does not send it, and the
+   * client must not treat its absence as "nothing has been erased" — it means
+   * "this server cannot tell me", which is a different thing and is why the
+   * purge runs on a list rather than on a diff.
+   */
+  erased?: string[]
   settings?: Record<string, unknown>
   /**
    * The company's IANA timezone — the calendar its reporting days are cut on.

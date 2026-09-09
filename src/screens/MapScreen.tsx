@@ -14,14 +14,30 @@ import { distanceMiles, formatDistance } from '../lib/geo'
 import { useIsWide } from '../lib/useMediaQuery'
 import type { LeadStatus } from '../types'
 import { STATUS_COLOR, STATUS_LABEL } from '../data/outcomes'
+import { VISITED_WINDOWS, matchesVisited, type VisitedWindow } from '../lib/leadFilter'
 
-type Filter = 'all' | 'route' | 'unvisited' | 'open' | LeadStatus
+type Filter = 'all' | 'route' | 'unvisited' | 'noanswer' | 'open' | LeadStatus
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'route', label: 'My route' },
   { key: 'all', label: 'All' },
   { key: 'unvisited', label: 'Not knocked' },
+  /*
+    The second pass.
+
+    "Not knocked" and "nobody answered" are different jobs on different days:
+    the first is virgin territory, the second is a street a rep has already
+    walked and should come back to at a different hour. Until the map could
+    tell them apart there was no way to ask for the second one at all.
+  */
+  { key: 'noanswer', label: 'No answer' },
   { key: 'open', label: 'Open leads' },
+  /*
+    Ahead of the sale stages on purpose. "Who asked me to come back" is the
+    question a rep opens the map with when planning an afternoon; an appointment
+    is already in their calendar.
+  */
+  { key: 'follow_up', label: STATUS_LABEL.follow_up },
   { key: 'appointment', label: STATUS_LABEL.appointment },
   { key: 'quoted', label: STATUS_LABEL.quoted },
   { key: 'working', label: STATUS_LABEL.working },
@@ -47,6 +63,14 @@ export function MapScreen() {
   const hasRoute = (useAppStore((s) => s.route)?.stops.length ?? 0) > 0
   const [filter, setFilter] = useState<Filter>(hasRoute ? 'route' : 'open')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /*
+    When it was last knocked, alongside the status rail rather than folded into
+    it. "Not knocked" already lives in that rail as a one-off; these are the same
+    question asked properly, and keeping them apart means the status chips stay a
+    list of statuses.
+  */
+  const [visited, setVisited] = useState<VisitedWindow>('any')
+  const timezone = useAppStore((s) => s.timezone)
   /*
     Map or list. A choice for now, and the offline default later.
 
@@ -84,7 +108,14 @@ export function MapScreen() {
   )
 
   const shown = useMemo(() => {
-    const list = scoped
+    /*
+      The visit window applies on top of whichever chip is selected, not instead
+      of it: "my route, not knocked in a month" is a real request and the two
+      rails compose. Through the shared predicate so the map agrees with both
+      lists about what a month is. See leadFilter.ts.
+    */
+    const list =
+      visited === 'any' ? scoped : scoped.filter((p) => matchesVisited(p, visited, timezone))
     switch (filter) {
       case 'all':
         return list
@@ -92,12 +123,22 @@ export function MapScreen() {
         return list.filter((p) => routeIds.has(p.id))
       case 'unvisited':
         return list.filter((p) => !p.lastVisitAt)
+      case 'noanswer':
+        /*
+          Still worth another knock. A door that answered and said no is not on
+          this list — `lastOutcome` is the *last* thing that happened, so a lead
+          that has since been sold or marked Do Not Contact has moved on and
+          must not be handed back to a rep as unfinished business.
+        */
+        return list.filter(
+          (p) => p.lastOutcome === 'no_answer' && !['won', 'lost', 'dnc'].includes(p.status),
+        )
       case 'open':
         return list.filter((p) => !['won', 'lost', 'dnc'].includes(p.status))
       default:
         return list.filter((p) => p.status === filter)
     }
-  }, [scoped, filter, routeIds])
+  }, [scoped, filter, routeIds, visited, timezone])
 
   const selected = selectedId ? properties[selectedId] : undefined
 
@@ -136,6 +177,27 @@ export function MapScreen() {
           }
         >
           {f.label}
+        </Chip>
+      ))}
+      {/*
+        The visit windows continue the same scroller rather than starting a
+        second band. Over the map every extra row of chrome costs map, which on
+        a 360px phone is the screen — and this rail already scrolls, so length
+        is free where height is not. A divider says the two groups compose
+        instead of replacing each other.
+      */}
+      <span className="mx-1 w-px shrink-0 self-stretch bg-line/60" />
+      {VISITED_WINDOWS.filter((w) => w.key !== 'any' || visited !== 'any').map((w) => (
+        <Chip
+          key={w.key}
+          size="sm"
+          selected={visited === w.key}
+          onClick={() => setVisited(w.key)}
+          className={
+            visited === w.key ? 'shadow-card' : 'bg-surface/95 shadow-card backdrop-blur'
+          }
+        >
+          {w.key === 'any' ? 'Any visit' : w.label}
         </Chip>
       ))}
     </div>
@@ -186,6 +248,16 @@ export function MapScreen() {
         */
         className="metal metal-quiet ml-auto flex overflow-hidden rounded-full p-0.5"
       >
+        {/*
+          Two, not three. Street belongs on a map screen and it was briefly a
+          third segment here, which broke the layout at 320px: this row also
+          carries the lead search, and the extra width pushed the search field
+          out of it entirely — `verify:mapsearch` measures that and caught it.
+          The overflow was also the design telling me something. Map and List
+          are two renderings of *this* screen; Street is a different route, and
+          a view-toggle is the wrong place to navigate from. It moved to a
+          button on the map itself.
+        */}
         {(['map', 'list'] as const).map((v) => (
           <button
             key={v}
@@ -243,6 +315,25 @@ export function MapScreen() {
     initialCenter: route?.stops.length ? properties[route.stops[0].propertyId] : undefined,
     overlay: (
       <>
+        {/*
+          The way into the street view, bottom-left.
+
+          Down here rather than in the segmented control at the top, which is
+          the row that also carries the lead search — a third item there pushed
+          the search off screen at 320px. The left edge at thumb height is free
+          (the map's own controls stack on the right), so this costs no
+          horizontal room at any width, which is what a 320px phone needs.
+        */}
+        <div className="pointer-events-none absolute inset-0">
+          <button
+            onClick={() => nav('/street')}
+            className="focusable metal metal-map pointer-events-auto absolute left-3 flex min-h-[44px] items-center rounded-pill px-4 text-[12.5px] font-semibold text-ink-soft"
+            style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+          >
+            Street
+          </button>
+        </div>
+
         {/* Floating filter rail — scrolls horizontally, never wraps. */}
         <div className="pad-top pointer-events-none absolute inset-x-0 top-0">
           <div className="pointer-events-auto flex items-center gap-2 px-3 pb-2 pt-2">{chips}</div>
