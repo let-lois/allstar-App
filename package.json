@@ -23,6 +23,7 @@
     "verify:cors-message": "node scripts/verify-cors-message.mjs",
     "verify:mapadd": "node scripts/verify-mapadd.mjs",
     "verify:mapfilters": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-mapfilters.mjs",
+    "verify:address": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-address.mjs",
     "verify:console": "node scripts/verify-console-access.mjs",
     "verify:login": "node scripts/verify-login.mjs",
     "verify:all": "node scripts/verify-all.mjs",

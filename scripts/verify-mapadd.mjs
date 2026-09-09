@@ -167,6 +167,25 @@ try {
   }
   ok(/tapped/i.test(await readout()), 'and the form says the pin came from the tap', await readout())
 
+  /*
+    With no Google key, nothing is filled in — and nothing pretends to be.
+
+    This is the state every gate runs in, and also the state of any deployment
+    whose key does not have the Geocoding API switched on. The address prefill
+    is allowed to be absent; what it is not allowed to do is claim it happened,
+    or leave a half-filled field behind. `verify:address` covers the lookup
+    itself, without a key.
+  */
+  {
+    const value = await page.locator('input[autocomplete="street-address"]').inputValue()
+    const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+    ok(value === '', 'with no geocoding available the address field is left empty', `"${value}"`)
+    ok(
+      !/Filled in from the map/.test(body) && !/Looking up the address/.test(body),
+      'and the form does not claim an address it never got',
+    )
+  }
+
   /* ===== 2. the map is still the screen ================================= */
   //
   // The reason this is a sheet and not the full-screen Add-lead form: a rep

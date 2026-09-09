@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Field } from '../ui/Input'
 import { AddressAutocomplete, type PickedAddress } from './AddressAutocomplete'
 import { useAppStore } from '../../store/useAppStore'
+import { reverseGeocode, type ReverseAddress } from '../../lib/reverseGeocode'
 import { getPosition } from '../../lib/geo'
 import { uid } from '../../lib/id'
 import * as db from '../../lib/db'
@@ -60,6 +61,19 @@ export function useLeadDraft({
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [locating, setLocating] = useState(!at)
   const [saving, setSaving] = useState(false)
+  /*
+    What the map said was here, and whether the rep has since disagreed.
+
+    `touched` is the whole safety rule of this feature: an answer that arrives
+    from Google half a second after a rep starts typing must never land on top
+    of what they are typing. They are standing in front of the house reading its
+    number off the door; Google is guessing from a coordinate. The rep wins, and
+    they win permanently — once they have touched the field, no later lookup
+    writes to it.
+  */
+  const [found, setFound] = useState<ReverseAddress | null>(null)
+  const [looking, setLooking] = useState(false)
+  const touched = useRef(false)
 
   const storePosition = useAppStore((s) => s.position)
 
@@ -95,6 +109,41 @@ export function useLeadDraft({
   }, [])
 
   /*
+    Ask what is at the pin, once the rep has actually asked for a lead here.
+
+    Keyed on the coordinate rather than run on mount, so moving the pin asks
+    again — but through a cache, so moving it back does not. Nothing is asked
+    while a rep is only panning the map: this hook exists solely for the form,
+    and the form only exists once they have tapped a house.
+  */
+  useEffect(() => {
+    if (!at) return
+    let cancelled = false
+    setLooking(true)
+    void reverseGeocode(at)
+      .then((r) => {
+        if (cancelled) return
+        setFound(r)
+        // Only into fields the rep has not touched. See `touched`.
+        if (r && !touched.current) {
+          setAddress(r.address1)
+          setPicked(null)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLooking(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // The coordinate, and nothing else. Listing `at` itself would re-run this on
+    // every render that rebuilt the object — a fresh billable lookup for a pin
+    // that has not moved, which the cache would mostly absorb and should not
+    // have to.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [at?.lat, at?.lng])
+
+  /*
     The tapped point first, then a picked address, then GPS.
 
     A picked address beats GPS because it is the rooftop rather than wherever
@@ -113,10 +162,17 @@ export function useLeadDraft({
     const property: Property = {
       id: uid('p'),
       address1: picked?.address1 ?? address.trim(),
-      // Blank rather than guessed — see the note on this component.
-      city: picked?.city ?? '',
-      state: picked?.state ?? '',
-      zip: picked?.zip ?? '',
+      /*
+        A picked suggestion first, then whatever the map said was at the pin,
+        then blank. Blank rather than guessed is still the rule — what has
+        changed is that there is now a third thing that is not a guess: the town
+        containing the exact point the rep tapped. That is not the hardcoded
+        "Round Rock, TX 78664" this used to stamp on every lead; it is derived
+        from their own finger.
+      */
+      city: picked?.city ?? found?.city ?? '',
+      state: picked?.state ?? found?.state ?? '',
+      zip: picked?.zip ?? found?.zip ?? '',
       lat: pin.lat,
       lng: pin.lng,
       status: 'new',
@@ -144,6 +200,11 @@ export function useLeadDraft({
     phone,
     setPhone,
     at: at ?? null,
+    found,
+    looking,
+    markTouched: () => {
+      touched.current = true
+    },
     pin,
     coords,
     locating,
@@ -174,13 +235,15 @@ export function LeadFields({
   autoFocus?: boolean
 }) {
   const { address, setAddress, picked, setPicked, name, setName, phone, setPhone } = draft
-  const { at, pin, coords, locating } = draft
+  const { at, pin, coords, locating, found, looking, markTouched } = draft
 
   return (
     <div className="space-y-4">
       <AddressAutocomplete
         value={address}
         onChange={(v) => {
+          // From here on this field is the rep's. See `touched` in useLeadDraft.
+          markTouched()
           setAddress(v)
           // Editing after a pick makes the pick stale — the coordinates would
           // still be the old house's.
@@ -193,7 +256,7 @@ export function LeadFields({
           picked
             ? `${[picked.city, picked.state, picked.zip].filter(Boolean).join(' ')}`
             : at
-              ? 'House number and street. The pin is already set where you tapped.'
+              ? addressHint(found, looking)
               : 'Start typing and pick from the list — that sets the pin exactly.'
         }
       />
@@ -249,11 +312,28 @@ export function LeadFields({
         )}
         {at && (
           <p className="mt-1.5 text-[12.5px] text-ink-mute">
-            Tap the map again to move it.
+            {[found?.city, found?.state, found?.zip].filter(Boolean).length > 0
+              ? `${[found?.city, found?.state, found?.zip].filter(Boolean).join(' ')} · tap the map again to move it.`
+              : 'Tap the map again to move it.'}
           </p>
         )}
       </div>
 
     </div>
   )
+}
+
+/**
+ * What to say under the address field when the pin came from the map.
+ *
+ * Three states, and the middle one is why this is a function rather than a
+ * string. Google can answer precisely, vaguely, or not at all — and a rep told
+ * nothing cannot tell "we could not find this street" from "this app does not
+ * do that". A vague answer says which half is missing and whose job it now is.
+ */
+function addressHint(found: ReverseAddress | null, looking: boolean): string {
+  if (looking) return 'Looking up the address at this pin…'
+  if (found?.address1) return 'Filled in from the map — check it against the door.'
+  if (found) return 'Only the area came back, not the street. Type the number and street.'
+  return 'House number and street. The pin is already set where you tapped.'
 }
