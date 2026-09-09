@@ -607,16 +607,19 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await page.waitForTimeout(400)
 
   // Filtering by rep is how an office answers "what does Priya have".
-  await page.selectOption('select', 'u_rep_2')
+  // By label. A bare `select` selector matched one control when this was
+  // written and four by the time filters were added, at which point it aimed at
+  // the wrong one and timed out looking for a rep in a list of dates.
+  await page.getByLabel('Assigned to').selectOption('u_rep_2')
   await page.waitForTimeout(400)
   ok((await rowCount()) === 1, 'filtering by rep shows only their leads')
-  await page.selectOption('select', 'unassigned')
+  await page.getByLabel('Assigned to').selectOption('unassigned')
   await page.waitForTimeout(400)
   ok(
     (await rowCount()) === 1 && /5 Elm Ct/.test(await body()),
     'and unassigned leads can be found as a group — the ones nobody is working',
   )
-  await page.selectOption('select', 'all')
+  await page.getByLabel('Assigned to').selectOption('all')
   await page.waitForTimeout(400)
 
   /* ---- moving one house ---- */

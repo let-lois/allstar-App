@@ -12,6 +12,7 @@ import type { LeadStatus } from '../types'
 import { DataList } from './DataList'
 import { FieldMap } from '../components/map/FieldMap'
 import { pointInPolygon } from '../lib/geo'
+import { VISITED_WINDOWS, matchesVisited, type VisitedWindow } from '../lib/leadFilter'
 
 /**
  * Every lead, from a desk.
@@ -35,6 +36,8 @@ export default function AdminLeads() {
   const territories = useAppStore((s) => s.territories)
   const team = useAppStore((s) => s.team)
   const mode = useAppStore((s) => s.mode)
+  // The company's calendar, so "today" here is the day the reporting counts on.
+  const timezone = useAppStore((s) => s.timezone)
   const refreshFromServer = useAppStore((s) => s.refreshFromServer)
 
   // Seeded from the URL so another screen can send somebody here pointed at one
@@ -44,6 +47,7 @@ export default function AdminLeads() {
   const [query, setQuery] = useState(() => params.get('q') ?? '')
   const [status, setStatus] = useState<LeadStatus | 'all'>('all')
   const [repFilter, setRepFilter] = useState<string>('all')
+  const [visited, setVisited] = useState<VisitedWindow>('any')
   const [sort, setSort] = useState<SortKey>('address')
   const [shown, setShown] = useState(PAGE)
   const [view, setView] = useState<'list' | 'map'>('list')
@@ -83,6 +87,13 @@ export default function AdminLeads() {
     if (status !== 'all') list = list.filter((p) => p.status === status)
     if (repFilter === 'unassigned') list = list.filter((p) => !p.assignedRepId)
     else if (repFilter !== 'all') list = list.filter((p) => p.assignedRepId === repFilter)
+    /*
+      Through the shared predicate rather than inline arithmetic, so this screen,
+      the rep's list and the map cannot disagree about what "the last 7 days"
+      means — and so all three cut the day on the company's calendar instead of
+      this browser's. See leadFilter.ts.
+    */
+    if (visited !== 'any') list = list.filter((p) => matchesVisited(p, visited, timezone))
 
     const sorted = [...list]
     if (sort === 'address') sorted.sort((a, b) => a.address1.localeCompare(b.address1))
@@ -91,7 +102,7 @@ export default function AdminLeads() {
       sorted.sort((a, b) => (b.opportunityValue ?? 0) - (a.opportunityValue ?? 0))
     else sorted.sort((a, b) => (b.lastVisitAt ?? 0) - (a.lastVisitAt ?? 0))
     return sorted
-  }, [properties, query, status, repFilter, sort])
+  }, [properties, query, status, repFilter, visited, sort, timezone])
 
   const page = rows.slice(0, shown)
 
@@ -250,9 +261,29 @@ export default function AdminLeads() {
           className="focusable min-h-[40px] w-72 rounded-field border border-line px-3 text-sm"
         />
         <select
+          value={visited}
+          onChange={(e) => setVisited(e.target.value as VisitedWindow)}
+          className="focusable min-h-[40px] rounded-field border border-line bg-surface px-2 text-sm"
+          aria-label="Last visited"
+        >
+          {VISITED_WINDOWS.map((w) => (
+            <option key={w.key} value={w.key}>
+              {w.key === 'any' ? 'Visited: any time' : w.label}
+            </option>
+          ))}
+        </select>
+        {/*
+          Labelled, like every other control in this bar. Four dropdowns sitting
+          in a row are four identical "combo box" announcements to a screen
+          reader — and a bare `select` selector in a gate becomes ambiguous the
+          moment a fifth is added, which is how two gates broke on unrelated
+          work in this session.
+        */}
+        <select
           value={repFilter}
           onChange={(e) => setRepFilter(e.target.value)}
           className="focusable min-h-[40px] rounded-field border border-line bg-surface px-2 text-sm"
+          aria-label="Assigned to"
         >
           <option value="all">Everyone</option>
           <option value="unassigned">Unassigned</option>
@@ -263,6 +294,7 @@ export default function AdminLeads() {
           ))}
         </select>
         <select
+          aria-label="Sort by"
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
           className="focusable min-h-[40px] rounded-field border border-line bg-surface px-2 text-sm"

@@ -14,6 +14,7 @@ import { distanceMiles, formatDistance } from '../lib/geo'
 import { useIsWide } from '../lib/useMediaQuery'
 import type { LeadStatus } from '../types'
 import { STATUS_COLOR, STATUS_LABEL } from '../data/outcomes'
+import { VISITED_WINDOWS, matchesVisited, type VisitedWindow } from '../lib/leadFilter'
 
 type Filter = 'all' | 'route' | 'unvisited' | 'noanswer' | 'open' | LeadStatus
 
@@ -63,6 +64,14 @@ export function MapScreen() {
   const [filter, setFilter] = useState<Filter>(hasRoute ? 'route' : 'open')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /*
+    When it was last knocked, alongside the status rail rather than folded into
+    it. "Not knocked" already lives in that rail as a one-off; these are the same
+    question asked properly, and keeping them apart means the status chips stay a
+    list of statuses.
+  */
+  const [visited, setVisited] = useState<VisitedWindow>('any')
+  const timezone = useAppStore((s) => s.timezone)
+  /*
     Map or list. A choice for now, and the offline default later.
 
     The map is moving to the Google Maps JavaScript API, which cannot draw
@@ -99,7 +108,14 @@ export function MapScreen() {
   )
 
   const shown = useMemo(() => {
-    const list = scoped
+    /*
+      The visit window applies on top of whichever chip is selected, not instead
+      of it: "my route, not knocked in a month" is a real request and the two
+      rails compose. Through the shared predicate so the map agrees with both
+      lists about what a month is. See leadFilter.ts.
+    */
+    const list =
+      visited === 'any' ? scoped : scoped.filter((p) => matchesVisited(p, visited, timezone))
     switch (filter) {
       case 'all':
         return list
@@ -122,7 +138,7 @@ export function MapScreen() {
       default:
         return list.filter((p) => p.status === filter)
     }
-  }, [scoped, filter, routeIds])
+  }, [scoped, filter, routeIds, visited, timezone])
 
   const selected = selectedId ? properties[selectedId] : undefined
 
@@ -161,6 +177,27 @@ export function MapScreen() {
           }
         >
           {f.label}
+        </Chip>
+      ))}
+      {/*
+        The visit windows continue the same scroller rather than starting a
+        second band. Over the map every extra row of chrome costs map, which on
+        a 360px phone is the screen — and this rail already scrolls, so length
+        is free where height is not. A divider says the two groups compose
+        instead of replacing each other.
+      */}
+      <span className="mx-1 w-px shrink-0 self-stretch bg-line/60" />
+      {VISITED_WINDOWS.filter((w) => w.key !== 'any' || visited !== 'any').map((w) => (
+        <Chip
+          key={w.key}
+          size="sm"
+          selected={visited === w.key}
+          onClick={() => setVisited(w.key)}
+          className={
+            visited === w.key ? 'shadow-card' : 'bg-surface/95 shadow-card backdrop-blur'
+          }
+        >
+          {w.key === 'any' ? 'Any visit' : w.label}
         </Chip>
       ))}
     </div>
