@@ -10,6 +10,8 @@ import { PIPELINE_STAGES, STATUS_COLOR, STATUS_LABEL, outcomeByCode } from '../d
 import { money, relative } from '../lib/format'
 import type { LeadStatus } from '../types'
 import { DataList } from './DataList'
+import { FieldMap } from '../components/map/FieldMap'
+import { pointInPolygon } from '../lib/geo'
 
 /**
  * Every lead, from a desk.
@@ -44,6 +46,16 @@ export default function AdminLeads() {
   const [repFilter, setRepFilter] = useState<string>('all')
   const [sort, setSort] = useState<SortKey>('address')
   const [shown, setShown] = useState(PAGE)
+  const [view, setView] = useState<'list' | 'map'>('list')
+  /*
+    The shape being drawn, or null when not drawing.
+
+    Held here rather than inside the map for the same reason territory drawing
+    holds it in its own screen: the undo, the commit and the running count all
+    belong to whoever is selecting, and the map's job is only to turn a tap into
+    a coordinate and show what has been drawn so far.
+  */
+  const [lasso, setLasso] = useState<{ lat: number; lng: number }[] | null>(null)
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignTo, setAssignTo] = useState('')
@@ -82,6 +94,43 @@ export default function AdminLeads() {
   }, [properties, query, status, repFilter, sort])
 
   const page = rows.slice(0, shown)
+
+  /*
+    Which leads the drawn shape currently covers.
+
+    Over `rows` — the filtered set — not every lead in the company. If somebody
+    has narrowed to Follow-up and then draws round a block, they mean the
+    follow-ups on that block; selecting the closed sales underneath them as well
+    would be a bulk action nobody asked for. It also means the shape composes
+    with the filters instead of fighting them.
+
+    Recomputed on every tap, which is the feedback loop of the whole gesture —
+    the count has to move under the finger, which is why the test is plain
+    arithmetic rather than anything cleverer.
+  */
+  const inside = useMemo(() => {
+    if (!lasso || lasso.length < 3) return []
+    return rows.filter(
+      (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && pointInPolygon(p, lasso),
+    )
+  }, [lasso, rows])
+
+  /*
+    Added to the selection rather than replacing it.
+
+    Replacing would silently discard ticks somebody had already made — including
+    ones scrolled off screen — and the count in the bulk bar is the only place
+    that would have said so. A union is visible in that count and undone by
+    "Clear selection", so the recoverable choice is the default.
+  */
+  function commitLasso() {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      for (const p of inside) next.add(p.id)
+      return next
+    })
+    setLasso(null)
+  }
   // Selection follows what's on screen: "select all" that silently picks up
   // three thousand filtered-out rows is how a bulk action goes wrong.
   const allOnPageSelected = page.length > 0 && page.every((p) => selected.has(p.id))
@@ -166,6 +215,30 @@ export default function AdminLeads() {
       description={`${Object.keys(properties).length.toLocaleString()} in total · ${rows.length.toLocaleString()} matching`}
     >
       <FilterBar>
+        {/*
+          A segmented control rather than two buttons, matching the map screen:
+          two buttons leave "which one am I looking at" to colour alone, and this
+          pair has to answer it at a glance.
+        */}
+        <div className="flex overflow-hidden rounded-field border border-line" role="group" aria-label="View">
+          {(['list', 'map'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => {
+                setView(v)
+                // Leaving the map mid-shape would leave the draft hanging with
+                // nothing on screen able to finish or discard it.
+                if (v === 'list') setLasso(null)
+              }}
+              aria-pressed={view === v}
+              className={`focusable min-h-[40px] px-3 text-sm font-semibold capitalize ${
+                view === v ? 'bg-brand-500 text-ink-inverse' : 'bg-surface text-ink-soft'
+              }`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
         <input
           value={query}
           onChange={(e) => {
@@ -293,11 +366,99 @@ export default function AdminLeads() {
         </div>
       )}
 
+      {view === 'map' && (
+        <section className="mb-3">
+          {/*
+            Drawing a shape round some pins, which is how an office selects a
+            block without ticking forty rows.
+
+            The gesture and the geometry are both reused rather than rebuilt:
+            `FieldMap` already turns taps into coordinates and draws the shape
+            for territory drawing, and `pointInPolygon` is the same function the
+            server uses to decide which leads a territory claims — kept in step
+            by `verify:geo-parity`. What is new here is only where the answer
+            goes: into the selection the checkboxes already feed.
+          */}
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            {!lasso ? (
+              <Button size="sm" variant="secondary" onClick={() => setLasso([])}>
+                Select an area
+              </Button>
+            ) : (
+              <>
+                <span className="text-sm font-semibold">
+                  {lasso.length < 3
+                    ? `Tap the map to outline an area — ${3 - lasso.length} more point${
+                        3 - lasso.length === 1 ? '' : 's'
+                      }`
+                    : `${inside.length.toLocaleString()} lead${
+                        inside.length === 1 ? '' : 's'
+                      } inside`}
+                </span>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={lasso.length === 0}
+                  onClick={() => setLasso((pts) => (pts ? pts.slice(0, -1) : pts))}
+                >
+                  Undo point
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={inside.length === 0}
+                  onClick={commitLasso}
+                >
+                  Add {inside.length.toLocaleString()} to selection
+                </Button>
+                <button
+                  onClick={() => setLasso(null)}
+                  className="focusable text-sm font-medium text-ink-mute underline"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
+
+          {/*
+            The filtered set, so what is on the map is what the list would show.
+            An operator who has narrowed to one rep's follow-ups and then opens
+            the map to draw round them should not be handed the whole company.
+          */}
+          <FieldMap
+            className="h-[520px] rounded-card"
+            properties={rows}
+            draw={
+              lasso
+                ? {
+                    points: lasso,
+                    onAddPoint: (point) => setLasso((pts) => [...(pts ?? []), point]),
+                    label: 'Outline an area to select leads',
+                  }
+                : undefined
+            }
+            // An office user's own GPS says nothing about a customer's street,
+            // and passing it would recentre the map away from the work.
+            position={null}
+            selectedId={null}
+            // FieldMap deselects by passing null; there is nothing to toggle
+            // then, and the selection is cleared from the bulk bar instead.
+            onSelect={(id) => id && toggle(id)}
+          />
+          <p className="mt-1 text-xs text-ink-mute">
+            {lasso
+              ? 'Tap the map to add points. The shape closes itself.'
+              : 'Tap a pin to select it, or draw round several at once.'}
+          </p>
+        </section>
+      )}
+
       {/*
         Cards on a phone, the table on a desktop — see `DataList`. This one keeps
         its select-all: reassigning a street's worth of leads is exactly the job
         somebody does from a phone after a rep quits.
       */}
+      {view === 'list' && (
       <DataList
         rows={page}
         keyOf={(p) => p.id}
@@ -411,8 +572,9 @@ export default function AdminLeads() {
           },
         ]}
       />
+      )}
 
-      {shown < rows.length && (
+      {view === 'list' && shown < rows.length && (
         <Button
           variant="secondary"
           className="mt-3 self-start"

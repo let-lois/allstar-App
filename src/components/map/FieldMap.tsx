@@ -124,6 +124,15 @@ interface Props {
   draw?: {
     points: { lat: number; lng: number }[]
     onAddPoint: (point: { lat: number; lng: number }) => void
+    /**
+     * What the drawing is for, announced to a screen reader.
+     *
+     * The gesture has two callers now — outlining a territory, and selecting a
+     * block of leads to act on — and while it was only ever the first, the label
+     * said "territory" unconditionally. Reusing the gesture without this made
+     * the map tell a screen reader the wrong thing about what a tap would do.
+     */
+    label?: string
   }
 }
 
@@ -545,7 +554,7 @@ export function FieldMap({
         a territory vertex, which makes it a control.
       */
       role="application"
-      aria-label={draw ? 'Outline a territory on the map' : 'Map of your leads'}
+      aria-label={draw ? (draw.label ?? 'Outline a territory on the map') : 'Map of your leads'}
       data-tour="map-canvas"
       className={`relative touch-none overflow-hidden bg-[#EDF1F3] ${className}`}
     >

@@ -28,6 +28,7 @@
     "verify:csv": "node scripts/verify-csv.mjs",
     "verify:merge": "node scripts/verify-crm-merge.mjs",
     "verify:import": "node scripts/verify-import-ui.mjs",
+    "verify:lasso": "node scripts/verify-lasso.mjs",
     "verify:route": "node scripts/verify-route.mjs",
     "verify:maptiles": "node scripts/verify-map-tiles.mjs",
     "verify:navigate": "node scripts/verify-navigate.mjs",
