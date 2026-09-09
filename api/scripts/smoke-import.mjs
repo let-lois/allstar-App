@@ -461,6 +461,106 @@ ok(
 )
 ok((await imp({ rows: [] })).error !== undefined, 'an empty import is refused rather than reported as success')
 
+/* --- bulk status, and the one rule it must never break --------------------- */
+//
+// The office needs to move a batch of leads: a canvass comes back, a street
+// turns out to be rentals, a vendor file was mis-scored. Doing that one lead at
+// a time is not a workflow.
+//
+// The rule this is shaped around is Do Not Contact. Once a household has asked
+// a rep to stop, selecting four hundred rows and setting them to New must not
+// quietly undo it — the lead would look ordinary again with its history buried,
+// and the next rep on that street would knock.
+{
+  const bStreet = `Bulk Status Row ${stamp}`
+  const seed = await imp({
+    rows: [1, 2, 3, 4].map((n) => ({
+      ref: `B${n}`,
+      address1: `${n} ${bStreet}`,
+      lat: 30.5,
+      lng: -97.6,
+    })),
+  })
+  ok(seed.created === 4, `four leads to work on (created=${seed.created})`)
+
+  const boot0 = await (await api('/api/bootstrap', {}, admin.token)).json()
+  const at = (n, b) => b.properties.find((p) => p.address1 === `${n} ${bStreet}`)
+  const ids = [1, 2, 3, 4].map((n) => at(n, boot0).id)
+
+  const setStatus = (body, token = admin.token) =>
+    api('/api/leads/status', { method: 'POST', body: JSON.stringify(body) }, token).then(
+      async (r) => ({ status: r.status, body: await r.json() }),
+    )
+
+  /* the ordinary case */
+  const moved = await setStatus({ propertyIds: ids, status: 'follow_up' })
+  ok(moved.body.updated === 4, `all four move together (updated=${moved.body.updated})`)
+  const boot1 = await (await api('/api/bootstrap', {}, admin.token)).json()
+  ok(
+    [1, 2, 3, 4].every((n) => at(n, boot1).status === 'follow_up'),
+    'and the new status is what the device sees',
+    [1, 2, 3, 4].map((n) => at(n, boot1).status).join(','),
+  )
+
+  /* Do Not Contact is never overwritten */
+  ok((await setStatus({ propertyIds: [ids[0]], status: 'dnc' })).body.updated === 1,
+    'one of them is marked Do Not Contact')
+  const back = await setStatus({ propertyIds: ids, status: 'new' })
+  ok(back.body.updated === 3, `the other three move (updated=${back.body.updated})`)
+  ok(
+    back.body.protectedDnc === 1,
+    'and the operator is told one was held, rather than left to wonder why the count is short',
+    `protectedDnc=${back.body.protectedDnc}`,
+  )
+  const boot2 = await (await api('/api/bootstrap', {}, admin.token)).json()
+  ok(at(1, boot2).status === 'dnc', 'the Do Not Contact survived a bulk reset to New', at(1, boot2).status)
+  // The control: the same request really did change the others, so "it survived"
+  // is not just "the request did nothing".
+  ok(
+    [2, 3, 4].every((n) => at(n, boot2).status === 'new'),
+    'while the same request moved every lead beside it',
+    [2, 3, 4].map((n) => at(n, boot2).status).join(','),
+  )
+
+  /* setting dnc itself is the one safe direction */
+  ok(
+    (await setStatus({ propertyIds: ids, status: 'dnc' })).body.updated === 4,
+    'marking the whole selection Do Not Contact is allowed, including one already marked',
+  )
+
+  /* what it refuses */
+  ok((await setStatus({ propertyIds: ids, status: 'nonsense' })).status === 400,
+    'a status no lead can hold is refused')
+  ok((await setStatus({ propertyIds: [], status: 'new' })).status === 400,
+    'an empty selection is refused rather than reported as success')
+  ok((await setStatus({ propertyIds: ids, status: 'new' }, rep.token)).status === 403,
+    'a field rep cannot set a status in bulk — that is the whole point of the split')
+
+  /*
+    An id that matches nothing is a no-op rather than an error.
+
+    Worth pinning on its own — a 500 here would break a legitimate request that
+    happened to include a lead somebody else erased a moment earlier. It is
+    *not* a tenant-isolation test, and it was written as one: passing an id that
+    exists nowhere passes identically with the client_id predicate removed. The
+    real isolation case needs a row under another tenant and lives in
+    `smoke:erase`, where a rival company is already set up.
+  */
+  const missing = await setStatus({ propertyIds: ['p_no_such_lead_anywhere'], status: 'won' })
+  ok(
+    missing.status === 200 && missing.body.updated === 0 && missing.body.protectedDnc === 0,
+    'an id matching no lead is a no-op, not an error, and is not reported as protected',
+    JSON.stringify(missing.body),
+  )
+
+  /* and it is recorded as an office action rather than a visit */
+  const log = await (await api('/api/audit?limit=50', {}, admin.token)).json()
+  ok(
+    (log.entries ?? []).some((e) => e.action === 'leads.status_changed'),
+    'the bulk change is in the audit log, which is what tells it apart from a visit',
+  )
+}
+
 /* --- the geocoder's verdict survives the save ------------------------------ */
 //
 // The geocoders have always reported how well they know a position, the import

@@ -1,4 +1,4 @@
-import type { Role } from '../types'
+import type { LeadStatus, Role } from '../types'
 
 /**
  * The API client.
@@ -351,6 +351,21 @@ export function apiCreateTerritory(
 }
 
 /** Move specific leads to a rep, rather than a whole territory. */
+/**
+ * Set a status on a batch of leads.
+ *
+ * Office-only, and deliberately absent from the field app's surface: a rep
+ * records what happened at the door and the status follows from it. See
+ * `api/src/lead-edit.ts` for why that split is worth keeping.
+ */
+export function apiSetLeadStatus(token: string, input: { propertyIds: string[]; status: LeadStatus }) {
+  return request<{ updated: number; protectedDnc: number }>('/api/leads/status', {
+    method: 'POST',
+    token,
+    body: input,
+  })
+}
+
 export function apiAssignProperties(
   token: string,
   input: { propertyIds: string[]; repId: string | null },

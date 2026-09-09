@@ -218,6 +218,25 @@ try {
     ok(res.status === 404, "another company's lead is refused, not erased", `${res.status}`)
     const survived = n(await query(`SELECT COUNT(*) FROM properties WHERE id='${OTHER}'`))
     ok(survived === 1, 'and their row is untouched', `${survived} still there`)
+
+    /*
+      Bulk status, tested here rather than in `smoke:import` because this is
+      where a second tenant actually exists.
+
+      The version of this in the import smoke passed an id that existed nowhere
+      at all, which proves only that a missing row changes nothing — it passed
+      just as happily with the tenant predicate removed. A real row under
+      somebody else's client is the only fixture that can tell the difference,
+      and there is one right here.
+    */
+    const bulk = await call('/api/leads/status', {
+      method: 'POST',
+      body: JSON.stringify({ propertyIds: [OTHER], status: 'won' }),
+    }, session)
+    const bulkBody = await bulk.json()
+    ok(bulkBody.updated === 0, "and a bulk status change cannot reach it either", JSON.stringify(bulkBody))
+    const theirStatus = (await query(`SELECT status FROM properties WHERE id='${OTHER}'`))[0]?.status
+    ok(theirStatus === 'new', "with their lead still holding its own status", String(theirStatus))
     // No tombstone under our client either: an id that was never ours must not
     // end up on our block-list.
     const junk = n(await query(

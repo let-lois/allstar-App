@@ -628,7 +628,17 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await page.waitForTimeout(300)
   ok(/1 selected/.test(await body()), 'selecting a lead shows what will be acted on')
 
-  await page.locator('select').last().selectOption('u_rep_1')
+  /*
+    Selected by label rather than by position.
+
+    This read `select` `.last()`, which was the reassignment dropdown right up
+    until a second control — "Set status" — was added beside it. The gate then
+    hunted for a rep id in the status list and timed out sixty times over. A
+    positional locator in a bar that gains controls is a gate that breaks on
+    unrelated work, so both dropdowns now carry an aria-label and this asks for
+    the one it means.
+  */
+  await page.getByLabel('Reassign to').selectOption('u_rep_1')
   await page.getByRole('button', { name: /^Apply$/ }).click()
   await page.waitForTimeout(900)
 

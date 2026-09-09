@@ -4,9 +4,9 @@ import { AdminPage, FilterBar } from './AdminLayout'
 import { Chip } from '../components/ui/Chip'
 import { Button } from '../components/ui/Button'
 import { useAppStore } from '../store/useAppStore'
-import { ApiError, apiAssignProperties } from '../lib/http'
+import { ApiError, apiAssignProperties, apiSetLeadStatus } from '../lib/http'
 import { liveToken } from '../lib/session'
-import { STATUS_COLOR, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
+import { PIPELINE_STAGES, STATUS_COLOR, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
 import { money, relative } from '../lib/format'
 import type { LeadStatus } from '../types'
 import { DataList } from './DataList'
@@ -47,6 +47,7 @@ export default function AdminLeads() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignTo, setAssignTo] = useState('')
+  const [statusTo, setStatusTo] = useState<LeadStatus | ''>('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -114,6 +115,42 @@ export default function AdminLeads() {
         assignTo
           ? `${res.assigned} lead${res.assigned === 1 ? '' : 's'} moved to ${nameOf(assignTo)}.`
           : `${res.assigned} lead${res.assigned === 1 ? '' : 's'} unassigned.`,
+      )
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save that. Nothing was changed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /*
+    Setting a status on a selection.
+
+    The one place in the product where a status is typed rather than earned, and
+    it is here rather than on a phone on purpose — see `api/src/lead-edit.ts`.
+    Do Not Contact is never overwritten by it, which the server enforces and
+    reports back, so the notice below can say how many were held rather than
+    leaving an operator to work out why the count is short.
+  */
+  async function applyStatus() {
+    const token = liveToken()
+    if (!token) {
+      setError('Changing a status needs a live account. The demo has nothing to save to.')
+      return
+    }
+    if (!statusTo) return
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const res = await apiSetLeadStatus(token, { propertyIds: [...selected], status: statusTo })
+      await refreshFromServer()
+      setSelected(new Set())
+      const held = res.protectedDnc
+        ? ` ${res.protectedDnc} left on Do Not Contact.`
+        : ''
+      setNotice(
+        `${res.updated} lead${res.updated === 1 ? '' : 's'} set to ${STATUS_LABEL[statusTo]}.${held}`,
       )
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save that. Nothing was changed.')
@@ -193,10 +230,17 @@ export default function AdminLeads() {
           <span className="text-sm font-semibold">
             {selected.size.toLocaleString()} selected
           </span>
+          {/*
+            Labelled, now that there are two dropdowns in this bar. Unlabelled
+            it was identifiable only by position — fine for one control, and
+            immediately wrong for two: a screen reader announces "combo box"
+            twice with no way to tell reassignment from a status change.
+          */}
           <select
             value={assignTo}
             onChange={(e) => setAssignTo(e.target.value)}
             className="focusable min-h-[38px] rounded-lg border border-ink/15 bg-surface px-2 text-sm"
+            aria-label="Reassign to"
           >
             <option value="">Unassign</option>
             {reps.map((r) => (
@@ -207,6 +251,35 @@ export default function AdminLeads() {
           </select>
           <Button size="sm" disabled={busy || mode !== 'live'} onClick={() => void assign()}>
             {busy ? 'Saving…' : 'Apply'}
+          </Button>
+
+          {/*
+            A second control rather than a shared "Apply", because the two do
+            unrelated things to the same rows and a single button next to two
+            dropdowns has to guess which one was meant. `dnc` is offered, since
+            a scrubbed list coming back is a real reason to set it in bulk; the
+            server refuses to overwrite one either way.
+          */}
+          <select
+            value={statusTo}
+            onChange={(e) => setStatusTo(e.target.value as LeadStatus | '')}
+            className="focusable min-h-[38px] rounded-lg border border-ink/15 bg-surface px-2 text-sm"
+            aria-label="Set status"
+          >
+            <option value="">Set status…</option>
+            {[...PIPELINE_STAGES, 'lost' as LeadStatus, 'dnc' as LeadStatus].map((st) => (
+              <option key={st} value={st}>
+                {STATUS_LABEL[st]}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={busy || mode !== 'live' || !statusTo}
+            onClick={() => void applyStatus()}
+          >
+            {busy ? 'Saving…' : 'Set'}
           </Button>
           <button
             onClick={() => setSelected(new Set())}
