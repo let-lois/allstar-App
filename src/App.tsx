@@ -17,6 +17,7 @@ import { VisitMode } from './screens/VisitMode'
 import { RouteScreen } from './screens/RouteScreen'
 import { More } from './screens/More'
 import { NewLead } from './screens/NewLead'
+import { StreetScreen } from './screens/StreetScreen'
 import { Navigate as NavigateScreen } from './screens/Navigate'
 import { ScheduleNew } from './screens/ScheduleNew'
 import { Team } from './screens/Team'
@@ -123,6 +124,12 @@ export function App() {
               element={isRep ? <Today /> : <Overview role={user.role} />}
             />
             <Route path="/map" element={<MapScreen />} />
+            {/*
+              Its own route rather than a mode of the map, so it can be linked,
+              restored on reload and reached from the segmented control on
+              either side. See StreetScreen.
+            */}
+            <Route path="/street" element={<StreetScreen />} />
             <Route path="/leads" element={<Leads />} />
             <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/route" element={<RouteScreen />} />

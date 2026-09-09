@@ -146,9 +146,31 @@ export function routeName(ordered: Property[]): string {
   return `${streets[0]} + ${streets.length - 1} street${streets.length === 2 ? '' : 's'}`
 }
 
-/** "1420 Cedar Bend Dr" -> "Cedar Bend Dr". Drops the house number only. */
-function streetOf(address1: string): string {
+/**
+ * "1420 Cedar Bend Dr" -> "Cedar Bend Dr". Drops the house number only.
+ *
+ * Exported because the Street screen groups by exactly this, and two functions
+ * that each decide what counts as a street would eventually disagree — leaving
+ * a rep with a street in one screen that does not exist in the other.
+ */
+export function streetOf(address1: string): string {
   return address1.replace(/^\s*[\d-]+\s+/, '').trim()
+}
+
+/**
+ * "1420 Cedar Bend Dr" -> 1420, and 0 when there is no number.
+ *
+ * For ordering a street the way it is walked. Nearest-first is right on a map
+ * and wrong in a list of doors: a rep going up one side reads kerb numbers in
+ * sequence, and a list that jumps 1420, 1418, 1424 because of GPS scatter is a
+ * list they have to re-read at every house.
+ *
+ * "1420-B" and "1420 1/2" both yield 1420, which is the correct answer for
+ * ordering — they belong beside 1420, and the full address is what is shown.
+ */
+export function houseNumberOf(address1: string): number {
+  const n = /^\s*(\d+)/.exec(address1)
+  return n ? Number(n[1]) : 0
 }
 
 /** Total walking distance of a route, for the "about N miles" estimate. */

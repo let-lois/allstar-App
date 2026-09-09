@@ -211,6 +211,16 @@ export function MapScreen() {
         */
         className="metal metal-quiet ml-auto flex overflow-hidden rounded-full p-0.5"
       >
+        {/*
+          Two, not three. Street belongs on a map screen and it was briefly a
+          third segment here, which broke the layout at 320px: this row also
+          carries the lead search, and the extra width pushed the search field
+          out of it entirely — `verify:mapsearch` measures that and caught it.
+          The overflow was also the design telling me something. Map and List
+          are two renderings of *this* screen; Street is a different route, and
+          a view-toggle is the wrong place to navigate from. It moved to a
+          button on the map itself.
+        */}
         {(['map', 'list'] as const).map((v) => (
           <button
             key={v}
@@ -268,6 +278,25 @@ export function MapScreen() {
     initialCenter: route?.stops.length ? properties[route.stops[0].propertyId] : undefined,
     overlay: (
       <>
+        {/*
+          The way into the street view, bottom-left.
+
+          Down here rather than in the segmented control at the top, which is
+          the row that also carries the lead search — a third item there pushed
+          the search off screen at 320px. The left edge at thumb height is free
+          (the map's own controls stack on the right), so this costs no
+          horizontal room at any width, which is what a 320px phone needs.
+        */}
+        <div className="pointer-events-none absolute inset-0">
+          <button
+            onClick={() => nav('/street')}
+            className="focusable metal metal-map pointer-events-auto absolute left-3 flex min-h-[44px] items-center rounded-pill px-4 text-[12.5px] font-semibold text-ink-soft"
+            style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+          >
+            Street
+          </button>
+        </div>
+
         {/* Floating filter rail — scrolls horizontally, never wraps. */}
         <div className="pad-top pointer-events-none absolute inset-x-0 top-0">
           <div className="pointer-events-auto flex items-center gap-2 px-3 pb-2 pt-2">{chips}</div>

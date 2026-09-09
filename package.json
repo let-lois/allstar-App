@@ -36,6 +36,7 @@
     "verify:classes": "node scripts/verify-classes.mjs",
     "verify:schema": "node scripts/verify-schema-drift.mjs",
     "verify:leaderboard": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-leaderboard.mjs",
+    "verify:street": "node scripts/verify-street.mjs",
     "verify:standings": "node scripts/verify-standings.mjs",
     "verify:repdetail": "node scripts/verify-repdetail.mjs",
     "verify:territorydraw": "node scripts/verify-territory-draw.mjs",
