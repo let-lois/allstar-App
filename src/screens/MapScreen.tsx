@@ -10,13 +10,25 @@ import { PropertyPeek } from '../components/property/PropertyPeek'
 import { Chip } from '../components/ui/Chip'
 import { SyncBadge } from '../components/sync/SyncBadge'
 import { useAppStore, useScopedProperties } from '../store/useAppStore'
+import { LeadFields, useLeadDraft } from '../components/property/LeadForm'
+import { Button } from '../components/ui/Button'
+import { haptic } from '../lib/haptics'
 import { distanceMiles, formatDistance } from '../lib/geo'
 import { useIsWide } from '../lib/useMediaQuery'
-import type { LeadStatus } from '../types'
+import type { LeadStatus, Property } from '../types'
 import { STATUS_COLOR, STATUS_LABEL } from '../data/outcomes'
 import { VISITED_WINDOWS, matchesVisited, type VisitedWindow } from '../lib/leadFilter'
 
 type Filter = 'all' | 'route' | 'unvisited' | 'noanswer' | 'open' | LeadStatus
+
+/**
+ * How much of the screen the Add-lead sheet covers.
+ *
+ * One number in one place, because it is two things at once: the sheet's first
+ * detent, and how much of the map the picked pin has to stay clear of. Written
+ * twice, those two would drift and the pin would start landing behind the sheet.
+ */
+const SHEET_FRACTION = 0.46
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'route', label: 'My route' },
@@ -63,6 +75,17 @@ export function MapScreen() {
   const hasRoute = (useAppStore((s) => s.route)?.stops.length ?? 0) > 0
   const [filter, setFilter] = useState<Filter>(hasRoute ? 'route' : 'open')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /*
+    The house a rep has just tapped, and the form that opens over it.
+
+    Two pieces of state rather than one because they answer different
+    questions. `draftAt` is where the pin is — nothing else, and no record
+    anywhere: tapping the map has to be free, or reps will stop doing it. It
+    becomes a lead only when somebody fills the form in and presses Save, which
+    is the whole of `adding`.
+  */
+  const [draftAt, setDraftAt] = useState<{ lat: number; lng: number } | null>(null)
+  const [adding, setAdding] = useState(false)
   /*
     When it was last knocked, alongside the status rail rather than folded into
     it. "Not knocked" already lives in that rail as a one-off; these are the same
@@ -141,6 +164,60 @@ export function MapScreen() {
   }, [scoped, filter, routeIds, visited, timezone])
 
   const selected = selectedId ? properties[selectedId] : undefined
+
+  const pickAt = (at: { lat: number; lng: number }) => {
+    setDraftAt(at)
+    setAdding(true)
+    haptic('tap')
+    /*
+      Only if the sheet is about to cover it. The pin has to land under the
+      rep's finger and stay there — that *is* the confirmation — so the map
+      moves the minimum that keeps it visible and never recentres. See
+      `MapHandle.reveal`.
+    */
+    mapHandle.current?.reveal(at, SHEET_FRACTION)
+  }
+
+  const cancelDraft = () => {
+    setDraftAt(null)
+    setAdding(false)
+  }
+
+  /*
+    Saved. The temporary pin goes and the lead's own marker takes its place —
+    which is only true if the lead is one the current filter shows, and "My
+    route" shows a route this house is not on yet. So the filter widens rather
+    than letting the pin vanish into a lead nobody can see, and the new lead is
+    selected, which puts its own sheet up in place of the form.
+  */
+  const onSaved = (p: Property) => {
+    setDraftAt(null)
+    setAdding(false)
+    const visible =
+      (visited === 'any' || matchesVisited(p, visited, timezone)) &&
+      (filter === 'all' || filter === 'open' || filter === 'unvisited' || filter === 'new')
+    if (!visible) {
+      setFilter('all')
+      setVisited('any')
+    }
+    /*
+      Close enough in that the new lead is its own dot rather than a number in a
+      cluster bubble. Nearby doors merge into counts below zoom 17, so a lead
+      saved at street zoom could otherwise vanish into one the instant it was
+      created — the rep presses Save and their house is gone.
+    */
+    mapHandle.current?.flyTo(p.lat, p.lng, 18)
+    setSelectedId(p.id)
+  }
+
+  /*
+    One draft per pin, and it survives the pin moving.
+
+    Keyed on nothing: re-mounting this on every tap would throw away whatever
+    the rep had typed, and moving the pin is a correction to *this* lead, not a
+    different one. The address they have already entered is still the address.
+  */
+  const leadDraft = useLeadDraft({ at: draftAt, onSaved })
 
   // Nearest open door — the answer to "where do I go now" when the rep is
   // freelancing rather than following the route.
@@ -313,6 +390,20 @@ export function MapScreen() {
     onSelect: setSelectedId,
     handleRef: mapHandle,
     initialCenter: route?.stops.length ? properties[route.stops[0].propertyId] : undefined,
+    /*
+      Not while a lead's sheet is up. In that state a tap on the map means
+      "close this", which is what it has always meant and what a rep expects —
+      handing it to the picker instead would answer a question nobody asked
+      with a form. Once the sheet is down, a tap on open ground is the new lead.
+    */
+    pick: selected
+      ? undefined
+      : {
+          at: draftAt,
+          onPick: pickAt,
+          exclusive: adding,
+          label: adding ? 'Tap to move the new lead’s pin' : 'Tap a house to add it as a lead',
+        },
     overlay: (
       <>
         {/*
@@ -496,6 +587,51 @@ export function MapScreen() {
           />
         </div>
       )}
+
+      {/*
+        The Add-lead sheet.
+
+        A sheet rather than the full screen at `/lead/new`, and the reason is
+        the pin: a rep who has just tapped a house needs to keep seeing which
+        house while they type, and a screen that covers the map takes away the
+        thing they were confirming. No scrim, one detent under half the height,
+        and the map stays live behind it — tapping it again moves the pin.
+
+        Not on a tablet or a desktop, where the left pane is doing this job and
+        there is room to show both properly.
+      */}
+      <BottomSheet
+        open={adding && !isWide}
+        onClose={cancelDraft}
+        detents={[SHEET_FRACTION, 0.9]}
+        scrim={false}
+        title="Add lead"
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" size="lg" onClick={cancelDraft} className="shrink-0">
+              Cancel
+            </Button>
+            {/*
+              The one obvious thing to do next, and the widest target on the
+              sheet. Disabled until there is an address *and* a pin, with the
+              readout above saying which of the two is missing — a dead button
+              that does not explain itself is what the old screen offered.
+            */}
+            <Button
+              size="lg"
+              full
+              onClick={() => void leadDraft.save()}
+              disabled={!leadDraft.canSave}
+            >
+              {leadDraft.saving ? 'Saving…' : 'Save lead'}
+            </Button>
+          </div>
+        }
+      >
+        <div data-testid="add-lead-sheet" className="pb-2">
+          <LeadFields draft={leadDraft} autoFocus={false} />
+        </div>
+      </BottomSheet>
 
       {/* Scrim off: the rep should still be able to pan the map behind the sheet. */}
       <BottomSheet

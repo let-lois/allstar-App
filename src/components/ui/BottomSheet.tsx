@@ -10,6 +10,11 @@ interface Props {
   title?: string
   /** Suppress the scrim for map sheets, where the rep still needs to pan. */
   scrim?: boolean
+  /**
+   * Pinned below the content instead of scrolling with it. For a sheet's
+   * primary action — see the note at the render site.
+   */
+  footer?: React.ReactNode
 }
 
 /**
@@ -26,6 +31,7 @@ export function BottomSheet({
   initialDetent = 0,
   title,
   scrim = true,
+  footer,
 }: Props) {
   const [detent, setDetent] = useState(initialDetent)
   const [dragY, setDragY] = useState(0)
@@ -132,6 +138,24 @@ export function BottomSheet({
           )}
         </div>
         <div className="scroll-pane px-4 pb-4">{children}</div>
+
+        {/*
+          The action row, kept out of the scrolling area.
+
+          A sheet opens at under half the screen, which on a phone is room for
+          about two fields — so anything below them is off the bottom, and the
+          first sheet with a form in it shipped with its Save button down there.
+          A primary action a rep has to go looking for is one they will assume
+          is missing.
+        */}
+        {footer && (
+          <div
+            className="shrink-0 border-t border-line-soft bg-surface px-4 pt-3"
+            style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   )

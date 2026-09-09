@@ -95,6 +95,7 @@ export function AddressAutocomplete({
   near,
   label = 'Address',
   hint,
+  autoFocus = true,
 }: {
   value: string
   onChange: (v: string) => void
@@ -104,6 +105,16 @@ export function AddressAutocomplete({
   near?: { lat: number; lng: number } | null
   label?: string
   hint?: string
+  /**
+   * Whether to take the keyboard on mount. On by default, which is right on the
+   * Add-lead *screen*: it exists for nothing else, so a rep arrives ready to
+   * type.
+   *
+   * The map's sheet turns it off. There the rep has just tapped a house and the
+   * pin is the confirmation they are looking for — throwing a keyboard over the
+   * map to cover it, unasked, would take away the one thing the tap was for.
+   */
+  autoFocus?: boolean
 }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [open, setOpen] = useState(false)
@@ -222,7 +233,7 @@ export function AddressAutocomplete({
         onKeyDown={(e) => {
           if (e.key === 'Escape') setOpen(false)
         }}
-        autoFocus
+        autoFocus={autoFocus}
         autoComplete="street-address"
         enterKeyHint="next"
         placeholder="123 Main Street"

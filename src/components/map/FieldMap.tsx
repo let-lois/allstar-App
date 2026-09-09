@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Property, Route } from '../../types'
 import { project, unproject, type Position } from '../../lib/geo'
+import { LocationPinSvg } from './LocationPin'
 import { STATUS_COLOR } from '../../data/outcomes'
 import {
   LAYERS,
@@ -73,9 +74,25 @@ const GRATICULE_STEPS = [30, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02]
 /** Below this, nearby pins merge into counts so the map stays readable. */
 const CLUSTER_UNTIL_ZOOM = 17
 const CLUSTER_CELL_PX = 58
+/** How far above a covering sheet a revealed pin should sit. One pin's height. */
+const PIN_MARGIN = 44
 
 export interface MapHandle {
   flyTo: (lat: number, lng: number, zoom?: number) => void
+  /**
+   * Pan just enough to lift a point clear of the bottom `covered` fraction of
+   * the map, and not one pixel more.
+   *
+   * For the sheet that rises over a tapped house. Recentring on the point would
+   * be the easy thing and the wrong one — the rep is watching the pin land
+   * where their finger was, and sliding it to the middle of the screen throws
+   * away the confirmation the tap was for. So this does nothing at all unless
+   * the point is actually about to be covered.
+   *
+   * The renderer works it out rather than the caller: only the map knows how
+   * tall it is and where a coordinate falls inside it.
+   */
+  reveal: (at: { lat: number; lng: number }, covered: number) => void
 }
 
 interface Props {
@@ -134,6 +151,41 @@ interface Props {
      */
     label?: string
   }
+  /**
+   * Location picking — the tap that becomes a lead.
+   *
+   * Separate from `draw` because it answers a different question with the same
+   * gesture. Drawing collects a shape and keeps collecting; picking holds one
+   * point and replaces it, so a rep who tapped the wrong house taps the right
+   * one rather than undoing anything.
+   *
+   * `at` lives with the caller for the same reason `draw.points` does: whoever
+   * opened the form owns the coordinate, and this component's job is only to
+   * turn a tap into one and draw where it landed.
+   */
+  pick?: {
+    at: { lat: number; lng: number } | null
+    onPick: (point: { lat: number; lng: number }) => void
+    /** What a tap will do, for a screen reader. */
+    label?: string
+    /**
+     * Whether picking takes *every* tap, including one on a lead's own dot.
+     *
+     * Off by default, and the default is the important half. A rep tapping a
+     * house they already have is asking about that house — so with the picker
+     * merely armed, a tap that lands on a dot opens the lead as it always did,
+     * and only a tap that misses everything places a new pin. Nothing about
+     * looking at the map changes.
+     *
+     * On while the form is open, when the question has already been asked:
+     * every tap is the answer to "which house?", and a dot 22px wide sitting a
+     * few feet from the one the rep means must not hijack it into opening
+     * somebody else's lead over the form. Lead dots stay drawn, because they
+     * are the context that makes the choice make sense; they just stop being
+     * buttons until the question is answered.
+     */
+    exclusive?: boolean
+  }
 }
 
 interface View {
@@ -157,6 +209,7 @@ export function FieldMap({
   path,
   pathKind = 'route',
   draw,
+  pick,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -247,10 +300,6 @@ export function FieldMap({
     setView((v) => ({ lat, lng, zoom: zoom ?? Math.max(v.zoom, 17) }))
   }, [])
 
-  useEffect(() => {
-    if (handleRef) handleRef.current = { flyTo }
-  }, [handleRef, flyTo])
-
   /* --- gestures ---------------------------------------------------------- */
 
   const pointers = useRef(new Map<number, { x: number; y: number }>())
@@ -278,6 +327,34 @@ export function FieldMap({
     },
     [],
   )
+
+  const reveal = useCallback(
+    (at: { lat: number; lng: number }, covered: number) => {
+      /*
+        `covered` is a fraction of the *screen*, because that is what a sheet
+        covers — it is anchored to the bottom of the viewport, not to the bottom
+        of the map, and on this screen the two are a nav bar apart. Taking the
+        fraction of the map's own height instead moved the pin by that nav bar
+        on every tap, which the gate caught as a pin 60px above the finger.
+      */
+      const box = boxRef.current?.getBoundingClientRect()
+      if (!box) return
+      const limit = window.innerHeight * (1 - covered) - box.top
+      const y = toScreen(at.lat, at.lng).y
+      /*
+        Only when the sheet would actually cover it. Nudging a pin that is
+        already in clear view would trade the strongest confirmation this
+        interaction has — the pin appearing exactly under the finger, map
+        motionless — for tidier margins, which is the wrong way round.
+      */
+      if (y > limit) panBy(0, -(y - limit + PIN_MARGIN))
+    },
+    [toScreen, panBy],
+  )
+
+  useEffect(() => {
+    if (handleRef) handleRef.current = { flyTo, reveal }
+  }, [handleRef, flyTo, reveal])
 
   const onPointerDown = (e: React.PointerEvent) => {
     const hit = (e.target as Element).closest?.('[data-marker]') as HTMLElement | null
@@ -338,6 +415,17 @@ export function FieldMap({
     if (draw) {
       const box = boxRef.current?.getBoundingClientRect()
       if (box) draw.onAddPoint(toLatLng(e.clientX - box.left, e.clientY - box.top))
+      return
+    }
+
+    /*
+      Then the location picker — for a tap that hit nothing, or for any tap at
+      all once the form is open. See `pick.exclusive`, which is where the
+      difference between those two is argued.
+    */
+    if (pick && (pick.exclusive || !hit)) {
+      const box = boxRef.current?.getBoundingClientRect()
+      if (box) pick.onPick(toLatLng(e.clientX - box.left, e.clientY - box.top))
       return
     }
 
@@ -537,6 +625,13 @@ export function FieldMap({
             (pts.length >= 3 ? ' Z' : ''),
     }
   }, [draw, toScreen, size.w])
+
+  /*
+    Where the picked point is on screen, recomputed with the view like
+    everything else here — the pin has to stay on its house through a pan and a
+    zoom, which is the difference between a marker and a sticker.
+  */
+  const pickAt = pick?.at ? toScreen(pick.at.lat, pick.at.lng) : null
 
   const me = position ? toScreen(position.lat, position.lng) : null
   // Accuracy circle drawn to true scale — a 40m fix should *look* uncertain.
@@ -817,7 +912,16 @@ export function FieldMap({
           */
           const noAnswer = pin.property.lastOutcome === 'no_answer'
           return (
-            <g key={pin.id} data-marker="pin" data-index={i} className="cursor-pointer">
+            <g
+              key={pin.id}
+              data-marker="pin"
+              data-index={i}
+              // Which lead this is, not just that it is one. Added for the gate
+              // that has to prove a saved lead landed where the pin was; a
+              // marker you cannot name is one you cannot check.
+              data-id={pin.id}
+              className="cursor-pointer"
+            >
               {/* Invisible 44px hit area — the visible dot is far too small to
                   hit reliably with a thumb, so the target is decoupled from it. */}
               <circle cx={pin.x} cy={pin.y} r={22} fill="transparent" />
@@ -872,6 +976,13 @@ export function FieldMap({
             </g>
           )
         })}
+
+        {/*
+          Last in the SVG, so it is over every lead dot. A pin the rep just
+          placed that renders *under* a house they already have is the one
+          moment this feature has to get right.
+        */}
+        {pickAt && <LocationPinSvg x={pickAt.x} y={pickAt.y} label={pick?.label} />}
       </svg>
 
       {/*
