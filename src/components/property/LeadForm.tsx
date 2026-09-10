@@ -3,6 +3,7 @@ import { Field } from '../ui/Input'
 import { AddressAutocomplete, type PickedAddress } from './AddressAutocomplete'
 import { useAppStore } from '../../store/useAppStore'
 import { reverseGeocode, type ReverseAddress } from '../../lib/reverseGeocode'
+import { addressFieldMode } from '../../lib/address'
 import { getPosition } from '../../lib/geo'
 import { uid } from '../../lib/id'
 import * as db from '../../lib/db'
@@ -278,7 +279,6 @@ export function useLeadDraft({
 }
 
 export type LeadDraft = ReturnType<typeof useLeadDraft>
-
 /**
  * The fields, without deciding where the save button goes.
  *
@@ -300,8 +300,53 @@ export function LeadFields({
   const { address, setAddress, picked, setPicked, name, setName, phone, setPhone } = draft
   const { at, pin, coords, locating, found, looking, filled, markTouched, error } = draft
 
+  /*
+    Sticky for the life of the draft, like `touched`. Having asked to correct
+    the address once, a rep who then nudges the pin should not have the field
+    snatched back into a read-only line.
+  */
+  const [editing, setEditing] = useState(false)
+  const mode = addressFieldMode({ at: at ?? null, found, filled, editing })
+
   return (
     <div className="space-y-4">
+      {mode === 'confirmed' ? (
+        <div
+          data-testid="lead-address-confirmed"
+          className="rounded-field bg-surface-tint px-3.5 py-3"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="eyebrow">Address</p>
+              <p className="mt-1 truncate text-[15px] font-semibold">{address}</p>
+              {(found?.city || found?.state || found?.zip) && (
+                <p className="truncate text-[13px] text-ink-mute">
+                  {[found?.city, found?.state, found?.zip].filter(Boolean).join(' ')}
+                </p>
+              )}
+            </div>
+            {/*
+              Not an icon. This is the escape hatch from an address the app
+              guessed, and the rep needs to find it while holding a phone in one
+              hand at a door — a pencil glyph is a puzzle at that moment.
+            */}
+            <button
+              type="button"
+              onClick={() => {
+                // Theirs from here on, so no later lookup overwrites it.
+                markTouched()
+                setEditing(true)
+              }}
+              className="focusable min-h-tap shrink-0 rounded-lg px-2 text-sm font-semibold text-accent"
+            >
+              Change
+            </button>
+          </div>
+          <p className="mt-1.5 text-[12.5px] text-ink-mute">
+            From the map — check it against the door.
+          </p>
+        </div>
+      ) : (
       <AddressAutocomplete
         value={address}
         onChange={(v) => {
@@ -323,6 +368,7 @@ export function LeadFields({
               : 'Start typing and pick from the list — that sets the pin exactly.'
         }
       />
+      )}
 
       <Field
         label="Contact name"
