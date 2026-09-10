@@ -115,6 +115,19 @@ export function Leads() {
       <TopBar
         title="Leads"
         subtitle={`${list.length} of ${scoped.length}`}
+        /*
+          The way to the rep's lists. Not a sixth tab — the bar is full and a
+          list is a way of working the leads, so it lives with them.
+        */
+        right={
+          <button
+            onClick={() => nav('/lists')}
+            data-testid="open-lists"
+            className="focusable min-h-[44px] rounded-lg px-3 text-[14px] font-semibold text-accent"
+          >
+            Lists
+          </button>
+        }
         below={
           <div className="space-y-2.5">
             <label className="relative block">

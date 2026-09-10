@@ -320,6 +320,19 @@ const shows = (property, over = {}, opts = {}) =>
   ok(shows(lead(), { scope: 'all' }, { onRoute: false }), 'while "All" ignores the route entirely')
 }
 
+/* --- a list narrows to its houses, whatever their status ----------------- */
+{
+  ok(!shows(lead(), { list: 'll_1' }, { onRoute: false, onList: false }), 'a lead off the list is hidden when a list is open')
+  ok(shows(lead(), { list: 'll_1' }, { onRoute: false, onList: true }), 'and one on it is shown')
+  // The list is the manager's choice of houses; second-guessing it by status
+  // would hide the very doors they asked for.
+  ok(
+    shows(lead({ status: 'won' }), { ...UNFILTERED_MAP, list: 'll_1' }, { onRoute: false, onList: true }),
+    'a finished lead on the list still shows when the list is opened unfiltered',
+  )
+  ok(shows(lead(), {}, { onRoute: false, onList: false }), 'and with no list open, membership is not asked about')
+}
+
 /* --- the number on the button counts questions, not answers ------------- */
 {
   ok(activeFilterCount(DEFAULT_MAP_FILTER) === 0, 'an untouched map says no filters are on')
@@ -338,6 +351,10 @@ const shows = (property, over = {}, opts = {}) =>
       noAnswerOnly: true,
     }) === 3,
     'three different questions answered is three',
+  )
+  ok(
+    activeFilterCount({ ...UNFILTERED_MAP, list: 'll_1' }) === 1,
+    'an open list counts as one, so the badge shows the way back out',
   )
   // Switching scope is not narrowing anything, and a badge on a screen nobody
   // has touched is a badge people learn to ignore.

@@ -49,6 +49,7 @@
     "verify:repdetail": "node scripts/verify-repdetail.mjs",
     "verify:territorydraw": "node scripts/verify-territory-draw.mjs",
     "verify:adminlists": "node scripts/verify-adminlists.mjs",
+    "verify:replists": "node scripts/verify-replists.mjs",
     "verify:streetview": "node scripts/verify-streetview.mjs",
     "verify:mapsearch": "node scripts/verify-mapsearch.mjs",
     "verify:newlead": "node scripts/verify-newlead.mjs",

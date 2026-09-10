@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { FieldMap, type MapHandle } from '../components/map/FieldMap'
 import { RouteList } from '../components/map/RouteList'
 import { GoogleFieldMap } from '../components/map/GoogleFieldMap'
@@ -64,10 +64,22 @@ export function MapScreen() {
     leadFilter.ts, beside the visit windows it composes with, so the predicate
     has one implementation and a gate that needs no browser.
   */
-  const [filter, setFilter] = useState<MapFilter>({
-    ...DEFAULT_MAP_FILTER,
-    scope: hasRoute ? 'route' : 'all',
+  /*
+    Arrived from a list. `/map?list=<id>` is what "Open on map" on a list
+    sends, and the map opens already narrowed to that list — every house on
+    it, whatever its status, because the list is somebody's deliberate choice
+    of doors and second-guessing it by status would hide the ones they asked
+    for. The chip in the rail is the way back out.
+  */
+  const [params] = useSearchParams()
+  const leadLists = useAppStore((s) => s.leadLists)
+  const [filter, setFilter] = useState<MapFilter>(() => {
+    const fromList = params.get('list')
+    if (fromList && leadLists[fromList]) return { ...UNFILTERED_MAP, list: fromList }
+    return { ...DEFAULT_MAP_FILTER, scope: hasRoute ? 'route' : 'all' }
   })
+  const openList = filter.list ? leadLists[filter.list] : undefined
+  const listIds = useMemo(() => new Set(openList?.leadIds ?? []), [openList])
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /*
@@ -128,8 +140,11 @@ export function MapScreen() {
       branches already showed a new lead — a second model of the same question,
       which had already drifted into testing a branch that no chip could reach.
     */
-    () => scoped.filter((p) => matchesMapFilter(p, filter, { onRoute: routeIds.has(p.id), timezone })),
-    [scoped, filter, routeIds, timezone],
+    () =>
+      scoped.filter((p) =>
+        matchesMapFilter(p, filter, { onRoute: routeIds.has(p.id), onList: listIds.has(p.id), timezone }),
+      ),
+    [scoped, filter, routeIds, listIds, timezone],
   )
 
   const selected = selectedId ? properties[selectedId] : undefined
@@ -181,7 +196,9 @@ export function MapScreen() {
       every Do Not Contact lead in the territory on a rep's map as a side effect
       of their adding one house. See `widenToShow`.
     */
-    if (!matchesMapFilter(p, filter, { onRoute: routeIds.has(p.id), timezone })) {
+    if (
+      !matchesMapFilter(p, filter, { onRoute: routeIds.has(p.id), onList: listIds.has(p.id), timezone })
+    ) {
       setFilter(widenToShow(p))
     }
     /*
@@ -235,8 +252,10 @@ export function MapScreen() {
       ? 'Loading your leads…'
       : scoped.length === 0
         ? 'No leads on this device yet. The office adds them, or use + to add one here.'
-        : activeCount === 0 && filter.scope === 'route'
-          ? 'Nothing on today’s route matches.'
+        : openList && activeCount === 1
+          ? `Nothing on ${openList.name} is on the map yet.`
+          : activeCount === 0 && filter.scope === 'route'
+            ? 'Nothing on today’s route matches.'
           : activeCount === 0
             ? 'Every lead of yours is finished — won, lost or Do Not Contact.'
             : 'No leads match these filters.'
@@ -305,6 +324,21 @@ export function MapScreen() {
         >
           All
         </Chip>
+        {/*
+          The list this map was opened from, and the way out of it. Selected
+          by definition — it is only here while it is on — and one tap clears
+          it, which is what the × says.
+        */}
+        {openList && (
+          <Chip
+            size="sm"
+            selected
+            onClick={() => setFilter((f) => ({ ...f, list: undefined }))}
+            className="bg-surface/95 shadow-card backdrop-blur"
+          >
+            <span data-testid="map-list-chip">{openList.name} ×</span>
+          </Chip>
+        )}
         {hasRoute && (
           <Chip
             size="sm"

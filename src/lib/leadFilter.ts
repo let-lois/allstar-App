@@ -128,6 +128,15 @@ export interface MapFilter {
    */
   scope: 'route' | 'all'
   /**
+   * One lead list, by id — the houses on it and nothing else.
+   *
+   * Opened from a list rather than chosen here: a rep taps "Open on map" and
+   * the map arrives already narrowed to it. Membership is the caller's to
+   * answer (`opts.onList`), the same way the route is, so this predicate stays
+   * a pure function of the lead and the filter.
+   */
+  list?: string
+  /**
    * Where the lead stands — three different kinds of answer, so three shapes.
    *
    * `open` is a *rule*, not a set: it means `isOpenStatus`, so a status added
@@ -223,7 +232,12 @@ export function widenToShow(property: Pick<Property, 'status'>): MapFilter {
 
 export function activeFilterCount(f: MapFilter): number {
   return (
-    (f.status.kind === 'some' ? 1 : 0) + (f.visited !== 'any' ? 1 : 0) + (f.noAnswerOnly ? 1 : 0)
+    (f.status.kind === 'some' ? 1 : 0) +
+    (f.visited !== 'any' ? 1 : 0) +
+    (f.noAnswerOnly ? 1 : 0) +
+    // A list is a narrowing the rep asked for by name, and the badge is how
+    // they find the way back out of it.
+    (f.list ? 1 : 0)
   )
 }
 
@@ -250,9 +264,10 @@ export function activeFilterCount(f: MapFilter): number {
 export function matchesMapFilter(
   property: Pick<Property, 'status' | 'lastOutcome' | 'lastVisitAt'>,
   filter: MapFilter,
-  opts: { onRoute: boolean; timezone?: string; now?: number },
+  opts: { onRoute: boolean; onList?: boolean; timezone?: string; now?: number },
 ): boolean {
   if (filter.scope === 'route' && !opts.onRoute) return false
+  if (filter.list && !opts.onList) return false
   if (!matchesVisited(property, filter.visited, opts.timezone, opts.now)) return false
   if (filter.noAnswerOnly && property.lastOutcome !== 'no_answer') return false
 

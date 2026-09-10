@@ -9,6 +9,7 @@ import { CommActions } from './CommActions'
 import { Button } from '../ui/Button'
 import { distanceMiles, formatDistance, walkMinutes, type Position } from '../../lib/geo'
 import { moneyFull, relativeLower, cityLine } from '../../lib/format'
+import { ListMembership } from './ListMembership'
 
 /**
  * The map's property sheet — map → tap pin → this → action, in two taps.
@@ -178,6 +179,13 @@ export function PropertyPeek({
           )}
         </div>
       )}
+
+      {/*
+        Which lists this door is on, and the one control that changes it. Here
+        because this sheet is where a rep is when they decide a house belongs on
+        tonight's list — the profile is a tap further than they will go for it.
+      */}
+      <ListMembership propertyId={property.id} compact />
 
       <CommActions property={property} contact={contact} />
 

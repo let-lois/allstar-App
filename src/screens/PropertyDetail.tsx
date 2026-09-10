@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useAppStore } from '../store/useAppStore'
+import { useAppStore, useListsContaining } from '../store/useAppStore'
+import { ListMembership } from '../components/property/ListMembership'
 import { TopBar } from '../components/nav/TopBar'
 import { Collapsible } from '../components/ui/Collapsible'
 import { Button } from '../components/ui/Button'
@@ -52,6 +53,7 @@ export function PropertyDetail() {
         .sort((a, b) => b.createdAt - a.createdAt),
     [allNotes, propertyId],
   )
+  const onLists = useListsContaining(propertyId)
   const photos = useMemo(
     () =>
       Object.values(allPhotos)
@@ -259,6 +261,10 @@ export function PropertyDetail() {
             >
               Add note
             </Button>
+          </Collapsible>
+
+          <Collapsible flat title="Lists" count={onLists.length} defaultOpen={onLists.length > 0}>
+            <ListMembership propertyId={property.id} />
           </Collapsible>
 
           <Collapsible flat title="Photos" count={photos.length} defaultOpen={photos.length > 0}>
