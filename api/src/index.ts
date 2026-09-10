@@ -54,6 +54,7 @@ import {
 import { applyMutations } from './mutations'
 import { readSettings, writeSettings, writeTimezone } from './settings'
 import { drainOutbox } from './crm-push'
+import { BACKUP_CRON, BackupNotConfigured, runBackup } from './backup'
 import { eraseProperty } from './erase'
 import { setLeadStatus } from './lead-edit'
 import { canReviewConflicts, listConflicts, reviewConflict } from './stale'
@@ -238,23 +239,68 @@ async function requireUser(req: Request, env: Env): Promise<SessionUser | null> 
   return resolveSession(env, token)
 }
 
+/**
+ * The nightly backup, and what it says when it does not happen.
+ *
+ * Every outcome ends in the log, including the boring one. A scheduled job that
+ * only speaks up on failure is a job whose silence means either "fine" or "not
+ * running", and nobody can tell which from outside — which is the exact state
+ * this whole feature exists to end. The success line carries the object key and
+ * the size, so `wrangler tail` answers "did last night's backup happen, and was
+ * it the right size" without opening the bucket.
+ *
+ * A missing bucket or key is reported differently from a failed dump on purpose.
+ * One is a deployment that was never finished and stays broken until a person
+ * does something; the other is a run that may well succeed tomorrow.
+ */
+async function scheduledBackup(env: Env): Promise<void> {
+  try {
+    const report = await runBackup(env)
+    console.log('backup ok', report)
+  } catch (err) {
+    if (err instanceof BackupNotConfigured) {
+      console.error(`backup NOT CONFIGURED — no backup was taken. ${err.message}`)
+      return
+    }
+    /*
+      Not rethrown. Cloudflare would retry on its own clock, and a retry that
+      re-reads the whole database is not free — the next scheduled run is close
+      enough, and a night without a backup is a thing to see in the log rather
+      than to paper over.
+    */
+    console.error('backup FAILED — no backup was taken.', String(err))
+  }
+}
+
 export default {
   /**
-   * The scheduled drain.
+   * Everything that runs without somebody asking for it.
    *
-   * Queued CRM work needs something to push it, and the alternative — draining
-   * inside whatever request happened to be passing — makes a rep's sync pay for
-   * a third party being slow. This runs on Cloudflare's clock instead, on every
-   * customer's queue at once, and it is the only thing in this Worker that runs
-   * without somebody asking for it.
+   * Two schedules, and the branch matters. The CRM drain runs every five
+   * minutes; the database backup runs once a night. Running the backup on the
+   * five-minute tick would be 288 dumps a day, and running the drain once a
+   * night would put a rep's lead in the office CRM sometime tomorrow — so this
+   * dispatches on which expression fired rather than doing both on every tick.
    *
-   * Failures are swallowed on purpose. A scheduled handler that throws is a
-   * retry Cloudflare decides the timing of, on top of the backoff the outbox
-   * already implements — two retry schedules fighting each other over the same
-   * customer's API quota. `drainOutbox` records every failure against its own
-   * row and against the customer's integration, which is where an admin looks.
+   * An unrecognised expression takes the drain. `wrangler dev --test-scheduled`
+   * fires with no cron at all, and so does a hand-triggered run from the
+   * dashboard; the harmless, idempotent, every-five-minutes job is the right
+   * thing to do when the answer is unclear, and taking a full backup would be
+   * the wrong one.
    */
-  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === BACKUP_CRON) {
+      ctx.waitUntil(scheduledBackup(env))
+      return
+    }
+
+    /*
+      Failures are swallowed on purpose. A scheduled handler that throws is a
+      retry Cloudflare decides the timing of, on top of the backoff the outbox
+      already implements — two retry schedules fighting each other over the same
+      customer's API quota. `drainOutbox` records every failure against its own
+      row and against the customer's integration, which is where an admin looks.
+    */
     ctx.waitUntil(
       drainOutbox(env, { limit: 100 })
         .then((r: { claimed: number }) => {
@@ -472,6 +518,17 @@ export default {
             config: {
               d1: !!env.DB,
               r2: !!env.PHOTOS,
+              /*
+                Both halves, because either one missing means the nightly backup
+                silently does not happen — and a backup that has never run looks
+                from outside exactly like one that runs every night. Presence
+                only: no timestamp, no size, no object names. Whether backups are
+                configured is an operational fact; when the last one was taken
+                and how big it is describes the database, and this endpoint is
+                unauthenticated.
+              */
+              backupBucket: !!env.BACKUPS,
+              backupKey: !!env.BACKUP_KEY,
               sessionPepper: !!env.SESSION_PEPPER,
               setupToken: !!env.SETUP_TOKEN,
               // Present means rooftop geocoding via Google; absent means the

@@ -5,6 +5,29 @@ export interface Env {
    * runs without it: photo metadata still syncs, the image stays on the phone.
    */
   PHOTOS?: R2Bucket
+  /**
+   * Where scheduled database backups go. Optional, and deliberately NOT the
+   * photos bucket: a dump holds every customer's addresses, contact names,
+   * phone numbers and password hashes, and it should not sit in the same place
+   * as the files a rep's phone uploads over a normal API call. Different
+   * contents, different blast radius, different bucket.
+   *
+   * Absent means no backup is taken. That is reported by `/api/health` and
+   * shouted into the log on every scheduled run, because a backup that has
+   * never happened looks exactly like one that happens every night.
+   */
+  BACKUPS?: R2Bucket
+  /**
+   * Encrypts those backups. Optional, and its absence is a refusal rather than
+   * a fallback — the Worker will not write a dump in the clear.
+   *
+   * Use the SAME value as the operator's local `api/.backup-key`. The two are
+   * interchangeable only if they match, and `npm run backup:open` /
+   * `verify-restore` then read a file from either source with no flag. Losing
+   * it is unrecoverable: every backup written with it becomes permanently
+   * unreadable, so keep old keys forever rather than rotating them.
+   */
+  BACKUP_KEY?: string
   ALLOWED_ORIGINS: string
   SESSION_PEPPER?: string
   /** Present only while first-run setup is still needed; remove after. */

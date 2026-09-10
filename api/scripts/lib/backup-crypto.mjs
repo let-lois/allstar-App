@@ -164,8 +164,30 @@ export function keySetupHelp() {
   )
 }
 
-const derive = (secret, salt) =>
-  scryptSync(secret, salt, KEY_BYTES, { N: KDF.N, r: KDF.r, p: KDF.p, maxmem: KDF.maxmem })
+/**
+ * The key, from a secret and a salt.
+ *
+ * `params` comes from the file's own header when reading, and from the constants
+ * above when writing. That distinction is the point: the header records N, r, p
+ * and the key length in every file ever written, and for a while nothing read
+ * them back — decryption used today's constants regardless, so a file written
+ * with any other parameters was unreadable *while carrying the numbers needed to
+ * read it*. Nothing had done that yet, and the gates would have caught the first
+ * one; but a format that documents parameters it then ignores is a trap set for
+ * whoever changes them, and there are two writers now rather than one.
+ *
+ * They are safe to trust. The header is fed to GCM as additional authenticated
+ * data, so an attacker cannot edit the parameters without the file failing to
+ * authenticate — which is why it was worth authenticating them in the first
+ * place.
+ */
+const derive = (secret, salt, params = KDF) =>
+  scryptSync(secret, salt, params.keyBytes ?? KEY_BYTES, {
+    N: params.N ?? KDF.N,
+    r: params.r ?? KDF.r,
+    p: params.p ?? KDF.p,
+    maxmem: KDF.maxmem,
+  })
 
 /** SHA-256 of a file, streamed. */
 async function sha256File(path) {
@@ -183,20 +205,29 @@ async function sha256File(path) {
  * whole dump in memory to get one pass would put a ceiling on how large a
  * database this tool works for, which is the wrong thing to optimise.
  */
-export async function encryptFile({ plainPath, outPath, secret, source }) {
+export async function encryptFile({ plainPath, outPath, secret, source, kdf }) {
   const plainBytes = statSync(plainPath).size
   const plainSha256 = await sha256File(plainPath)
 
+  /*
+    `kdf` overrides the parameters for one file. Nothing in the project passes
+    it — production backups use the constants — and it exists so the gate can
+    prove that what the header records is what the reader uses. A format whose
+    recorded parameters are never exercised is a format whose recorded
+    parameters are decorative.
+  */
+  const params = { N: KDF.N, r: KDF.r, p: KDF.p, keyBytes: KEY_BYTES, ...kdf }
+
   const salt = randomBytes(SALT_BYTES)
   const iv = randomBytes(IV_BYTES)
-  const key = derive(secret, salt)
+  const key = derive(secret, salt, params)
 
   const header = {
     kdf: 'scrypt',
-    N: KDF.N,
-    r: KDF.r,
-    p: KDF.p,
-    keyBytes: KEY_BYTES,
+    N: params.N,
+    r: params.r,
+    p: params.p,
+    keyBytes: params.keyBytes,
     cipher: CIPHER,
     salt: salt.toString('base64'),
     iv: iv.toString('base64'),
@@ -313,7 +344,7 @@ export async function decryptFile({ path, outPath, secret }) {
     closeSync(fd)
   }
 
-  const key = derive(secret, Buffer.from(header.salt, 'base64'))
+  const key = derive(secret, Buffer.from(header.salt, 'base64'), header)
   const decipher = createDecipheriv(CIPHER, key, Buffer.from(header.iv, 'base64'))
   decipher.setAAD(preamble)
   decipher.setAuthTag(tag)
