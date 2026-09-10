@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "postinstall": "node scripts/stamp-version.mjs",
+    "pretypecheck": "node scripts/stamp-version.mjs",
     "typecheck": "tsc --noEmit",
     "db:schema": "wrangler d1 execute allstar-db --remote --file=./schema.sql",
     "db:schema:local": "wrangler d1 execute allstar-db --local --file=./schema.sql",

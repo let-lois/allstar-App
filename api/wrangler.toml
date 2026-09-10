@@ -83,7 +83,9 @@ ALLOWED_ORIGINS = "https://allstar.letlois.com,https://allstar-app.pages.dev,htt
 # They must be added as *Secrets*, not as Text variables. The [vars] block above
 # is authoritative: `wrangler deploy` replaces the Worker's plain-text variables
 # with exactly what is listed there, so a Text variable added in the dashboard
-# disappears at the next deploy — and since every merge to main deploys, that is
+# disappears at the next deploy — and since a merge to main is meant to deploy
+# (check `curl <api>/api/health | jq .version` — it reports the running commit,
+# because that deploy has silently not happened before), that is
 # soon and silent. Secrets are stored separately and survive.
 #
 #   SESSION_PEPPER        — mixed into password hashing. Never change it once

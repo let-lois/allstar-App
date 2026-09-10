@@ -821,6 +821,58 @@ exact instant, that is Time Travel.
 around a hundred megabytes and the cost of keeping everything is less than the
 cost of an automatic delete going wrong.
 
+## Knowing which version is actually deployed
+
+`/api/health` reports the commit it is running:
+
+```bash
+curl -s https://<api>/api/health | jq .version
+{ "commit": "d78b3d0…", "builtAt": "2026-09-10T04:52:39.777Z", "dirty": false }
+```
+
+This was added after the failure it exists to catch. A Cloudflare build token
+belonging to somebody who had left the organisation stopped working, and the
+Worker did not deploy for **nine days** — while Cloudflare Pages, which does not
+use that token, deployed every commit. So the front end moved and the API did
+not, and the only signal anywhere was a red checkmark beside a green one on each
+commit, which reads like noise and was read like noise. Nine days of merged work
+sat in `main` while everyone believed it was live.
+
+Nothing in the app could have said so. A Worker has no idea what version it is —
+it answers requests exactly as well as it did the day it was deployed. That is
+the whole problem: a stale deployment has no symptom. So the commit is stamped
+into the bundle at build time and reported, and "is production current" becomes
+one `curl` and a `git log` rather than a belief.
+
+Three fields, and each answers a different question:
+
+| | |
+|---|---|
+| `commit` | which commit. `null` means the build was never stamped, which is distinct from being stale and worth telling apart |
+| `builtAt` | when it was bundled — the fastest way to see a deploy simply never happened |
+| `dirty` | whether it was deployed from a working tree with uncommitted changes, in which case the sha names what somebody was sitting on rather than what is running |
+
+`api/scripts/stamp-version.mjs` writes `api/src/version.ts`, and it hangs off
+`postinstall` rather than a deploy script on purpose: Cloudflare's build settings
+run `npm ci` and then `npx wrangler deploy`, with `npx` rather than `npm run`, so
+no hook on `deploy` would ever fire. `npm ci` does run `postinstall`, which lands
+before the bundle is built — so this works with the build configuration exactly
+as it already is, and nobody has to remember a dashboard field. The cost is that
+it runs during every install anywhere, so it can never be allowed to fail one:
+every path in it writes the file and exits zero, and a missing `git` or a tarball
+with no `.git` ends in `commit: null` rather than a broken install.
+
+The file is generated and git-ignored. Committing it would leave every working
+tree dirty after an install, and the value has to come from the machine doing the
+build.
+
+Gated by `smoke:observe`, in two halves that fail independently — one that the
+stamp reaches the endpoint (health matches what the bundle was stamped with), one
+that the stamp reads the right thing (`--print` matches `git rev-parse HEAD`).
+Confirmed by breaking each: dropping `version` from the health payload turns four
+assertions red and leaves the script's own green; making the stamp read `HEAD~1`
+does the exact opposite.
+
 ## Schema changes apply themselves
 
 The Worker runs its own migrations on the first request after a deploy

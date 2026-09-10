@@ -46,3 +46,9 @@ api/seed.sql
 # the app reads. Ignored rather than deleted, so one can sit here while it is
 # being sent without showing up as a change to the app.
 Allstar-week*.pdf
+
+# Written by api/scripts/stamp-version.mjs on every install, so /api/health can
+# report which commit is deployed. Generated rather than committed: a file that
+# changes on every install would be dirty in every working tree, and the value
+# has to come from the machine doing the build.
+api/src/version.ts

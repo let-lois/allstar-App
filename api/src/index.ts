@@ -54,6 +54,7 @@ import {
 import { applyMutations } from './mutations'
 import { readSettings, writeSettings, writeTimezone } from './settings'
 import { drainOutbox } from './crm-push'
+import { BUILT_AT, COMMIT, DIRTY } from './version'
 import { BACKUP_CRON, BackupNotConfigured, runBackup } from './backup'
 import { eraseProperty } from './erase'
 import { setLeadStatus } from './lead-edit'
@@ -515,6 +516,30 @@ export default {
           {
             ok: true,
             time: Date.now(),
+            /*
+              Which commit is actually running.
+
+              Not a nicety. A build token belonging to somebody who had left the
+              organisation broke every Worker deploy for nine days, while
+              Cloudflare Pages kept deploying — so the front end moved, the API
+              did not, and nothing anywhere said so. A Worker cannot tell it is
+              stale; it serves the version it was given exactly as well as it
+              did on day one. This turns "is production current" into a `curl`
+              and a `git log`.
+
+              On the unauthenticated endpoint deliberately, because a check that
+              needs a credential is a check nobody runs from a phone at the point
+              they are wondering. It names a commit in a private repository and
+              nothing about a customer, which is the same bar the rest of this
+              payload meets.
+
+              `commit: null` means the build was never stamped — distinct from a
+              stamped build, and worth telling apart. `dirty` means somebody
+              deployed from a working tree with uncommitted changes, so the sha
+              describes the commit they were sitting on rather than what is
+              running.
+            */
+            version: { commit: COMMIT, builtAt: BUILT_AT, dirty: DIRTY },
             config: {
               d1: !!env.DB,
               r2: !!env.PHOTOS,
