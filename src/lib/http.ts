@@ -457,8 +457,26 @@ export interface GeocodeMatchDTO {
   provider?: 'google' | 'census'
 }
 
+/**
+ * What one provider did with the batch it was handed.
+ *
+ * Returned alongside the matches so a provider rejecting everything is visible.
+ * The chain degrades rather than fails — Google falling over means Census
+ * answers instead — and the price of that is a dead key looking identical to a
+ * provider that had nothing to add, with every pin quietly dropping from a
+ * rooftop to a block.
+ */
+export interface GeocodeAttemptDTO {
+  provider: 'google' | 'census'
+  asked: number
+  matched: number
+  errors: number
+  /** The provider's own words, so a bad key reads as a bad key. */
+  firstError?: string
+}
+
 export function apiGeocode(token: string, rows: GeocodeRequestDTO[]) {
-  return request<{ matches: GeocodeMatchDTO[] }>('/api/import/geocode', {
+  return request<{ matches: GeocodeMatchDTO[]; attempts?: GeocodeAttemptDTO[] }>('/api/import/geocode', {
     method: 'POST',
     body: { rows },
     token,

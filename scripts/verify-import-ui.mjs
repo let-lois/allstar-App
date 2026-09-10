@@ -88,7 +88,22 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
               matchedAddress: `${r.address1.toUpperCase()}, ROUND ROCK, TX, 78664`,
             },
       )
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ matches }) })
+      /*
+        A healthy provider reports zero errors. Sent on the happy path so the
+        "no warning when nothing is wrong" assertion below is about real data
+        rather than about the field being absent — a banner that is always on is
+        one nobody reads, which is the failure this whole thing exists to avoid.
+      */
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          matches,
+          attempts: [
+            { provider: 'google', asked: body.rows.length, matched: matches.length - 1, errors: 0 },
+          ],
+        }),
+      })
     })
   }
   /*
@@ -233,6 +248,20 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
     (await page.locator('text=/1420 CEDAR BEND DR, ROUND ROCK/').count()) > 0,
     'the geocoder’s normalised address is shown so a wrong match is visible',
   )
+
+  /* --- a paid key that has stopped working ------------------------------- */
+  //
+  // The chain degrades rather than fails: Google going quiet means the free
+  // block-level service answers instead and every row still gets a pin. That is
+  // the right behaviour and it hides a revoked key perfectly — the import
+  // succeeds, the pins are merely worse than the account is paying for, and
+  // nothing on the screen ever said so. The same shape as the build token that
+  // stopped deploying the Worker for nine days behind a green checkmark.
+  ok(
+    (await page.getByTestId('provider-down').count()) === 0,
+    'a working provider raises no warning, so the warning means something',
+  )
+
 
   await page.locator('input[placeholder*="Cedar Bend"]').fill('Cedar Bend — August')
   await page.selectOption('select:below(:text("Assign to"))', 'u_rep_1').catch(async () => {
@@ -880,6 +909,115 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await confirm.click()
   await page.waitForTimeout(1200)
   ok(geocodeCalls > 0, `and the lookup runs once agreed (${geocodeCalls} calls)`)
+
+  await ctx.close()
+}
+
+/* ========== a paid geocoding key that has stopped working ================ */
+//
+// The chain degrades rather than fails: Google going quiet means the free
+// block-level service answers instead, and every row still gets a pin. That is
+// the right behaviour, and it hides a revoked key perfectly — the import
+// succeeds, the pins are merely worse than the account is paying for, and
+// nothing on the screen ever said so. The first person who could notice is a rep
+// knocking on the wrong door.
+//
+// The same shape as the Cloudflare build token that stopped deploying the Worker
+// for nine days behind a green checkmark. A credential that fails loudly gets
+// fixed the same day; one that fails quietly gets found by a customer.
+//
+// Its own scenario rather than a step inside the happy path: driving a second
+// lookup there would place the row that path deliberately leaves unplaced, and
+// quietly turn its "import 2 of 3" assertions into something else.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 } })
+  const page = await signedInConsole(ctx, { withGeocode: false })
+
+  await page.route('**/api/import/geocode', async (route) => {
+    const body = JSON.parse(route.request().postData() || '{}')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        // Every row placed — by the free fallback underneath, so nothing on the
+        // screen looks wrong. That is the whole problem being fixed.
+        matches: body.rows.map((r) => ({
+          ref: r.ref,
+          status: 'match',
+          lat: 30.5119,
+          lng: -97.6759,
+          matchedAddress: `${(r.address1 ?? '').toUpperCase()}, ROUND ROCK, TX, 78664`,
+          provider: 'census',
+          precision: 'interpolated',
+        })),
+        attempts: [
+          {
+            provider: 'google',
+            asked: body.rows.length,
+            matched: 0,
+            errors: body.rows.length,
+            firstError: 'This API project is not authorized to use this API.',
+          },
+          { provider: 'census', asked: body.rows.length, matched: body.rows.length, errors: 0 },
+        ],
+      }),
+    })
+  })
+
+  await page.locator('textarea').fill(MESSY_CSV)
+  await page.getByRole('button', { name: /^Continue$/ }).click()
+  await page.waitForTimeout(500)
+  await page.getByRole('button', { name: /^Continue$/ }).click()
+  await page.waitForTimeout(600)
+
+  const tally = async (label) =>
+    page.evaluate((l) => {
+      const el = [...document.querySelectorAll('p')].find((p) => p.textContent?.trim() === l)
+      return el?.previousElementSibling?.textContent?.trim() ?? null
+    }, label)
+
+  ok(
+    (await page.getByTestId('provider-down').count()) === 0,
+    'nothing is claimed about a provider before one has been asked',
+  )
+
+  await page.getByRole('button', { name: /Look up 3 addresses/ }).click()
+  await page.waitForTimeout(1400)
+
+  const down = page.getByTestId('provider-down')
+  /*
+    Read once, behind a presence check. Playwright throws rather than returning
+    null when asked for the text or an attribute of a locator that matches
+    nothing, so an unguarded read turns a clean failure into a crash — and a
+    crash stops every assertion after it, which is how one defect gets reported
+    as no information at all.
+  */
+  const shown = (await down.count()) > 0
+  ok(shown, 'a provider that rejected every address is called out on screen')
+  const downText = shown ? await down.innerText() : ''
+  const downRole = shown ? await down.getAttribute('role') : null
+  ok(/google/i.test(downText), 'naming which provider it was', downText.split('\n')[0]?.slice(0, 70))
+  ok(
+    /not authorized/i.test(downText),
+    'in the provider’s own words, so a bad key reads as a bad key rather than a mystery',
+  )
+  ok(
+    /street rather than the right roof/i.test(downText),
+    'and says what it cost — the pins are coarser than the account is paying for',
+  )
+  /*
+    Not an error, and it must not read as one. Nothing failed, nothing needs
+    undoing, and the leads are importable — a red alert beside a working import
+    is how people learn to ignore red.
+  */
+  ok(
+    shown && downRole !== 'alert',
+    'without claiming the import failed, because it did not',
+  )
+  ok(
+    (await tally('Ready to import')) === '3',
+    'and the rows were still placed, which is exactly why this needed saying out loud',
+  )
 
   await ctx.close()
 }

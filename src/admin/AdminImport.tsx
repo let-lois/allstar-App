@@ -110,6 +110,18 @@ export default function AdminImport() {
   const [busy, setBusy] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /**
+   * The paid provider rejected everything it was asked.
+   *
+   * Not an error — the import worked. The chain is built to degrade rather than
+   * fail, so Google falling over means Census answered instead and every row
+   * still got a pin. The pin is just on the right street rather than the right
+   * roof, and without this the operator has no way to tell that from a list of
+   * addresses Google genuinely could not place.
+   */
+  const [providerDown, setProviderDown] = useState<{ provider: string; reason?: string } | null>(
+    null,
+  )
   const [result, setResult] = useState<ImportResultDTO | null>(null)
 
   const fileInput = useRef<HTMLInputElement>(null)
@@ -253,6 +265,7 @@ export default function AdminImport() {
     }
     setBusy('geocode')
     setError(null)
+    setProviderDown(null)
     setProgress({ done: 0, total: needsGeocode.length })
 
     const byRef = new Map(prepared.map((r) => [r.ref, r]))
@@ -263,7 +276,7 @@ export default function AdminImport() {
     try {
       for (let i = 0; i < needsGeocode.length; i += CHUNK) {
         const chunk = needsGeocode.slice(i, i + CHUNK)
-        const { matches } = await apiGeocode(
+        const { matches, attempts } = await apiGeocode(
           token,
           chunk.map((r) => ({
             ref: r.ref,
@@ -273,6 +286,23 @@ export default function AdminImport() {
             zip: r.values.zip,
           })),
         )
+
+        /*
+          Only a paid provider, and only when it failed on everything.
+
+          Census is excluded because it is the bottom of the chain: when it
+          fails, rows come back unplaced and the table already says so in the
+          row itself. The invisible case is the one above it — the key somebody
+          is paying for went quiet and the free one covered, so nothing looks
+          wrong anywhere.
+
+          Some errors on a batch are ordinary; a provider that rejected every
+          single address is a credential, a quota, or a billing problem.
+        */
+        const dead = attempts?.find(
+          (a) => a.provider !== 'census' && a.errors > 0 && a.errors === a.asked,
+        )
+        if (dead) setProviderDown({ provider: dead.provider, reason: dead.firstError })
         for (const m of matches) {
           const row = byRef.get(m.ref)
           if (!row) continue
@@ -447,6 +477,32 @@ export default function AdminImport() {
         <p role="alert" className="mb-4 rounded-field bg-bad-bg p-3 text-sm font-medium text-bad ring-1 ring-bad/25">
           {error}
         </p>
+      )}
+
+      {/*
+        Deliberately not `role="alert"`, and deliberately not styled as an
+        error. Nothing failed and nothing needs undoing — the pins are simply
+        coarser than the account is paying for, and saying so in red next to a
+        working import trains people to ignore red.
+      */}
+      {providerDown && (
+        <div
+          data-testid="provider-down"
+          className="mb-4 rounded-field bg-warn-bg p-3 text-sm text-warn ring-1 ring-warn/25"
+        >
+          <p className="font-semibold">
+            {providerDown.provider === 'google' ? 'Google' : providerDown.provider} rejected every
+            address in a batch.
+          </p>
+          <p className="mt-1 leading-relaxed">
+            These leads were placed by the free block-level service instead, so their pins are on
+            the right street rather than the right roof. The import is fine — but the key you are
+            paying for is not being used. Check it before importing a large list.
+          </p>
+          {providerDown.reason && (
+            <p className="mt-1.5 font-mono text-[12px] opacity-80">{providerDown.reason}</p>
+          )}
+        </div>
       )}
 
       {/* ---- 1. pick a file --------------------------------------------- */}

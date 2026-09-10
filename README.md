@@ -873,6 +873,68 @@ Confirmed by breaking each: dropping `version` from the health payload turns fou
 assertions red and leaves the script's own green; making the stamp read `HEAD~1`
 does the exact opposite.
 
+## Every credential, and what happens when it dies
+
+Written after a Cloudflare build token belonging to somebody who had left the
+organisation went quiet and nothing deployed for nine days. The lesson was not
+about that token. It was that **a credential which fails silently is found by a
+customer**, and the only way to know which ones those are is to go through them
+one at a time.
+
+| credential | when it dies | who finds out |
+|---|---|---|
+| `DB` (D1) | deploy is refused — a required binding | whoever deploys, immediately |
+| `SESSION_PEPPER` | every password stops verifying | everyone, at once. Reported in `/api/health` |
+| `INTEGRATION_KEY` | connecting a CRM is refused rather than storing a token in plaintext | the operator who tries. In `/api/health` |
+| `PHOTOS` (R2) | uploads refused with `no_photo_storage`, photos stay on the phone | the rep, on the screen. In `/api/health` |
+| `BACKUPS` + `BACKUP_KEY` | the nightly backup refuses rather than writing plaintext | the log, every run. In `/api/health` |
+| a customer's GoHighLevel token | `status = 'broken'` on their integration | the console's integrations panel |
+| a customer's geocoding key | **used to be nobody** — see below | the import screen and the log |
+| the browser's Google Maps key | the map falls back to the self-rendered one and says why | the rep, on the screen |
+| the Cloudflare build token | **used to be nobody** — nine days | the deployed commit in `/api/health` |
+| the Cloudflare API token in a session environment | operations tooling stops working | whoever runs it |
+
+Two of those rows said "nobody" and both are now fixed. They failed the same
+way, and it is worth naming the shape: **neither one broke anything.** The
+Worker kept serving; the import kept succeeding. Something quietly got worse and
+every surface stayed green.
+
+### The geocoding one
+
+The provider chain degrades rather than fails — ask Google, and whatever it
+cannot place falls through to the free Census service. That is deliberate and
+right: an expired card must not turn an import into a page of red rows.
+
+The cost is that a key which rejects *everything* is indistinguishable from a
+provider that simply had nothing to add. The import succeeds, every pin drops
+from a rooftop to a block, the customer is still being billed for a key that is
+not being used, and the first person who could notice is a rep knocking on the
+wrong door.
+
+`geocode()` could always report which providers were asked and what they said —
+`GeocodeAttempt`, whose comment has described this blind spot since the day it
+was written. Only the selftest endpoint ever asked for it, so on the path that
+actually runs, in volume, against a customer's list, the report was never
+collected. Now `/api/import/geocode` collects it, returns it, and logs a
+provider that rejected everything in that provider's own words. The import
+screen says so in warning rather than error colours, because nothing failed:
+
+> **Google rejected every address in a batch.** These leads were placed by the
+> free block-level service instead, so their pins are on the right street rather
+> than the right roof. The import is fine — but the key you are paying for is
+> not being used.
+
+Gated on both sides: `cd api && npm run smoke:deadkey` drives a real Worker
+against a stand-in Google that answers `REQUEST_DENIED` to everything, and
+`npm run verify:import` drives the screen. Both check the signal is *not* raised
+by a healthy provider — a warning that is always on is one nobody reads, which
+would be this same bug with extra steps.
+
+Proved by reverting the endpoint to its old silent shape: five API assertions go
+red and "every address is still placed" stays green, which is precisely the
+failure being described. Disabling the client's collection turns five browser
+assertions red the same way.
+
 ## Schema changes apply themselves
 
 The Worker runs its own migrations on the first request after a deploy

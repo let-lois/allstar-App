@@ -16,9 +16,11 @@ import {
 import {
   GEOCODE_CHUNK,
   geocode,
+  useCensusBase,
   type GeocodeAttempt,
   type GeocodeRequest,
 } from './geocode'
+import { useGoogleBase } from './geocode-google'
 import { findProvider } from './geocode-providers'
 import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
 import { assignProperties, assignTerritory } from './assign'
@@ -1076,7 +1078,55 @@ export default {
             Census is still underneath, inside `geocode`, because it is free.
           */
           const { keys, provider } = await geocodeKeysFor(env, user.clientId)
-          const matches = await geocode(rows, keys)
+          /*
+            Both overrides applied here, not just Google's.
+
+            `useCensusBase` was only ever called on the inbound webhook path, so
+            this endpoint always talked to the real Census service even when a
+            deployment had pointed everything else at a stand-in — which made
+            the endpoint that does the actual importing the one that could not be
+            driven end to end. Both default to the real services when unset.
+          */
+          useCensusBase(env.CENSUS_BASE_URL)
+          useGoogleBase(env.GOOGLE_GEOCODE_BASE_URL)
+          /*
+            Which providers were asked, and what they said.
+
+            `geocode` has always been able to report this and only the selftest
+            endpoint ever asked for it — so on the path that actually runs, in
+            volume, against a customer's list, a key that rejects every request
+            was invisible. The chain is built to degrade rather than fail, which
+            is right, and the cost of that is a dead key looking exactly like a
+            provider that had nothing to add: the import succeeds, every pin
+            quietly drops from a rooftop to a block, and the first person who
+            could notice is a rep knocking on the wrong door.
+
+            The same shape as the Cloudflare build token that stopped deploying
+            this Worker for nine days while every check but one stayed green.
+            A credential that fails loudly gets fixed the same day.
+          */
+          const attempts: GeocodeAttempt[] = []
+          const matches = await geocode(rows, keys, attempts)
+
+          /*
+            Logged as well as returned. The response reaches the operator who
+            started the import, which is the person who most needs it — but only
+            while they are looking at that screen. `wrangler tail` is where
+            somebody diagnoses it afterwards, and a customer reporting "the pins
+            are all wrong" a week later is the likelier way this surfaces.
+
+            The provider's own words, which carry no key: Google's
+            `error_message`, or the bare status code.
+          */
+          for (const a of attempts) {
+            if (a.errors > 0 && a.errors === a.asked) {
+              console.error(
+                `geocode: ${a.provider} rejected all ${a.asked} addresses for client ` +
+                  `${user.clientId} — ${a.firstError ?? 'no reason given'}`,
+              )
+            }
+          }
+
           /*
             Counted after the fact, because the money is spent by the time the
             answer arrives — a refusal here would lose the work without saving
@@ -1084,7 +1134,7 @@ export default {
             bills for the question, not the answer.
           */
           await recordLookups(env, user.clientId, provider, rows.length)
-          return json({ matches }, 200, cors)
+          return json({ matches, attempts }, 200, cors)
         } catch (err) {
           // A geocoder outage must not read as "these addresses are bad". The
           // console needs to distinguish "couldn't look them up" from "looked
