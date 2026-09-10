@@ -1,5 +1,6 @@
 import { OUTCOMES, NOTE_TEMPLATES, PHOTO_CATEGORIES } from '../data/outcomes'
-import type { OutcomeDef, PhotoCategory } from '../types'
+import type { PhotoCategoryDef } from '../data/outcomes'
+import type { OutcomeDef } from '../types'
 
 /**
  * Company customisation, merged over the defaults.
@@ -49,7 +50,7 @@ export function effectiveNoteTemplates(settings: ClientSettings | null | undefin
 
 export function effectivePhotoCategories(
   settings: ClientSettings | null | undefined,
-): { key: PhotoCategory; label: string; glyph: string }[] {
+): PhotoCategoryDef[] {
   const overrides = settings?.photoCategories
   if (!overrides?.length) return PHOTO_CATEGORIES
   const byKey = new Map(overrides.map((c) => [c.key, c]))

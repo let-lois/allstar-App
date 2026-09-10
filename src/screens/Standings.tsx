@@ -1,3 +1,4 @@
+import { Glyph } from '../components/ui/Glyph'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
@@ -151,7 +152,7 @@ export function Standings() {
                     {prizes.map((a) => (
                       <li key={a.key} className="card p-4">
                         <p className="text-[20px] leading-none" aria-hidden>
-                          {a.glyph}
+                          <Glyph name={a.icon} />
                         </p>
                         <p className="mt-2 text-[12.5px] font-medium text-ink-mute">{a.label}</p>
                         <p className="mt-0.5 truncate text-[15px] font-semibold">

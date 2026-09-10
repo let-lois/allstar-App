@@ -1,3 +1,4 @@
+import { Glyph } from '../components/ui/Glyph'
 import { useEffect, useState } from 'react'
 import { AdminPage } from './AdminLayout'
 import { Button } from '../components/ui/Button'
@@ -317,7 +318,7 @@ export function AdminSettings() {
                 key={c.key}
                 className="flex items-center gap-2 rounded-field border border-line px-3 py-2.5"
               >
-                <span aria-hidden>{c.glyph}</span>
+                {c.icon ? <Glyph name={c.icon} /> : <span aria-hidden>{c.letter}</span>}
                 <input
                   value={c.label}
                   onChange={(e) =>

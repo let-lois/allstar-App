@@ -1,3 +1,4 @@
+import type { GlyphName } from '../lib/glyphs'
 import type { LeadStatus, NoteTag, OutcomeCode, OutcomeDef, PhotoCategory } from '../types'
 
 /**
@@ -169,12 +170,27 @@ export const NOTE_TEMPLATES: string[] = [
   'Asked for pricing info',
 ]
 
-export const PHOTO_CATEGORIES: { key: PhotoCategory; label: string; glyph: string }[] = [
-  { key: 'property', label: 'Property', glyph: '🏠' },
-  { key: 'roof', label: 'Roof', glyph: '🧱' },
-  { key: 'damage', label: 'Damage', glyph: '⚠' },
-  { key: 'interior', label: 'Interior', glyph: '🛋' },
-  { key: 'document', label: 'Document', glyph: '📄' },
-  { key: 'before', label: 'Before', glyph: 'B' },
-  { key: 'after', label: 'After', glyph: 'A' },
+/**
+ * A photo category as the UI needs it: a key, a label, and either an icon name
+ * or a letter. Exported because `lib/settings.ts` returns the same shape after
+ * applying a client's label overrides, and it had its own copy of it — which
+ * is how the two came to disagree the moment these stopped being emoji.
+ */
+export interface PhotoCategoryDef {
+  key: PhotoCategory
+  label: string
+  /** An icon name, resolved by `<Glyph>`. These were emoji; see that component. */
+  icon?: GlyphName
+  /** Before and after are a pair of letters on purpose — no icon says "after". */
+  letter?: string
+}
+
+export const PHOTO_CATEGORIES: PhotoCategoryDef[] = [
+  { key: 'property', label: 'Property', icon: 'house' },
+  { key: 'roof', label: 'Roof', icon: 'roof' },
+  { key: 'damage', label: 'Damage', icon: 'warn' },
+  { key: 'interior', label: 'Interior', icon: 'sofa' },
+  { key: 'document', label: 'Document', icon: 'doc' },
+  { key: 'before', label: 'Before', letter: 'B' },
+  { key: 'after', label: 'After', letter: 'A' },
 ]

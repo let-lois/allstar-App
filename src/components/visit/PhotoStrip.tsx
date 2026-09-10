@@ -1,3 +1,4 @@
+import { Glyph } from '../ui/Glyph'
 import { useEffect, useState } from 'react'
 import type { Photo, PhotoCategory } from '../../types'
 import { usePhotoCategories } from '../../lib/useSettings'
@@ -167,7 +168,7 @@ export function PhotoStrip({
                 className="press focusable flex min-h-[64px] items-center gap-2.5 rounded-card border-2 border-accent/40 px-4 font-semibold active:bg-surface-field"
               >
                 <span className="text-xl" aria-hidden>
-                  {c.glyph}
+                  {c.icon ? <Glyph name={c.icon} /> : c.letter}
                 </span>
                 {c.label}
               </button>

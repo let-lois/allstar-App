@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apply, readChoice, resolve, saveChoice, watchSystem, type ThemeChoice } from '../../lib/theme'
+import { IconDevice, IconMoon, IconSun } from '../nav/icons'
 
 /**
  * Light, dark, or whatever the phone says.
@@ -15,10 +16,17 @@ import { apply, readChoice, resolve, saveChoice, watchSystem, type ThemeChoice }
  * nothing here is worth a round trip to a server.
  */
 
-const OPTIONS: { value: ThemeChoice; label: string; glyph: string }[] = [
-  { value: 'light', label: 'Light', glyph: '☀' },
-  { value: 'dark', label: 'Dark', glyph: '☾' },
-  { value: 'system', label: 'Follow the phone', glyph: 'A' },
+/*
+  Icons, not characters. This was `☀`, `☾` and a literal capital `A`: text
+  standing in for icons, which means the OS font decides the artwork, they sit
+  on the text baseline instead of centred in their 44px target, and the `A`
+  carried no meaning at all without its accessible name. Same 24px stroke set
+  as the rest of the interface, so they take the tone of the tile they sit on.
+*/
+const OPTIONS: { value: ThemeChoice; label: string; Icon: () => React.JSX.Element }[] = [
+  { value: 'light', label: 'Light', Icon: IconSun },
+  { value: 'dark', label: 'Dark', Icon: IconMoon },
+  { value: 'system', label: 'Follow the phone', Icon: IconDevice },
 ]
 
 export function ThemeToggle() {
@@ -48,7 +56,7 @@ export function ThemeToggle() {
       data-tour="theme-toggle"
       className="flex shrink-0 items-center rounded-pill border border-line bg-surface-field"
     >
-      {OPTIONS.map((o) => {
+      {OPTIONS.map(({ Icon, ...o }) => {
         const selected = choice === o.value
         return (
           <button
@@ -57,9 +65,10 @@ export function ThemeToggle() {
             role="radio"
             aria-checked={selected}
             /*
-              The accessible name says what it does, not what it shows. "A" is a
-              glyph for "automatic" and reads as the letter A to a screen reader,
-              which is no use to anybody.
+              The accessible name says what it does, not what it shows. Now
+              that these are icons rather than characters there is nothing for
+              a screen reader to fall back on, so the name is the only thing
+              carrying the meaning — and it is also the tooltip, below.
             */
             aria-label={
               o.value === 'system'
@@ -81,7 +90,7 @@ export function ThemeToggle() {
                 exactly who the rule is for. The pill's own padding shrank to
                 keep the group from growing into the profile row beside it.
               */
-              'focusable grid h-11 w-11 place-items-center rounded-full text-[15px] leading-none transition-colors',
+              'focusable grid h-11 w-11 place-items-center rounded-full transition-colors',
               /*
                 An opaque tile with an accent ring, not a hairline. On the light
                 ground the old pairing was white on off-white with a grey ring —
@@ -97,7 +106,7 @@ export function ThemeToggle() {
                 : 'text-ink-mute active:bg-surface',
             ].join(' ')}
           >
-            <span aria-hidden>{o.glyph}</span>
+            <Icon />
           </button>
         )
       })}
