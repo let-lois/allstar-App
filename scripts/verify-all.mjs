@@ -183,3 +183,19 @@ if (failed.length) {
   process.exit(1)
 }
 console.log('every gate passed')
+/*
+  Explicit, because a passing run used to hang here for ever.
+
+  The preview server this script may have started is a live child process, and a
+  live child keeps Node's event loop alive — so the script never exited. The
+  only thing that kills that child is the `process.on('exit')` handler above,
+  which cannot run until the process exits: exit waits on the child, the child
+  waits on exit.
+
+  The failure path already called `process.exit(1)`, which fires that handler
+  and tears the server down, so only a *green* run deadlocked. That is why it
+  went unnoticed — you read "every gate passed" and press ctrl-C, and SIGINT is
+  handled. It only bites something waiting on the exit code, and only when this
+  script started the server rather than finding one already up.
+*/
+process.exit(0)
