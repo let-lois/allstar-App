@@ -172,6 +172,32 @@ ok(selectedVsResting >= AA_GRAPHIC,
 const metalQuiet = face(declared('.metal-quiet', '--metal-top'), 0)
 at(T['ink'], metalQuiet, AA_TEXT, 'ink on a gunmetal control')
 /*
+ * The unselected chip's label. It is `ink-mute` on this face, and on the old
+ * sheened face that measured 4.36:1 — under AA on every filter row in the app,
+ * and nothing here looked, because only `ink` and `ink-soft` were sampled.
+ * Flat, it clears; pinned so it cannot creep back.
+ */
+at(T['ink-mute'], metalQuiet, AA_TEXT, 'the unselected chip label (ink-mute) on the quiet face')
+/*
+ * Chips: selection is carried by the face, so the resting ring can be neutral.
+ *
+ * The resting chip wore the teal `--edge` like every other control, and once
+ * the faces went flat that ring was all the material left on it — eight rings
+ * louder than the content under them. For the ring to step back, the fill has
+ * to carry selection on its own: the chosen face against the resting one has
+ * to clear the graphic floor. Both halves asserted, so neither can be undone
+ * without the other.
+ */
+const brandFace = declared('.metal-brand', '--metal-top')
+ok(ratio(brandFace, metalQuiet) >= AA_GRAPHIC,
+   'a selected chip is found by its face alone against a resting one',
+   ratio(brandFace, metalQuiet).toFixed(2))
+{
+  const rule = css.match(/\n  \.metal-quiet\s*\{([^}]*)\}/)?.[1].replace(/\/\*[\s\S]*?\*\//g, '') ?? ''
+  ok(/--metal-ring:\s*var\(--hairline\)/.test(rule),
+     'and so the resting chip wears the neutral hairline, keeping teal for what is chosen')
+}
+/*
  * A labelled control on that face — the header's logout button. `ink-mute`
  * measures 4.36:1 here and would fail, which is worth pinning rather than
  * rediscovering: the quiet tone that is right for a loose icon on the header's
@@ -341,6 +367,60 @@ console.log('\n--- structure ---')
   ok(!/box-shadow/.test(selected), 'and does not glow')
   ok(!/rgb\(var\(--accent\)/.test(rule('card')),
      'a resting panel carries no accent, so selection stays the only teal on the screen')
+}
+
+/* -------------------------------------------------------------------------
+ * Selection on the light ground.
+ *
+ * Everything above measures the dark theme; the light one was checked by
+ * looking at it, and looking at it is how its selected states came out weaker
+ * than the dark theme's on every control. The tinted selected row is 1.1:1
+ * from the white row beside it, so the ring has to carry selection — and at
+ * 0.45 alpha it measured 2.4:1 against its own face. These read the light
+ * block's tokens and hold the same floors the dark theme holds.
+ * ---------------------------------------------------------------------- */
+console.log('\n--- selection on the light ground ---')
+{
+  const lightBlock = css.slice(css.indexOf(":root[data-theme='light'] {"))
+  const lightVar = (name) => {
+    const m = lightBlock.match(new RegExp(`--${name}:\\s*([0-9]+)\\s+([0-9]+)\\s+([0-9]+)\\s*;`))
+    if (!m) throw new Error(`light theme variable --${name} not found`)
+    return toHex([Number(m[1]), Number(m[2]), Number(m[3])])
+  }
+  const L = { accent: lightVar('accent'), surface: lightVar('surface'), ink: lightVar('ink') }
+  const lightRule = (sel) =>
+    (css.match(new RegExp(`:root\\[data-theme='light'\\] ${sel.replace(/[.\[\]'=]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] ?? '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+  const ringAlpha = (rule) => Number(rule.match(/rgb\(var\(--accent\)\s*\/\s*([0-9.]+)\)/)?.[1] ?? 0)
+  const faceOf = (rule) => rule.match(/(?:background|--metal-top):\s*(#[0-9a-fA-F]{6})/)?.[1]
+
+  const rowBrand = lightRule('.metal-row-brand')
+  const rowFace = faceOf(rowBrand)
+  const rowRing = over(L.accent, ringAlpha(rowBrand), rowFace)
+  ok(!!rowFace && ringAlpha(rowBrand) > 0, 'the light selected row declares a face and an accent ring')
+  ok(ratio(rowRing, rowFace) >= AA_GRAPHIC, 'its ring reads against its own face', ratio(rowRing, rowFace).toFixed(2))
+  const rowRest = faceOf(lightRule('.metal-row'))
+  ok(ratio(rowFace, rowRest) < 2, 'the two light row faces are too close to carry selection alone, so the ring is load-bearing',
+     ratio(rowFace, rowRest).toFixed(2))
+  ok(ratio(rowRing, rowRest) >= AA_GRAPHIC, 'and the ring reads against the row beside it', ratio(rowRing, rowRest).toFixed(2))
+
+  const pill = lightRule(".nav-pill[data-active='true']")
+  const pillFace = faceOf(pill)
+  const pillRing = over(L.accent, ringAlpha(pill), pillFace)
+  ok(ratio(pillRing, pillFace) >= AA_GRAPHIC, 'the light side rail marks the current screen with a ring that reads', ratio(pillRing, pillFace).toFixed(2))
+
+  /*
+    The theme toggle's chosen tile: accent glyph on an opaque surface tile.
+    The first version was a translucent accent tint, and measured here over
+    `surface` at 4.54 — but the group sits on `surface-field`, and over that it
+    was 3.99 in the light theme. `verify:legibility` caught it in the browser;
+    this now measures the opaque tile the component actually paints, and the
+    ring against the field the group sits on.
+  */
+  at(L.accent, L.surface, AA_TEXT, 'the chosen appearance glyph reads on its tile (light)')
+  at(T['accent'], T['surface'], AA_TEXT, 'the chosen appearance glyph reads on its tile (dark)')
+  const fieldLight = lightVar('surface-field')
+  ok(ratio(L.accent, fieldLight) >= AA_GRAPHIC, 'and its accent ring reads against the field the group sits on (light)', ratio(L.accent, fieldLight).toFixed(2))
 }
 
 const lift = ratio(T['surface'], T['surface-sunk'])

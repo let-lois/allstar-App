@@ -553,8 +553,15 @@
    * space on the screens with no button is a little air at the end of a scroll,
    * and the cost of getting it wrong is an unreachable row.
    */
+  /*
+   * Room under a scrolling pane for the dock *and* the floating + above it.
+   * The + sits at dock-space + 12px and is 56px tall, so its top edge is
+   * 168px up; 140px of padding left the last line of every screen under it —
+   * the cached-data paragraph on More was cut mid-sentence. 24px of air past
+   * the button's top so the last line is readable, not merely uncovered.
+   */
   .pad-nav {
-    padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(var(--dock-space) + 92px);
   }
 
   /*
@@ -848,7 +855,15 @@
     @apply text-ink;
     --metal-top: #1c2538;
     --metal-bottom: #1c2538;
-    --metal-ring: var(--edge);
+    /*
+      The neutral hairline, not the teal edge. A resting chip in a row of ten
+      wore the same teal ring as everything else, and once the faces went flat
+      that ring was the only material left on it — eight rings shouting louder
+      than the lead cards under them. Teal now means chosen: the selected chip
+      is a solid teal face 5.4:1 from this one, so selection is carried by fill
+      and the ring can step back. The light theme already did this.
+    */
+    --metal-ring: var(--hairline);
   }
 
   /*
@@ -880,14 +895,16 @@
    * is what a settings list is. The edge is an inset ring so the rows butt
    * cleanly; the seam between them is the row-group's divider.
    *
-   * Teal rather than gunmetal, so the rows stay the warmest thing on a cold
-   * screen. On this face `ink` measures 9.6:1, `ink-soft` 6.7:1 and — now that
-   * there is no sheen lightening the top of the face out from under it —
-   * `ink-mute` clears AA at 4.8:1. `verify:contrast` pins all three.
+   * The raised surface, the same navy family as a card — not the teal it was.
+   * Cards navy and rows teal was two surfaces doing one job on the lead
+   * screen, and it spent teal on a resting state, where it is meant to be the
+   * accent on the *chosen* row alone. `ink`, `ink-soft` and `ink-mute` all
+   * clear AA on it; `verify:contrast` pins all three and reads the hex from
+   * here.
    */
   .metal-row {
     position: relative;
-    background: #143240;
+    background: #1b2437;
     box-shadow: inset 0 0 0 1px var(--edge);
     transition:
       box-shadow 140ms ease,
@@ -1326,9 +1343,15 @@
     box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.09);
   }
 
+  /*
+   * Selection on the light ground. The tinted face is 1.1:1 from the white row
+   * beside it — nobody finds that — so the ring carries it, and at 0.45 alpha
+   * it did not: measured 2.4:1 against its own face. Full-strength accent,
+   * the same rule the dark theme uses for `--edge-strong`.
+   */
   :root[data-theme='light'] .metal-row-brand {
     background: #e8f7f9;
-    box-shadow: inset 0 0 0 1.5px rgb(var(--accent) / 0.45);
+    box-shadow: inset 0 0 0 1.5px rgb(var(--accent) / 0.85);
   }
 
   :root[data-theme='light'] .metal-tint {
@@ -1341,7 +1364,7 @@
   :root[data-theme='light'] .nav-pill[data-active='true'] {
     --metal-top: #e8f7f9;
     --metal-bottom: #e8f7f9;
-    --metal-ring: rgb(var(--accent) / 0.4);
+    --metal-ring: rgb(var(--accent) / 0.85);
   }
 
   :root[data-theme='light'] .metal-quiet {

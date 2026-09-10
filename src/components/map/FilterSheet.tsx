@@ -144,7 +144,7 @@ export function FilterSheet({
           without opening anything: it is the question a rep answers when they
           arrive, not one they go looking for.
         */}
-        <Section
+        <FilterSection
           title="Status"
           hint={
             filter.status.kind === 'some'
@@ -199,9 +199,9 @@ export function FilterSheet({
               </Chip>
             ))}
           </div>
-        </Section>
+        </FilterSection>
 
-        <Section title="Last knocked" hint="One answer: a door cannot be both unknocked and knocked today.">
+        <FilterSection title="Last knocked" hint="One answer: a door cannot be both unknocked and knocked today.">
           {/*
             `group`, not `radiogroup`. A radiogroup's children have to be
             `role="radio"` with `aria-checked`; these are `aria-pressed`
@@ -221,7 +221,7 @@ export function FilterSheet({
               </Chip>
             ))}
           </div>
-        </Section>
+        </FilterSection>
 
         {/*
           A list is the fourth kind of question: not what state a door is in or
@@ -229,7 +229,7 @@ export function FilterSheet({
           list from its own page lands here with its chip already on; this is
           the same control, reachable without leaving the map.
         */}
-        <Section
+        <FilterSection
           title="List"
           hint={
             lists.length === 0
@@ -273,9 +273,9 @@ export function FilterSheet({
               ))}
             </div>
           )}
-        </Section>
+        </FilterSection>
 
-        <Section title="Outcome" hint="Worth another try at a different hour.">
+        <FilterSection title="Outcome" hint="Worth another try at a different hour.">
           <Chip
             size="sm"
             selected={filter.noAnswerOnly}
@@ -283,14 +283,14 @@ export function FilterSheet({
           >
             No answer
           </Chip>
-        </Section>
+        </FilterSection>
       </div>
     </BottomSheet>
   )
 }
 
-/** A titled group. The thing the rail could not have, and the reason for the sheet. */
-function Section({
+/** A titled group. The thing the rail could not have, and the reason for the sheet. Shared with the Leads sheet. */
+export function FilterSection({
   title,
   hint,
   children,

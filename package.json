@@ -14,6 +14,7 @@
     "verify:contrast": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-contrast.mjs",
     "verify:theme": "node scripts/verify-theme.mjs",
     "verify:leadfilter": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-leadfilter.mjs",
+    "verify:leadsheet": "node scripts/verify-leadsheet.mjs",
     "verify:leadlists": "node scripts/verify-leadlists.mjs",
     "verify:legibility": "node scripts/verify-legibility.mjs",
     "verify:offline": "node scripts/verify-offline.mjs",
