@@ -2,6 +2,9 @@ import { useDeferredValue, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Chip } from '../components/ui/Chip'
+import { Button } from '../components/ui/Button'
+import { BottomSheet } from '../components/ui/BottomSheet'
+import { FilterSection } from '../components/map/FilterSheet'
 import { PropertyRow } from '../components/property/PropertyRow'
 import { PropertyPeek } from '../components/property/PropertyPeek'
 import { VirtualList } from '../components/ui/VirtualList'
@@ -67,6 +70,10 @@ export function Leads() {
     [team],
   )
   const [previewId, setPreviewId] = useState<string | null>(null)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  /* How many questions have an answer other than the default — the number on the button. */
+  const activeFilters =
+    (status !== 'all' ? 1 : 0) + (visited !== 'any' ? 1 : 0) + (seesEveryone && repFilter !== 'all' ? 1 : 0)
   // The preview pane needs a list *and* a readable detail column beside it —
   // that only fits from `lg`. Below it, rows push a full detail screen.
   const isDesktop = useIsDesktop()
@@ -115,6 +122,19 @@ export function Leads() {
       <TopBar
         title="Leads"
         subtitle={`${list.length} of ${scoped.length}`}
+        /*
+          The way to the rep's lists. Not a sixth tab — the bar is full and a
+          list is a way of working the leads, so it lives with them.
+        */
+        right={
+          <button
+            onClick={() => nav('/lists')}
+            data-testid="open-lists"
+            className="focusable min-h-[44px] rounded-lg px-3 text-[14px] font-semibold text-accent"
+          >
+            Lists
+          </button>
+        }
         below={
           <div className="space-y-2.5">
             <label className="relative block">
@@ -133,77 +153,119 @@ export function Leads() {
                 className="field h-[48px] pl-11 pr-3 md:max-w-md"
               />
             </label>
-            <div className="snap-x-row" data-tour="leads-sort">
-              {SORTS.map((s) => (
-                <Chip
-                  key={s.key}
-                  size="sm"
-                  selected={sort === s.key}
-                  onClick={() => setSort(s.key)}
-                >
-                  {s.label}
-                </Chip>
-              ))}
-              <span className="mx-1 w-px shrink-0 self-stretch bg-line" />
+            {/*
+              One row that wraps, and a way into the rest.
+
+              This was two horizontal rails holding eighteen chips between them
+              on a rep's phone — sorts, nine statuses, six visit windows — and
+              "All" was clipped at the right edge of a 390px screen with nothing
+              to say more lay past it. The map had the same rail and the same
+              fix: keep the question a rep answers on arriving in plain sight,
+              and put everything else one tap away in a sheet with headings.
+              Here that question is the sort. Four chips wrap rather than
+              scroll, and the Filters button is pinned so it is never the thing
+              that got pushed off.
+            */}
+            <div className="flex flex-wrap items-center gap-2" data-testid="leads-header-row">
+              <div className="flex min-w-0 flex-wrap gap-2" data-tour="leads-sort" role="group" aria-label="Sort">
+                {SORTS.map((s) => (
+                  <Chip key={s.key} size="sm" selected={sort === s.key} onClick={() => setSort(s.key)}>
+                    {s.label}
+                  </Chip>
+                ))}
+              </div>
+              <button
+                onClick={() => setFiltersOpen(true)}
+                data-testid="leads-filters"
+                aria-label={activeFilters ? `Filters, ${activeFilters} active` : 'Filters'}
+                className="focusable press metal metal-quiet ml-auto flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-pill px-3.5 text-[12.5px] font-semibold text-ink-soft"
+              >
+                Filters
+                {activeFilters > 0 && (
+                  <span className="nums rounded-full bg-ink/10 px-1.5 py-0.5 text-[11px] font-bold text-accent-strong">
+                    {activeFilters}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        }
+      />
+
+      <BottomSheet
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        title="Filters"
+        detents={[0.86]}
+        footer={
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="lg"
+              className="shrink-0"
+              disabled={activeFilters === 0}
+              onClick={() => {
+                setStatus('all')
+                setVisited('any')
+                setRepFilter('all')
+              }}
+            >
+              Clear
+            </Button>
+            <Button size="lg" full onClick={() => setFiltersOpen(false)}>
+              <span>
+                Show <span className="nums">{list.length}</span>
+                {list.length === 1 ? ' lead' : ' leads'}
+              </span>
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-5 pt-1" data-testid="leads-filter-sheet">
+          <FilterSection title="Status" hint={status === 'all' ? 'Every stage.' : 'Only this stage.'}>
+            <div role="group" aria-label="Status" className="flex flex-wrap gap-2">
               {STATUS_FILTERS.map((s) => (
                 <Chip key={s} size="sm" selected={status === s} onClick={() => setStatus(s)}>
                   {s === 'all' ? 'All' : STATUS_LABEL[s]}
                 </Chip>
               ))}
             </div>
-            {/*
-              A second rail rather than more chips on the first.
+          </FilterSection>
 
-              The rail above is already long enough to scroll on a phone, and
-              burying "not knocked in a month" past six sort options and nine
-              statuses is the same as not having it. Two shorter rails each stay
-              readable at a glance, which is the whole reason they scroll rather
-              than wrap.
-            */}
-            <div className="snap-x-row" data-testid="leads-visited">
+          <FilterSection title="Last visit" hint="One answer: a door cannot be both unknocked and knocked today.">
+            <div role="group" aria-label="Last visit" className="flex flex-wrap gap-2" data-testid="leads-visited">
               {VISITED_WINDOWS.map((w) => (
-                <Chip
-                  key={w.key}
-                  size="sm"
-                  selected={visited === w.key}
-                  onClick={() => setVisited(w.key)}
-                >
+                <Chip key={w.key} size="sm" selected={visited === w.key} onClick={() => setVisited(w.key)}>
                   {w.key === 'any' ? 'Any visit' : w.label}
                 </Chip>
               ))}
-              {seesEveryone && reps.length > 0 && (
-                <>
-                  <span className="mx-1 w-px shrink-0 self-stretch bg-line" />
-                  <Chip
-                    size="sm"
-                    selected={repFilter === 'all'}
-                    onClick={() => setRepFilter('all')}
-                  >
-                    Everyone
-                  </Chip>
-                  <Chip
-                    size="sm"
-                    selected={repFilter === 'unassigned'}
-                    onClick={() => setRepFilter('unassigned')}
-                  >
-                    Unassigned
-                  </Chip>
-                  {reps.map((r) => (
-                    <Chip
-                      key={r.id}
-                      size="sm"
-                      selected={repFilter === r.id}
-                      onClick={() => setRepFilter(r.id)}
-                    >
-                      {r.name}
-                    </Chip>
-                  ))}
-                </>
-              )}
             </div>
-          </div>
-        }
-      />
+          </FilterSection>
+
+          {/*
+            Whose leads. Meaningless to a field rep — the list is already only
+            theirs — so the section exists only for the office roles that see
+            everybody's, which is exactly who needs it.
+          */}
+          {seesEveryone && reps.length > 0 && (
+            <FilterSection title="Whose" hint="Everyone, nobody yet, or one rep.">
+              <div role="group" aria-label="Whose" className="flex flex-wrap gap-2">
+                <Chip size="sm" selected={repFilter === 'all'} onClick={() => setRepFilter('all')}>
+                  Everyone
+                </Chip>
+                <Chip size="sm" selected={repFilter === 'unassigned'} onClick={() => setRepFilter('unassigned')}>
+                  Unassigned
+                </Chip>
+                {reps.map((r) => (
+                  <Chip key={r.id} size="sm" selected={repFilter === r.id} onClick={() => setRepFilter(r.id)}>
+                    {r.name}
+                  </Chip>
+                ))}
+              </div>
+            </FilterSection>
+          )}
+        </div>
+      </BottomSheet>
 
       {/*
         Phone: one full-width list, tap to push a detail screen.

@@ -32,6 +32,11 @@ export type AuditAction =
   | 'user.role_changed'
   | 'territory.assigned'
   | 'territory.created'
+  | 'list.created'
+  | 'list.assigned'
+  | 'list.archived'
+  | 'list.restored'
+  | 'list.deleted'
   | 'leads.imported'
   /*
     A status set from the office rather than earned at a door.
@@ -60,7 +65,7 @@ export type AuditAction =
 
 export interface AuditEntry {
   action: AuditAction
-  targetType?: 'user' | 'territory' | 'import' | 'settings' | 'integration' | 'geocoder' | 'lead'
+  targetType?: 'user' | 'territory' | 'list' | 'import' | 'settings' | 'integration' | 'geocoder' | 'lead'
   targetId?: string
   /** The name as it read at the time. Never resolved later. */
   targetLabel?: string

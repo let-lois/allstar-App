@@ -1,6 +1,8 @@
 import { readSettings } from './settings'
 import { dayKeyIn } from './day'
 import type { Env, SessionUser } from './types'
+import { parseBoundary } from './territories'
+import { listsFor, repScopeSql } from './lists'
 
 /**
  * The read path.
@@ -25,7 +27,16 @@ export async function bootstrap(env: Env, user: SessionUser) {
   // 30 days back is what the console's longest range needs; the phone ignores it.
   const historyFrom = dayKeyIn(Date.now() - 30 * 86_400_000, user.timezone)
 
-  const scope = isRep(user) ? 'AND assigned_rep_id = ?2' : ''
+  /*
+    A rep's leads: assigned to them, OR on a live list assigned to them.
+
+    The second half is new, and it is the whole point of lead lists — a manager
+    hands forty houses to three people, and all three need those houses on their
+    phones, while each house still has one `assigned_rep_id`. The predicate is
+    written once in lists.ts and used here, so the bootstrap and the "may this
+    rep add that lead" check can never disagree about what a rep may see.
+  */
+  const scope = isRep(user) ? `AND ${repScopeSql('properties', '?2')}` : ''
   const bind = (base: unknown[]) => (isRep(user) ? [...base, user.id] : base)
 
   const [
@@ -42,7 +53,7 @@ export async function bootstrap(env: Env, user: SessionUser) {
     erased,
   ] = await Promise.all([
       env.DB.prepare(
-        `SELECT * FROM properties WHERE client_id = ?1 ${scope} ORDER BY address1`,
+        `SELECT * FROM properties WHERE properties.client_id = ?1 ${scope} ORDER BY address1`,
       )
         .bind(...bind([user.clientId]))
         .all(),
@@ -50,7 +61,7 @@ export async function bootstrap(env: Env, user: SessionUser) {
       env.DB.prepare(
         `SELECT c.* FROM contacts c
            JOIN properties p ON p.id = c.property_id
-          WHERE p.client_id = ?1 ${isRep(user) ? 'AND p.assigned_rep_id = ?2' : ''}`,
+          WHERE p.client_id = ?1 ${isRep(user) ? `AND ${repScopeSql('p', '?2')}` : ''}`,
       )
         .bind(...bind([user.clientId]))
         .all(),
@@ -270,6 +281,13 @@ export async function bootstrap(env: Env, user: SessionUser) {
       outcome: a.outcome ?? undefined,
       at: a.at,
     })),
+    /*
+      The lists this person can see, members and reps included. Fetched after
+      the batch above rather than inside it because it is two-to-four queries of
+      its own and reads cleanest as one call; on a ten-list account it is
+      milliseconds either way.
+    */
+    leadLists: await listsFor(env, user),
     territories: (territories.results as Record<string, unknown>[]).map((t) => ({
       id: t.id,
       name: t.name,
@@ -320,16 +338,3 @@ export async function bootstrap(env: Env, user: SessionUser) {
   }
 }
 
-function parseBoundary(raw: unknown): { lat: number; lng: number }[] | undefined {
-  if (typeof raw !== 'string' || raw.length === 0) return undefined
-  try {
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed) || parsed.length < 3) return undefined
-    const points = parsed
-      .map((p) => ({ lat: Number(p?.lat), lng: Number(p?.lng) }))
-      .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
-    return points.length >= 3 ? points : undefined
-  } catch {
-    return undefined
-  }
-}

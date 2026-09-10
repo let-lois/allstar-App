@@ -320,6 +320,46 @@ const MIGRATIONS: Migration[] = [
     statements: ['ALTER TABLE properties ADD COLUMN geo_provider TEXT'],
     skipIfColumn: { table: 'properties', column: 'geo_provider' },
   },
+  /*
+    Lead lists: a working set of leads that many reps can be assigned to, and
+    that a lead can belong to several of. Not a change to territories — see the
+    note above the tables in schema.sql for why the two coexist. Three tables,
+    all `IF NOT EXISTS`, so this is idempotent against a database that was
+    created from schema.sql after they were added.
+  */
+  {
+    id: '014-lead-lists',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS lead_lists (
+         id          TEXT PRIMARY KEY,
+         client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+         name        TEXT NOT NULL,
+         description TEXT,
+         created_by  TEXT REFERENCES users(id) ON DELETE SET NULL,
+         boundary    TEXT,
+         archived    INTEGER NOT NULL DEFAULT 0,
+         created_at  INTEGER NOT NULL,
+         updated_at  INTEGER NOT NULL
+       )`,
+      'CREATE INDEX IF NOT EXISTS lead_lists_by_client ON lead_lists(client_id, archived)',
+      `CREATE TABLE IF NOT EXISTS lead_list_members (
+         list_id     TEXT NOT NULL REFERENCES lead_lists(id) ON DELETE CASCADE,
+         property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+         added_at    INTEGER NOT NULL,
+         added_by    TEXT REFERENCES users(id) ON DELETE SET NULL,
+         PRIMARY KEY (list_id, property_id)
+       )`,
+      'CREATE INDEX IF NOT EXISTS lead_list_members_by_property ON lead_list_members(property_id)',
+      `CREATE TABLE IF NOT EXISTS lead_list_reps (
+         list_id     TEXT NOT NULL REFERENCES lead_lists(id) ON DELETE CASCADE,
+         user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         assigned_at INTEGER NOT NULL,
+         assigned_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+         PRIMARY KEY (list_id, user_id)
+       )`,
+      'CREATE INDEX IF NOT EXISTS lead_list_reps_by_user ON lead_list_reps(user_id)',
+    ],
+  },
 ]
 
 async function hasColumn(

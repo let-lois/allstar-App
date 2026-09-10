@@ -44,6 +44,7 @@ import type { Property } from '../../types'
 export function useLeadDraft({
   at,
   onSaved,
+  onPick,
 }: {
   /**
    * A location the caller already has — the map's tapped point.
@@ -54,9 +55,23 @@ export function useLeadDraft({
   at?: { lat: number; lng: number } | null
   /** The saved lead. The caller decides where to go next; see the two callers. */
   onSaved: (property: Property) => void
+  /**
+   * A suggestion was picked, and it knows where it is.
+   *
+   * The map passes this so the pin follows the pick: a rep who tapped roughly
+   * the right block and then chose the exact address from the list expects the
+   * pin to go to that door, the way it does in every map they have used. Before
+   * this the tapped point kept winning and the lead saved a house's address
+   * with the neighbour's coordinates.
+   */
+  onPick?: (at: { lat: number; lng: number }) => void
 }) {
   const [address, setAddress] = useState('')
-  const [picked, setPicked] = useState<PickedAddress | null>(null)
+  const [picked, setPickedState] = useState<PickedAddress | null>(null)
+  const setPicked = (p: PickedAddress | null) => {
+    setPickedState(p)
+    if (p) onPick?.({ lat: p.lat, lng: p.lng })
+  }
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
@@ -403,7 +418,9 @@ export function LeadFields({
       <div className="rounded-field bg-surface-tint px-3.5 py-3" data-testid="lead-pin-readout">
         <p className="eyebrow">Location</p>
         <p className="nums mt-1 text-[13px] text-ink-soft">
-          {at
+          {at && picked && at.lat === picked.lat && at.lng === picked.lng
+            ? `Pinned on the address — ${at.lat.toFixed(5)}, ${at.lng.toFixed(5)}`
+            : at
             ? `Pinned where you tapped — ${at.lat.toFixed(5)}, ${at.lng.toFixed(5)}`
             : picked
               ? `Pinned on the address — ${pin!.lat.toFixed(5)}, ${pin!.lng.toFixed(5)}`

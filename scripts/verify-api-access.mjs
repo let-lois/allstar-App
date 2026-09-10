@@ -103,6 +103,14 @@ const ROUTES = {
   "/api/leads/status|POST": { how: 'delegate', fn: 'setLeadStatus', file: 'lead-edit.ts' },
   "/api/territories/assign|POST": { how: 'delegate', fn: 'assignTerritory', file: 'assign.ts' },
   "/api/territories|POST": { how: 'delegate', fn: 'createTerritory', file: 'territories.ts' },
+  /*
+    Lead lists. Reading is scoped inside `listsFor` — a rep gets lists assigned
+    to or made by them, an office role gets the company's — and every write is
+    decided inside lists.ts, because the offline mutation path calls the same
+    functions and one implementation of "may this person do this" is the point.
+  */
+  "/api/lists|GET": { how: 'delegate', fn: 'listsFor', file: 'lists.ts' },
+  "/api/lists|POST": { how: 'delegate', fn: 'createList', file: 'lists.ts' },
 }
 
 /**
@@ -160,7 +168,32 @@ const REGEX_ROUTES = {
     match: "/^\\/api\\/webhooks\\/ghl\\/([a-f0-9]{64})$/.exec(path)",
     credential: 'clientForSecret',
   },
+  /*
+    One list: rename/archive, delete, change its houses, change its reps. Four
+    handlers behind one matcher, each delegating to lists.ts — so the check is
+    that every one of those functions decides the role itself, and that the
+    handler region actually calls each of them rather than something else with
+    a similar name.
+  */
+  '/^\\/api\\/lists\\/([A-Za-z0-9_-]{1,40})(?:\\/(members|reps))?$/': {
+    match: "/^\\/api\\/lists\\/([A-Za-z0-9_-]{1,40})(?:\\/(members|reps))?$/.exec(path)",
+    delegates: ['updateList', 'deleteList', 'updateMembers', 'setReps'],
+    file: 'lists.ts',
+  },
 }
+
+/**
+ * Does this function decide the role itself?
+ *
+ * `can*(actor)` or a look at `actor.role` — or, for lists, `mayEdit(actor, …)`,
+ * which is the one place the answer is "the office, or whoever made it" rather
+ * than a role alone, and `isRep(user)`, which is how a read narrows to the
+ * caller's own lists. Read from the source, never inferred from a parameter
+ * called `actor`: a function that takes the user looks guarded from the call
+ * site whether or not it is.
+ */
+const decidesRole = (fnBody) =>
+  /can[A-Z][a-zA-Z]*\((actor|user)\)|(actor|user)\.role|mayEdit\((actor|user),|isRep\((actor|user)\)/.test(fnBody)
 
 /* ---- what the source actually has ------------------------------------- */
 
@@ -236,10 +269,7 @@ for (const route of found) {
       const at = fnSrc.indexOf(`export async function ${decl.fn}`)
       if (at < 0) throw new Error(`${decl.fn} is gone from ${decl.file} — update this gate`)
       const fnBody = fnSrc.slice(at, at + 1200)
-      ok(
-        /can[A-Z][a-zA-Z]*\(actor\)|actor\.role/.test(fnBody),
-        `${route.key} delegates to ${decl.fn}, which checks the role itself`,
-      )
+      ok(decidesRole(fnBody), `${route.key} delegates to ${decl.fn}, which checks the role itself`)
       ok(route.line > authLine, `and ${route.key} is behind authentication`)
       break
     }
@@ -319,6 +349,16 @@ for (const route of found) {
 
     if (decl.scopedBy) {
       ok(region.includes(decl.scopedBy), `${pattern} scopes its query by ${decl.scopedBy}`)
+    }
+
+    if (decl.delegates) {
+      const fnSrc = readFileSync(new URL(`../api/src/${decl.file}`, import.meta.url), 'utf8')
+      for (const fn of decl.delegates) {
+        ok(new RegExp(`await ${fn}\\(env, user,`).test(region), `${pattern} hands the request to ${fn}`)
+        const fnAt = fnSrc.indexOf(`export async function ${fn}`)
+        if (fnAt < 0) throw new Error(`${fn} is gone from ${decl.file} — update this gate`)
+        ok(decidesRole(fnSrc.slice(fnAt, fnAt + 1200)), `and ${fn} decides the role itself`)
+      }
     }
 
     if (decl.credential) {

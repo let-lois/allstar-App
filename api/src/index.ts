@@ -25,6 +25,7 @@ import { findProvider } from './geocode-providers'
 import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
 import { assignProperties, assignTerritory } from './assign'
 import { createTerritory } from './territories'
+import { createList, deleteList, listsFor, setReps, updateList, updateMembers } from './lists'
 import { readAudit, record as recordAudit } from './audit'
 import {
   createResetLink,
@@ -1203,6 +1204,54 @@ export default {
         })
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 201, cors)
+      }
+
+      /* --- lead lists ------------------------------------------------------ */
+      //
+      // Every route hands its body to lists.ts unvalidated, on purpose: that
+      // module owns the checks, because it is also what the offline mutation
+      // path calls, and one implementation of "may this person do this" is the
+      // whole point. Permission decisions are inside each function and are
+      // explicit for every role — see canManageLists and mayEdit there.
+      if (path === '/api/lists' && req.method === 'GET') {
+        return json({ lists: await listsFor(env, user) }, 200, cors)
+      }
+
+      if (path === '/api/lists' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await createList(env, user, body)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 201, cors)
+      }
+
+      {
+        const m = /^\/api\/lists\/([A-Za-z0-9_-]{1,40})(?:\/(members|reps))?$/.exec(path)
+        if (m) {
+          const [, id, sub] = m
+          if (!sub && req.method === 'PATCH') {
+            const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+            const result = await updateList(env, user, id!, body)
+            if ('error' in result) return json({ error: result.error }, result.status, cors)
+            return json(result, 200, cors)
+          }
+          if (!sub && req.method === 'DELETE') {
+            const result = await deleteList(env, user, id!)
+            if ('error' in result) return json({ error: result.error }, result.status, cors)
+            return json(result, 200, cors)
+          }
+          if (sub === 'members' && req.method === 'POST') {
+            const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+            const result = await updateMembers(env, user, id!, body)
+            if ('error' in result) return json({ error: result.error }, result.status, cors)
+            return json(result, 200, cors)
+          }
+          if (sub === 'reps' && req.method === 'PUT') {
+            const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+            const result = await setReps(env, user, id!, body)
+            if ('error' in result) return json({ error: result.error }, result.status, cors)
+            return json(result, 200, cors)
+          }
+        }
       }
 
       if (path === '/api/import/properties' && req.method === 'POST') {

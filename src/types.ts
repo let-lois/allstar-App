@@ -261,6 +261,36 @@ export interface Territory {
   boundary?: { lat: number; lng: number }[]
 }
 
+/**
+ * A working set of leads, and the reps who work it.
+ *
+ * "Monday Route", "Follow Ups", "Northwest Territory – Sept 10". A lead can be
+ * on several at once; a list can be handed to several reps at once. Not a
+ * territory — a territory is whose ground this is, one rep to a patch; a list is
+ * what we are working on together. See the note above the tables in
+ * api/schema.sql for why the two coexist.
+ *
+ * `leadIds` and `repIds` are carried flat rather than normalised, because the
+ * phone reads them a hundred times for every time it writes one, and the server
+ * is the authority on both — the join tables live there.
+ */
+export interface LeadList {
+  id: string
+  name: string
+  description?: string
+  /** Who made it. A rep's own lists are theirs to reshape; a manager's are not. */
+  createdBy?: string
+  /** The outline it was drawn from, when it was drawn rather than typed. */
+  boundary?: { lat: number; lng: number }[]
+  archived: boolean
+  createdAt: number
+  updatedAt: number
+  leadIds: string[]
+  repIds: string[]
+  /** Made on this device and not yet acknowledged by the server. */
+  pending?: boolean
+}
+
 export interface Appointment {
   id: string
   propertyId: string
@@ -332,6 +362,15 @@ export type MutationKind =
   | 'route.stop'
   | 'comm.log'
   | 'user.avatar'
+  /*
+    Lead lists from the phone. Each is applied by the same server function the
+    REST route calls, so a list made in a dead zone obeys the same permission
+    checks as one made in the console — see api/src/lists.ts.
+  */
+  | 'list.create'
+  | 'list.update'
+  | 'list.members'
+  | 'list.reps'
 
 export interface Mutation {
   id: string

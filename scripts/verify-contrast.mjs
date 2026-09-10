@@ -85,26 +85,35 @@ ok(faint < AA_TEXT, 'ink-faint is below the text floor, so it cannot be mistaken
 ok(faint >= 3.0, 'ink-faint still reads as a graphic', faint.toFixed(2))
 
 /* -------------------------------------------------------------------------
- * 2. The machined faces.
+ * 2. The control faces.
  *
- * These are gradients with a white sheen composited over the top half, and the
- * label sits in exactly that band — so the number that matters is the lightest
- * point, not the declared colour. This is the trap the light theme hit from the
- * other side, and it is worth a test precisely because it is invisible to one.
+ * Flat, so each is one colour and the label sits on the colour it is measured
+ * against. They used to be gradients with a white sheen over the top half, and
+ * the number that mattered was the lightest point rather than the declared
+ * colour — a trap the light theme hit from the other side. `face()` still
+ * takes a sheen so the trap stays sayable; every face here passes 0.
+ *
+ * The hexes are read from index.css rather than restated, so a face that
+ * changes there is measured here without anyone remembering to copy it.
  * ---------------------------------------------------------------------- */
-console.log('\n--- machined faces, measured at their lightest point ---')
+console.log('\n--- control faces ---')
 const face = (top, sheen) => toHex(over('#ffffff', sheen, top))
+const declared = (selector, prop) => {
+  const rule = css.match(new RegExp(`\\n  ${selector.replace(/[.\-]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] ?? ''
+  const m = rule.replace(/\/\*[\s\S]*?\*\//g, '').match(new RegExp(`${prop}:\\s*(#[0-9a-fA-F]{6})`))
+  if (!m) throw new Error(`${selector} declares no ${prop} hex in index.css`)
+  return m[1]
+}
 
-const metalRow = face('#143240', 0.07)
-at(T['ink'], metalRow, AA_TEXT, 'ink on a metal row')
-at(T['ink-soft'], metalRow, AA_TEXT, 'ink-soft on a metal row')
-at(T['accent-strong'], metalRow, AA_TEXT, 'accent-strong on a metal row')
-const muteOnRow = ratio(T['ink-mute'], metalRow)
-ok(muteOnRow < AA_TEXT,
-   'ink-mute is still too quiet for a metal row (the comment in index.css says so)',
-   muteOnRow.toFixed(2))
+const metalRow = face(declared('.metal-row', 'background'), 0)
+at(T['ink'], metalRow, AA_TEXT, 'ink on a row')
+at(T['ink-soft'], metalRow, AA_TEXT, 'ink-soft on a row')
+at(T['accent-strong'], metalRow, AA_TEXT, 'accent-strong on a row')
+// With the sheen gone, the quiet tone is legal on a row. Pinned so a face that
+// creeps lighter is caught: the comment in index.css states this figure.
+at(T['ink-mute'], metalRow, AA_TEXT, 'ink-mute on a row — legal now the face is flat')
 
-const metalRowBrand = face('#17495c', 0.07)
+const metalRowBrand = face(declared('.metal-row-brand', 'background'), 0)
 at(T['ink'], metalRowBrand, AA_TEXT, 'ink on a selected metal row')
 at(T['ink-soft'], metalRowBrand, AA_TEXT, 'ink-soft on a selected metal row')
 at(T['accent-strong'], metalRowBrand, AA_TEXT, 'accent-strong on a selected metal row')
@@ -160,8 +169,34 @@ ok(selectedVsResting >= AA_GRAPHIC,
    'a selected control still reads against a control merely at rest',
    selectedVsResting.toFixed(2))
 
-const metalQuiet = face('#232e44', 0.06)
+const metalQuiet = face(declared('.metal-quiet', '--metal-top'), 0)
 at(T['ink'], metalQuiet, AA_TEXT, 'ink on a gunmetal control')
+/*
+ * The unselected chip's label. It is `ink-mute` on this face, and on the old
+ * sheened face that measured 4.36:1 — under AA on every filter row in the app,
+ * and nothing here looked, because only `ink` and `ink-soft` were sampled.
+ * Flat, it clears; pinned so it cannot creep back.
+ */
+at(T['ink-mute'], metalQuiet, AA_TEXT, 'the unselected chip label (ink-mute) on the quiet face')
+/*
+ * Chips: selection is carried by the face, so the resting ring can be neutral.
+ *
+ * The resting chip wore the teal `--edge` like every other control, and once
+ * the faces went flat that ring was all the material left on it — eight rings
+ * louder than the content under them. For the ring to step back, the fill has
+ * to carry selection on its own: the chosen face against the resting one has
+ * to clear the graphic floor. Both halves asserted, so neither can be undone
+ * without the other.
+ */
+const brandFace = declared('.metal-brand', '--metal-top')
+ok(ratio(brandFace, metalQuiet) >= AA_GRAPHIC,
+   'a selected chip is found by its face alone against a resting one',
+   ratio(brandFace, metalQuiet).toFixed(2))
+{
+  const rule = css.match(/\n  \.metal-quiet\s*\{([^}]*)\}/)?.[1].replace(/\/\*[\s\S]*?\*\//g, '') ?? ''
+  ok(/--metal-ring:\s*var\(--hairline\)/.test(rule),
+     'and so the resting chip wears the neutral hairline, keeping teal for what is chosen')
+}
 /*
  * A labelled control on that face — the header's logout button. `ink-mute`
  * measures 4.36:1 here and would fail, which is worth pinning rather than
@@ -176,8 +211,7 @@ at(T['ink-soft'], metalQuiet, AA_TEXT, 'a label on a gunmetal control')
  * survived the inversion untouched — but it is also the single most-pressed
  * control in the app, so it gets measured at both ends of its gradient.
  */
-at('#111827', face('#7fe0ef', 0.3), AA_TEXT, 'metal-brand label at the face\'s lightest point')
-at('#111827', '#0fa9b8', AA_TEXT, 'metal-brand label at the face\'s darkest point')
+at('#111827', declared('.metal-brand', '--metal-top'), AA_TEXT, 'metal-brand label on its face')
 
 /* -------------------------------------------------------------------------
  * 3. Saturated fills that carry their own labels.
@@ -292,60 +326,101 @@ console.log('\n--- structure ---')
 //
 // The edge has been four things: a navy hairline at 1.40:1, invisible; a grey at
 // 3.20:1, rejected twice from the same screenshot; white at 16.84:1; a lit teal
-// at 5.04:1. Each time the line was doing the separating alone, so each time the
-// honest question was "is this line bright enough".
+// at 5.04:1. Then the panel became glass — a translucent fill over a blurred
+// backdrop — and the hairline stopped carrying the job alone.
 //
-// It is glass now. A translucent fill over a blurred, saturated backdrop, a
-// hairline, and a shadow — three things sharing the job, which is how iOS gets
-// depth on a dark ground without drawing anything bright. Measuring the hairline
-// on its own would now be measuring a third of the answer and calling it the
-// whole one, and it would fail a design that works.
-//
-// So these assert the *material is present*. If somebody deletes the blur, the
-// hairline that is left is the 3.20:1 grey that was already rejected — this is
-// what notices.
+// It is flat now, and deliberately so: an opaque fill one step up from the
+// ground, the shared hairline, and one shadow token. The previous version of
+// this block asserted that the blur was present, which is asserting a design
+// decision rather than a requirement — the requirement is that a card be
+// findable against the ground in daylight, and that is what `lift` below pins.
+// What this block asserts is that the material is *one* material: nothing
+// translucent, nothing blurred, nothing lit, and every panel edged and shadowed
+// from the same two tokens, so a screen cannot end up nearly consistent.
 {
   const rule = (name) => css.match(new RegExp(`\\.${name}\\s*\\{[^}]*`))?.[0] ?? ''
+  const paint = css.replace(/\/\*[\s\S]*?\*\//g, ' ')
 
-  for (const name of ['card', 'nav-dock']) {
+  ok(!/backdrop-filter\s*:/.test(paint), 'nothing in the stylesheet blurs what is behind it')
+  ok(!/linear-gradient|radial-gradient/.test(paint.replace(/\.wordmark-anim::after\s*\{[^}]*\}/, '')),
+     'no surface or control is a gradient (the wordmark\'s one glint excepted)')
+  ok(!/::after\s*\{[^}]*height:\s*4\d%/.test(paint), 'no control wears a sheen')
+
+  for (const name of ['card', 'nav-dock', 'topbar-lit']) {
     const r = rule(name)
     ok(r.length > 0, `.${name} exists to be measured`)
-    /*
-      Written to accept a token or a literal. The first draft demanded literals
-      and failed `.card`, which reaches for `var(--glass-blur)` — a gate that
-      insists on one spelling of the same value is a gate that fails a
-      refactor and teaches people to loosen it rather than read it.
-    */
-    ok(/backdrop-filter:[^;]*blur\([^;]*saturate\(/.test(r),
-       `.${name} is glass: blurred *and* saturated, not just blurred`)
-    ok(/background:\s*rgb\(var\(--surface\)\s*\/\s*(var\(--glass-fill\)|0?\.[0-9]+)\)/.test(r),
-       `.${name} is translucent, so there is something for the blur to do`)
-    ok(/border:\s*1px solid var\(--glass-hairline\)/.test(r),
-       `.${name} states its edge with the shared hairline`)
-    ok((r.match(/rgba\(0, 0, 0,/g) ?? []).length >= 2,
-       `.${name} carries a layered shadow, which is the third of the three`)
+    ok(/background:\s*rgb\(var\(--surface\)\);/.test(r), `.${name} is an opaque surface, not an alpha over the ground`)
+    ok(/border(-bottom)?:\s*1px solid var\(--hairline\)/.test(r), `.${name} states its edge with the shared hairline`)
   }
-
-  /*
-    Safari needs the prefix and will render a flat, opaque panel without it —
-    on the one platform this app is most used on. Easy to drop in a tidy-up,
-    invisible in any Chromium screenshot.
-  */
   for (const name of ['card', 'nav-dock']) {
-    ok(/-webkit-backdrop-filter:/.test(rule(name)),
-       `.${name} keeps the -webkit- prefix, or Safari renders it flat`)
+    ok(/box-shadow:\s*var\(--shadow-card\)/.test(rule(name)), `.${name} casts the one shared shadow, not its own`)
   }
 
   /*
-    Teal is the accent now, not the edge. The selected orb is the one lit thing
-    in the navigation, and if it stops being lit the dock loses its only signal
-    for where you are.
+    Teal is the accent, not the edge. The selected orb is the one teal thing in
+    the navigation: a fill and a ring, so the state is carried by colour and by
+    shape and a resting panel carries neither.
   */
   const selected = css.match(/\.nav-dock \.nav-pill\[data-active='true'\][^{]*\{[^}]*/)?.[0] ?? ''
-  ok(/box-shadow:[^;]*rgb\(var\(--accent\)/.test(selected),
-     'the selected orb is still lit, which is where the accent went')
+  ok(/background:[^;]*rgb\(var\(--accent\)/.test(selected) && /border-color:[^;]*rgb\(var\(--accent-strong\)/.test(selected),
+     'the selected orb is filled and ringed in the accent')
+  ok(!/box-shadow/.test(selected), 'and does not glow')
   ok(!/rgb\(var\(--accent\)/.test(rule('card')),
-     'and a resting panel is not, so selection stays the only teal on the screen')
+     'a resting panel carries no accent, so selection stays the only teal on the screen')
+}
+
+/* -------------------------------------------------------------------------
+ * Selection on the light ground.
+ *
+ * Everything above measures the dark theme; the light one was checked by
+ * looking at it, and looking at it is how its selected states came out weaker
+ * than the dark theme's on every control. The tinted selected row is 1.1:1
+ * from the white row beside it, so the ring has to carry selection — and at
+ * 0.45 alpha it measured 2.4:1 against its own face. These read the light
+ * block's tokens and hold the same floors the dark theme holds.
+ * ---------------------------------------------------------------------- */
+console.log('\n--- selection on the light ground ---')
+{
+  const lightBlock = css.slice(css.indexOf(":root[data-theme='light'] {"))
+  const lightVar = (name) => {
+    const m = lightBlock.match(new RegExp(`--${name}:\\s*([0-9]+)\\s+([0-9]+)\\s+([0-9]+)\\s*;`))
+    if (!m) throw new Error(`light theme variable --${name} not found`)
+    return toHex([Number(m[1]), Number(m[2]), Number(m[3])])
+  }
+  const L = { accent: lightVar('accent'), surface: lightVar('surface'), ink: lightVar('ink') }
+  const lightRule = (sel) =>
+    (css.match(new RegExp(`:root\\[data-theme='light'\\] ${sel.replace(/[.\[\]'=]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] ?? '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+  const ringAlpha = (rule) => Number(rule.match(/rgb\(var\(--accent\)\s*\/\s*([0-9.]+)\)/)?.[1] ?? 0)
+  const faceOf = (rule) => rule.match(/(?:background|--metal-top):\s*(#[0-9a-fA-F]{6})/)?.[1]
+
+  const rowBrand = lightRule('.metal-row-brand')
+  const rowFace = faceOf(rowBrand)
+  const rowRing = over(L.accent, ringAlpha(rowBrand), rowFace)
+  ok(!!rowFace && ringAlpha(rowBrand) > 0, 'the light selected row declares a face and an accent ring')
+  ok(ratio(rowRing, rowFace) >= AA_GRAPHIC, 'its ring reads against its own face', ratio(rowRing, rowFace).toFixed(2))
+  const rowRest = faceOf(lightRule('.metal-row'))
+  ok(ratio(rowFace, rowRest) < 2, 'the two light row faces are too close to carry selection alone, so the ring is load-bearing',
+     ratio(rowFace, rowRest).toFixed(2))
+  ok(ratio(rowRing, rowRest) >= AA_GRAPHIC, 'and the ring reads against the row beside it', ratio(rowRing, rowRest).toFixed(2))
+
+  const pill = lightRule(".nav-pill[data-active='true']")
+  const pillFace = faceOf(pill)
+  const pillRing = over(L.accent, ringAlpha(pill), pillFace)
+  ok(ratio(pillRing, pillFace) >= AA_GRAPHIC, 'the light side rail marks the current screen with a ring that reads', ratio(pillRing, pillFace).toFixed(2))
+
+  /*
+    The theme toggle's chosen tile: accent glyph on an opaque surface tile.
+    The first version was a translucent accent tint, and measured here over
+    `surface` at 4.54 — but the group sits on `surface-field`, and over that it
+    was 3.99 in the light theme. `verify:legibility` caught it in the browser;
+    this now measures the opaque tile the component actually paints, and the
+    ring against the field the group sits on.
+  */
+  at(L.accent, L.surface, AA_TEXT, 'the chosen appearance glyph reads on its tile (light)')
+  at(T['accent'], T['surface'], AA_TEXT, 'the chosen appearance glyph reads on its tile (dark)')
+  const fieldLight = lightVar('surface-field')
+  ok(ratio(L.accent, fieldLight) >= AA_GRAPHIC, 'and its accent ring reads against the field the group sits on (light)', ratio(L.accent, fieldLight).toFixed(2))
 }
 
 const lift = ratio(T['surface'], T['surface-sunk'])

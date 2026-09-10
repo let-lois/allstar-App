@@ -550,6 +550,57 @@ export function apiImport(
 }
 
 /** Shape returned by /api/bootstrap — already in the client's domain casing. */
+/** The wire shape of a lead list. Mirrors LeadListDTO in api/src/lists.ts. */
+export interface LeadListDTO {
+  id: string
+  name: string
+  description: string | null
+  createdBy: string | null
+  boundary?: { lat: number; lng: number }[]
+  archived: boolean
+  createdAt: number
+  updatedAt: number
+  leadIds: string[]
+  repIds: string[]
+}
+
+export const apiLists = (token: string) =>
+  request<{ lists: LeadListDTO[] }>('/api/lists', { token })
+
+export const apiCreateList = (
+  token: string,
+  body: {
+    id?: string
+    name: string
+    description?: string
+    propertyIds?: string[]
+    repIds?: string[]
+    boundary?: { lat: number; lng: number }[]
+  },
+) => request<{ list: LeadListDTO; skipped: number }>('/api/lists', { method: 'POST', body, token })
+
+export const apiUpdateList = (
+  token: string,
+  id: string,
+  body: { name?: string; description?: string; archived?: boolean },
+) => request<{ ok: true }>(`/api/lists/${encodeURIComponent(id)}`, { method: 'PATCH', body, token })
+
+export const apiDeleteList = (token: string, id: string) =>
+  request<{ ok: true }>(`/api/lists/${encodeURIComponent(id)}`, { method: 'DELETE', token })
+
+export const apiListMembers = (token: string, id: string, body: { add?: string[]; remove?: string[] }) =>
+  request<{ added: number; removed: number; skipped: number }>(
+    `/api/lists/${encodeURIComponent(id)}/members`,
+    { method: 'POST', body, token },
+  )
+
+export const apiSetListReps = (token: string, id: string, repIds: string[]) =>
+  request<{ repIds: string[] }>(`/api/lists/${encodeURIComponent(id)}/reps`, {
+    method: 'PUT',
+    body: { repIds },
+    token,
+  })
+
 export interface BootstrapDTO {
   user: SessionUserDTO
   properties: unknown[]
@@ -559,6 +610,12 @@ export interface BootstrapDTO {
   activity: unknown[]
   dailyStats: unknown[]
   territories?: unknown[]
+  /**
+   * The lists this person can see, members and reps included. Optional for the
+   * same reason as `team`: a Worker deployed before lists existed does not send
+   * it, and absence must read as "none", not as a crash.
+   */
+  leadLists?: LeadListDTO[]
   /**
    * Names and initials for everyone on the account — enough to label a rep id.
    *

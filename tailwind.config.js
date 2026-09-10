@@ -180,40 +180,34 @@ export default {
       },
       borderRadius: {
         /*
-         * One card radius, used everywhere, so nothing looks borrowed.
-         *
-         * Opened up across the board. A tighter radius reads as a box with
-         * rounded corners; a generous one reads as a shape, which is most of
-         * what separates a polished interface from a competent one. CSS has no
-         * continuous corner, so the nearest honest approximation is a larger
-         * radius and a softer shadow under it.
+         * One scale, three steps: 14 for controls and fields, 20 for cards,
+         * 24 for the sheet that rises over them. Anything else is borrowed.
+         * Brought in from 16/26/30 — at 26px a card on a 390px screen read as a
+         * pebble rather than a panel, and the sheet's corners were most of what
+         * was visible of it at its opening detent.
          */
-        card: '26px',
-        field: '16px',
-        sheet: '30px',
+        card: '20px',
+        field: '14px',
+        sheet: '24px',
         /** Nav pills, chips, small tappable surfaces. */
-        pill: '18px',
+        pill: '14px',
       },
       boxShadow: {
         /*
-         * Wide, soft, and much deeper than they were on white.
-         *
-         * A 6%-alpha shadow is invisible on a near-black ground — there is
-         * nothing darker for it to be — so these carry roughly five times the
-         * alpha they used to. The failure mode being avoided is unchanged: a
-         * tight dark shadow makes a card look stuck onto the page rather than
-         * resting on it, and stacked up the screen reads as a dashboard of
-         * widgets. What actually separates a card here is its hairline and its
-         * one-pixel lit top edge; these only keep the corners from looking cut
-         * out.
+         * One shadow, and `raise` is an alias of it. A raised thing and a card
+         * used to cast different shadows, which made two surfaces on one
+         * screen look like they were lit from different rooms. `float` is the
+         * one exception, for things that genuinely hover — menus, tooltips,
+         * the tour card. What separates a card here is its hairline and the
+         * step in value; these only keep the corners from looking cut out.
          *
          * The nav hairline inverts outright: a dark line above a dark bar is
          * nothing, so it is now a faint light one.
          */
-        card: '0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.28)',
-        raise: '0 2px 6px rgba(0,0,0,0.45), 0 12px 32px rgba(0,0,0,0.35)',
-        float: '0 6px 14px rgba(0,0,0,0.5), 0 20px 44px rgba(0,0,0,0.45)',
-        sheet: '0 -8px 34px rgba(0,0,0,0.55)',
+        card: '0 1px 2px rgba(0,0,0,0.28), 0 6px 18px rgba(0,0,0,0.22)',
+        raise: '0 1px 2px rgba(0,0,0,0.28), 0 6px 18px rgba(0,0,0,0.22)',
+        float: '0 2px 6px rgba(0,0,0,0.3), 0 12px 28px rgba(0,0,0,0.32)',
+        sheet: '0 -4px 20px rgba(0,0,0,0.35)',
         /** Bottom nav: a hairline, not a drop shadow. */
         nav: '0 -1px 0 rgba(255,255,255,0.07)',
       },

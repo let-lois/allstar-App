@@ -115,6 +115,7 @@ const TESTS = [
   { script: 'smoke:stale', kind: 'hosted', port: 8834 },
   { script: 'smoke:backup', kind: 'hosted', port: 8817 },
   { script: 'smoke:deadkey', kind: 'hosted', port: 8841 },
+  { script: 'smoke:lists', kind: 'hosted', port: 8851 },
 
   // --- manual -----------------------------------------------------------
   {

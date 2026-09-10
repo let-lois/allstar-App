@@ -82,8 +82,18 @@ export function ThemeToggle() {
                 keep the group from growing into the profile row beside it.
               */
               'focusable grid h-11 w-11 place-items-center rounded-full text-[15px] leading-none transition-colors',
+              /*
+                An opaque tile with an accent ring, not a hairline. On the light
+                ground the old pairing was white on off-white with a grey ring —
+                the weakest selected state in the app, on the control that
+                switches the theme. Opaque rather than a tint: the group sits on
+                the recessed field colour, and an accent glyph on a translucent
+                tint over *that* measured 3.99:1 in the light theme. On the
+                surface itself it is 4.75 light and 7.9 dark, and the ring is
+                the shape half of the signal.
+              */
               selected
-                ? 'bg-surface text-accent shadow-sm ring-1 ring-line'
+                ? 'bg-surface text-accent ring-1 ring-accent'
                 : 'text-ink-mute active:bg-surface',
             ].join(' ')}
           >

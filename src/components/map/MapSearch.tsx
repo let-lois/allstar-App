@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Property } from '../../types'
 import { distanceMiles, formatDistance } from '../../lib/geo'
 import { STATUS_COLOR } from '../../data/outcomes'
-import { gmapsConfigured, loadGmaps } from '../../lib/gmaps'
+import { placesConfigured, loadGmaps } from '../../lib/gmaps'
 
 /**
  * Search on the map screen.
@@ -64,7 +64,7 @@ export function MapSearch({
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const [places, setPlaces] = useState<PlaceHit[]>([])
-  const [placesOff, setPlacesOff] = useState(!gmapsConfigured())
+  const [placesOff, setPlacesOff] = useState(!placesConfigured())
   const seq = useRef(0)
   const timer = useRef<number | null>(null)
 
@@ -158,7 +158,7 @@ export function MapSearch({
         results open lands on the backdrop and does nothing visible — the second
         time an unpainted overlay has quietly eaten taps in this codebase.
       */}
-      <div className="relative z-20 flex min-h-tap items-center gap-1 rounded-full border border-line bg-surface/95 pl-3 pr-2.5 shadow-card backdrop-blur">
+      <div className="relative z-20 flex min-h-tap items-center gap-1 rounded-full border border-line bg-surface pl-3 pr-2.5 shadow-card">
         <span aria-hidden className="shrink-0 text-[13px] text-ink-mute">
           ⌕
         </span>
