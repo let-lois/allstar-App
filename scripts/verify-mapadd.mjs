@@ -24,6 +24,14 @@ import { dismissTour } from './lib/tour.mjs'
  * **Existing leads still open.** The tap gesture already meant "open this
  * lead" for the pins on the map, and that meaning had to survive.
  *
+ * **And all of it at both widths.** This ran only at 390px for a while, which
+ * is defensible — the rep is the primary user and they are on a phone — right
+ * up until the desktop layout turned out to draw the pin and then offer no form
+ * at all. The phone's sheet is suppressed on wide screens in favour of the left
+ * pane, and the left pane had no Add-lead state; the comment saying otherwise
+ * was the only place that behaviour existed. A gate that only ever measures one
+ * viewport cannot see a whole layout going missing.
+ *
  * ## What this exercises, and what it cannot
  *
  * The self-rendered map. In production, where a Google key is configured, the
@@ -493,6 +501,133 @@ try {
           ok(/\bNew\b/.test(t), 'and still says what state it is in')
         }
       }
+    }
+  }
+
+  /* ===== 11. the same flow on a laptop ================================= */
+  //
+  // Reported from a browser: clicking the map drew the pin and no form
+  // appeared. On wide screens the bottom sheet is deliberately suppressed
+  // (`adding && !isWide`) because the left pane is meant to host the form —
+  // and the pane only ever had two states, the selected lead or the list. So
+  // the pin landed with nothing to type into, nothing to save, and no way to
+  // clear it.
+  {
+    const wide = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+    const wp = await wide.newPage()
+    try {
+      await wp.route('**://maps.googleapis.com/**', (r) => r.abort())
+      await wp.goto(BASE, { waitUntil: 'domcontentloaded' })
+      await wp.waitForTimeout(1200)
+      await wp.getByRole('button', { name: /Try the demo/ }).click()
+      await wp.getByRole('button', { name: /Dana Whitfield/ }).click()
+      await dismissTour(wp)
+      await wp.waitForTimeout(1500)
+      await wp.locator('a[href="/map"]:visible').first().click()
+      await wp.waitForTimeout(1500)
+
+      ok(
+        (await wp.getByTestId('add-lead-pane').count()) === 0,
+        'the laptop map shows no Add-lead pane until somebody clicks the map',
+      )
+
+      /*
+        Somewhere on the map and not on a lead. The left pane occupies the first
+        380px, so every candidate is well clear of it.
+      */
+      let opened = false
+      for (const [x, y] of [[900, 430], [1050, 520], [780, 350], [1150, 400], [860, 620]]) {
+        await wp.mouse.click(x, y)
+        await wp.waitForTimeout(700)
+        if ((await wp.getByTestId('add-lead-pane').count()) > 0) {
+          opened = true
+          break
+        }
+        // A lead's own panel came up instead — that click found a house.
+        const back = wp.getByRole('button', { name: /All properties/ })
+        if (await back.isVisible().catch(() => false)) await back.click()
+        await wp.waitForTimeout(300)
+      }
+      ok(opened, 'clicking open map on a laptop offers the Add-lead form, not just a pin')
+
+      if (opened) {
+        const pane = wp.getByTestId('add-lead-pane')
+        ok(
+          await pane.getByRole('button', { name: /^Save lead$/ }).count() > 0,
+          'with a way to save it',
+        )
+        ok(
+          await pane.getByRole('button', { name: /^Cancel$/ }).count() > 0,
+          'and a way to abandon it, so the pin is never stranded',
+        )
+        ok(
+          (await wp.locator('input[autocomplete="street-address"]').count()) > 0,
+          'and an address field to type into',
+        )
+        /*
+          The pin is the confirmation on this layout too. `reveal` was being
+          told the phone sheet's 46% was covering the map when no sheet was
+          there, which panned the map away from the point just clicked.
+        */
+        ok(
+          (await wp.locator('[data-testid="location-pin"]').count()) > 0,
+          'and the pin that says which house is being added',
+        )
+
+        const wideBefore = (await wp.evaluate(() => new Promise((res, rej) => {
+          const q = indexedDB.open('allstar-field')
+          q.onsuccess = () => {
+            const r = q.result.transaction('properties', 'readonly').objectStore('properties').getAll()
+            r.onsuccess = () => res(r.result.length)
+            r.onerror = () => rej(new Error('x'))
+          }
+          q.onerror = () => rej(new Error('x'))
+        })))
+
+        await wp.locator('input[autocomplete="street-address"]').fill('7 Laptop Court')
+        await wp.getByRole('button', { name: /^Save lead$/ }).click()
+        await wp.waitForTimeout(1600)
+
+        const saved = await wp.evaluate(() => new Promise((res, rej) => {
+          const q = indexedDB.open('allstar-field')
+          q.onsuccess = () => {
+            const r = q.result.transaction('properties', 'readonly').objectStore('properties').getAll()
+            r.onsuccess = () => res(r.result.filter((p) => p.address1 === '7 Laptop Court').length)
+            r.onerror = () => rej(new Error('x'))
+          }
+          q.onerror = () => rej(new Error('x'))
+        }))
+        ok(saved === 1, 'and saving from the laptop creates the lead', `${wideBefore} → ${saved} matching`)
+        ok(
+          (await wp.getByTestId('add-lead-pane').count()) === 0,
+          'after which the pane goes back to showing the lead rather than the form',
+        )
+        ok(
+          await wp.getByTestId('property-peek').isVisible().catch(() => false),
+          'and the new lead is what the pane is showing',
+        )
+      }
+
+      /* Cancel clears the pin, so it is never left with nothing attached. */
+      let reopened = false
+      for (const [x, y] of [[820, 300], [1100, 620], [950, 250]]) {
+        await wp.mouse.click(x, y)
+        await wp.waitForTimeout(700)
+        if ((await wp.getByTestId('add-lead-pane').count()) > 0) {
+          reopened = true
+          break
+        }
+      }
+      if (reopened) {
+        await wp.getByTestId('add-lead-pane').getByRole('button', { name: /^Cancel$/ }).click()
+        await wp.waitForTimeout(600)
+        ok(
+          (await wp.locator('[data-testid="location-pin"]').count()) === 0,
+          'cancelling on a laptop takes the pin away with it',
+        )
+      }
+    } finally {
+      await wide.close()
     }
   }
 } finally {

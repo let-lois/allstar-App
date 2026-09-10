@@ -143,8 +143,14 @@ export function MapScreen() {
       rep's finger and stay there — that *is* the confirmation — so the map
       moves the minimum that keeps it visible and never recentres. See
       `MapHandle.reveal`.
+
+      Zero on a wide screen, because there is no sheet there: the form goes in
+      the left pane, which the map was never under. Passing the sheet's fraction
+      regardless told the map that 46% of itself was hidden and moved the pin
+      away from the spot that had just been clicked — undoing the one thing this
+      call exists to protect.
     */
-    mapHandle.current?.reveal(at, SHEET_FRACTION)
+    mapHandle.current?.reveal(at, isWide ? 0 : SHEET_FRACTION)
   }
 
   const cancelDraft = () => {
@@ -630,7 +636,59 @@ export function MapScreen() {
       */}
       {isWide && (
         <aside className="hidden w-[320px] shrink-0 flex-col border-r border-line bg-surface md:flex lg:w-[380px]">
-          {selected ? (
+          {/*
+            Adding wins over a selection.
+
+            Clicking open ground while a lead is open means "add a house here",
+            not "keep looking at that one" — and the pin is already on the map
+            saying so. Without this the pane would answer a question the rep has
+            moved on from.
+
+            This branch did not exist. The Add-lead sheet is suppressed on wide
+            screens (`adding && !isWide`) with a comment saying the left pane
+            was doing the job instead, and the pane only ever had two states:
+            the selected property, or the list. So clicking the map here drew a
+            pin and offered nothing — no field to type an address into, no Save,
+            and no Cancel, which left the pin stranded with no way to clear it.
+            The claim was in a comment and never in the code.
+          */}
+          {adding ? (
+            /*
+              Laid out like the sheet on purpose: a scrolling body with the
+              actions pinned under it, so Save is in the same place and never
+              scrolls away. `LeadFields` deliberately does not render the button
+              — the two callers disagree about where it goes, which is why.
+            */
+            <div data-testid="add-lead-pane" className="flex min-h-0 flex-1 flex-col">
+              <div className="flex items-center justify-between gap-2 border-b border-line-soft px-4 py-3">
+                <p className="eyebrow">Add lead</p>
+                <button
+                  onClick={cancelDraft}
+                  className="focusable min-h-tap rounded-lg px-2 text-sm font-semibold text-accent"
+                >
+                  Cancel
+                </button>
+              </div>
+              <div className="scroll-pane min-h-0 flex-1 p-4">
+                {/*
+                  Focused, unlike the phone's. On a phone the keyboard covering
+                  the map is the thing being avoided; here the map is beside the
+                  form rather than behind it, so the rep can start typing.
+                */}
+                <LeadFields draft={leadDraft} />
+              </div>
+              <div className="border-t border-line-soft p-4">
+                <Button
+                  size="lg"
+                  full
+                  onClick={() => void leadDraft.save()}
+                  disabled={!leadDraft.canSave}
+                >
+                  {leadDraft.saving ? 'Saving…' : 'Save lead'}
+                </Button>
+              </div>
+            </div>
+          ) : selected ? (
             <div className="scroll-pane p-4">
               <button
                 onClick={() => setSelectedId(null)}
