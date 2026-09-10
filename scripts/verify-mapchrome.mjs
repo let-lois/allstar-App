@@ -229,17 +229,26 @@ try {
       await page.waitForTimeout(450)
       const typing = await fieldWidth()
       /*
-        Measured against its own resting width, not against the viewport: at
-        768 the map shares the screen with the stop-list pane, so a fraction of
-        the window is the wrong yardstick and the first draft of this failed
-        there for a reason that had nothing to do with the search field.
+        Wide enough to read what you are typing — measured while typing, which
+        is the state that was broken.
 
-        180px is roughly a house number and a street name — the shortest thing
-        anybody actually types here.
+        Not "it grows on focus": that was the first fix and it was wrong. The
+        row re-laid out at the moment a rep reached for a result and the panel
+        moved out from under their thumb, which `verify:mapsearch` caught as a
+        result that could not be chosen. The assertion moved with the fix.
+
+        The floor is 56px — about seven characters, which is a house number and
+        the start of a street. Not a target, a floor: at 390 this measures 127
+        and at 768 109. It is set by 320px, where three controls share one row
+        and there is no arrangement that gives the field more without taking
+        something else off the screen. Written down rather than rounded up,
+        because a floor nobody can meet gets deleted by the next person.
+
+        The number that matters is the one this replaced: 13px.
       */
       ok(
-        typing > resting * 1.4 && typing > 180,
-        'the search field takes the row while it is being used',
+        typing >= 56,
+        'the search field stays usable while somebody is typing in it',
         `${Math.round(resting)}px resting, ${Math.round(typing)}px typing`,
       )
       await field.fill('')

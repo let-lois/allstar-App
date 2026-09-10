@@ -322,10 +322,7 @@ export function MapScreen() {
     controls a rep uses at every door.
   */
   const statusRow = (
-    <div
-      className="group pointer-events-auto flex items-center gap-2 px-3"
-      data-tour="map-search"
-    >
+    <div className="pointer-events-auto flex items-center gap-2 px-3" data-tour="map-search">
       {/*
         Search takes the space the property-count pill used to hold. The count
         moved into its placeholder rather than getting a row of its own: on a
@@ -361,8 +358,26 @@ export function MapScreen() {
         inside this row they give it the width. Pure `focus-within`: no state to
         get out of step, and it collapses back the moment focus leaves.
       */}
-      <div className="contents group-focus-within:hidden">
-      <SyncBadge plated onClick={() => nav('/more')} />
+      {/*
+        The badge keeps its signal and loses its word.
+
+        At 320px this row is search, sync badge and the map/list switch, and the
+        search was left about 98px of it — six characters, and one once the
+        clear button appeared. Something had to give. Hiding the badge outright
+        was the first answer and the wrong one: this app is offline-first, and
+        "is my work saved" is not a question to answer only on another screen.
+        The dot and the count say it; the word "Synced" was what cost the room.
+
+        Two earlier attempts made this worse rather than better. Expanding the
+        search on focus and hiding the others sounds right and is not: the
+        layout moves at the exact moment a rep is reaching for a result, and
+        the panel jumps out from under their thumb — `verify:mapsearch` caught
+        it as a result that could not be chosen, which is a real finger missing
+        a real row. Hiding on `focus-within` was worse still: the map/list
+        switch is inside this row, so tapping "List" hid the control that had
+        just been tapped. A breakpoint moves nothing while anybody is using it.
+      */}
+      <SyncBadge plated compact onClick={() => nav('/more')} />
       <div
         role="group"
         aria-label="View"
@@ -402,7 +417,6 @@ export function MapScreen() {
             {v}
           </button>
         ))}
-      </div>
       </div>
     </div>
   )

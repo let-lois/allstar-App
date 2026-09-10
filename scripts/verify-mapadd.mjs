@@ -284,9 +284,15 @@ try {
     const pin = page.locator('[data-marker="pin"]').first()
     await pin.click({ force: true })
     await page.waitForTimeout(800)
-    const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+    /*
+      Asked by a hook rather than by a button's words. This used to look for
+      "View full profile", which moved into the sheet's footer and was renamed
+      when the peek's actions were pinned there — so the assertion started
+      failing for a reason that had nothing to do with what it was testing.
+      A label is copy; a testid is the question.
+    */
     ok(
-      /View full profile/.test(body),
+      await page.getByTestId('property-peek').isVisible().catch(() => false),
       'tapping a lead on the map still opens that lead, not the Add-lead form',
     )
     ok(

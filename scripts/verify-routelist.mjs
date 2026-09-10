@@ -137,7 +137,7 @@ for (const width of [320, 390, 768]) {
   */
   await list.getByRole('button').first().click()
   await page.waitForTimeout(600)
-  const peek = await page.getByRole('button', { name: /^View full profile$/ }).count()
+  const peek = await page.getByTestId('property-peek').count()
   ok(peek > 0, `[${width}] tapping a stop opens the property peek (${peek} found)`)
 
   // The peek sheet is a phone thing: at tablet width the selected property

@@ -67,7 +67,7 @@ export function PropertyPeek({
   }, [allNotes, property.id])
 
   return (
-    <div className="space-y-3 pt-1">
+    <div className="space-y-3 pt-1" data-testid="property-peek">
       <div>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
