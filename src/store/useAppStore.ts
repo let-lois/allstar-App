@@ -16,6 +16,7 @@ import type {
   Territory,
   User,
   Visit,
+  LeadList,
 } from '../types'
 import * as db from '../lib/db'
 import { uid } from '../lib/id'
@@ -24,8 +25,17 @@ import { initPhotoSync, onPhotoUpdated } from '../lib/photos'
 import { DEMO_USERS, FIELD_REPS } from '../data/seed'
 import { ensureFreshDemo, resetDemo } from '../lib/demo'
 import { fetchBootstrap } from '../lib/api'
-import { apiCreateTerritory, apiLogin, apiLogout, apiUsers } from '../lib/http'
-import { applyBootstrap, outboxPending, wipeCachedData } from '../lib/hydrate'
+import {
+  apiCreateList,
+  apiCreateTerritory,
+  apiDeleteList,
+  apiLogin,
+  apiLogout,
+  apiSetListReps,
+  apiUsers,
+} from '../lib/http'
+import { canSee, leadIdsViaLists, listsContaining, listsFor, withMembers } from '../lib/leadLists'
+import { applyBootstrap, leadListFromDTO, outboxPending, wipeCachedData } from '../lib/hydrate'
 import {
   clearSession,
   currentSession,
@@ -88,6 +98,12 @@ interface AppState {
   dailyStats: DailyStat[]
   /** Names for the territory ids on properties. Empty in demo mode. */
   territories: Record<string, Territory>
+  /**
+   * The lists this person can see — handed to them, or made by them; every
+   * live list for an office role. Members and reps carried flat. What a rep
+   * may *see* on the map is derived from these in `useScopedProperties`.
+   */
+  leadLists: Record<string, LeadList>
   /** How this company has customised the field app. Empty means defaults. */
   settings: ClientSettings
   /**
@@ -134,6 +150,34 @@ interface AppState {
     repId: string | null
     boundary: { lat: number; lng: number }[]
   }) => Promise<{ assigned: number }>
+  /**
+   * Lead lists.
+   *
+   * Two kinds of write, and they take different roads on purpose.
+   *
+   * A rep organising their own week — a list from houses they can see, a
+   * rename, a house added or dropped, an archive — is written locally first and
+   * queued, like a visit or a note. It works in a dead zone, and the outbox
+   * applies it through the same server function the console uses, so a refusal
+   * comes back as a rejected mutation rather than never being noticed.
+   *
+   * A manager's write — drawing round an area, handing a list to reps — needs
+   * the server's answer: which houses are actually inside, who is actually on
+   * the team. Those go to the server and pull its view back, and offline they
+   * say so rather than guess. In the demo they run locally, because a feature
+   * you cannot show is a feature nobody buys.
+   */
+  createList: (input: {
+    name: string
+    description?: string
+    propertyIds?: string[]
+    repIds?: string[]
+    boundary?: { lat: number; lng: number }[]
+  }) => Promise<LeadList>
+  updateList: (id: string, patch: { name?: string; description?: string; archived?: boolean }) => Promise<void>
+  updateListMembers: (id: string, change: { add?: string[]; remove?: string[] }) => Promise<void>
+  setListReps: (id: string, repIds: string[]) => Promise<void>
+  deleteList: (id: string) => Promise<void>
   signOut: () => Promise<void>
   refreshPosition: () => Promise<void>
   setPosition: (p: Position) => void
@@ -236,6 +280,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activity: [],
   dailyStats: [],
   territories: {},
+  leadLists: {},
   team: [],
   settings: {},
   timezone: '',
@@ -345,6 +390,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       tasks,
       activity,
       territories,
+      leadLists,
       team,
       dailyStats,
     ] =
@@ -358,6 +404,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         db.all<Task>('tasks'),
         db.all<ActivityEvent>('activity'),
         db.all<Territory>('territories'),
+        db.all<LeadList>('leadLists'),
         db.all<TeamMember>('team'),
         /*
           Thirty days of per-rep daily totals, cached by bootstrap and until now
@@ -429,6 +476,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activity: activity.sort((a, b) => b.at - a.at),
       dailyStats,
       territories: indexById(territories),
+      leadLists: indexById(leadLists),
       team: team.length
         ? team
         : roster.length
@@ -605,6 +653,136 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     }))
     return { assigned: moved.length }
+  },
+
+  async createList({ name, description, propertyIds = [], repIds = [], boundary }) {
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error('Give the list a name.')
+    const token = liveToken()
+    const managerial = !!boundary?.length || repIds.length > 0
+
+    if (token && managerial) {
+      /*
+        The server is the authority on which houses lie inside a shape and on
+        who is on the team, so a drawn or assigned list is not guessed at
+        locally. Offline this throws a NetworkError, which the screen turns into
+        "needs a connection" — better than a list that claims houses the server
+        would count differently.
+      */
+      const res = await apiCreateList(token, {
+        name: trimmed,
+        description,
+        propertyIds,
+        repIds,
+        boundary,
+      })
+      await get().refreshFromServer()
+      return get().leadLists[res.list.id] ?? leadListFromDTO(res.list)
+    }
+
+    /*
+      A rep's own list, or the demo. Local first, queued second, like every
+      other write in this app. The id is minted here and the server keeps it,
+      so a retry after a lost reply is a duplicate rather than a second list.
+    */
+    const now = Date.now()
+    const visible = new Set(useScopedIds(get()))
+    let leadIds = propertyIds.filter((id) => visible.has(id))
+    if (boundary?.length) {
+      // Demo only — the live path above took the drawn case to the server.
+      leadIds = Object.values(get().properties)
+        .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && pointInPolygon(p, boundary))
+        .map((p) => p.id)
+    }
+    const list: LeadList = {
+      id: uid('ll'),
+      name: trimmed,
+      description: description?.trim() || undefined,
+      createdBy: get().user?.id,
+      boundary,
+      archived: false,
+      createdAt: now,
+      updatedAt: now,
+      leadIds: [...new Set(leadIds)],
+      repIds: [...new Set(repIds)],
+      pending: !!token,
+    }
+    await db.put('leadLists', list)
+    set((state) => ({ leadLists: { ...state.leadLists, [list.id]: list } }))
+    if (token) {
+      await enqueue('list.create', {
+        id: list.id,
+        name: list.name,
+        description: list.description,
+        propertyIds: list.leadIds,
+      })
+    }
+    return list
+  },
+
+  async updateList(id, patch) {
+    const current = get().leadLists[id]
+    if (!current) throw new Error('That list is no longer here.')
+    const name = patch.name?.trim()
+    if (patch.name !== undefined && !name) throw new Error('Give the list a name.')
+    const next: LeadList = {
+      ...current,
+      ...(name !== undefined ? { name } : {}),
+      ...(patch.description !== undefined ? { description: patch.description.trim() || undefined } : {}),
+      ...(patch.archived !== undefined ? { archived: patch.archived } : {}),
+      updatedAt: Date.now(),
+    }
+    await db.put('leadLists', next)
+    set((state) => ({ leadLists: { ...state.leadLists, [id]: next } }))
+    if (liveToken()) await enqueue('list.update', { id, ...patch, name })
+  },
+
+  async updateListMembers(id, { add = [], remove = [] }) {
+    const current = get().leadLists[id]
+    if (!current) throw new Error('That list is no longer here.')
+    // Only houses this person can see. The server applies the same rule and
+    // reports what it skipped; agreeing here means the screen never shows a
+    // house on a list that the next refresh takes off again.
+    const visible = new Set(useScopedIds(get()))
+    const allowed = add.filter((p) => visible.has(p))
+    if (!allowed.length && !remove.length) return
+    const next = withMembers(current, allowed, remove)
+    await db.put('leadLists', next)
+    set((state) => ({ leadLists: { ...state.leadLists, [id]: next } }))
+    if (liveToken()) await enqueue('list.members', { id, add: allowed, remove })
+  },
+
+  async setListReps(id, repIds) {
+    const token = liveToken()
+    if (token) {
+      await apiSetListReps(token, id, repIds)
+      await get().refreshFromServer()
+      return
+    }
+    const current = get().leadLists[id]
+    if (!current) throw new Error('That list is no longer here.')
+    const next = { ...current, repIds: [...new Set(repIds)], updatedAt: Date.now() }
+    await db.put('leadLists', next)
+    set((state) => ({ leadLists: { ...state.leadLists, [id]: next } }))
+  },
+
+  async deleteList(id) {
+    /*
+      Online only, deliberately. Archiving is the offline-safe way to put a list
+      away; deleting is rare, final, and worth the server's confirmation. A rep
+      with no signal is told to archive instead.
+    */
+    const token = liveToken()
+    if (token) {
+      await apiDeleteList(token, id)
+      await get().refreshFromServer()
+      return
+    }
+    await db.del('leadLists', id)
+    set((state) => {
+      const { [id]: _gone, ...rest } = state.leadLists
+      return { leadLists: rest }
+    })
   },
 
   async signOut() {
@@ -1102,14 +1280,56 @@ function isRep(user: User | null): boolean {
   return user?.role === 'field_rep'
 }
 
+/**
+ * The property ids this person may see, from a state snapshot.
+ *
+ * Not a hook: the store's own actions need the answer synchronously to decide
+ * what a rep may put on a list. The predicate is `canSee`, the same one the
+ * server applies, so a house that gets onto a list here is a house the server
+ * will accept.
+ */
+function useScopedIds(state: Pick<AppState, 'properties' | 'leadLists' | 'user'>): string[] {
+  const all = Object.values(state.properties)
+  if (!isRep(state.user)) return all.map((p) => p.id)
+  const via = leadIdsViaLists(state.user!, Object.values(state.leadLists))
+  return all.filter((p) => canSee(p, state.user, via)).map((p) => p.id)
+}
+
+/**
+ * A rep sees the houses assigned to them — and, since lead lists, the houses on
+ * any live list handed to them. Same rule as the server's bootstrap, stated in
+ * `src/lib/leadLists.ts` and gated by `verify:leadlists`; a difference between
+ * the two is a house that vanishes on refresh or a list that is one short.
+ */
 export function useScopedProperties(): Property[] {
   const properties = useAppStore((s) => s.properties)
+  const leadLists = useAppStore((s) => s.leadLists)
   const user = useAppStore((s) => s.user)
   return useMemo(() => {
     const all = Object.values(properties)
     if (!isRep(user)) return all
-    return all.filter((p) => p.assignedRepId === user?.id)
-  }, [properties, user])
+    const via = leadIdsViaLists(user!, Object.values(leadLists))
+    return all.filter((p) => canSee(p, user, via))
+  }, [properties, leadLists, user])
+}
+
+/** The lists this person works — handed to them or made by them. Live only. */
+export function useMyLists(): LeadList[] {
+  const leadLists = useAppStore((s) => s.leadLists)
+  const user = useAppStore((s) => s.user)
+  return useMemo(
+    () => listsFor(user, Object.values(leadLists)).sort((a, b) => a.name.localeCompare(b.name)),
+    [leadLists, user],
+  )
+}
+
+/** The live lists a lead is on, for the peek and the profile. */
+export function useListsContaining(propertyId: string | undefined): LeadList[] {
+  const leadLists = useAppStore((s) => s.leadLists)
+  return useMemo(
+    () => (propertyId ? listsContaining(propertyId, Object.values(leadLists)) : []),
+    [leadLists, propertyId],
+  )
 }
 
 export function useMyTasks(): Task[] {

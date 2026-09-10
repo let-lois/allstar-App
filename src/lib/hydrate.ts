@@ -6,10 +6,11 @@ import type {
   Route,
   Task,
   Territory,
+  LeadList,
 } from '../types'
 import * as db from './db'
 import { purgeErased } from './erase-local'
-import type { BootstrapDTO } from './http'
+import type { BootstrapDTO, LeadListDTO } from './http'
 import type { StoreName } from './db'
 
 /**
@@ -30,6 +31,7 @@ const SERVER_STORES: StoreName[] = [
   'activity',
   'dailyStats',
   'territories',
+  'leadLists',
 ]
 
 /**
@@ -44,6 +46,22 @@ const LOCAL_WORK_STORES: StoreName[] = ['visits', 'notes', 'photos']
 
 export async function outboxPending(): Promise<boolean> {
   return (await db.all<{ id: string }>('outbox')).length > 0
+}
+
+/** The wire shape has nulls where the app has optionals. */
+export function leadListFromDTO(d: LeadListDTO): LeadList {
+  return {
+    id: d.id,
+    name: d.name,
+    description: d.description ?? undefined,
+    createdBy: d.createdBy ?? undefined,
+    boundary: d.boundary,
+    archived: !!d.archived,
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+    leadIds: Array.isArray(d.leadIds) ? d.leadIds : [],
+    repIds: Array.isArray(d.repIds) ? d.repIds : [],
+  }
 }
 
 export async function applyBootstrap(dto: BootstrapDTO, mergeOnly = false): Promise<void> {
@@ -87,6 +105,13 @@ export async function applyBootstrap(dto: BootstrapDTO, mergeOnly = false): Prom
     replace('activity', dto.activity as ActivityEvent[], pending),
     replace('dailyStats', dto.dailyStats as DailyStat[], pending),
     replace('territories', (dto.territories ?? []) as Territory[], pending),
+    /*
+      Lists ride the same rule as everything above: a full replace when the
+      outbox is empty, a merge when it is not. A list made on this phone a
+      minute ago and not yet sent is exactly the "row the server did not
+      mention" that the merge rule exists to keep.
+    */
+    replace('leadLists', (dto.leadLists ?? []).map(leadListFromDTO), pending),
   ])
 
   /*

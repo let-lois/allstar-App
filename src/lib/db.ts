@@ -2,16 +2,17 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type {
   ActivityEvent,
   Appointment,
+  DailyStat,
+  LeadList,
   Mutation,
   Note,
   Photo,
   Property,
   Route,
   Task,
-  Visit,
-  DailyStat,
-  Territory,
   TeamMember,
+  Territory,
+  Visit,
 } from '../types'
 
 /**
@@ -29,6 +30,7 @@ interface AllstarDB extends DBSchema {
   activity: { key: string; value: ActivityEvent; indexes: { 'by-at': number } }
   dailyStats: { key: string; value: DailyStat; indexes: { 'by-day': string } }
   territories: { key: string; value: Territory }
+  leadLists: { key: string; value: LeadList }
   team: { key: string; value: TeamMember }
   outbox: { key: string; value: Mutation; indexes: { 'by-created': number } }
   meta: { key: string; value: unknown }
@@ -46,6 +48,7 @@ export type StoreName =
   | 'activity'
   | 'dailyStats'
   | 'territories'
+  | 'leadLists'
   | 'team'
   | 'outbox'
 
@@ -53,7 +56,7 @@ let dbPromise: Promise<IDBPDatabase<AllstarDB>> | null = null
 
 export function db(): Promise<IDBPDatabase<AllstarDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<AllstarDB>('allstar-field', 5, {
+    dbPromise = openDB<AllstarDB>('allstar-field', 6, {
       /**
        * Idempotent by design. `upgrade` runs for a first-time install *and* for
        * every version bump, so creating a store unconditionally throws
@@ -90,6 +93,10 @@ export function db(): Promise<IDBPDatabase<AllstarDB>> {
         // v4 — the roster, so every console screen names the same people from
         // one place instead of each fetching it and none of them caching it.
         store('team', 'id')
+        // v6 — lead lists: the working sets a rep is handed or makes for
+        // themselves, with their members and reps, so the map can filter by
+        // one with no signal.
+        store('leadLists', 'id')
         store('meta')
       },
 
