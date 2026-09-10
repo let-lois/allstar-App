@@ -6,6 +6,7 @@ import {
   precisionOf,
 } from '../src/lib/address.ts'
 import { reverseGeocode, __resetReverseCache, __cacheSize } from '../src/lib/reverseGeocode.ts'
+import { addressFieldMode } from '../src/lib/address.ts'
 
 /**
  * The address under a tapped pin, as arithmetic and bookkeeping.
@@ -220,6 +221,50 @@ const GEOCODER = [
   // And once it succeeds, that answer is the one that sticks.
   const back = await reverseGeocode(spot, async () => ({ parts: GEOCODER, locationType: 'ROOFTOP' }))
   ok(back?.address1 === '1302 Deepwood Drive', 'so the same house answers properly once there is signal', back?.address1)
+}
+
+/* --- the address: a field, or a line to check? ---------------------------- */
+//
+// The browser gates cannot reach this. Their environment has no Google key, so
+// `reverseGeocode` never answers and the only branch they exercise is the one
+// where nothing came back — which is exactly why the collapsed state went so
+// long without anybody looking at it. Checked here instead, where the four
+// inputs can simply be stated.
+{
+  const street = { address1: '1302 Deepwood Drive', city: 'Round Rock', state: 'TX', zip: '78664', precision: 'rooftop' }
+  const town = { address1: '', city: 'Round Rock', state: 'TX', zip: '78664', precision: 'approximate' }
+  const at = { lat: 30.51, lng: -97.67 }
+
+  ok(
+    addressFieldMode({ at, found: street, filled: true, editing: false }) === 'confirmed',
+    'a street that came back from the tap is shown to check, not typed again',
+  )
+  ok(
+    addressFieldMode({ at: null, found: street, filled: true, editing: false }) === 'input',
+    'but with no pin there was no tap to confirm, so it stays a field',
+  )
+  ok(
+    addressFieldMode({ at, found: street, filled: false, editing: false }) === 'input',
+    'and text the rep typed themselves is never collapsed behind a button',
+  )
+  /*
+    The one that matters most on this screen. A coarse answer is a town and no
+    number — the README calls that "the right block, not the right roof" — and
+    presenting it as a confirmed address would invite a rep to accept a house
+    number nobody ever supplied.
+  */
+  ok(
+    addressFieldMode({ at, found: town, filled: true, editing: false }) === 'input',
+    'a town with no street number is not an address to confirm',
+  )
+  ok(
+    addressFieldMode({ at, found: null, filled: true, editing: false }) === 'input',
+    'nor is nothing at all',
+  )
+  ok(
+    addressFieldMode({ at, found: street, filled: true, editing: true }) === 'input',
+    'and asking to change it gives the field back',
+  )
 }
 
 console.log('')

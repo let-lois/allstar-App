@@ -189,8 +189,26 @@ try {
     const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
     ok(value === '', 'with no geocoding available the address field is left empty', `"${value}"`)
     ok(
-      !/Filled in from the map/.test(body) && !/Looking up the address/.test(body),
+      !/From the map/.test(body) && !/Looking up the address/.test(body),
       'and the form does not claim an address it never got',
+    )
+    /*
+      The address collapses into a line to check once the tap has produced one,
+      leaving the contact name and phone as the only things to fill in. This
+      environment has no Google key, so nothing ever comes back — and that is
+      the case worth asserting here, because getting the condition backwards
+      would show an empty confirmed box with no field underneath it and no way
+      to type an address at all. Which state is correct for which inputs is
+      settled in `verify:address`, where all four can be stated without a key.
+    */
+    ok(
+      (await page.getByTestId('lead-address-confirmed').count()) === 0,
+      'and offers a field to type in rather than an empty address to confirm',
+    )
+    ok(
+      (await page.locator('input[autocomplete="name"]').count()) === 1 &&
+        (await page.locator('input[autocomplete="tel"]').count()) === 1,
+      'with the contact name and phone alongside it',
     )
   }
 
@@ -572,6 +590,15 @@ try {
         ok(
           (await wp.locator('[data-testid="location-pin"]').count()) > 0,
           'and the pin that says which house is being added',
+        )
+        ok(
+          (await wp.getByTestId('lead-address-confirmed').count()) === 0,
+          'a laptop with no geocoding also gets a field, not an empty address to confirm',
+        )
+        ok(
+          (await wp.locator('input[autocomplete="name"]').count()) === 1 &&
+            (await wp.locator('input[autocomplete="tel"]').count()) === 1,
+          'and the same two fields the phone offers',
         )
 
         const wideBefore = (await wp.evaluate(() => new Promise((res, rej) => {
