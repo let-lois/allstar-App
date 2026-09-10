@@ -1,3 +1,5 @@
+import { IconFilter } from '../components/nav/icons'
+import { IconBack } from '../components/nav/icons'
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { FieldMap, type MapHandle } from '../components/map/FieldMap'
@@ -311,9 +313,18 @@ export function MapScreen() {
           translucent control over map imagery is the dark-on-dark bug this
           codebase has already recorded once.
         */
-        className="focusable press metal metal-map flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-pill px-3.5 text-[12.5px] font-semibold text-ink-soft"
+        /*
+          The sliders alone, with the count when there is one. The word cost
+          most of the width of the one band that floats over the map, and this
+          is the control a rep opens twenty times a shift: they learn its shape
+          on the first day and never read it again. The accessible name and the
+          tooltip still say "Filters", and say how many are on.
+        */
+        className="icon-sm focusable press metal metal-map flex min-h-[44px] w-11 shrink-0 items-center justify-center gap-1 rounded-pill text-ink-soft data-[on=true]:w-auto data-[on=true]:px-3"
+        data-on={activeCount > 0}
+        title={activeCount ? `Filters, ${activeCount} active` : 'Filters'}
       >
-        Filters
+        <IconFilter />
         {activeCount > 0 && (
           <span className="nums rounded-full bg-ink/10 px-1.5 py-0.5 text-[11px] font-bold text-accent-strong">
             {activeCount}
@@ -735,9 +746,10 @@ export function MapScreen() {
             <div className="scroll-pane p-4">
               <button
                 onClick={() => setSelectedId(null)}
-                className="focusable mb-2 min-h-tap rounded-lg px-2 text-sm font-semibold text-accent"
+                className="icon-xs focusable mb-2 flex min-h-tap items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-accent"
               >
-                ← All properties
+                <IconBack />
+                All properties
               </button>
               <PropertyPeek
                 property={selected}

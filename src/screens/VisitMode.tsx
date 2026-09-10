@@ -1,3 +1,4 @@
+import { IconCheck } from '../components/nav/icons'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
@@ -146,10 +147,10 @@ export function VisitMode() {
       <div className="app-shell bg-good-bg text-ink">
         <div className="scroll-pane pad-top flex flex-col justify-center px-6 text-center">
           <div className="mx-auto w-full max-w-sm">
-            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-good/15 text-4xl text-good">
-              ✓
+            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-good/15 text-good [&>svg]:h-9 [&>svg]:w-9">
+              <IconCheck />
             </div>
-            <h1 className="mt-5 text-2xl font-black">Visit recorded</h1>
+            <h1 className="mt-5 text-[22px] font-semibold tracking-[-0.02em]">Visit recorded</h1>
             <p className="mt-1 text-ink-soft">
               {property.address1} · {outcomeDef?.label}
             </p>

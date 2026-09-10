@@ -1,3 +1,4 @@
+import { IconBack, IconChevron } from '../components/nav/icons'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
@@ -251,8 +252,9 @@ export function StreetScreen() {
                 variant="ghost"
                 disabled={focusIndex <= 0}
                 onClick={() => setFocusId(shown[focusIndex - 1]?.property.id ?? null)}
+                icon={<IconBack />}
               >
-                ← Prev
+                Prev
               </Button>
               <Button
                 size="sm"
@@ -260,7 +262,10 @@ export function StreetScreen() {
                 disabled={focusIndex >= shown.length - 1}
                 onClick={() => setFocusId(shown[focusIndex + 1]?.property.id ?? null)}
               >
-                Next →
+                Next
+                <span className="icon-xs grid place-items-center">
+                  <IconChevron />
+                </span>
               </Button>
             </div>
           </section>

@@ -1,3 +1,4 @@
+import { IconWarn } from '../nav/icons'
 import { useState } from 'react'
 import {
   copyCurrentUrl,
@@ -46,8 +47,8 @@ export function InAppBrowserNotice({ tone = 'light' }: { tone?: 'light' | 'dark'
       }`}
     >
       <div className="mx-auto flex max-w-[600px] items-start gap-2.5">
-        <span aria-hidden className="mt-0.5 shrink-0">
-          ⚠
+        <span aria-hidden className="icon-sm mt-0.5 grid shrink-0 place-items-center">
+          <IconWarn />
         </span>
         <div className="min-w-0 flex-1">
           <p className="font-semibold leading-snug">

@@ -3,7 +3,13 @@ import { haptic } from '../../lib/haptics'
 
 export interface SwipeAction {
   label: string
-  glyph: string
+  /**
+   * The icon shown as the row is dragged. A node rather than a string: these
+   * were `📞` and `▶`, emoji and a dingbat rendered by the OS at whatever size
+   * and in whatever house style, on the one control a rep uses forty times a
+   * day without looking at it properly.
+   */
+  glyph: ReactNode
   color: string
   onAction: () => void
 }

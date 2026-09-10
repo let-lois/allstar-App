@@ -1176,6 +1176,28 @@
     scrollbar-width: none;
   }
 
+  /*
+   * Icon sizes, in one place.
+   *
+   * Every icon in `nav/icons.tsx` is drawn on a 24px grid, which is right for a
+   * tap target and wrong inside a 20px badge or a line of 13px text — a 24px
+   * glyph there overflows its circle or shoves the line height around. These
+   * scale the SVG rather than the box, so the stroke thins proportionally and
+   * the icon stays the same drawing.
+   *
+   * Two steps, not a scale: 18px for a glyph sitting beside text, 15px for one
+   * inside a badge or a pill. Anything needing a third size is probably the
+   * wrong icon for that spot.
+   */
+  .icon-sm > svg {
+    width: 18px;
+    height: 18px;
+  }
+  .icon-xs > svg {
+    width: 15px;
+    height: 15px;
+  }
+
   .snap-x-row {
     @apply flex gap-2 overflow-x-auto hide-scrollbar;
     scroll-snap-type: x proximity;

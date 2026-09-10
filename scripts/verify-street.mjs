@@ -260,12 +260,12 @@ try {
     ok((await page.getByTestId('street-focus').count()) === 1, 'tapping a door opens that one house')
     ok(/4 Marbury Row/.test(await body()), 'the chosen door is the one tapped')
 
-    await page.getByRole('button', { name: /Next →/ }).click()
+    await page.getByRole('button', { name: /^Next$/ }).click()
     await page.waitForTimeout(500)
     ok(/9 Marbury Row/.test(await body()), 'and Next walks up the street in order')
 
     ok(
-      await page.getByRole('button', { name: /← Prev/ }).isEnabled(),
+      await page.getByRole('button', { name: /^Prev$/ }).isEnabled(),
       'with Prev available once past the first door',
     )
   }

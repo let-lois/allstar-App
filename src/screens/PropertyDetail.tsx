@@ -1,3 +1,4 @@
+import { IconRefresh } from '../components/nav/icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAppStore, useListsContaining } from '../store/useAppStore'
@@ -203,8 +204,8 @@ export function PropertyDetail() {
 
           {property.nextActionLabel && property.nextActionAt && (
             <div className="mt-3 flex items-center gap-2 rounded-field bg-warn-bg px-3.5 py-3 text-[14px]">
-              <span className="text-warn" aria-hidden>
-                ↻
+              <span className="icon-sm grid shrink-0 place-items-center text-warn" aria-hidden>
+                <IconRefresh />
               </span>
               <span className="font-semibold text-warn">
                 {property.nextActionLabel} {relativeLower(property.nextActionAt)}

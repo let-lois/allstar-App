@@ -776,7 +776,7 @@ export default function AdminImport() {
       {/* ---- 4. done ---------------------------------------------------- */}
       {stage === 'done' && result && (
         <section className="card p-6">
-          <h2 className="text-xl font-black">Import finished</h2>
+          <h2 className="text-[19px] font-semibold tracking-[-0.01em]">Import finished</h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <Tally label="New leads created" value={result.created} tone="good" />
             <Tally label="Existing leads updated" value={result.updated} tone="muted" />
@@ -994,7 +994,7 @@ function Tally({
           : 'ring-line bg-surface'
   return (
     <div className={`rounded-field p-4 ring-1 ${ring}`}>
-      <p className="nums text-2xl font-black">{value.toLocaleString()}</p>
+      <p className="nums text-[22px] font-semibold tracking-[-0.02em]">{value.toLocaleString()}</p>
       <p className="mt-0.5 text-[12.5px] font-medium text-ink-mute">{label}</p>
     </div>
   )
