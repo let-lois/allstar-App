@@ -80,14 +80,30 @@ async function repOnMap(width, height) {
 const controls = (page) =>
   page.evaluate(() => {
     const out = []
-    for (const el of document.querySelectorAll('button, a[href], [role="button"], input')) {
+    /*
+      `[data-marker]` is in this list because it was not, and two real
+      undersized targets hid in the gap: the map's cluster bubbles are SVG
+      groups rather than buttons, so a selector written in terms of HTML
+      controls could not see the one marker standing for the most doors.
+    */
+    for (const el of document.querySelectorAll(
+      'button, a[href], [role="button"], input, [data-marker]',
+    )) {
       const r = el.getBoundingClientRect()
       if (r.width < 1 || r.height < 1) continue
       const cs = getComputedStyle(el)
       if (cs.visibility === 'hidden' || cs.display === 'none' || cs.pointerEvents === 'none') continue
       if (parseFloat(cs.opacity) < 0.05) continue
+      /*
+        Only what is wholly on screen. A map marker half past the edge of the
+        viewport has a clipped bounding box, and judging that as an undersized
+        target is measuring the window rather than the control — the first run
+        of this reported two 44x44 pins as failures for exactly that reason.
+      */
+      if (r.left < -0.5 || r.top < -0.5) continue
+      if (r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) continue
       const name = (el.getAttribute('aria-label') || el.textContent || el.tagName).trim().slice(0, 34)
-      out.push({ name, x: r.x, y: r.y, w: r.width, h: r.height })
+      out.push({ name, x: r.x, y: r.y, w: r.width, h: r.height, marker: !!el.dataset.marker })
     }
     return out
   })
@@ -109,7 +125,14 @@ try {
 
     /* ===== 1. nothing tappable covers anything else tappable =========== */
     {
-      const all = await controls(page)
+      /*
+        Chrome only. Two houses forty feet apart have overlapping 44px hit
+        circles and always will — that is what clustering exists to manage, not
+        a defect — and the chrome deliberately floats over the markers. The
+        question worth asking is whether two *controls* cover each other, which
+        is what "Street" and "Nearest door" were doing.
+      */
+      const all = (await controls(page)).filter((c) => !c.marker)
       const clashes = []
       for (let i = 0; i < all.length; i++) {
         for (let j = i + 1; j < all.length; j++) {
@@ -127,12 +150,39 @@ try {
 
     /* ===== 2. and every one of them is big enough to hit ============== */
     {
-      const small = (await controls(page)).filter((c) => Math.min(c.w, c.h) < 44)
+      /*
+        Type first. The search field's clear button does not exist until there
+        is something to clear, so a sweep of the resting screen never saw it —
+        and it was 36x36. A control that appears only in a state nobody
+        measured is exactly where an undersized target survives.
+      */
+      await page.getByRole('searchbox', { name: /Search leads and addresses/i }).fill('main')
+      await page.waitForTimeout(500)
+      /*
+        A hundredth of a pixel of slack.
+
+        SVG markers measure 43.999999 rather than 44 — the transform arithmetic
+        does not land on an integer — and reporting that as an undersized target
+        sends the next person hunting through map geometry for a pixel that is
+        not missing. Anything genuinely short is short by whole pixels: the two
+        real ones this gate found were 36 and 38.
+      */
+      const small = (await controls(page)).filter((c) => Math.min(c.w, c.h) < 44 - 0.01)
+      /*
+        Put it back. The next check measures this field's resting width, and a
+        field still holding text from this one is already expanded — which is
+        how that assertion first reported 211px resting and 211px typing and
+        failed against itself.
+      */
+      await page.getByRole('searchbox', { name: /Search leads and addresses/i }).fill('')
+      await page.keyboard.press('Escape')
+      await page.mouse.click(10, 300)
+      await page.waitForTimeout(450)
       ok(
         small.length === 0,
         'every control clears the 44px tap floor',
         small.length
-          ? small.map((c) => `${c.name} ${Math.round(c.w)}x${Math.round(c.h)}`).slice(0, 3).join('; ')
+          ? small.map((c) => `${c.name} ${c.w.toFixed(2)}x${c.h.toFixed(2)}`).slice(0, 3).join('; ')
           : 'all of them',
       )
     }
@@ -163,6 +213,37 @@ try {
         'and it does not sit on top of the Street shortcut',
         a && b ? `nearest ${Math.round(a.y)}-${Math.round(a.y + a.h)}, street ${Math.round(b.y)}-${Math.round(b.y + b.h)}` : 'one is missing',
       )
+    }
+
+    /* --- and the search is usable once somebody is using it ----------- */
+    //
+    // At 320px this row is [search | sync | map/list] and the search was left
+    // 98px of it. Typing made it worse rather than better: the clear button
+    // appears and took the input down to thirteen pixels — one character of an
+    // address, on the screen where a rep looks one up.
+    {
+      const field = page.locator('input[type="search"]').first()
+      const fieldWidth = async () => (await field.boundingBox())?.width ?? 0
+      const resting = await fieldWidth()
+      await field.fill('main')
+      await page.waitForTimeout(450)
+      const typing = await fieldWidth()
+      /*
+        Measured against its own resting width, not against the viewport: at
+        768 the map shares the screen with the stop-list pane, so a fraction of
+        the window is the wrong yardstick and the first draft of this failed
+        there for a reason that had nothing to do with the search field.
+
+        180px is roughly a house number and a street name — the shortest thing
+        anybody actually types here.
+      */
+      ok(
+        typing > resting * 1.4 && typing > 180,
+        'the search field takes the row while it is being used',
+        `${Math.round(resting)}px resting, ${Math.round(typing)}px typing`,
+      )
+      await field.fill('')
+      await page.waitForTimeout(300)
     }
 
     ok(errors.length === 0, 'and the app threw nothing drawing any of it', errors[0]?.slice(0, 120) ?? 'none')
@@ -232,6 +313,85 @@ try {
       (await page.getByRole('button', { name: /^Show all$/ }).count()) === 0,
       'and does not offer to clear a filter nobody set',
     )
+    await ctx.close()
+  }
+
+  /* ===== 5. a worked-out territory is not an empty device ============== */
+  //
+  // The third nothing, and the one an earlier draft of this strip got wrong: a
+  // rep whose every door is won or lost has leads — they are just all finished.
+  // Telling them the office has not sent them anything is false and
+  // unactionable at the same time, and it is what they see at the end of a good
+  // week.
+  {
+    const { ctx, page } = await repOnMap(390, 844)
+    await page.evaluate(
+      () =>
+        new Promise((res, rej) => {
+          const req = indexedDB.open('allstar-field')
+          req.onerror = () => rej(new Error('no db'))
+          req.onsuccess = () => {
+            const db = req.result
+            const tx = db.transaction(['properties', 'routes'], 'readwrite')
+            const store = tx.objectStore('properties')
+            const all = store.getAll()
+            all.onsuccess = () => {
+              for (const row of all.result) {
+                row.status = 'won'
+                store.put(row)
+              }
+            }
+            tx.objectStore('routes').clear()
+            tx.oncomplete = () => res()
+            tx.onerror = () => rej(new Error('write failed'))
+          }
+        }),
+    )
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(2000)
+    const worked = await page.getByTestId('no-matches').innerText()
+    ok(/finished/i.test(worked), 'a territory that is all won says it is finished', worked.replace(/\s+/g, ' ').slice(0, 70))
+    ok(
+      !/no leads on this device/i.test(worked),
+      'and does not claim the office has sent them nothing',
+    )
+    ok(
+      (await page.getByRole('button', { name: /^Show all$/ }).count()) > 0,
+      'and offers the tap that shows them anyway',
+    )
+    await ctx.close()
+  }
+
+  /* ===== 6. a save that fails says so ================================== */
+  //
+  // The button read "Saving…" for ever: no path back, a disabled control, an
+  // open sheet, and no lead. The likeliest cause is a full phone — reps
+  // photograph roofs all week — and silently losing the lead they just typed is
+  // the worst thing this form could do.
+  {
+    const { ctx, page } = await repOnMap(390, 844)
+    await page.addInitScript(() => {
+      const real = IDBObjectStore.prototype.put
+      IDBObjectStore.prototype.put = function (...args) {
+        if (this.name === 'properties') throw new Error('StorageFull: simulated')
+        return real.apply(this, args)
+      }
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(2200)
+    await page.mouse.click(200, 430)
+    await page.waitForTimeout(800)
+    if (await page.locator('[data-testid="add-lead-sheet"]').isVisible().catch(() => false)) {
+      await page.locator('input[autocomplete="street-address"]').fill('1 Unsaveable Way')
+      await page.getByRole('button', { name: /Save lead/ }).click()
+      await page.waitForTimeout(1200)
+      const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+      ok(/out of space|could not be saved/i.test(body), 'a write that fails tells the rep', body.match(/[^.]*saved[^.]*\./)?.[0]?.slice(0, 80) ?? '(nothing said)')
+      const btn = await page.getByRole('button', { name: /Save lead|Saving/ }).innerText()
+      ok(!/Saving/.test(btn), 'and the button stops saying "Saving…" for ever', btn)
+    } else {
+      ok(false, 'the Add-lead sheet opened so a failing save could be tested')
+    }
     await ctx.close()
   }
 } finally {

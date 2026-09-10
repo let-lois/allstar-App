@@ -839,6 +839,10 @@ export function FieldMap({
             colour and the ring is only there to hold the shape against imagery.
           */
           <g key={`c${i}`} data-marker="cluster" data-index={i} className="cursor-pointer">
+            {/* The same invisible 44px target a single pin gets. Without it a
+                cluster was a 38px bubble — the one marker on this map a thumb
+                could miss, and the one standing for the most doors. */}
+            <circle cx={c.x} cy={c.y} r={22} fill="transparent" />
             <circle cx={c.x} cy={c.y} r={19} fill="#20C4D3" opacity={0.22} />
             {/* Dark disc, bright count: 6.9:1. A white disc would need a dark
                 label, and a dark label is the one thing on this map that has
@@ -1064,8 +1068,23 @@ export function FieldMap({
               made the corner of the map the busiest part of the screen — and the
               filled one was the *passive* state indicator, not the action.
             */
-            className={`metal press focusable grid h-11 w-11 place-items-center rounded-full ${
-              followMe ? 'metal-brand !text-accent-strong' : 'metal-map !text-ink-soft'
+            /*
+              And now it does what the note above says.
+
+              `metal-brand !text-accent-strong` painted the glyph in exactly the
+              colour of the face beneath it — measured at 1.00:1 against the top
+              stop of its own gradient in the dark theme, which is this app's
+              default, and under 3:1 across the lower half in the light one. The
+              button that says "I am following you" was a teal disc with an
+              invisible glyph on it, stacked 26px above the quick-action button
+              wearing the identical gradient.
+
+              One face, and the state lives in the glyph's colour and in
+              `aria-pressed`, which is where a screen reader was already
+              reading it from.
+            */
+            className={`metal metal-map press focusable grid h-11 w-11 place-items-center rounded-full ${
+              followMe ? '!text-accent-strong' : '!text-ink-soft'
             }`}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

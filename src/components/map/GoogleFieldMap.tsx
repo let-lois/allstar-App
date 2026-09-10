@@ -756,6 +756,29 @@ export function GoogleFieldMap({
         data-tour="map-canvas"
       />
 
+      {/*
+        Something between "asked for a map" and "has a map".
+
+        Until tiles arrive this box is an empty rectangle with filter chips
+        floating on it, and on a slow connection it stays that way for up to
+        twelve seconds before the load timeout gives up and says why. Twelve
+        seconds of nothing is indistinguishable from broken, and a rep on a
+        rural road spends it wondering whether to close the app.
+
+        Removed by `ready`, which is set on `tilesloaded` — the same event the
+        undrawable watchdog waits for — so this says "loading" for exactly as
+        long as the map is actually loading, and never after pixels exist.
+      */}
+      {!ready && (
+        <div
+          role="status"
+          data-testid="map-loading"
+          className="pointer-events-none absolute inset-0 grid place-items-center bg-surface-sunk"
+        >
+          <p className="text-[13px] font-medium text-ink-mute">Loading the map…</p>
+        </div>
+      )}
+
       {/* Thumb-sized controls, bottom-right, matching the self-rendered map. */}
       <div
         className="absolute right-3 flex flex-col gap-2"

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { Property } from '../../types'
 import { useAppStore } from '../../store/useAppStore'
 import { NOTE_TAGS } from '../../data/outcomes'
+import type { NoteTag } from '../../types'
 import { OutcomePill, ScoreBar, StatusPill } from '../ui/StatusPill'
 import { CommActions } from './CommActions'
 import { Button } from '../ui/Button'
@@ -19,10 +20,13 @@ export function PropertyPeek({
   property,
   position,
   onOpenFull,
+  actionsInFooter,
 }: {
   property: Property
   position: Position | null
   onOpenFull?: () => void
+  /** The caller is pinning Start visit and View full profile itself. See below. */
+  actionsInFooter?: boolean
 }) {
   const nav = useNavigate()
   const contact = property.contacts.find((c) => c.isPrimary) ?? property.contacts[0]
@@ -42,13 +46,24 @@ export function PropertyPeek({
     stack of notes here would push the button that starts work below the fold.
   */
   const allNotes = useAppStore((s) => s.notes)
-  const note = useMemo(() => {
+  const { note, tags } = useMemo(() => {
     let best
+    /*
+      The newest body, but every note's tags.
+
+      "Big dog in the side yard" stops being the newest note the moment anybody
+      writes anything after it, and a rep who does not know about the dog is
+      the reason that tag exists. Bodies do not merge — a wall of them would
+      push the button that starts work below the fold — but the tags are a
+      handful of words and they are the part that has to survive.
+    */
+    const seen = new Set<NoteTag>()
     for (const n of Object.values(allNotes)) {
       if (n.propertyId !== property.id) continue
       if (!best || n.createdAt > best.createdAt) best = n
+      for (const t of n.tags) seen.add(t)
     }
-    return best
+    return { note: best, tags: [...seen] }
   }, [allNotes, property.id])
 
   return (
@@ -96,7 +111,15 @@ export function PropertyPeek({
 
       <p className="text-xs text-ink-mute">
         Last visit {relativeLower(property.lastVisitAt)}
-        {property.nextActionLabel && ` · Next: ${property.nextActionLabel}`}
+        {/*
+          With its date. "Next: Appointment" alone does not tell a rep whether
+          it is in twenty minutes or three weeks, which is the only thing about
+          it that changes what they do in the next hour.
+        */}
+        {property.nextActionLabel &&
+          ` · Next: ${property.nextActionLabel}${
+            property.nextActionAt ? ` ${relativeLower(property.nextActionAt)}` : ''
+          }`}
       </p>
 
       {note && (
@@ -113,9 +136,9 @@ export function PropertyPeek({
             longer is a profile, and the profile is one tap away and says so.
           */}
           <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-ink-soft">{note.body}</p>
-          {note.tags.length > 0 && (
+          {tags.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
-              {note.tags.map((t) => (
+              {tags.map((t) => (
                 <span
                   key={t}
                   className="rounded-full bg-ink/10 px-2 py-0.5 text-[11px] font-semibold text-accent-strong"
@@ -130,7 +153,17 @@ export function PropertyPeek({
 
       <CommActions property={property} contact={contact} />
 
-      {/* Primary action last, so it sits closest to the thumb. */}
+      {/*
+        Rendered here only when the caller has nowhere better to put them.
+
+        On a phone the map's sheet pins these to its footer instead: at the
+        opening detent on a 320px screen every one of them was below the fold,
+        so a sheet whose whole purpose is "tap a pin, then act" showed an
+        address and nothing to press. The wide layout has no sheet and no
+        footer, so there they stay in flow.
+      */}
+      {!actionsInFooter && (
+        <>
       <Button
         size="lg"
         full
@@ -147,6 +180,8 @@ export function PropertyPeek({
       >
         View full profile
       </button>
+        </>
+      )}
     </div>
   )
 }

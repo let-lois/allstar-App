@@ -130,7 +130,13 @@ export function BottomSheet({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="flex shrink-0 cursor-grab touch-none flex-col items-center pb-1 pt-3 active:cursor-grabbing"
+          /*
+            44px on the grab area itself, not on the handle inside it. Without a
+            title this strip was 22px tall — and it is the only way to raise a
+            sheet to its taller detent, so half the gesture's target was a
+            rounding error on a control a rep uses one-handed while walking.
+          */
+          className="flex min-h-[44px] shrink-0 cursor-grab touch-none flex-col items-center justify-center pb-1 pt-3 active:cursor-grabbing"
         >
           <div className="h-1.5 w-10 rounded-full bg-ink/15" />
           {title && (

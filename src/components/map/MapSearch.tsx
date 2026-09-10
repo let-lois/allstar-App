@@ -188,7 +188,7 @@ export function MapSearch({
           <button
             onClick={clear}
             aria-label="Clear search"
-            className="focusable -mr-1 grid h-9 w-9 shrink-0 place-items-center rounded-full text-[15px] text-ink-mute"
+            className="focusable -mr-1 grid h-11 w-11 shrink-0 place-items-center rounded-full text-[15px] text-ink-mute"
           >
             ✕
           </button>

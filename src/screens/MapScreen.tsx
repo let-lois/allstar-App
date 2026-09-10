@@ -82,6 +82,8 @@ export function MapScreen() {
   const [draftAt, setDraftAt] = useState<{ lat: number; lng: number } | null>(null)
   const [adding, setAdding] = useState(false)
   const timezone = useAppStore((s) => s.timezone)
+  /** Whether the first pull from the server is still running. See the empty strip. */
+  const refreshing = useAppStore((s) => s.refreshing)
   /*
     Map or list. A choice for now, and the offline default later.
 
@@ -215,6 +217,25 @@ export function MapScreen() {
   const activeCount = activeFilterCount(filter)
 
   /*
+    Which kind of nothing this is, in one sentence, decided once.
+
+    The map draws it over the imagery and the list draws it in the middle of an
+    empty column, and until now they disagreed: the list said "No doors match
+    this filter" whatever the cause, including when there was no filter. One
+    string, two renderers.
+  */
+  const emptyReason =
+    refreshing && scoped.length === 0
+      ? 'Loading your leads…'
+      : scoped.length === 0
+        ? 'No leads on this device yet. The office adds them, or use + to add one here.'
+        : activeCount === 0 && filter.scope === 'route'
+          ? 'Nothing on today’s route matches.'
+          : activeCount === 0
+            ? 'Every lead of yours is finished — won, lost or Do Not Contact.'
+            : 'No leads match these filters.'
+
+  /*
     The band that used to be fourteen chips.
 
     Four things now, and the first is pinned. `shrink-0` on the button and
@@ -301,7 +322,10 @@ export function MapScreen() {
     controls a rep uses at every door.
   */
   const statusRow = (
-    <div className="pointer-events-auto flex items-center gap-2 px-3" data-tour="map-search">
+    <div
+      className="group pointer-events-auto flex items-center gap-2 px-3"
+      data-tour="map-search"
+    >
       {/*
         Search takes the space the property-count pill used to hold. The count
         moved into its placeholder rather than getting a row of its own: on a
@@ -327,6 +351,17 @@ export function MapScreen() {
           setView('map')
         }}
       />
+      {/*
+        The row steps aside while the search is being used.
+
+        At 320px this row is [search | sync | map/list] and the search was left
+        about 98px of it — six characters, and one once the clear button
+        appeared. Neither the sync badge nor the view switch is something a rep
+        needs while they are typing an address, so for as long as focus is
+        inside this row they give it the width. Pure `focus-within`: no state to
+        get out of step, and it collapses back the moment focus leaves.
+      */}
+      <div className="contents group-focus-within:hidden">
       <SyncBadge plated onClick={() => nav('/more')} />
       <div
         role="group"
@@ -367,6 +402,7 @@ export function MapScreen() {
             {v}
           </button>
         ))}
+      </div>
       </div>
     </div>
   )
@@ -522,25 +558,19 @@ export function MapScreen() {
                 the device said nothing whatsoever, which is indistinguishable
                 from a map that has failed to draw.
               */}
-              {activeCount > 0 || filter.scope === 'route' ? (
-                <>
-                  <span className="flex-1">
-                    {filter.scope === 'route' && activeCount === 0
-                      ? 'Nothing on today’s route matches.'
-                      : 'No leads match these filters.'}
-                  </span>
-                  <button
-                    onClick={() => setFilter(UNFILTERED_MAP)}
-                    className="focusable min-h-[44px] shrink-0 rounded-lg px-2 font-semibold text-accent"
-                  >
-                    Show all
-                  </button>
-                </>
-              ) : (
-                <span className="flex-1">
-                  No leads on this device yet. The office adds them, or use{' '}
-                  <span className="font-semibold">+</span> to add one here.
-                </span>
+              <span className="flex-1">{emptyReason}</span>
+              {/*
+                Only when there is something to undo. A rep whose device has no
+                leads did not set a filter, and offering them one to clear sends
+                them looking for a control they never touched.
+              */}
+              {scoped.length > 0 && (
+                <button
+                  onClick={() => setFilter(UNFILTERED_MAP)}
+                  className="focusable min-h-[44px] shrink-0 rounded-lg px-2 font-semibold text-accent"
+                >
+                  Show all
+                </button>
               )}
             </div>
           )}
@@ -671,6 +701,7 @@ export function MapScreen() {
 
           <RouteList
             className="pad-nav min-h-0 flex-1"
+            emptyNotice={emptyReason}
             properties={shown}
             route={filter.scope === 'route' ? route : null}
             position={position}
@@ -739,11 +770,35 @@ export function MapScreen() {
         onClose={() => setSelectedId(null)}
         detents={[0.46, 0.86]}
         scrim={false}
+        footer={
+          selected && (
+            /*
+              Pinned, because at this sheet's opening detent on a 320px phone
+              every one of these was below the fold — a sheet whose whole
+              purpose is "tap a pin, then act" was showing an address and
+              nothing to press.
+            */
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="lg"
+                className="shrink-0"
+                onClick={() => nav(`/property/${selected.id}`)}
+              >
+                Profile
+              </Button>
+              <Button size="lg" full buzz onClick={() => nav(`/property/${selected.id}?start=1`)}>
+                Start visit
+              </Button>
+            </div>
+          )
+        }
       >
         {selected && (
           <PropertyPeek
             property={selected}
             position={position}
+            actionsInFooter
             onOpenFull={() => nav(`/property/${selected.id}`)}
           />
         )}

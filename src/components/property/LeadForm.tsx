@@ -61,6 +61,7 @@ export function useLeadDraft({
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [locating, setLocating] = useState(!at)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   /*
     What the map said was here, and whether the rep has since disagreed.
 
@@ -73,6 +74,8 @@ export function useLeadDraft({
   */
   const [found, setFound] = useState<ReverseAddress | null>(null)
   const [looking, setLooking] = useState(false)
+  /** Whether the last answer was actually written into the field, or only offered. */
+  const [filled, setFilled] = useState(false)
   const touched = useRef(false)
 
   const storePosition = useAppStore((s) => s.position)
@@ -128,6 +131,9 @@ export function useLeadDraft({
         if (r && !touched.current) {
           setAddress(r.address1)
           setPicked(null)
+          setFilled(true)
+        } else {
+          setFilled(false)
         }
       })
       .finally(() => {
@@ -157,6 +163,7 @@ export function useLeadDraft({
   const save = async () => {
     if (!address.trim() || !pin) return
     setSaving(true)
+    setError(null)
     haptic('confirm')
 
     const property: Property = {
@@ -183,9 +190,29 @@ export function useLeadDraft({
       assignedRepId: useAppStore.getState().user?.id,
     }
 
-    await db.put('properties', property)
-    useAppStore.setState((s) => ({ properties: { ...s.properties, [property.id]: property } }))
-    await enqueue('property.status', { id: property.id, created: true })
+    /*
+      A write that fails has to say so.
+
+      Without this the button reads "Saving…" for ever: `setSaving(true)` with
+      no path back, a disabled control, an open sheet and no lead. The likeliest
+      cause is not a bug but a full phone — `db.ts` raises StorageFull by name
+      for exactly this, and a rep who has been photographing roofs all week is
+      the one it happens to. Silently losing the lead they just typed is the
+      worst thing this form could do.
+    */
+    try {
+      await db.put('properties', property)
+      useAppStore.setState((s) => ({ properties: { ...s.properties, [property.id]: property } }))
+      await enqueue('property.status', { id: property.id, created: true })
+    } catch (err) {
+      setError(
+        String(err).includes('StorageFull')
+          ? 'This phone is out of space, so the lead was not saved. Free some up and try again.'
+          : 'The lead could not be saved on this phone. Try again.',
+      )
+      setSaving(false)
+      return
+    }
 
     onSaved(property)
   }
@@ -202,6 +229,7 @@ export function useLeadDraft({
     at: at ?? null,
     found,
     looking,
+    filled,
     markTouched: () => {
       touched.current = true
     },
@@ -209,6 +237,7 @@ export function useLeadDraft({
     coords,
     locating,
     saving,
+    error,
     canSave: !!address.trim() && !!pin && !saving,
     save,
   }
@@ -235,7 +264,7 @@ export function LeadFields({
   autoFocus?: boolean
 }) {
   const { address, setAddress, picked, setPicked, name, setName, phone, setPhone } = draft
-  const { at, pin, coords, locating, found, looking, markTouched } = draft
+  const { at, pin, coords, locating, found, looking, filled, markTouched, error } = draft
 
   return (
     <div className="space-y-4">
@@ -256,7 +285,7 @@ export function LeadFields({
           picked
             ? `${[picked.city, picked.state, picked.zip].filter(Boolean).join(' ')}`
             : at
-              ? addressHint(found, looking)
+              ? addressHint(found, looking, filled)
               : 'Start typing and pick from the list — that sets the pin exactly.'
         }
       />
@@ -279,6 +308,12 @@ export function LeadFields({
         autoComplete="tel"
         enterKeyHint="done"
       />
+
+      {error && (
+        <p role="alert" className="rounded-field bg-bad-bg px-3 py-2 text-[12.5px] text-bad">
+          {error}
+        </p>
+      )}
 
       {/*
         Read-only, and stated rather than silent: the pin is the one field the
@@ -331,9 +366,16 @@ export function LeadFields({
  * nothing cannot tell "we could not find this street" from "this app does not
  * do that". A vague answer says which half is missing and whose job it now is.
  */
-function addressHint(found: ReverseAddress | null, looking: boolean): string {
+function addressHint(found: ReverseAddress | null, looking: boolean, filled: boolean): string {
   if (looking) return 'Looking up the address at this pin…'
-  if (found?.address1) return 'Filled in from the map — check it against the door.'
+  /*
+    `filled`, not just `found`. Once the rep has typed here the field is theirs
+    and no lookup writes to it — so saying "filled in from the map" would be
+    claiming credit for text they wrote themselves, which is a small lie that
+    makes them doubt the rest of the form.
+  */
+  if (found?.address1 && filled) return 'Filled in from the map — check it against the door.'
+  if (found?.address1) return 'Kept what you typed. The map says this is ' + found.address1 + '.'
   if (found) return 'Only the area came back, not the street. Type the number and street.'
   return 'House number and street. The pin is already set where you tapped.'
 }
