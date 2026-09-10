@@ -320,7 +320,6 @@ export function MapScreen() {
           size="sm"
           selected={activeCount === 0 && filter.scope === 'all' && filter.status.kind === 'any'}
           onClick={() => setFilter(UNFILTERED_MAP)}
-          className="bg-surface/95 shadow-card backdrop-blur"
         >
           All
         </Chip>
@@ -334,7 +333,6 @@ export function MapScreen() {
             size="sm"
             selected
             onClick={() => setFilter((f) => ({ ...f, list: undefined }))}
-            className="bg-surface/95 shadow-card backdrop-blur"
           >
             <span data-testid="map-list-chip">{openList.name} ×</span>
           </Chip>
@@ -346,7 +344,6 @@ export function MapScreen() {
             onClick={() =>
               setFilter((f) => ({ ...f, scope: f.scope === 'route' ? 'all' : 'route' }))
             }
-            className="bg-surface/95 shadow-card backdrop-blur"
           >
             My route
           </Chip>

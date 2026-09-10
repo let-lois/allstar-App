@@ -158,7 +158,7 @@ export function MapSearch({
         results open lands on the backdrop and does nothing visible — the second
         time an unpainted overlay has quietly eaten taps in this codebase.
       */}
-      <div className="relative z-20 flex min-h-tap items-center gap-1 rounded-full border border-line bg-surface/95 pl-3 pr-2.5 shadow-card backdrop-blur">
+      <div className="relative z-20 flex min-h-tap items-center gap-1 rounded-full border border-line bg-surface pl-3 pr-2.5 shadow-card">
         <span aria-hidden className="shrink-0 text-[13px] text-ink-mute">
           ⌕
         </span>

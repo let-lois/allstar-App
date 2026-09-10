@@ -24,12 +24,12 @@ import { usePhotoSync, useSync } from '../sync/SyncBadge'
  * on its own is a question nobody can answer. A number is.
  *
  * The sheet is portalled to the body, and that is not tidiness. This button
- * lives inside the `TopBar`, and the header carries `backdrop-blur` —
+ * lives inside the `TopBar`, and when the header carried `backdrop-blur` —
  * `backdrop-filter` makes an element the containing block for every
- * `position: fixed` descendant, so a sheet rendered in place was clipped to the
+ * `position: fixed` descendant — a sheet rendered in place was clipped to the
  * header's own 54px box: a scrim over nothing, a panel with no room, and two
- * buttons the person could not reach. It looked like a broken sheet and was
- * really a CSS containment rule two components away.
+ * buttons the person could not reach. The blur is gone; the portal stays,
+ * because any future filter or transform on the header would bring it back.
  */
 export function SignOutButton() {
   const [open, setOpen] = useState(false)

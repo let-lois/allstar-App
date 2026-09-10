@@ -73,7 +73,7 @@ export function ListMembership({ propertyId, compact }: { propertyId: string; co
         <button
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className="focusable ml-auto min-h-[36px] rounded-lg px-2 text-[13px] font-semibold text-accent"
+          className="focusable ml-auto min-h-[44px] rounded-lg px-2 text-[13px] font-semibold text-accent"
         >
           {open ? 'Done' : 'Add to list'}
         </button>

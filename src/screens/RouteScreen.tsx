@@ -90,7 +90,7 @@ export function RouteScreen() {
 
       <div className="scroll-pane pad-nav bg-surface">
         <div className="content-col">
-        <div className="sticky top-0 z-10 border-b border-line-soft bg-surface/95 px-4 py-3 backdrop-blur">
+        <div className="sticky top-0 z-10 border-b border-line-soft bg-surface px-4 py-3">
           <ProgressBar
             value={progress.done}
             max={Math.max(progress.total, 1)}
