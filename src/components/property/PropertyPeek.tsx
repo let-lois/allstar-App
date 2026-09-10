@@ -1,5 +1,8 @@
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Property } from '../../types'
+import { useAppStore } from '../../store/useAppStore'
+import { NOTE_TAGS } from '../../data/outcomes'
 import { OutcomePill, ScoreBar, StatusPill } from '../ui/StatusPill'
 import { CommActions } from './CommActions'
 import { Button } from '../ui/Button'
@@ -24,6 +27,29 @@ export function PropertyPeek({
   const nav = useNavigate()
   const contact = property.contacts.find((c) => c.isPrimary) ?? property.contacts[0]
   const dist = position ? distanceMiles(position, property) : null
+
+  /*
+    The last thing anybody wrote about this door.
+
+    This sheet answers "should I walk over there and knock", and until now it
+    answered it without the one field that most often says no. A note tagged
+    `dog` or `gate_code` is not colour on a profile — it is the difference
+    between opening a side gate and not, and it was two taps away behind "View
+    full profile", which is one tap more than a rep standing in the street will
+    spend.
+
+    Newest only. This is a peek: the whole history is on the profile, and a
+    stack of notes here would push the button that starts work below the fold.
+  */
+  const allNotes = useAppStore((s) => s.notes)
+  const note = useMemo(() => {
+    let best
+    for (const n of Object.values(allNotes)) {
+      if (n.propertyId !== property.id) continue
+      if (!best || n.createdAt > best.createdAt) best = n
+    }
+    return best
+  }, [allNotes, property.id])
 
   return (
     <div className="space-y-3 pt-1">
@@ -72,6 +98,35 @@ export function PropertyPeek({
         Last visit {relativeLower(property.lastVisitAt)}
         {property.nextActionLabel && ` · Next: ${property.nextActionLabel}`}
       </p>
+
+      {note && (
+        <div
+          className="rounded-field bg-surface-sunk px-3 py-2.5"
+          data-testid="peek-note"
+        >
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="eyebrow">Last note</p>
+            <p className="shrink-0 text-[11.5px] text-ink-mute">{relativeLower(note.createdAt)}</p>
+          </div>
+          {/*
+            Two lines, then it stops. A rep reads this standing up; anything
+            longer is a profile, and the profile is one tap away and says so.
+          */}
+          <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-ink-soft">{note.body}</p>
+          {note.tags.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {note.tags.map((t) => (
+                <span
+                  key={t}
+                  className="rounded-full bg-ink/10 px-2 py-0.5 text-[11px] font-semibold text-accent-strong"
+                >
+                  {NOTE_TAGS.find((x) => x.tag === t)?.label ?? t}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <CommActions property={property} contact={contact} />
 

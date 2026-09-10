@@ -19,10 +19,19 @@ export function Chip({ children, color, selected, onClick, size = 'md', classNam
   // the target itself never drops below 44px.
   const staticBase =
     size === 'sm' ? 'px-2.5 py-1 text-xs rounded-full' : 'px-3.5 py-1.5 text-sm rounded-full'
+  /*
+    Both dimensions, not just height.
+
+    `min-h` alone leaves a short label short in the other direction: "All" came
+    out 43x44, one pixel under the floor this file claims to hold. Nobody would
+    ever have measured it by hand — it was found by a gate that compares every
+    control on a screen against the rule rather than checking the ones somebody
+    thought to name.
+  */
   const tapBase =
     size === 'sm'
-      ? 'px-3.5 min-h-[44px] text-xs rounded-full'
-      : 'px-4 min-h-tap text-sm rounded-full'
+      ? 'px-3.5 min-h-[44px] min-w-[44px] justify-center text-xs rounded-full'
+      : 'px-4 min-h-tap min-w-tap justify-center text-sm rounded-full'
 
   if (!onClick) {
     return (

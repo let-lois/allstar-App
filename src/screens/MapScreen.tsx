@@ -434,19 +434,49 @@ export function MapScreen() {
     overlay: (
       <>
         {/*
-          The way into the street view, bottom-left.
+          The bottom-left stack, mirroring the map's own controls on the right.
 
-          Down here rather than in the segmented control at the top, which is
-          the row that also carries the lead search — a third item there pushed
-          the search off screen at 320px. The left edge at thumb height is free
-          (the map's own controls stack on the right), so this costs no
-          horizontal room at any width, which is what a 320px phone needs.
+          These were two separately positioned buttons at the same offset —
+          `absolute left-3` at `bottom: 96px`, both of them — so whenever a rep
+          had a GPS fix and no lead selected, which is the ordinary state of
+          this screen in the field, "Nearest door" was drawn directly on top of
+          "Street". Neither gate caught it because gates run without a position:
+          `nearest` needs one, so in a test only ever one of the two existed.
+
+          One stack, laid out rather than stacked by accident, and the order is
+          by urgency: the nearest door is a thing to do next, the street view is
+          a way of looking. Both are down here because the left edge at thumb
+          height is the one region of a phone screen the map's own controls do
+          not use.
         */}
-        <div className="pointer-events-none absolute inset-0">
+        <div
+          className="pointer-events-none absolute left-3 flex flex-col items-start gap-2"
+          style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+        >
+          {!selected && nearest && (
+            <button
+              onClick={() => {
+                const p = properties[nearest.id]
+                mapHandle.current?.flyTo(p.lat, p.lng, 18)
+                setSelectedId(nearest.id)
+              }}
+              /*
+                `metal-map`, not `metal-quiet`. The quiet face is translucent,
+                and a translucent control over live map imagery is the
+                dark-on-dark failure this codebase has already recorded once —
+                it read as a hole in the map on a bright basemap.
+              */
+              className="metal metal-map press focusable pointer-events-auto flex min-h-[48px] items-center gap-2 rounded-pill px-4 text-[14px] font-semibold !text-accent-strong"
+            >
+              Nearest door
+              <span className="nums font-medium text-ink-mute">
+                {(nearest.d * 5280).toFixed(0)} ft
+              </span>
+            </button>
+          )}
           <button
             onClick={() => nav('/street')}
-            className="focusable metal metal-map pointer-events-auto absolute left-3 flex min-h-[44px] items-center rounded-pill px-4 text-[12.5px] font-semibold text-ink-soft"
-            style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+            className="focusable metal metal-map press pointer-events-auto flex min-h-[44px] items-center rounded-pill px-4 text-[12.5px] font-semibold text-ink-soft"
           >
             Street
           </button>
@@ -474,26 +504,44 @@ export function MapScreen() {
             from a broken one. Only shown when a filter is actually on, so a rep
             whose territory really is empty is not told it is their fault.
           */}
-          {shown.length === 0 && activeCount > 0 && (
+          {shown.length === 0 && (
             <div
               role="status"
               data-testid="no-matches"
               className="pointer-events-auto mx-3 mt-2 flex items-center gap-2 rounded-field bg-surface px-3 py-2 text-[12.5px] text-ink-soft shadow-card"
             >
-              <span className="flex-1">No leads match these filters.</span>
-              <button
-                onClick={() =>
-                  setFilter((f) => ({
-                    ...f,
-                    status: { kind: 'open' },
-                    visited: 'any',
-                    noAnswerOnly: false,
-                  }))
-                }
-                className="focusable min-h-[36px] shrink-0 rounded-lg px-2 font-semibold text-accent"
-              >
-                Clear filters
-              </button>
+              {/*
+                Two different nothings, and telling them apart is the whole
+                point. "Your filters match nothing" is something the rep did and
+                can undo in one tap. "You have no leads" is not their doing at
+                all — it means nobody has imported or assigned any yet, and
+                offering them a Clear button for it would send them looking for
+                a filter they never set.
+
+                Only the first of these existed. An empty map with no leads on
+                the device said nothing whatsoever, which is indistinguishable
+                from a map that has failed to draw.
+              */}
+              {activeCount > 0 || filter.scope === 'route' ? (
+                <>
+                  <span className="flex-1">
+                    {filter.scope === 'route' && activeCount === 0
+                      ? 'Nothing on today’s route matches.'
+                      : 'No leads match these filters.'}
+                  </span>
+                  <button
+                    onClick={() => setFilter(UNFILTERED_MAP)}
+                    className="focusable min-h-[44px] shrink-0 rounded-lg px-2 font-semibold text-accent"
+                  >
+                    Show all
+                  </button>
+                </>
+              ) : (
+                <span className="flex-1">
+                  No leads on this device yet. The office adds them, or use{' '}
+                  <span className="font-semibold">+</span> to add one here.
+                </span>
+              )}
             </div>
           )}
 
@@ -524,23 +572,6 @@ export function MapScreen() {
           )}
         </div>
 
-        {/* Nearest-door shortcut, bottom-left, opposite the zoom controls. */}
-        {!selected && nearest && (
-          <button
-            onClick={() => {
-              const p = properties[nearest.id]
-              mapHandle.current?.flyTo(p.lat, p.lng, 18)
-              setSelectedId(nearest.id)
-            }}
-            className="metal metal-quiet press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-pill px-4 text-[14px] font-semibold !text-accent-strong"
-            style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
-          >
-            Nearest door
-            <span className="nums font-medium text-ink-mute">
-              {(nearest.d * 5280).toFixed(0)} ft
-            </span>
-          </button>
-        )}
       </>
     ),
   }

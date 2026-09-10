@@ -358,7 +358,10 @@ try {
       await page.getByTestId('no-matches').isVisible().catch(() => false),
       'and the map says so rather than looking broken',
     )
-    await page.getByRole('button', { name: /^Clear filters$/ }).click()
+    // "Show all", not "Clear filters": the strip now distinguishes a filter
+    // that matched nothing from a device with no leads on it, and only the
+    // first of those has anything to undo. See verify:mapchrome.
+    await page.getByRole('button', { name: /^Show all$/ }).click()
     await page.waitForTimeout(600)
     ok((await pins(page)) > 0, 'and offers a way out of it', `${await pins(page)} pins`)
     await ctx.close()
