@@ -222,6 +222,18 @@ try {
   const map = mgr.getByRole('application', { name: /Outline a list/ })
   await map.scrollIntoViewIfNeeded()
   await mgr.waitForTimeout(400)
+  /*
+    The precondition the geometry below rests on, asserted rather than assumed.
+
+    Without this the gate was timing-dependent and said so in the worst
+    possible way: a box drawn at fixed fractions of a map that had opened
+    somewhere unexpected took in one house instead of four, and the failure
+    read as "the server computed the wrong membership". The map now fits every
+    lead — so if the store had not filled when it mounted, that shows up here,
+    named, instead of as a wrong count three assertions later.
+  */
+  const pins = await mgr.locator('[data-marker="pin"]').count()
+  ok(pins === 6, 'the drawing map opens on every lead in the account', `${pins} pins`)
   const box = await map.boundingBox()
   for (const [fx, fy] of [[0.25, 0.25], [0.75, 0.25], [0.75, 0.75], [0.25, 0.75]]) {
     await mgr.mouse.click(box.x + box.width * fx, box.y + box.height * fy)

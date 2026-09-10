@@ -93,16 +93,32 @@ export function AdminLists() {
     return allProperties.filter((p) => ids.has(p.id))
   }, [current, allProperties])
 
+  /*
+    Frame the selected list, or — when nothing is selected, which is every
+    first visit and the whole of the drawing flow — every lead in the account.
+
+    Not `properties[0]`, which is what the map falls back to on its own. That
+    is the alphabetically first address, because the server orders by address1,
+    and "1 Outside Ave" sorts before "10 Inside St": a manager about to draw
+    round a block was opened onto whichever lone lead happened to sort first,
+    which can be miles from everything else. Worse, the map seeds that view
+    once at mount, so *which* answer you got depended on whether the store had
+    filled yet — the same screen opened on two different places depending on
+    how loaded the machine was. Fitting everything is both the right default
+    for drawing and a deterministic one.
+  */
+  const framed = shown.length > 0 ? shown : allProperties.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
   const view = useMemo(() => {
-    if (shown.length === 0) return undefined
+    if (framed.length === 0) return undefined
     return {
       center: {
-        lat: shown.reduce((a, p) => a + p.lat, 0) / shown.length,
-        lng: shown.reduce((a, p) => a + p.lng, 0) / shown.length,
+        lat: framed.reduce((a, p) => a + p.lat, 0) / framed.length,
+        lng: framed.reduce((a, p) => a + p.lng, 0) / framed.length,
       },
-      zoom: fitZoom(shown, 440, 500),
+      zoom: fitZoom(framed, 440, 500),
     }
-  }, [shown])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [framed.length, shown.length, current?.id])
 
   /* --- drawing a new list -------------------------------------------------- */
   const [draft, setDraft] = useState<Draft | null>(null)
