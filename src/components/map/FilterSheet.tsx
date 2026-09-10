@@ -3,6 +3,7 @@ import { Button } from '../ui/Button'
 import { Chip } from '../ui/Chip'
 import { STATUS_COLOR, STATUS_LABEL } from '../../data/outcomes'
 import { VISITED_WINDOWS, activeFilterCount, type MapFilter } from '../../lib/leadFilter'
+import { useMyLists } from '../../store/useAppStore'
 import type { LeadStatus } from '../../types'
 
 /**
@@ -53,6 +54,13 @@ export function FilterSheet({
 }) {
   const count = activeFilterCount(filter)
 
+  /*
+    The rep's lists — handed to them or their own. Read here rather than passed
+    in because this is the only place on the map that needs the whole set; the
+    map itself only ever needs the one that is open.
+  */
+  const lists = useMyLists()
+
   const chosen = filter.status.kind === 'some' ? filter.status.set : []
 
   /*
@@ -97,6 +105,7 @@ export function FilterSheet({
                 status: { kind: 'open' },
                 visited: 'any',
                 noAnswerOnly: false,
+                list: undefined,
               })
             }
           >
@@ -212,6 +221,58 @@ export function FilterSheet({
               </Chip>
             ))}
           </div>
+        </Section>
+
+        {/*
+          A list is the fourth kind of question: not what state a door is in or
+          when it was knocked, but whether somebody put it on a list. Opening a
+          list from its own page lands here with its chip already on; this is
+          the same control, reachable without leaving the map.
+        */}
+        <Section
+          title="List"
+          hint={
+            lists.length === 0
+              ? 'No lists yet. Start one from any lead’s page, or your manager can hand you one.'
+              : filter.list
+                ? 'Only the houses on this list, whatever their status.'
+                : 'Only the houses on one list.'
+          }
+        >
+          {lists.length > 0 && (
+            <div role="group" aria-label="List" className="flex flex-wrap gap-2" data-testid="filter-lists">
+              <Chip
+                size="sm"
+                selected={!filter.list}
+                onClick={() => onChange({ ...filter, list: undefined })}
+              >
+                Any list
+              </Chip>
+              {lists.map((l) => (
+                <Chip
+                  key={l.id}
+                  size="sm"
+                  selected={filter.list === l.id}
+                  /*
+                    Picking a list widens status to "any": the list is a chosen
+                    set of doors and hiding its finished ones behind the default
+                    "open" rule would make it look shorter than it is. Tapping
+                    it back off restores the default.
+                  */
+                  onClick={() =>
+                    onChange(
+                      filter.list === l.id
+                        ? { ...filter, list: undefined, status: { kind: 'open' } }
+                        : { ...filter, list: l.id, status: { kind: 'any' } },
+                    )
+                  }
+                >
+                  {l.name}
+                  <span className="nums text-ink-mute">{l.leadIds.length}</span>
+                </Chip>
+              ))}
+            </div>
+          )}
         </Section>
 
         <Section title="Outcome" hint="Worth another try at a different hour.">

@@ -367,6 +367,82 @@ try {
     await ctx.close()
   }
 
+  /* ===== 9. a list is a filter, reachable from the sheet ================= */
+  //
+  // Opening a list from its own page lands on the map with its chip on; this is
+  // the other way in — the same question asked from the sheet, so a rep already
+  // on the map does not have to leave it to narrow to tonight's list.
+  {
+    const { ctx, page } = await repOnMap()
+    const total = await pins(page)
+
+    await openSheet(page)
+    const sheet = page.getByTestId('filter-sheet')
+    ok(/^List$/m.test(await sheet.innerText()), 'the sheet has a List section')
+    ok(/No lists yet/.test(await sheet.innerText()), 'which, with no lists, says how to get one')
+    ok((await page.getByTestId('filter-lists').count()) === 0, 'and offers no chips for lists that do not exist')
+    await closeSheet(page)
+
+    // Make one, from a door — the way a rep would.
+    await page.goto(`${BASE}/leads`, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(1400)
+    await dismissTour(page)
+    await page.getByTestId('lead-row').first().click()
+    await page.waitForTimeout(900)
+    if ((await page.getByTestId('list-membership').count()) === 0) {
+      await page.getByRole('button', { name: /^Lists/ }).click()
+      await page.waitForTimeout(400)
+    }
+    await page.getByRole('button', { name: /Add to list/ }).click()
+    await page.waitForTimeout(300)
+    const LIST = 'Gate Sheet List'
+    await page.getByLabel('New list').fill(LIST)
+    await page.getByRole('button', { name: /^Create$/ }).click()
+    await page.waitForTimeout(800)
+    ok((await page.getByTestId('on-list').count()) === 1, 'a list made at the door holds it')
+
+    await page.goto(`${BASE}/map`, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(1600)
+    ok((await pins(page)) === total, 'the map is unchanged until a list is chosen', `${await pins(page)} of ${total}`)
+
+    await openSheet(page)
+    const group = page.getByTestId('filter-lists')
+    ok((await group.count()) === 1, 'now the sheet offers the list')
+    const chip = group.getByRole('button', { name: new RegExp(`^${LIST}`) })
+    ok(/1$/.test((await chip.innerText()).trim()), 'with its count on the chip', (await chip.innerText()).trim())
+    await chip.click()
+    await page.waitForTimeout(400)
+    ok(
+      (await page.getByRole('button', { name: /^Any status$/ }).getAttribute('aria-pressed')) === 'true',
+      'choosing a list widens status to any — the list is the choice, not the status',
+    )
+    const label = await page.getByRole('button', { name: /^Show \d+ leads?$/ }).innerText()
+    ok(label.replace(/\D/g, '') === '1', 'the button counts the one house on it', label)
+    await closeSheet(page)
+    ok((await pins(page)) === 1, 'and the map draws only that house', `${await pins(page)}`)
+    ok(
+      (await page.getByTestId('map-list-chip').count()) === 1,
+      'the rail names the list the map is narrowed to',
+    )
+    ok(
+      /1 active/.test((await page.getByTestId('map-filters').getAttribute('aria-label')) ?? ''),
+      'and the Filters button counts it as one filter on',
+    )
+
+    // Clear takes the list off with everything else.
+    await openSheet(page)
+    await page.getByRole('button', { name: /^Clear$/ }).click()
+    await page.waitForTimeout(400)
+    ok(
+      (await group.getByRole('button', { name: /^Any list$/ }).getAttribute('aria-pressed')) === 'true',
+      'Clear puts the list back to any',
+    )
+    await closeSheet(page)
+    ok((await pins(page)) === total, 'and every marker returns', `${await pins(page)} of ${total}`)
+    ok((await page.getByTestId('map-list-chip').count()) === 0, 'with no list named on the rail')
+    await ctx.close()
+  }
+
   /* ===== 8. "Nearest door" never offers a closed lead =================== */
   //
   // Ungated until now, and wrong: it skipped won and dnc but not lost, so the
