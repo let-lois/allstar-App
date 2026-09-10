@@ -80,7 +80,7 @@ scheduled handler against a real Worker and then feeds what lands in the bucket
 to `verify-restore.mjs` — the same drill, unmodified.
 
 Your part, once, and **before this is merged** — the deploy fails on a bucket that
-does not exist, and every merge to `main` deploys:
+does not exist, and a merge to `main` is meant to deploy:
 
 ```bash
 cd api
@@ -703,7 +703,7 @@ this says so rather than being deleted.
    code change that lets the key be locked down is already in.
 4. **Create the backups bucket and set `BACKUP_KEY` as a Worker secret**
    (item 3). Two commands, and they have to happen *before* the scheduled-backup
-   change merges — every merge to `main` deploys, and a deploy fails on an R2
+   change merges — a merge to `main` deploys, and a deploy fails on an R2
    bucket that does not exist. No Cloudflare API token is needed after all: the
    Worker reads the database through its own binding, so nothing has to hold a
    credential that could pull production out of the account.
