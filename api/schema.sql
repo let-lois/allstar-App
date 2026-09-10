@@ -504,6 +504,58 @@ CREATE INDEX IF NOT EXISTS sync_conflicts_open
   ON sync_conflicts(client_id, reviewed_at, arrived_at);
 
 
+/* ---------------------------------------------------------------------------
+   Lead lists.
+
+   A list is a working set: "Monday Route", "Follow Ups", "Northwest Territory
+   – Sept 10". It is deliberately not a territory. A territory answers *whose
+   ground is this* — one rep, one patch, and it drives where an import lands and
+   what the coverage figures count. A list answers *what are we working on* —
+   many leads, many reps, and a lead can be on several at once. Folding the
+   second into the first would have meant changing the cardinality of a working,
+   gated pipeline to get a feature it was never shaped for.
+
+   Membership and assignment are both join tables, so both directions are N:N
+   without a JSON column anybody has to keep in step by hand. `boundary` is kept
+   when a list was made by drawing round an area — so the manager can see the
+   shape later, and so a lead added to the area afterwards can be offered to it —
+   and is null for a list somebody typed a name for.
+
+   `archived` rather than deleted, because a list that a rep worked last week is
+   history worth keeping. DELETE exists for the empty one made by mistake.
+--------------------------------------------------------------------------- */
+CREATE TABLE IF NOT EXISTS lead_lists (
+  id          TEXT PRIMARY KEY,
+  client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  description TEXT,
+  created_by  TEXT REFERENCES users(id) ON DELETE SET NULL,
+  /* JSON [{lat,lng}] when made from a drawn area; null otherwise. */
+  boundary    TEXT,
+  archived    INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS lead_lists_by_client ON lead_lists(client_id, archived);
+
+CREATE TABLE IF NOT EXISTS lead_list_members (
+  list_id     TEXT NOT NULL REFERENCES lead_lists(id) ON DELETE CASCADE,
+  property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+  added_at    INTEGER NOT NULL,
+  added_by    TEXT REFERENCES users(id) ON DELETE SET NULL,
+  PRIMARY KEY (list_id, property_id)
+);
+CREATE INDEX IF NOT EXISTS lead_list_members_by_property ON lead_list_members(property_id);
+
+CREATE TABLE IF NOT EXISTS lead_list_reps (
+  list_id     TEXT NOT NULL REFERENCES lead_lists(id) ON DELETE CASCADE,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  assigned_at INTEGER NOT NULL,
+  assigned_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  PRIMARY KEY (list_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS lead_list_reps_by_user ON lead_list_reps(user_id);
+
 CREATE TABLE IF NOT EXISTS integration_links (
   client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   provider    TEXT NOT NULL,

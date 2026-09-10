@@ -17,8 +17,14 @@ import type { Env, SessionUser } from './types'
  * which is the state the unassigned bucket already exists to describe.
  */
 
-/** Ray casting, flat. Same reasoning as the client's copy in src/lib/geo.ts. */
-function inside(point: { lat: number; lng: number }, poly: { lat: number; lng: number }[]) {
+/**
+ * Ray casting, flat. Same reasoning as the client's copy in src/lib/geo.ts.
+ *
+ * Exported because a lead list drawn round an area asks exactly this question,
+ * and a second copy is a second thing for `verify:geo-parity` to fail to notice
+ * drifting.
+ */
+export function inside(point: { lat: number; lng: number }, poly: { lat: number; lng: number }[]) {
   let hit = false
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const a = poly[i]
@@ -46,6 +52,36 @@ const MAX_POINTS = 200
 
 type Created = { territory: { id: string; name: string }; assigned: number }
 
+/**
+ * A polygon from a browser, checked before it is stored or run against a tenant.
+ *
+ * Shared by territories and lead lists, which both take a drawn outline. The
+ * checks are the same because the risk is the same: untrusted input that gets
+ * persisted and then evaluated against every property in the tenant.
+ */
+export function parsePolygon(
+  raw: unknown,
+): { boundary: { lat: number; lng: number }[] } | { error: string; status: number } {
+  if (!Array.isArray(raw)) return { error: 'No outline was sent.', status: 400 }
+  if (raw.length < MIN_POINTS) return { error: 'An area needs at least three points.', status: 400 }
+  if (raw.length > MAX_POINTS) return { error: 'That outline has too many points.', status: 400 }
+
+  const boundary: { lat: number; lng: number }[] = []
+  for (const item of raw as unknown[]) {
+    const p = item as { lat?: unknown; lng?: unknown }
+    const lat = Number(p?.lat)
+    const lng = Number(p?.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return { error: 'That outline has a point with no coordinates.', status: 400 }
+    }
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      return { error: 'That outline is not on Earth.', status: 400 }
+    }
+    boundary.push({ lat, lng })
+  }
+  return { boundary }
+}
+
 export async function createTerritory(
   env: Env,
   actor: SessionUser,
@@ -57,27 +93,9 @@ export async function createTerritory(
   if (!name) return { error: 'Give the area a name.', status: 400 }
   if (name.length > 120) return { error: 'That name is too long.', status: 400 }
 
-  if (!Array.isArray(input.boundary)) return { error: 'No outline was sent.', status: 400 }
-  if (input.boundary.length < MIN_POINTS) {
-    return { error: 'An area needs at least three points.', status: 400 }
-  }
-  if (input.boundary.length > MAX_POINTS) {
-    return { error: 'That outline has too many points.', status: 400 }
-  }
-
-  const boundary: { lat: number; lng: number }[] = []
-  for (const raw of input.boundary as unknown[]) {
-    const p = raw as { lat?: unknown; lng?: unknown }
-    const lat = Number(p?.lat)
-    const lng = Number(p?.lng)
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return { error: 'That outline has a point with no coordinates.', status: 400 }
-    }
-    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-      return { error: 'That outline is not on Earth.', status: 400 }
-    }
-    boundary.push({ lat, lng })
-  }
+  const parsed = parsePolygon(input.boundary)
+  if ('error' in parsed) return parsed
+  const { boundary } = parsed
 
   // A rep from another tenant would silently receive this company's leads.
   const repId = typeof input.repId === 'string' && input.repId ? input.repId : null
@@ -148,4 +166,26 @@ export async function createTerritory(
   })
 
   return { territory: { id, name }, assigned }
+}
+
+/**
+ * A stored outline, read back defensively.
+ *
+ * The column arrived by migration, so old rows hold null and — if anything ever
+ * wrote to it by hand — it could hold anything. A territory or list with an
+ * unreadable outline is still a perfectly good one, so a parse failure drops the
+ * shape rather than the row.
+ */
+export function parseBoundary(raw: unknown): { lat: number; lng: number }[] | undefined {
+  if (typeof raw !== 'string' || raw.length === 0) return undefined
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed) || parsed.length < 3) return undefined
+    const points = parsed
+      .map((p) => ({ lat: Number(p?.lat), lng: Number(p?.lng) }))
+      .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+    return points.length >= 3 ? points : undefined
+  } catch {
+    return undefined
+  }
 }

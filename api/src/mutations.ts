@@ -3,6 +3,7 @@ import { erasedAmong } from './erase'
 import { propertyIdOf } from './mutation-target'
 import { queueForCrm } from './integrations'
 import { noteIfStale, snapshotUpdatedAt } from './stale'
+import { createList, setReps, updateList, updateMembers } from './lists'
 import type { Env, Mutation, MutationResult, SessionUser } from './types'
 
 /**
@@ -561,6 +562,59 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
       // A status changed from the console reaches the CRM the same way a rep's
       // outcome does — including a manual Do Not Contact.
       await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
+      return
+    }
+
+    /*
+      Lead lists from the phone.
+
+      A rep organising their week in a dead zone makes a list, drops houses on
+      it, renames it — and all of that queues like every other edit and lands
+      here when there is signal. Each case calls the same function the REST
+      route calls, so a list made offline and a list made in the console obey
+      the same permission checks and the same tenant isolation; there is one
+      implementation of "may this person do this", not one per transport.
+
+      A refusal (403, 404, 409) is thrown, which the caller records as a
+      rejected mutation that the phone drops. That is right: a rep whose list
+      name clashed, or who tried to add a house that is not theirs, gets told
+      and does not retry for ever.
+    */
+    case 'list.create': {
+      const r = await createList(env, user, {
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        propertyIds: p.propertyIds,
+        repIds: p.repIds,
+        boundary: p.boundary,
+      })
+      if ('error' in r) throw new Error(`list.create: ${r.error}`)
+      return
+    }
+    case 'list.update': {
+      const id = str(p.id)
+      if (!id) throw new Error('list.update: missing id')
+      const r = await updateList(env, user, id, {
+        name: p.name,
+        description: p.description,
+        archived: p.archived,
+      })
+      if ('error' in r) throw new Error(`list.update: ${r.error}`)
+      return
+    }
+    case 'list.members': {
+      const id = str(p.id)
+      if (!id) throw new Error('list.members: missing id')
+      const r = await updateMembers(env, user, id, { add: p.add, remove: p.remove })
+      if ('error' in r) throw new Error(`list.members: ${r.error}`)
+      return
+    }
+    case 'list.reps': {
+      const id = str(p.id)
+      if (!id) throw new Error('list.reps: missing id')
+      const r = await setReps(env, user, id, { repIds: p.repIds })
+      if ('error' in r) throw new Error(`list.reps: ${r.error}`)
       return
     }
 
