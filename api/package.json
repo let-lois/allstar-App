@@ -27,6 +27,7 @@
     "verify:geocode:fallback": "node scripts/verify-geocode-fallback.mjs",
     "smoke:photos": "node scripts/smoke-photos.mjs",
     "smoke:backup": "node scripts/smoke-backup.mjs",
+    "smoke:deadkey": "node scripts/smoke-geocode-dead-key.mjs",
     "backup": "node scripts/backup.mjs",
     "backup:open": "node scripts/backup-open.mjs",
     "backup:list": "node scripts/backup-open.mjs --list",

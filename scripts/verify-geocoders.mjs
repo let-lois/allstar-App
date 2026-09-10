@@ -89,14 +89,29 @@ const ok = (cond, msg) => {
     So this reads the endpoint that spends the money and insists it goes through
     the two functions that make the picker real. Structural rather than
     behavioural because the alternative needs a live Worker and a real vendor
-    key, and a check that cannot run is worth nothing.
+    key — `cd api && npm run smoke:deadkey` is now exactly that, driving this
+    endpoint against a stand-in vendor, so this is the cheap first line rather
+    than the only one.
   */
   const src = readFileSync(new URL('../api/src/index.ts', import.meta.url), 'utf8')
   const i = src.indexOf("path === '/api/import/geocode'")
   if (i < 0) throw new Error('the geocode endpoint moved — update this gate')
-  // To the end of that handler: far enough to contain it, short enough not to
-  // pick up a mention from the next route along.
-  const handler = src.slice(i, i + 2000)
+  /*
+    Bounded by where the next route begins, not by a character count.
+
+    It was `i + 2000`, chosen to be "far enough to contain it, short enough not
+    to pick up a mention from the next route along" — and then the handler grew
+    past 2000 characters and `recordLookups` fell out of the window. The gate
+    went red on a call that was still there, which is the worst way for a gate
+    to fail: it accuses working code, and the obvious response is to widen the
+    number and wait for it to happen again.
+
+    Both ends are now derived. The handler is whatever sits between this route
+    and the next one, however long it gets.
+  */
+  const next = src.indexOf("path === '", i + 30)
+  if (next < 0) throw new Error('cannot find the route after /api/import/geocode — update this gate')
+  const handler = src.slice(i, next)
 
   ok(
     /geocodeKeysFor\(/.test(handler),

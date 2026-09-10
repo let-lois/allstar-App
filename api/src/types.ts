@@ -46,6 +46,13 @@ export interface Env {
    */
   CENSUS_BASE_URL?: string
   /*
+   * The same, for Google — so a revoked or over-quota key, which answers
+   * REQUEST_DENIED to everything, can be driven against a stand-in. That
+   * failure degrades silently by design and is the one worth a gate. Unset in
+   * every real deployment.
+   */
+  GOOGLE_GEOCODE_BASE_URL?: string
+  /*
    * Encrypts third-party credentials at rest — see secretbox.ts.
    *
    * Optional, and its absence is a refusal rather than a fallback: with no key

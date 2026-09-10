@@ -90,24 +90,52 @@ export function PropertyPeek({
         </div>
       </div>
 
-      {(contact || property.opportunityValue) && (
-        <div className="flex items-center justify-between gap-3 rounded-field bg-surface-sunk px-3 py-2.5">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{contact?.name ?? 'No contact'}</p>
-            <p className="truncate text-xs text-ink-mute">
-              {contact?.phone ?? 'Add a contact during your visit'}
-            </p>
-          </div>
-          {property.opportunityValue != null && (
-            <div className="shrink-0 text-right">
-              <p className="nums font-semibold text-good">
-                {moneyFull(property.opportunityValue)}
-              </p>
-              <p className="text-[11px] text-ink-mute">Opportunity</p>
-            </div>
-          )}
+      {/*
+        Always rendered, including when there is nobody on file.
+
+        It used to render only `if (contact || property.opportunityValue)`,
+        which put its own fallbacks — "No contact", "Add a contact during your
+        visit" — out of reach of the case they were written for. A lead added by
+        tapping the map has no contact (the field says Optional) and no
+        opportunity value, so for the newest leads on the map this whole row
+        simply was not there: the sheet went from the status pills straight to
+        "Last visit never", and a rep who came back to a door they had just
+        recorded found nothing on it about who lives there.
+
+        Silence reads as "no information exists in this app", which is a
+        different claim from "nobody has filled this in yet", and only the
+        second one is true. This sheet's job is to answer "who and what is
+        this?" — for a lead nobody has spoken to, the honest answer is that
+        nobody has, said out loud.
+      */}
+      <div
+        data-testid="peek-contact"
+        className="flex items-center justify-between gap-3 rounded-field bg-surface-sunk px-3 py-2.5"
+      >
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">
+            {contact?.name ?? 'No contact yet'}
+          </p>
+          {/*
+            The two lines are independent. Falling back on the name's absence
+            told a rep to "add a contact" for a household whose contact was
+            already named and merely had no number — which sends them looking
+            for something that is not missing.
+          */}
+          <p className="truncate text-xs text-ink-mute">
+            {contact?.phone ??
+              (contact ? 'No number on file' : 'Add a name and number during your visit')}
+          </p>
         </div>
-      )}
+        {property.opportunityValue != null && (
+          <div className="shrink-0 text-right">
+            <p className="nums font-semibold text-good">
+              {moneyFull(property.opportunityValue)}
+            </p>
+            <p className="text-[11px] text-ink-mute">Opportunity</p>
+          </div>
+        )}
+      </div>
 
       <p className="text-xs text-ink-mute">
         Last visit {relativeLower(property.lastVisitAt)}

@@ -214,6 +214,40 @@ export function useLeadDraft({
       return
     }
 
+    /*
+      Emptied for the next one, because this hook outlives the sheet.
+
+      `useLeadDraft` is called by `MapScreen`, not by the sheet it fills, so a
+      draft survives the sheet closing and is handed to the next lead the rep
+      adds. Nothing cleared it, and each leftover field was its own defect:
+
+        `saving` stayed true, so `canSave` stayed false and the button read
+        "Saving…" on a form nobody had submitted. A rep could add one lead by
+        tapping the map and then could not add another for the rest of the
+        session — no error, no explanation, just a dead button.
+
+        `name` and `phone` stayed filled, so tapping a different house offered
+        the previous homeowner's name and number as its own. That one is worse
+        than a dead button: it does not look broken, and a rep who taps Save
+        has attributed one household's details to another address.
+
+        `touched` stayed true, so the reverse geocode stopped filling the
+        address in — the second lead onward silently lost the prefill that is
+        the whole reason a tap on the map asks Google what is there.
+
+      Cleared before `onSaved`, which is what closes the sheet: the form has to
+      be usable again even if the caller throws.
+    */
+    setSaving(false)
+    setAddress('')
+    setPicked(null)
+    setName('')
+    setPhone('')
+    setFound(null)
+    setFilled(false)
+    setError(null)
+    touched.current = false
+
     onSaved(property)
   }
 

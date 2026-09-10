@@ -49,6 +49,26 @@ import type { GeocodeMatch, GeocodeRequest } from './geocode'
 const ENDPOINT = 'https://maps.googleapis.com/maps/api/geocode/json'
 
 /**
+ * Where Google's geocoder lives, unless a deployment says otherwise.
+ *
+ * `GOOGLE_GEOCODE_BASE_URL` overrides it, for exactly the reason
+ * `CENSUS_BASE_URL` and `GHL_BASE_URL` exist: so the path can be driven end to
+ * end against a stand-in. Here the case worth driving is the *unhappy* one — a
+ * key that has been revoked, exhausted its quota, or lost its billing account,
+ * which answers `REQUEST_DENIED` to every request. That failure used to be
+ * invisible: the chain degraded to the free geocoder, every pin dropped from a
+ * rooftop to a block, and the import reported success. Nothing but a real
+ * refusal from a real endpoint exercises it.
+ *
+ * A Worker variable, settable only by whoever deploys, defaulting to Google
+ * when unset. It never points anywhere but Google in a real deployment.
+ */
+let googleBase = ENDPOINT
+export function useGoogleBase(url: string | undefined): void {
+  googleBase = url || ENDPOINT
+}
+
+/**
  * Concurrent requests per batch. Deliberately modest: a Worker's subrequest
  * budget is spent by this loop, and exceeding it takes down the whole import
  * rather than one address.
@@ -177,7 +197,7 @@ const oneLine = (r: GeocodeRequest) =>
   [r.address1, r.city, r.state, r.zip].map((s) => (s ?? '').trim()).filter(Boolean).join(', ')
 
 async function geocodeOne(row: GeocodeRequest, key: string): Promise<GeocodeMatch> {
-  const url = `${ENDPOINT}?address=${encodeURIComponent(oneLine(row))}&key=${encodeURIComponent(key)}`
+  const url = `${googleBase}?address=${encodeURIComponent(oneLine(row))}&key=${encodeURIComponent(key)}`
   try {
     const res = await fetch(url)
     if (!res.ok) {

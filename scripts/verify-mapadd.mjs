@@ -325,6 +325,13 @@ try {
     const shownCoords = /(-?\d+\.\d+), (-?\d+\.\d+)/.exec(await readout())
     ok(!!shownCoords, 'the form shows the pin’s coordinates', shownCoords?.[0])
     await page.locator('input[autocomplete="street-address"]').fill('91 Verified Way')
+    // A name and a number too. The point of the next step is what comes back
+    // when the rep taps this door again — and what must NOT come back when they
+    // tap the next one. An assertion that the phone field is empty afterwards
+    // is worth nothing if no phone was ever typed, which is how it first got
+    // written.
+    await page.locator('input[autocomplete="name"]').fill('Marcus Vance')
+    await page.locator('input[autocomplete="tel"]').fill('512-555-0134')
     await page.getByRole('button', { name: /Save lead/ }).click()
     await page.waitForTimeout(1500)
 
@@ -350,6 +357,142 @@ try {
         made.id,
       )
       ok(marker, 'and drawn on the map as an ordinary lead marker of its own')
+    }
+
+    /* ===== 9. tapping it again says who and what it is ================== */
+    //
+    // Reported from a phone: a rep added a lead, tapped its marker, and the
+    // sheet told them nothing about who lived there. The contact row rendered
+    // only `if (contact || opportunityValue)`, and a lead added from the map
+    // has neither — so its own "No contact" fallback was unreachable for
+    // exactly the leads that needed it, and the sheet went from the status
+    // pills straight to "Last visit never".
+    if (made) {
+      const box = await page
+        .locator(`[data-marker="pin"][data-id="${made.id}"]`)
+        .first()
+        .boundingBox()
+      ok(!!box, 'the new lead’s marker can be found to tap')
+      if (box) {
+        // Where a finger lands, not a synthetic event: the map listens for a
+        // real click, and a dispatched one opens nothing.
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+        await page.waitForTimeout(1000)
+
+        const peek = page.getByTestId('property-peek')
+        const opened = await peek.isVisible().catch(() => false)
+        ok(opened, 'tapping the lead just recorded opens its own sheet')
+        const text = opened ? (await peek.innerText()).replace(/\s+/g, ' ') : ''
+        ok(/Marcus Vance/.test(text), 'which names the contact that was typed in', text.slice(0, 80))
+        ok(
+          /\bNew\b/.test(text),
+          'and says what state the lead is in',
+          text.match(/\b(New|Contacted|Follow up|Working|Appointment|Quoted|Won|Lost)\b/)?.[0],
+        )
+        /*
+          Above the fold, not merely present. This sheet opens at 0.46 of the
+          screen on a phone, and "in the DOM" is not the same claim as "the rep
+          can see it" — which is the whole reason this was reported.
+        */
+        const seen = await page.evaluate(() => {
+          const el = document.querySelector('[data-testid="peek-contact"]')
+          if (!el) return null
+          const r = el.getBoundingClientRect()
+          return { top: Math.round(r.top), bottom: Math.round(r.bottom), fold: window.innerHeight }
+        })
+        ok(
+          !!seen && seen.top >= 0 && seen.bottom <= seen.fold,
+          'without the rep having to drag the sheet up to find it',
+          seen ? `y ${seen.top}-${seen.bottom} of ${seen.fold}` : 'no contact row at all',
+        )
+      }
+    }
+
+    /* ===== 10. and says so even when nobody was named =================== */
+    //
+    // The half that was actually broken. Leaving the optional name blank is the
+    // common case for a door a rep has not knocked yet.
+    {
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(500)
+      const spot2 = await tapOpenGround([
+        [120, 300],
+        [280, 320],
+        [200, 260],
+        [90, 380],
+        [310, 460],
+      ])
+      ok(!!spot2, 'the form opens for a lead with no contact')
+      if (spot2) {
+        /*
+          The draft is emptied between leads.
+
+          `useLeadDraft` is called by MapScreen, so it outlives the sheet, and
+          nothing used to clear it. Three separate defects came out of that and
+          all three are on the most-used flow on this screen, so all three are
+          asserted here rather than trusted to one of them standing in for the
+          others.
+        */
+        const btns = await page.evaluate(() =>
+          [...document.querySelectorAll('button')].filter((b) => b.offsetParent).map((b) => b.textContent?.trim()),
+        )
+        ok(
+          btns.some((b) => /Save lead/.test(b ?? '')) && !btns.some((b) => /Saving/.test(b ?? '')),
+          'a second lead can actually be saved — the button is not still "Saving…"',
+          btns.filter((b) => /Sav/.test(b ?? '')).join(' | ') || 'no save button at all',
+        )
+        ok(
+          (await page.locator('input[autocomplete="name"]').inputValue()) === '',
+          'and it does not offer the previous homeowner’s name as this one’s',
+          JSON.stringify(await page.locator('input[autocomplete="name"]').inputValue()),
+        )
+        ok(
+          (await page.locator('input[autocomplete="tel"]').inputValue()) === '',
+          'nor their phone number',
+        )
+
+        /*
+          Guarded, because when this regresses the button is not merely
+          disabled — it is a different button, and clicking a locator that
+          matches nothing throws. An uncaught throw here ends the run and
+          reports three real failures as no output at all, which is how the
+          first version of this step behaved.
+        */
+        const saveAgain = page.getByRole('button', { name: /^Save lead$/ })
+        const anon = (await saveAgain.count())
+          ? await (async () => {
+              await page.locator('input[autocomplete="street-address"]').fill('93 Nameless Row')
+              await saveAgain.click()
+              await page.waitForTimeout(1500)
+              return (await leads()).find((p) => p.address1 === '93 Nameless Row')
+            })()
+          : undefined
+        ok(!!anon, 'and saves it with no contact', anon ? `${anon.contacts.length} contacts` : 'not saved')
+        if (anon) {
+          const b = await page
+            .locator(`[data-marker="pin"][data-id="${anon.id}"]`)
+            .first()
+            .boundingBox()
+          if (b) {
+            await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2)
+            await page.waitForTimeout(1000)
+          }
+          const t = await page
+            .getByTestId('property-peek')
+            .innerText()
+            .catch(() => '')
+          ok(
+            /No contact yet/.test(t),
+            'a lead with nobody on it says so rather than showing nothing',
+            t.replace(/\s+/g, ' ').slice(0, 90),
+          )
+          ok(
+            /Add a name and number during your visit/.test(t),
+            'and says what to do about it',
+          )
+          ok(/\bNew\b/.test(t), 'and still says what state it is in')
+        }
+      }
     }
   }
 } finally {
