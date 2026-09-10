@@ -218,7 +218,19 @@ export function MapScreen() {
     the rep had typed, and moving the pin is a correction to *this* lead, not a
     different one. The address they have already entered is still the address.
   */
-  const leadDraft = useLeadDraft({ at: draftAt, onSaved })
+  /*
+    A picked address moves the pin and the map to that door — the tapped point
+    was the rep's rough answer, the pick is their exact one. Zoom 18 so the pin
+    is its own dot rather than a number in a cluster.
+  */
+  const leadDraft = useLeadDraft({
+    at: draftAt,
+    onSaved,
+    onPick: (p) => {
+      setDraftAt(p)
+      mapHandle.current?.flyTo(p.lat, p.lng, 18)
+    },
+  })
 
   // Nearest open door — the answer to "where do I go now" when the rep is
   // freelancing rather than following the route.

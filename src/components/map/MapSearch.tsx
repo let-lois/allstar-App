@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Property } from '../../types'
 import { distanceMiles, formatDistance } from '../../lib/geo'
 import { STATUS_COLOR } from '../../data/outcomes'
-import { gmapsConfigured, loadGmaps } from '../../lib/gmaps'
+import { placesConfigured, loadGmaps } from '../../lib/gmaps'
 
 /**
  * Search on the map screen.
@@ -64,7 +64,7 @@ export function MapSearch({
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const [places, setPlaces] = useState<PlaceHit[]>([])
-  const [placesOff, setPlacesOff] = useState(!gmapsConfigured())
+  const [placesOff, setPlacesOff] = useState(!placesConfigured())
   const seq = useRef(0)
   const timer = useRef<number | null>(null)
 

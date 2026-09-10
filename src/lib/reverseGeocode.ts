@@ -98,8 +98,8 @@ const googleLookup: ReverseLookup = async (at) => {
     one case where "no address" must not be remembered — see the cache note.
   */
   if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Unasked('offline')
-  const { gmapsConfigured, loadGmaps } = await import('./gmaps')
-  if (!gmapsConfigured()) throw new Unasked('no key')
+  const { placesConfigured, loadGmaps } = await import('./gmaps')
+  if (!placesConfigured()) throw new Unasked('no key')
   await loadGmaps()
   const { Geocoder } = (await google.maps.importLibrary('geocoding')) as google.maps.GeocodingLibrary
   try {

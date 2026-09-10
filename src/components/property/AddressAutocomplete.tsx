@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Field } from '../ui/Input'
-import { gmapsConfigured, loadGmaps } from '../../lib/gmaps'
+import { placesConfigured, loadGmaps } from '../../lib/gmaps'
 import { fromPlaces, partsToAddress } from '../../lib/address'
 
 /**
@@ -112,9 +112,17 @@ export function AddressAutocomplete({
   const [open, setOpen] = useState(false)
   const [resolving, setResolving] = useState(false)
   /** Set once Places has failed, so we stop retrying on every keystroke. */
-  const [unavailable, setUnavailable] = useState(!gmapsConfigured())
+  const [unavailable, setUnavailable] = useState(!placesConfigured())
 
   const session = useRef<google.maps.places.AutocompleteSessionToken | null>(null)
+  /*
+    The text a pick just wrote into the field. Writing it changes `value`, and
+    without this the debounce would treat that change as typing and ask Google
+    again — for the address just chosen — and the list would come back up over
+    the form, with its dismiss layer sitting on top of the Save button. A pick
+    ends the search; the next search starts when the text becomes something else.
+  */
+  const justPicked = useRef<string | null>(null)
   /** Guards against a slow response overwriting a newer one. */
   const seq = useRef(0)
   const timer = useRef<number | null>(null)
@@ -184,7 +192,7 @@ export function AddressAutocomplete({
     if (unavailable) return
     if (timer.current) window.clearTimeout(timer.current)
     const q = value.trim()
-    if (q.length < MIN_CHARS) {
+    if (q.length < MIN_CHARS || q === justPicked.current) {
       setSuggestions([])
       setOpen(false)
       return
@@ -201,14 +209,17 @@ export function AddressAutocomplete({
     try {
       const picked = await s.resolve()
       if (picked) {
+        justPicked.current = picked.address1
         onChange(picked.address1)
         onPick(picked)
       } else {
         // Resolved to something without a street. Keep what the rep typed rather
         // than replacing it with a city name.
+        justPicked.current = s.main
         onChange(s.main)
       }
     } catch {
+      justPicked.current = s.main
       onChange(s.main)
     } finally {
       setResolving(false)

@@ -57,6 +57,14 @@ export class GmapsError extends Error {
 }
 
 export const gmapsConfigured = () => !!KEY && !!MAP_ID
+/**
+ * Places and the Geocoder need only the key. The Map ID is what advanced
+ * markers want, and a deployment that has set the key but not the ID should
+ * still get address suggestions and the address under a tapped pin — those are
+ * the two things a rep adding a lead actually feels, and for months they were
+ * silently off on exactly that half-configured build.
+ */
+export const placesConfigured = () => !!KEY
 export const gmapId = () => MAP_ID
 
 /**
@@ -94,7 +102,9 @@ let pending: Promise<void> | null = null
  * happened in a lift.
  */
 export function loadGmaps(): Promise<void> {
-  if (!gmapsConfigured()) {
+  // The key is the only hard requirement to load the API. Whether the *map*
+  // can render is `gmapsConfigured()`, and its callers check that themselves.
+  if (!placesConfigured()) {
     return Promise.reject(
       new GmapsError('not-configured', gmapsConfigProblem() ?? 'Google Maps is not configured.'),
     )
