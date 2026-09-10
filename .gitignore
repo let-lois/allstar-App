@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-e2e
 # TypeScript's incremental build cache — a local artifact, not source.
 tsconfig.tsbuildinfo
 viewport-audit

@@ -50,6 +50,7 @@
     "verify:territorydraw": "node scripts/verify-territory-draw.mjs",
     "verify:adminlists": "node scripts/verify-adminlists.mjs",
     "verify:replists": "node scripts/verify-replists.mjs",
+    "verify:lists-e2e": "VITE_API_URL=http://127.0.0.1:8853 vite build --outDir dist-e2e --emptyOutDir --logLevel warn && node scripts/verify-lists-e2e.mjs",
     "verify:streetview": "node scripts/verify-streetview.mjs",
     "verify:mapsearch": "node scripts/verify-mapsearch.mjs",
     "verify:newlead": "node scripts/verify-newlead.mjs",
