@@ -146,14 +146,39 @@ console.log('\n--- sign out ---')
   const shape = await out.first().evaluate((el) => {
     const cs = getComputedStyle(el)
     const r = el.getBoundingClientRect()
-    return { h: r.height, w: r.width, shadow: cs.boxShadow, label: (el.innerText || '').trim() }
+    return {
+      h: r.height,
+      w: r.width,
+      shadow: cs.boxShadow,
+      title: el.getAttribute('title') || '',
+      icons: el.querySelectorAll('svg').length,
+    }
   })
   ok(shape.h >= 44, 'at a size a thumb can hit in a truck', `${Math.round(shape.h)}px tall`)
   ok(
     /rgb/.test(shape.shadow) && shape.shadow !== 'none',
     'wearing the machined face the rest of the app uses for buttons',
   )
-  ok(/logout/i.test(shape.label), 'and saying what it does in words', shape.label)
+  /*
+    It announces itself, and it is not blank.
+
+    This asserted the *word* "Logout" was on the button. That was the
+    implementation, not the requirement: the word was the widest and loudest
+    thing in the header — a secondary action in uppercase with letterspacing,
+    competing with the rep's own name at the top of every screen — and it is an
+    icon now. A gate that pins the pixel-level answer rather than the thing
+    that must stay true goes red for the fix and teaches people to delete it,
+    which is what happened to the console gate when the console became
+    mobile-first.
+
+    What must stay true is that the control that ends the session says what it
+    does to anybody who asks: a screen reader gets the accessible name (the
+    `getByRole` lookup above already depends on it), a pointer user gets the
+    tooltip, and there is a drawing inside rather than an empty square — which
+    is the way an icon-only button actually fails.
+  */
+  ok(shape.title === 'Sign out', 'and names itself to a pointer, as a tooltip', shape.title || '(none)')
+  ok(shape.icons === 1, 'with exactly one drawing inside, not an empty square', `${shape.icons} svg`)
 
   /*
     The accessible name stays "Sign out" whether or not the word is drawn — the
