@@ -145,6 +145,20 @@ try {
 
   /* ===== the leads list ================================================= */
   //
+  /*
+    The Leads windows live in the Filters sheet now, beside the map's — the
+    header rail that held them scrolled sideways and clipped. Same question,
+    one tap further in: open, pick, and close with the button that counts.
+  */
+  const pickWindow = async (label) => {
+    await page.getByTestId('leads-filters').click()
+    await page.waitForTimeout(500)
+    await page.getByRole('button', { name: label }).click()
+    await page.waitForTimeout(300)
+    await page.getByRole('button', { name: /^Show \d+ leads?$/ }).click()
+    await page.waitForTimeout(600)
+  }
+
   // Every door knocked 40 days ago. "Over 30 days ago" must show all of them and
   // "Today" none — which is the pair that fails in both broken directions: a
   // filter doing nothing shows all of them for both, and a filter matching
@@ -157,8 +171,7 @@ try {
     const before = await listCounts()
     ok(before?.shown === total, 'the list starts with every lead', `${before?.shown}/${total}`)
 
-    await page.getByRole('button', { name: /^Over 30 days ago$/ }).click()
-    await page.waitForTimeout(600)
+    await pickWindow(/^Over 30 days ago$/)
     const stale = await listCounts()
     ok(
       stale?.shown === total,
@@ -166,13 +179,11 @@ try {
       `${stale?.shown} of ${stale?.total}`,
     )
 
-    await page.getByRole('button', { name: /^Today$/ }).click()
-    await page.waitForTimeout(600)
+    await pickWindow(/^Today$/)
     const today = await listCounts()
     ok(today?.shown === 0, 'and "Today" hides every one of them', `${today?.shown} of ${today?.total}`)
 
-    await page.getByRole('button', { name: /^Never knocked$/ }).click()
-    await page.waitForTimeout(600)
+    await pickWindow(/^Never knocked$/)
     const never = await listCounts()
     ok(
       never?.shown === 0,
@@ -186,16 +197,14 @@ try {
     const total = await write(me, null)
     await page.goto(`${BASE}/leads`, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(1500)
-    await page.getByRole('button', { name: /^Never knocked$/ }).click()
-    await page.waitForTimeout(600)
+    await pickWindow(/^Never knocked$/)
     const never = await listCounts()
     ok(
       never?.shown === total,
       'with nothing knocked, "Never knocked" is every lead',
       `${never?.shown} of ${never?.total}`,
     )
-    await page.getByRole('button', { name: /^Over 30 days ago$/ }).click()
-    await page.waitForTimeout(600)
+    await pickWindow(/^Over 30 days ago$/)
     const stale = await listCounts()
     ok(stale?.shown === 0, 'and "Over 30 days ago" is none of them', `${stale?.shown}`)
   }
