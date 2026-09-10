@@ -1,3 +1,4 @@
+import { IconClose, IconPlus } from '../components/nav/icons'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
@@ -62,9 +63,12 @@ export function Lists() {
         right={
           <button
             onClick={() => setCreating((c) => !c)}
-            className="focusable min-h-[44px] rounded-lg px-3 text-[14px] font-semibold text-accent"
+            aria-label={creating ? 'Cancel' : 'New list'}
+            title={creating ? 'Cancel' : 'New list'}
+            data-testid="new-list"
+            className="icon-sm focusable grid min-h-[44px] w-11 place-items-center rounded-lg text-accent"
           >
-            {creating ? 'Cancel' : 'New list'}
+            {creating ? <IconClose /> : <IconPlus />}
           </button>
         }
       />

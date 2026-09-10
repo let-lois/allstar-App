@@ -1,3 +1,4 @@
+import { IconChevron } from '../components/nav/icons'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DataList } from './DataList'
@@ -126,7 +127,10 @@ export function AdminDashboard() {
             {unassigned.count === 1 ? 'It is' : 'They are'} on no rep&rsquo;s phone until
             somebody owns {unassigned.count === 1 ? 'it' : 'them'}.
           </span>
-          <span className="ml-auto text-[13px] font-semibold text-accent">Assign →</span>
+          <span className="icon-xs ml-auto flex items-center gap-1 text-[13px] font-semibold text-accent">
+            Assign
+            <IconChevron />
+          </span>
         </button>
       )}
 

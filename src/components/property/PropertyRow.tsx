@@ -1,3 +1,4 @@
+import { IconPhone, IconPlay } from '../nav/icons'
 import { useNavigate } from 'react-router-dom'
 import type { Property } from '../../types'
 import { STATUS_COLOR } from '../../data/outcomes'
@@ -51,7 +52,7 @@ export function PropertyRow({
         tel
           ? {
               label: 'Call',
-              glyph: '📞',
+              glyph: <IconPhone />,
               color: '#166534',
               onAction: () => {
                 logComm(property.id, 'call', contact?.name)
@@ -62,7 +63,7 @@ export function PropertyRow({
       }
       right={{
         label: 'Start visit',
-        glyph: '▶',
+        glyph: <IconPlay />,
         color: '#0A6B7D',
         onAction: () => nav(`/property/${property.id}?start=1`),
       }}

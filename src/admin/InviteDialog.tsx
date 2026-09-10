@@ -110,7 +110,7 @@ export function InviteDialog({
       <div className="w-full max-w-lg rounded-card bg-surface p-6 shadow-float">
         {created ? (
           <>
-            <h2 className="text-xl font-black">Invite ready for {created.email}</h2>
+            <h2 className="text-[19px] font-semibold tracking-[-0.01em]">Invite ready for {created.email}</h2>
             <p className="mt-2 text-sm leading-relaxed text-ink-mute">
               Nothing has been emailed — there’s no mail service connected yet. Send
               this link to them however you normally would. Opening it lets them
@@ -157,7 +157,7 @@ export function InviteDialog({
           </>
         ) : (
           <form onSubmit={submit}>
-            <h2 className="text-xl font-black">Invite someone</h2>
+            <h2 className="text-[19px] font-semibold tracking-[-0.01em]">Invite someone</h2>
             <p className="mt-1 text-sm text-ink-mute">
               They’ll get a link to set their own password. You never see or set it.
             </p>

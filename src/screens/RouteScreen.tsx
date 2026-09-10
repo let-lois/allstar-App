@@ -1,3 +1,4 @@
+import { IconCheck } from '../components/nav/icons'
 import { useMemo, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
@@ -142,7 +143,15 @@ export function RouteScreen() {
                               : 'bg-surface-field text-ink-mute'
                       }`}
                     >
-                      {isDone ? '✓' : isSkipped ? '–' : stop.order + 1}
+                      {isDone ? (
+                        <span className="icon-xs grid place-items-center">
+                          <IconCheck />
+                        </span>
+                      ) : isSkipped ? (
+                        '–'
+                      ) : (
+                        stop.order + 1
+                      )}
                     </span>
 
                     <button

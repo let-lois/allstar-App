@@ -1,3 +1,4 @@
+import { IconClose } from '../nav/icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Property } from '../../types'
 import { distanceMiles, formatDistance } from '../../lib/geo'
@@ -198,9 +199,9 @@ export function MapSearch({
               using. At 320px that is the difference between five characters
               and eight, on the field where an address gets typed.
             */
-            className="focusable -mr-2.5 -my-1 grid h-11 w-11 shrink-0 place-items-center rounded-full text-[15px] text-ink-mute"
+            className="icon-sm focusable -mr-2.5 -my-1 grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-mute"
           >
-            ✕
+            <IconClose />
           </button>
         )}
       </div>

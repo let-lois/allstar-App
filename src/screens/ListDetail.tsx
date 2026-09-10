@@ -1,3 +1,4 @@
+import { IconClose, IconPencil } from '../components/nav/icons'
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
@@ -91,9 +92,12 @@ export function ListDetail() {
                 setName(list.name)
                 setRenaming((r) => !r)
               }}
-              className="focusable min-h-[44px] rounded-lg px-3 text-[14px] font-semibold text-accent"
+              aria-label={renaming ? 'Cancel' : 'Edit list'}
+              title={renaming ? 'Cancel' : 'Edit list'}
+              data-testid="edit-list"
+              className="icon-sm focusable grid min-h-[44px] w-11 place-items-center rounded-lg text-accent"
             >
-              {renaming ? 'Cancel' : 'Edit'}
+              {renaming ? <IconClose /> : <IconPencil />}
             </button>
           ) : undefined
         }

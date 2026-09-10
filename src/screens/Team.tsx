@@ -1,3 +1,4 @@
+import { IconStar } from '../components/nav/icons'
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
@@ -74,10 +75,10 @@ export function Team() {
                     <Avatar initials={rep.initials} name={rep.name} src={rep.avatarUrl} size="lg" />
                     {i === 0 && totals.conversations > 0 && (
                       <span
-                        className="absolute -right-0.5 -top-0.5 grid h-5 w-5 place-items-center rounded-full bg-good text-[10px] text-surface-sunk ring-2 ring-surface"
+                        className="icon-xs absolute -right-0.5 -top-0.5 grid h-5 w-5 place-items-center rounded-full bg-good text-surface-sunk ring-2 ring-surface"
                         title="Most conversations today"
                       >
-                        ★
+                        <IconStar />
                       </span>
                     )}
                   </span>

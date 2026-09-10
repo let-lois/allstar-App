@@ -172,9 +172,10 @@ export function AdminLayout() {
         <div className="mt-auto border-t border-line-soft pt-3">
           <button
             onClick={() => nav('/today')}
-            className="focusable flex min-h-[40px] w-full items-center rounded-lg px-3 text-sm font-medium text-ink-mute hover:bg-surface-field"
+            className="icon-xs focusable flex min-h-[40px] w-full items-center gap-2 rounded-lg px-3 text-sm font-medium text-ink-mute hover:bg-surface-field"
           >
-            ← Field app
+            <IconBack />
+            Field app
           </button>
           <p className="mt-2 px-3 text-xs text-ink-mute">
             {user.name}

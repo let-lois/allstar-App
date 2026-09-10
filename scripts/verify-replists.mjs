@@ -154,7 +154,7 @@ ok((await page.getByTestId('list-lead').count()) === 0, 'Remove takes the door o
 ok(/No houses on this list yet/.test(await text(page)), 'and the list says it is empty again')
 
 /* --- rename, and it all survives a reload --------------------------------- */
-await page.getByRole('button', { name: /^Edit$/ }).click()
+await page.getByTestId('edit-list').click()
 await page.waitForTimeout(300)
 const RENAMED = 'Gate Come Back Sunday'
 await page.getByTestId('list-edit').getByLabel('Name').fill(RENAMED)
@@ -191,7 +191,7 @@ ok(stored.every((l) => l.reps === 0), 'and a rep’s own list is handed to nobod
 /* --- archive puts one away ------------------------------------------------ */
 await page.getByTestId('list-row').filter({ hasText: NAME2 }).click()
 await page.waitForTimeout(800)
-await page.getByRole('button', { name: /^Edit$/ }).click()
+await page.getByTestId('edit-list').click()
 await page.waitForTimeout(300)
 await page.getByRole('button', { name: /Archive list/ }).click()
 await page.waitForTimeout(900)

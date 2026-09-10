@@ -1,3 +1,4 @@
+import { IconFilter, IconList } from '../components/nav/icons'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
@@ -130,9 +131,11 @@ export function Leads() {
           <button
             onClick={() => nav('/lists')}
             data-testid="open-lists"
-            className="focusable min-h-[44px] rounded-lg px-3 text-[14px] font-semibold text-accent"
+            aria-label="Lists"
+            title="Lists"
+            className="icon-sm focusable grid min-h-[44px] w-11 place-items-center rounded-lg text-accent"
           >
-            Lists
+            <IconList />
           </button>
         }
         below={
@@ -178,9 +181,10 @@ export function Leads() {
                 onClick={() => setFiltersOpen(true)}
                 data-testid="leads-filters"
                 aria-label={activeFilters ? `Filters, ${activeFilters} active` : 'Filters'}
-                className="focusable press metal metal-quiet ml-auto flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-pill px-3.5 text-[12.5px] font-semibold text-ink-soft"
+                title={activeFilters ? `Filters, ${activeFilters} active` : 'Filters'}
+                className="icon-sm focusable press metal metal-quiet ml-auto flex min-h-[44px] shrink-0 items-center justify-center gap-1 rounded-pill px-3 text-ink-soft"
               >
-                Filters
+                <IconFilter />
                 {activeFilters > 0 && (
                   <span className="nums rounded-full bg-ink/10 px-1.5 py-0.5 text-[11px] font-bold text-accent-strong">
                     {activeFilters}

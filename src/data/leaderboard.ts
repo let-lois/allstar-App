@@ -1,3 +1,4 @@
+import type { GlyphName } from '../lib/glyphs'
 import { addDays, dayKeyIn, dayLabel, keyOf, ymdIn } from '../lib/day'
 import type { DailyStat, TeamMember } from '../types'
 
@@ -141,7 +142,8 @@ export type AwardKey = 'top' | 'doors' | 'revenue' | 'appointments'
 
 export interface Award {
   key: AwardKey
-  glyph: string
+  /** An icon name, resolved by `<Glyph>`. These were emoji; see that component. */
+  icon: GlyphName
   label: string
   /** Everyone who earned it. More than one name means a genuine tie. */
   winners: Scorable[]
@@ -165,20 +167,20 @@ export interface Award {
 export function awards(reps: Scorable[]): Award[] {
   const best = (
     key: AwardKey,
-    glyph: string,
+    icon: GlyphName,
     label: string,
     valueOf: (r: Scorable) => number,
   ): Award | null => {
     const top = Math.max(0, ...reps.map(valueOf))
     if (top <= 0) return null
-    return { key, glyph, label, winners: reps.filter((r) => valueOf(r) === top), value: top }
+    return { key, icon, label, winners: reps.filter((r) => valueOf(r) === top), value: top }
   }
 
   return [
-    best('top', '🏆', 'Top rep', scoreOf),
-    best('doors', '🔥', 'Most doors', (r) => r.knocks),
-    best('revenue', '💰', 'Most revenue', (r) => r.revenue),
-    best('appointments', '📅', 'Most appointments', (r) => r.appointments),
+    best('top', 'trophy', 'Top rep', scoreOf),
+    best('doors', 'flame', 'Most doors', (r) => r.knocks),
+    best('revenue', 'money', 'Most revenue', (r) => r.revenue),
+    best('appointments', 'calendar', 'Most appointments', (r) => r.appointments),
   ].filter((a): a is Award => a !== null)
 }
 

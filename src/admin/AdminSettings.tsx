@@ -1,3 +1,5 @@
+import { IconArrowDown, IconArrowUp } from '../components/nav/icons'
+import { Glyph } from '../components/ui/Glyph'
 import { useEffect, useState } from 'react'
 import { AdminPage } from './AdminLayout'
 import { Button } from '../components/ui/Button'
@@ -184,9 +186,9 @@ export function AdminSettings() {
                            reordering outcomes is exactly the kind of setup an
                            owner does once, often from a phone, and missing the
                            arrow moves the wrong row. */
-                        className="focusable h-11 w-11 rounded text-sm text-ink-mute disabled:opacity-30 lg:h-6 lg:w-6 lg:text-xs"
+                        className="icon-xs focusable grid h-11 w-11 place-items-center rounded text-ink-mute disabled:opacity-30 lg:h-6 lg:w-6"
                       >
-                        ↑
+                        <IconArrowUp />
                       </button>
                       <button
                         aria-label={`Move ${o.label} down`}
@@ -202,9 +204,9 @@ export function AdminSettings() {
                            reordering outcomes is exactly the kind of setup an
                            owner does once, often from a phone, and missing the
                            arrow moves the wrong row. */
-                        className="focusable h-11 w-11 rounded text-sm text-ink-mute disabled:opacity-30 lg:h-6 lg:w-6 lg:text-xs"
+                        className="icon-xs focusable grid h-11 w-11 place-items-center rounded text-ink-mute disabled:opacity-30 lg:h-6 lg:w-6"
                       >
-                        ↓
+                        <IconArrowDown />
                       </button>
                     </span>
                   </td>
@@ -317,7 +319,7 @@ export function AdminSettings() {
                 key={c.key}
                 className="flex items-center gap-2 rounded-field border border-line px-3 py-2.5"
               >
-                <span aria-hidden>{c.glyph}</span>
+                {c.icon ? <Glyph name={c.icon} /> : <span aria-hidden>{c.letter}</span>}
                 <input
                   value={c.label}
                   onChange={(e) =>

@@ -171,3 +171,178 @@ export const IconSignOut = () => (
     <path d="M9 8.5 4.5 12 9 15.5z" fill="currentColor" stroke="currentColor" strokeLinejoin="round" />
   </svg>
 )
+
+/* ==========================================================================
+ * Theme
+ *
+ * Three states, three shapes — sun, moon, phone — so the chosen one is found
+ * by silhouette rather than by reading. They replace `☀`, `☾` and a literal
+ * capital `A`, which were text characters standing in for icons: they took
+ * whatever the system font gave them, sat on the text baseline rather than
+ * centred in their target, and the `A` needed its own accessible name to mean
+ * anything at all.
+ * ======================================================================= */
+
+export const IconSun = () => (
+  <svg {...base}>
+    <circle cx="12" cy="12" r="4.2" />
+    <path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6" />
+  </svg>
+)
+
+export const IconMoon = () => (
+  <svg {...base}>
+    {/* A crescent as one closed path, not a disc with a disc cut out of it: a
+        cut-out needs a mask or an even-odd fill, and both render as a filled
+        circle wherever that is not honoured. */}
+    <path d="M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z" />
+  </svg>
+)
+
+/** Follow the phone — the device itself, which is what the setting defers to. */
+export const IconDevice = () => (
+  <svg {...base}>
+    <rect x="6.5" y="2.5" width="11" height="19" rx="2.5" />
+    <path d="M10.5 5.5h3" />
+  </svg>
+)
+
+/* ==========================================================================
+ * Controls
+ * ======================================================================= */
+
+/** Filters — sliders, the shape that means "narrow this" rather than a funnel. */
+export const IconFilter = () => (
+  <svg {...base}>
+    <path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h10M18 17h2" />
+    <circle cx="16" cy="7" r="2" />
+    <circle cx="10" cy="12" r="2" />
+    <circle cx="16" cy="17" r="2" />
+  </svg>
+)
+
+/** A list of things, distinct from `IconPipeline`'s narrowing stack. */
+export const IconList = () => (
+  <svg {...base}>
+    <path d="M9 6h11M9 12h11M9 18h11" />
+    <circle cx="4.6" cy="6" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="4.6" cy="12" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="4.6" cy="18" r="1.3" fill="currentColor" stroke="none" />
+  </svg>
+)
+
+export const IconSettings = () => (
+  <svg {...base}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2.5v3M12 18.5v3M3.6 7.2l2.6 1.5M17.8 15.3l2.6 1.5M3.6 16.8l2.6-1.5M17.8 8.7l2.6-1.5" />
+  </svg>
+)
+
+export const IconPencil = () => (
+  <svg {...base}>
+    <path d="M4 20h4l10.5-10.5a2.1 2.1 0 00-3-3L5 17z" />
+    <path d="M14.5 5.5l4 4" />
+  </svg>
+)
+
+export const IconPlay = () => (
+  <svg {...base}>
+    <path d="M7 4.8l12 7.2-12 7.2z" fill="currentColor" stroke="currentColor" />
+  </svg>
+)
+
+export const IconCheck = () => (
+  <svg {...base} strokeWidth={2.2}>
+    <path d="M4.5 12.5l5 5 10-11" />
+  </svg>
+)
+
+export const IconRefresh = () => (
+  <svg {...base}>
+    <path d="M20 12a8 8 0 10-3 6.2" />
+    <path d="M20 5.5V12h-6" />
+  </svg>
+)
+
+export const IconStar = () => (
+  <svg {...base}>
+    <path d="M12 3.5l2.7 5.6 6.1.8-4.5 4.3 1.1 6.1L12 17.4l-5.4 2.9 1.1-6.1L3.2 9.9l6.1-.8z" />
+  </svg>
+)
+
+export const IconArrowUp = () => (
+  <svg {...base}>
+    <path d="M12 19.5V5M6 11l6-6 6 6" />
+  </svg>
+)
+
+export const IconArrowDown = () => (
+  <svg {...base}>
+    <path d="M12 4.5V19M6 13l6 6 6-6" />
+  </svg>
+)
+
+/** A hazard, for a warning that is worth interrupting somebody for. */
+export const IconWarn = () => (
+  <svg {...base}>
+    <path d="M12 3.5l9 15.5H3z" />
+    <path d="M12 9.5v4.2" />
+    <circle cx="12" cy="16.4" r="1.05" fill="currentColor" stroke="none" />
+  </svg>
+)
+
+/* ==========================================================================
+ * Award badges and photo categories
+ *
+ * These replace 🏆 🔥 💰 📅 and 🏠 🧱 ⚠ 🛋 📄 — real emoji, rendered by the
+ * OS at whatever size and in whatever house style it likes, which is the one
+ * kind of graphic this app cannot theme, size or measure. Same 24px grid and
+ * `currentColor` as every other icon here, so they take the tone of whatever
+ * they sit in.
+ * ======================================================================= */
+
+export const IconTrophy = () => (
+  <svg {...base}>
+    <path d="M8 4h8v4.5a4 4 0 01-8 0z" />
+    <path d="M8 5.5H5.5V8a3 3 0 003 3M16 5.5h2.5V8a3 3 0 01-3 3" />
+    <path d="M12 12.5V16M9 20h6M10 16h4l.5 4h-5z" />
+  </svg>
+)
+
+export const IconFlame = () => (
+  <svg {...base}>
+    <path d="M12 3s4.5 3.7 4.5 8a4.5 4.5 0 01-9 0c0-1.6.7-3 1.5-4 .2 1.4.9 2.2 1.8 2.2 1 0 1.4-.9 1.2-2.2A9 9 0 0012 3z" />
+    <path d="M7.5 13.5a4.5 4.5 0 009 0" />
+  </svg>
+)
+
+/** Money as a banknote — a coin at 24px is a circle with marks in it. */
+export const IconMoney = () => (
+  <svg {...base}>
+    <rect x="2.8" y="6.5" width="18.4" height="11" rx="1.8" />
+    <circle cx="12" cy="12" r="2.6" />
+    <path d="M6 12h.01M18 12h.01" />
+  </svg>
+)
+
+export const IconRoof = () => (
+  <svg {...base}>
+    <path d="M2.8 11.5L12 4.5l9.2 7" />
+    <path d="M5.5 13v7h13v-7" />
+    <path d="M5.5 16.5h13M12 13v7" />
+  </svg>
+)
+
+export const IconSofa = () => (
+  <svg {...base}>
+    <path d="M5 11V8.5A2.5 2.5 0 017.5 6h9A2.5 2.5 0 0119 8.5V11" />
+    <path d="M3.5 12.5a1.8 1.8 0 013.6 0V15h9.8v-2.5a1.8 1.8 0 013.6 0V18H3.5z" />
+  </svg>
+)
+
+export const IconDoc = () => (
+  <svg {...base}>
+    <path d="M6 3.5h7L18.5 9v11.5a1 1 0 01-1 1h-11a1 1 0 01-1-1v-16a1 1 0 011-1z" />
+    <path d="M13 3.5V9h5.5M8.5 13h7M8.5 17h5" />
+  </svg>
+)

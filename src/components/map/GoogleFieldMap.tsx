@@ -1,3 +1,4 @@
+import { IconLocate } from '../nav/icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer'
 import type { Property, Route } from '../../types'
@@ -810,9 +811,9 @@ export function GoogleFieldMap({
             onClick={() => flyTo(position.lat, position.lng, 18)}
             aria-label="Center on my location"
             data-tour="map-locate"
-            className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field metal metal-map text-base !text-accent-strong"
+            className="press focusable grid min-h-tap min-w-tap place-items-center rounded-field metal metal-map !text-accent-strong"
           >
-            ◎
+            <IconLocate />
           </button>
         )}
       </div>

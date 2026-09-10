@@ -1,3 +1,4 @@
+import { IconPhone } from '../components/nav/icons'
 import { useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
@@ -149,7 +150,7 @@ export function RepDetail() {
                   aria-label={`Call ${rep.name}`}
                   className="metal metal-quiet press focusable grid h-12 w-12 shrink-0 place-items-center rounded-field !text-ink-soft"
                 >
-                  ☎
+                  <IconPhone />
                 </a>
               )}
             </div>
