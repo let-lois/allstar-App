@@ -113,12 +113,17 @@ const TESTS = [
   { script: 'smoke:crm-inbound', kind: 'hosted', port: 8821 },
   { script: 'smoke:erase', kind: 'hosted', port: 8831 },
   { script: 'smoke:stale', kind: 'hosted', port: 8834 },
+  { script: 'smoke:backup', kind: 'hosted', port: 8817 },
 
   // --- manual -----------------------------------------------------------
   {
     script: 'verify:restore',
     kind: 'manual',
-    why: 'needs a backup file: npm run backup, then npm run verify:restore <file>',
+    why:
+      'needs a backup file: npm run backup, then npm run verify:restore <file>. ' +
+      'smoke:backup already runs this drill against what the nightly cron writes, ' +
+      'so what stays manual is the one thing it cannot cover: a real dump of real ' +
+      'production, opened with the real key.',
   },
 ]
 

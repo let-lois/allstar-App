@@ -46,43 +46,60 @@ hand to a lawyer. Full engineering reasoning: README → *Google's terms and the
 offline map are in direct conflict*. The constraint is also recorded next to the
 code it governs, in `api/src/geocode-google.ts` and `api/wrangler.toml`.
 
-### 2. Backups are encrypted — one command left, and it is yours
-**Owner: Curtis (generate the key) · Severity: blocker until the key exists**
+### 2. Backups are encrypted, and a key exists — DONE
+**Owner: Curtis · Was: blocker until the key existed**
 
-The code is done. `npm run backup` now writes AES-256-GCM
-(`api/backups/*.sql.enc`), the restore drill decrypts on its own, and
-`npm run verify:backups` holds it up. **It refuses to export production until a
-key exists** rather than writing the plaintext — so right now there is no
-production backup at all, which is why this is still a blocker.
+`npm run backup` writes AES-256-GCM (`api/backups/*.sql.enc`), the restore drill
+decrypts on its own, and `npm run verify:backups` holds it up. It refuses to
+export production until a key exists rather than writing the plaintext.
 
-Your part, once:
+The key was generated and a production backup taken — 324 KB of SQL, encrypted.
+**Keep that key forever.** It belongs somewhere that is not the same disk as the
+backups, and it must never be rotated: unlike `INTEGRATION_KEY`, where a rotation
+costs every customer a reconnect, losing this makes every backup written with it
+permanently unreadable. A file from before a rotation still wants the key it was
+written with.
+
+One thing left, and it is the only proof that matters: run the drill against that
+real file, once.
 
 ```bash
-openssl rand -base64 32
+cd api
+npm run verify:restore backups/allstar-db-<utc>.sql.enc
 ```
 
-Then either export it as `BACKUP_KEY` in the shell you run backups from, or save
-it to `api/.backup-key` (git-ignored). Do not paste it into chat.
+### 3. The backup runs on a schedule — two console steps left, both yours
+**Owner: Curtis · Severity: blocker until the bucket and secret exist · Tracked as #39**
 
-**Two things about that key.** It must go somewhere that is not the same disk as
-the backups — a password manager. And it must never be lost: unlike
-`INTEGRATION_KEY`, where a rotation costs every customer a reconnect, losing this
-makes every backup written with it permanently unreadable. Keep old keys forever
-rather than replacing them; a file from before a rotation still wants the key it
-was written with.
+The code is done. `api/wrangler.toml` carries a second cron expression
+(`17 7 * * *`, a little after 3am eastern) and the Worker's `scheduled()`
+dispatches on which one fired: the five-minute tick still drains the CRM outbox,
+the nightly one dumps the database, encrypts it with the same format the laptop
+script writes, and puts it in R2. `cd api && npm run smoke:backup` fires the real
+scheduled handler against a real Worker and then feeds what lands in the bucket
+to `verify-restore.mjs` — the same drill, unmodified.
 
-Until it exists, the recovery window is Cloudflare Time Travel's thirty days —
-which is the same position as item 3 below, for the same reason.
+Your part, once, and **before this is merged** — the deploy fails on a bucket that
+does not exist, and every merge to `main` deploys:
 
-### 3. Nothing runs a backup on a schedule
-**Owner: Curtis · Severity: blocker · Tracked as #39**
+```bash
+cd api
+npx wrangler r2 bucket create allstar-backups
+npx wrangler secret put BACKUP_KEY     # the SAME key as api/.backup-key
+```
 
-The tooling exists and the restore has been drilled. The habit does not exist.
-Until it does, the recovery window is Cloudflare Time Travel's thirty days.
+Use the key you already have. A second key means two sets of backup files needing
+two keys forever, and losing either one is unrecoverable. Do not paste it into
+chat — `wrangler secret put` prompts for it.
 
-Blocked on a decision, not on engineering: this needs either a scheduled job with
-a Cloudflare API token, or a calendar reminder and a person. Which is appropriate
-is a question about who holds that token.
+Until both exist the nightly run refuses and says so, in the log and in
+`/api/health` (`backupBucket`, `backupKey`), rather than writing a dump in the
+clear.
+
+**This does not close the off-account copy.** R2 and D1 are the same Cloudflare
+account, so the cron covers "nobody remembered" and does not cover "the account is
+gone". `npm run backup` onto a machine is still a person's job, and still the only
+copy that survives losing the account.
 
 ### 4. The MapTiler key is exposed — two console steps left, both yours
 **Owner: Curtis · Severity: blocker until the key is rotated**
@@ -684,17 +701,17 @@ this says so rather than being deleted.
 3. **Rotate the MapTiler key and remove `?` from its Allowed HTTP Origins**
    (item 4). Minutes of dashboard work; something is currently exposed, and the
    code change that lets the key be locked down is already in.
-4. **Decide who holds a Cloudflare API token** (item 3), which unblocks scheduled
-   backups.
+4. **Create the backups bucket and set `BACKUP_KEY` as a Worker secret**
+   (item 3). Two commands, and they have to happen *before* the scheduled-backup
+   change merges — every merge to `main` deploys, and a deploy fails on an R2
+   bucket that does not exist. No Cloudflare API token is needed after all: the
+   Worker reads the database through its own binding, so nothing has to hold a
+   credential that could pull production out of the account.
 5. **Say whether GHL is in scope for customer one** (item 11), which decides
    whether it is a blocker or a roadmap item.
 
-Add to that list, now that the code is done: **generate the backup key** (item
-2). One `openssl` command, and until it happens there is no production backup at
-all.
-
-Everything on that list is yours. The engineering behind items 2 and 4 is now
-done, so both are waiting on a console step rather than on code.
+Everything on that list is yours. The engineering behind items 2, 3 and 4 is now
+done, so all three are waiting on a console step rather than on code.
 
 The Do Not Contact enforcement defect (item 6) is done. The only thing left that
 I can pick up without input is the `ALLOWED_ORIGINS` fix (item 16).

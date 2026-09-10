@@ -106,6 +106,42 @@ const back = join(scratch, 'back.sql')
 await decryptFile({ path: enc, outPath: back, secret: KEY })
 ok(readFileSync(back, 'utf8') === dump, 'and it decrypts to exactly what went in')
 
+/*
+  The parameters in the header are the parameters used to read it.
+
+  For a while they were not: every file recorded N, r, p and the key length, and
+  decryption ignored all four and used the constants compiled in. Nothing had
+  written a file with other parameters, so nothing was broken — but a file
+  carrying exactly the numbers needed to read it, that could not be read, is a
+  trap for whoever changes them next, and there are two writers now: this and the
+  Worker's nightly cron. Written with parameters nothing else uses, so a reader
+  that quietly falls back to the defaults fails here.
+*/
+{
+  const odd = join(scratch, 'odd-kdf.sql.enc')
+  const oddBack = join(scratch, 'odd-kdf.sql')
+  const { header: oddHeader } = await encryptFile({
+    plainPath: plain,
+    outPath: odd,
+    secret: KEY,
+    source: 'allstar-db (odd kdf)',
+    kdf: { N: 8192, r: 4 },
+  })
+  ok(
+    oddHeader.N === 8192 && oddHeader.r === 4,
+    'a file can record key-derivation parameters of its own',
+    `N=${oddHeader.N} r=${oddHeader.r}`,
+  )
+  let read = null
+  try {
+    await decryptFile({ path: odd, outPath: oddBack, secret: KEY })
+    read = readFileSync(oddBack, 'utf8')
+  } catch (err) {
+    read = `THREW: ${String(err.message).split('\n')[0]}`
+  }
+  ok(read === dump, 'and it is read back with those, not with whatever this build was compiled with', typeof read === 'string' && read !== dump ? read.slice(0, 80) : undefined)
+}
+
 /* --- 2. the header is readable without the key ----------------------------- */
 //
 // Not a nicety. If a directory of .enc files cannot be told apart without first

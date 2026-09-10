@@ -725,6 +725,15 @@ a failed export leaving staged plaintext behind. Each one also asserts that
 nothing was written, because a decrypt that throws *after* writing a partial file
 gives a dump that restores cleanly up to the cut.
 
+It also asserts the one thing the round trip cannot see: that the key-derivation
+parameters recorded in a file's header are the parameters used to read it. For a
+while they were not — every file carried N, r, p and the key length, and
+decryption ignored all four in favour of the constants compiled in. Nothing had
+written a file with other parameters, so nothing was broken; but a file carrying
+exactly the numbers needed to read it, that cannot be read, is a trap for
+whoever changes them, and there are two writers now rather than one. The gate
+writes a file with parameters nothing else uses and reads it back.
+
 Confirmed by breaking the code seven ways and watching it fail each time. Two of
 those first passed anyway, and both are the same lesson: "it exited non-zero" is
 not evidence of a refusal when the test environment makes everything exit
@@ -732,13 +741,85 @@ non-zero, and `indexOf('loadBackupKey')` matches the import statement at the top
 of the file, so the check that the key is consulted *before* the export could not
 fail. Both now assert the reason rather than the symptom.
 
+### The nightly one, which nobody has to remember
+
+`npm run backup` is the better tool and it has one flaw: it happens only when a
+person decides it should. The Worker already runs on Cloudflare's clock to drain
+the CRM outbox, so it takes the backup too — `crons` in `api/wrangler.toml` holds
+two expressions now, and `scheduled()` in `api/src/index.ts` dispatches on which
+one fired.
+
+```
+*/5 * * * *   drain the CRM outbox
+17 7 * * *    back the database up   (a little after 3am on the east coast)
+```
+
+The two are not redundant, and neither replaces the other:
+
+| | survives | does not survive |
+|---|---|---|
+| Time Travel | the wrong `UPDATE`, undone | 30 days; a lost account |
+| the nightly cron | everyone being busy | a lost account — R2 is the same account as D1 |
+| `npm run backup` | a lost account, month-two corruption | nobody running it |
+
+**It writes the same file.** Same magic line, same authenticated header, same
+scrypt parameters, same AES-256-GCM — so `npm run backup:list`, `backup:open` and
+`verify:restore` read what the cron wrote with no flag and no branch. That was
+the point of doing it inside the Worker rather than inventing a second format: a
+second format is a second thing to keep working, and it gets discovered broken
+during a restore. `node:crypto`'s `scryptSync` runs in the Workers runtime under
+`nodejs_compat`, which is what makes the parameters match; the AES half goes
+through Web Crypto, whose AES-GCM output already has the tag appended exactly
+where the container wants it.
+
+**It refuses rather than degrades.** No bucket or no key is a stop, not a
+fallback — there is no "write it in the clear for now", because that dump holds
+every customer's addresses, contact names, phone numbers and password hashes.
+Both halves are reported by `/api/health` (`backupBucket`, `backupKey`) and named
+in the log on every run, because a scheduled backup that has never once happened
+looks, from outside, identical to one that runs every night.
+
+Two things have to exist in the account before a deploy will accept this:
+
+```bash
+cd api
+npx wrangler r2 bucket create allstar-backups   # deploy fails without it
+npx wrangler secret put BACKUP_KEY              # the SAME key as api/.backup-key
+```
+
+Use the key you already have. Two different keys is two sets of files needing two
+keys forever, and losing either one is unrecoverable.
+
+Fetching one back:
+
+```bash
+cd api
+npx wrangler r2 object get allstar-backups/allstar-db-<utc>.sql.enc --file /tmp/b.sql.enc
+npm run verify:restore /tmp/b.sql.enc
+```
+
 ### What is still missing
 
-**Nothing runs `npm run backup` on a schedule.** The tooling exists and is
-proved; the habit does not. That needs either a scheduled job somewhere with a
-Cloudflare API token, or a calendar reminder and a person — and which of those is
-appropriate is a decision about who holds that token, not an engineering one.
-Until it is answered, this account's recovery window is Time Travel's thirty days.
+**The nightly backup lives in the same account as the database.** R2 and D1 share
+a Cloudflare account, so the cron covers "nobody remembered" and does not cover
+"the account is gone". `npm run backup` onto a machine is still the only copy
+that survives that, and it is still a person's job — a scheduled job that could
+pull production out of the account would need a Cloudflare API token living
+somewhere, which is a decision about who holds that token rather than an
+engineering one.
+
+**It is a logical dump, not a snapshot.** D1 has no transaction spanning
+statements over the wire, so the dump is a set of reads taken over a few seconds
+rather than one instant. It goes through a D1 session pinned to the primary, so
+it can never be stitched together from replicas at different points in their
+catch-up, and it runs at an hour when nobody is knocking — but a row written
+mid-dump can land in one table and not another. The dump opens with `PRAGMA
+defer_foreign_keys=true` so that restores rather than aborting. If you need an
+exact instant, that is Time Travel.
+
+**Nothing prunes the bucket.** A day's backup is a few hundred KB, so a year is
+around a hundred megabytes and the cost of keeping everything is less than the
+cost of an automatic delete going wrong.
 
 ## Schema changes apply themselves
 

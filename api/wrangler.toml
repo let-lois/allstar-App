@@ -28,6 +28,25 @@ database_id = "3adac120-500e-404d-8a37-571ce3654bc0"
 binding = "PHOTOS"
 bucket_name = "allstar-photos"
 
+# Where the nightly database backup lands. A separate bucket from PHOTOS on
+# purpose: a dump holds every customer's addresses, contact names, phone numbers
+# and password hashes, and it does not belong in the bucket a rep's phone uploads
+# to over an ordinary API call. Different contents, different blast radius.
+#
+# Optional in the same way PHOTOS is — the Worker refuses to take a backup rather
+# than failing, and says so in the log and in /api/health. But the bucket must
+# exist in the account before `wrangler deploy` will accept this file at all, so
+# create it first:
+#
+#   npx wrangler r2 bucket create allstar-backups
+#
+# Everything in it is encrypted with BACKUP_KEY, which is a Worker secret and is
+# not in this file. Losing that key makes every backup in this bucket permanently
+# unreadable — see api/scripts/lib/backup-crypto.mjs.
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "allstar-backups"
+
 # ---------------------------------------------------------------------------
 # Scheduled work.
 #
@@ -43,8 +62,15 @@ bucket_name = "allstar-photos"
 # where it left off, so a backlog clears over several ticks instead of one long
 # one that could time out part-way.
 # ---------------------------------------------------------------------------
+# The second expression is the nightly database backup, at 07:17 UTC — a little
+# after 3am on the east coast, when nobody is knocking. Not a multiple of five,
+# so it never lands on the same minute as the drain; `scheduled()` branches on
+# which expression fired, and both literals live in src/backup.ts.
+#
+# It needs the BACKUPS bucket above and a BACKUP_KEY secret. Without either it
+# refuses and logs why — it will not write an unencrypted dump.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "17 7 * * *"]
 
 [vars]
 # Comma-separated. The console and the field app are the same origin today, but
@@ -62,6 +88,16 @@ ALLOWED_ORIGINS = "https://allstar.letlois.com,https://allstar-app.pages.dev,htt
 #
 #   SESSION_PEPPER        — mixed into password hashing. Never change it once
 #                           accounts exist; it would invalidate every password.
+#   BACKUP_KEY            — encrypts the nightly database backup. Use the SAME
+#                           value as api/.backup-key on the machine that runs
+#                           `npm run backup`, so one key opens both sets of
+#                           files. Never rotate it: every backup already written
+#                           with the old key becomes permanently unreadable, and
+#                           nothing in this project can recover them. Without it
+#                           the nightly backup refuses to run — deliberately, so
+#                           that nobody ends up with an unencrypted dump of every
+#                           customer's addresses and password hashes sitting in
+#                           a bucket.
 #   MAPTILER_API_KEY      — NO LONGER USED. MapTiler was the third link in the
 #                           geocoding chain and has been removed. The Worker
 #                           needs no MapTiler key; if one is still set as a
