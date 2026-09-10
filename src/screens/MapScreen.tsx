@@ -10,38 +10,31 @@ import { PropertyPeek } from '../components/property/PropertyPeek'
 import { Chip } from '../components/ui/Chip'
 import { SyncBadge } from '../components/sync/SyncBadge'
 import { useAppStore, useScopedProperties } from '../store/useAppStore'
+import { LeadFields, useLeadDraft } from '../components/property/LeadForm'
+import { Button } from '../components/ui/Button'
+import { haptic } from '../lib/haptics'
 import { distanceMiles, formatDistance } from '../lib/geo'
 import { useIsWide } from '../lib/useMediaQuery'
-import type { LeadStatus } from '../types'
-import { STATUS_COLOR, STATUS_LABEL } from '../data/outcomes'
-import { VISITED_WINDOWS, matchesVisited, type VisitedWindow } from '../lib/leadFilter'
+import type { Property } from '../types'
+import { STATUS_COLOR, isOpenStatus } from '../data/outcomes'
+import {
+  DEFAULT_MAP_FILTER,
+  UNFILTERED_MAP,
+  activeFilterCount,
+  matchesMapFilter,
+  widenToShow,
+  type MapFilter,
+} from '../lib/leadFilter'
+import { FilterSheet } from '../components/map/FilterSheet'
 
-type Filter = 'all' | 'route' | 'unvisited' | 'noanswer' | 'open' | LeadStatus
-
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'route', label: 'My route' },
-  { key: 'all', label: 'All' },
-  { key: 'unvisited', label: 'Not knocked' },
-  /*
-    The second pass.
-
-    "Not knocked" and "nobody answered" are different jobs on different days:
-    the first is virgin territory, the second is a street a rep has already
-    walked and should come back to at a different hour. Until the map could
-    tell them apart there was no way to ask for the second one at all.
-  */
-  { key: 'noanswer', label: 'No answer' },
-  { key: 'open', label: 'Open leads' },
-  /*
-    Ahead of the sale stages on purpose. "Who asked me to come back" is the
-    question a rep opens the map with when planning an afternoon; an appointment
-    is already in their calendar.
-  */
-  { key: 'follow_up', label: STATUS_LABEL.follow_up },
-  { key: 'appointment', label: STATUS_LABEL.appointment },
-  { key: 'quoted', label: STATUS_LABEL.quoted },
-  { key: 'working', label: STATUS_LABEL.working },
-]
+/**
+ * How much of the screen the Add-lead sheet covers.
+ *
+ * One number in one place, because it is two things at once: the sheet's first
+ * detent, and how much of the map the picked pin has to stay clear of. Written
+ * twice, those two would drift and the pin would start landing behind the sheet.
+ */
+const SHEET_FRACTION = 0.46
 
 /**
  * Full-bleed map.
@@ -61,16 +54,36 @@ export function MapScreen() {
     the Leads tab, one tap away, says otherwise.
   */
   const hasRoute = (useAppStore((s) => s.route)?.stops.length ?? 0) > 0
-  const [filter, setFilter] = useState<Filter>(hasRoute ? 'route' : 'open')
+  /*
+    One value, four questions.
+
+    This was two single-select rails holding fourteen chips between them, of
+    which three fitted on a 320px screen — and they could contradict each other:
+    "Not knocked" and "Today" sat a divider apart and asked for a door that had
+    never been knocked and was knocked this morning. The shape is in
+    leadFilter.ts, beside the visit windows it composes with, so the predicate
+    has one implementation and a gate that needs no browser.
+  */
+  const [filter, setFilter] = useState<MapFilter>({
+    ...DEFAULT_MAP_FILTER,
+    scope: hasRoute ? 'route' : 'all',
+  })
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /*
-    When it was last knocked, alongside the status rail rather than folded into
-    it. "Not knocked" already lives in that rail as a one-off; these are the same
-    question asked properly, and keeping them apart means the status chips stay a
-    list of statuses.
+    The house a rep has just tapped, and the form that opens over it.
+
+    Two pieces of state rather than one because they answer different
+    questions. `draftAt` is where the pin is — nothing else, and no record
+    anywhere: tapping the map has to be free, or reps will stop doing it. It
+    becomes a lead only when somebody fills the form in and presses Save, which
+    is the whole of `adding`.
   */
-  const [visited, setVisited] = useState<VisitedWindow>('any')
+  const [draftAt, setDraftAt] = useState<{ lat: number; lng: number } | null>(null)
+  const [adding, setAdding] = useState(false)
   const timezone = useAppStore((s) => s.timezone)
+  /** Whether the first pull from the server is still running. See the empty strip. */
+  const refreshing = useAppStore((s) => s.refreshing)
   /*
     Map or list. A choice for now, and the offline default later.
 
@@ -107,40 +120,82 @@ export function MapScreen() {
     [route],
   )
 
-  const shown = useMemo(() => {
+  const shown = useMemo(
     /*
-      The visit window applies on top of whichever chip is selected, not instead
-      of it: "my route, not knocked in a month" is a real request and the two
-      rails compose. Through the shared predicate so the map agrees with both
-      lists about what a month is. See leadFilter.ts.
+      One predicate, shared with the no-DOM gate and with the widening that runs
+      after a lead is saved. The switch this replaces had five branches and a
+      default, and the save path carried a hand-written list of which of those
+      branches already showed a new lead — a second model of the same question,
+      which had already drifted into testing a branch that no chip could reach.
     */
-    const list =
-      visited === 'any' ? scoped : scoped.filter((p) => matchesVisited(p, visited, timezone))
-    switch (filter) {
-      case 'all':
-        return list
-      case 'route':
-        return list.filter((p) => routeIds.has(p.id))
-      case 'unvisited':
-        return list.filter((p) => !p.lastVisitAt)
-      case 'noanswer':
-        /*
-          Still worth another knock. A door that answered and said no is not on
-          this list — `lastOutcome` is the *last* thing that happened, so a lead
-          that has since been sold or marked Do Not Contact has moved on and
-          must not be handed back to a rep as unfinished business.
-        */
-        return list.filter(
-          (p) => p.lastOutcome === 'no_answer' && !['won', 'lost', 'dnc'].includes(p.status),
-        )
-      case 'open':
-        return list.filter((p) => !['won', 'lost', 'dnc'].includes(p.status))
-      default:
-        return list.filter((p) => p.status === filter)
-    }
-  }, [scoped, filter, routeIds, visited, timezone])
+    () => scoped.filter((p) => matchesMapFilter(p, filter, { onRoute: routeIds.has(p.id), timezone })),
+    [scoped, filter, routeIds, timezone],
+  )
 
   const selected = selectedId ? properties[selectedId] : undefined
+
+  const pickAt = (at: { lat: number; lng: number }) => {
+    setDraftAt(at)
+    setAdding(true)
+    haptic('tap')
+    /*
+      Only if the sheet is about to cover it. The pin has to land under the
+      rep's finger and stay there — that *is* the confirmation — so the map
+      moves the minimum that keeps it visible and never recentres. See
+      `MapHandle.reveal`.
+    */
+    mapHandle.current?.reveal(at, SHEET_FRACTION)
+  }
+
+  const cancelDraft = () => {
+    setDraftAt(null)
+    setAdding(false)
+  }
+
+  /*
+    Saved. The temporary pin goes and the lead's own marker takes its place —
+    which is only true if the lead is one the current filter shows, and "My
+    route" shows a route this house is not on yet. So the filter widens rather
+    than letting the pin vanish into a lead nobody can see, and the new lead is
+    selected, which puts its own sheet up in place of the form.
+  */
+  const onSaved = (p: Property) => {
+    setDraftAt(null)
+    setAdding(false)
+    /*
+      The real predicate, not a list of filter keys.
+
+      This used to ask `filter === 'all' || filter === 'open' || ...` — a second,
+      hand-maintained model of what the map shows, which had already drifted:
+      one of its four keys named a chip that did not exist. Asking the filter
+      itself cannot drift, and it is the same function that drew the map.
+
+      Widened as little as it takes. Resetting to "everything" was the first
+      draft and it is wrong: "everything" includes any status, which would put
+      every Do Not Contact lead in the territory on a rep's map as a side effect
+      of their adding one house. See `widenToShow`.
+    */
+    if (!matchesMapFilter(p, filter, { onRoute: routeIds.has(p.id), timezone })) {
+      setFilter(widenToShow(p))
+    }
+    /*
+      Close enough in that the new lead is its own dot rather than a number in a
+      cluster bubble. Nearby doors merge into counts below zoom 17, so a lead
+      saved at street zoom could otherwise vanish into one the instant it was
+      created — the rep presses Save and their house is gone.
+    */
+    mapHandle.current?.flyTo(p.lat, p.lng, 18)
+    setSelectedId(p.id)
+  }
+
+  /*
+    One draft per pin, and it survives the pin moving.
+
+    Keyed on nothing: re-mounting this on every tap would throw away whatever
+    the rep had typed, and moving the pin is a correction to *this* lead, not a
+    different one. The address they have already entered is still the address.
+  */
+  const leadDraft = useLeadDraft({ at: draftAt, onSaved })
 
   // Nearest open door — the answer to "where do I go now" when the rep is
   // freelancing rather than following the route.
@@ -148,58 +203,115 @@ export function MapScreen() {
     if (!position) return undefined
     let best: { id: string; d: number } | undefined
     for (const p of shown) {
-      if (['won', 'dnc'].includes(p.status)) continue
+      // `isOpenStatus`, not the hand-written pair this used to carry: it
+      // skipped `won` and `dnc` but not `lost`, so the button whose whole job is
+      // to offer a rep somewhere worth going would send them to a door that had
+      // already turned them down — and one "Open leads" will not even draw.
+      if (!isOpenStatus(p.status)) continue
       const d = distanceMiles(position, p)
       if (!best || d < best.d) best = { id: p.id, d }
     }
     return best
   }, [shown, position])
 
+  const activeCount = activeFilterCount(filter)
+
+  /*
+    Which kind of nothing this is, in one sentence, decided once.
+
+    The map draws it over the imagery and the list draws it in the middle of an
+    empty column, and until now they disagreed: the list said "No doors match
+    this filter" whatever the cause, including when there was no filter. One
+    string, two renderers.
+  */
+  const emptyReason =
+    refreshing && scoped.length === 0
+      ? 'Loading your leads…'
+      : scoped.length === 0
+        ? 'No leads on this device yet. The office adds them, or use + to add one here.'
+        : activeCount === 0 && filter.scope === 'route'
+          ? 'Nothing on today’s route matches.'
+          : activeCount === 0
+            ? 'Every lead of yours is finished — won, lost or Do Not Contact.'
+            : 'No leads match these filters.'
+
+  /*
+    The band that used to be fourteen chips.
+
+    Four things now, and the first is pinned. `shrink-0` on the button and
+    `min-w-0` on the scroller beside it mean that however narrow the screen, the
+    way into every filter is on it — which was the actual failure of the rail,
+    not its length: eleven of its fourteen chips were behind a horizontal swipe
+    that gave no sign of how much was hidden, and five of the nine statuses had
+    no chip at all.
+
+    The two that stayed out are the two questions a rep answers on arriving:
+    which set am I looking at, and is it today's route. Everything else is one
+    tap further in, which is the trade — and it buys New, Contacted, Won, Lost
+    and Do Not Contact becoming askable on the map for the first time.
+
+    No third chip for "Open leads", though it was here in a first draft: the
+    sheet's status section already carries that name, and two controls with one
+    accessible name are ambiguous to a screen reader and to anything that
+    addresses a control by what it is called. The gate measures that now.
+  */
   const chips = (
-    /*
-      `min-w-0` is load-bearing. This is a horizontal scroller inside a flex row,
-      and a flex item without it takes its min-content width as a floor — here
-      the sum of every chip, about 527px. Over the map that was invisible,
-      because the overlay is `absolute inset-x-0` and pinned to the viewport. In
-      the list view the same row sits in normal flow, so the floor stretched the
-      whole column to 551px inside a 390px screen and pushed the map/list switch
-      off the right edge with no way to scroll to it.
-    */
-    <div className="snap-x-row min-w-0 flex-1 pr-1" data-tour="map-filters">
-      {FILTERS.filter((f) => f.key !== 'route' || hasRoute).map((f) => (
-        <Chip
-          key={f.key}
-          size="sm"
-          selected={filter === f.key}
-          onClick={() => setFilter(f.key)}
-          className={
-            filter === f.key ? 'shadow-card' : 'bg-surface/95 shadow-card backdrop-blur'
-          }
-        >
-          {f.label}
-        </Chip>
-      ))}
+    <div className="flex min-w-0 flex-1 items-center gap-2 pr-1">
+      <button
+        type="button"
+        data-tour="map-filters"
+        data-testid="map-filters"
+        aria-expanded={filtersOpen}
+        /*
+          A stable accessible name with the count inside it, so a gate can find
+          the control without depending on how the number is rendered, and a
+          screen-reader user hears how much is on before they open it.
+        */
+        aria-label={activeCount ? `Filters, ${activeCount} active` : 'Filters'}
+        onClick={() => setFiltersOpen(true)}
+        /*
+          `metal-map`, not `metal-quiet`: the quiet face is translucent, and a
+          translucent control over map imagery is the dark-on-dark bug this
+          codebase has already recorded once.
+        */
+        className="focusable press metal metal-map flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-pill px-3.5 text-[12.5px] font-semibold text-ink-soft"
+      >
+        Filters
+        {activeCount > 0 && (
+          <span className="nums rounded-full bg-ink/10 px-1.5 py-0.5 text-[11px] font-bold text-accent-strong">
+            {activeCount}
+          </span>
+        )}
+      </button>
+
       {/*
-        The visit windows continue the same scroller rather than starting a
-        second band. Over the map every extra row of chrome costs map, which on
-        a 360px phone is the screen — and this rail already scrolls, so length
-        is free where height is not. A divider says the two groups compose
-        instead of replacing each other.
+        `min-w-0` is still load-bearing here. This is a horizontal scroller
+        inside a flex row, and a flex item without it takes its min-content
+        width as a floor — which once stretched this column to 551px inside a
+        390px screen and pushed the map/list switch off the right edge.
       */}
-      <span className="mx-1 w-px shrink-0 self-stretch bg-line/60" />
-      {VISITED_WINDOWS.filter((w) => w.key !== 'any' || visited !== 'any').map((w) => (
+      <div className="snap-x-row min-w-0 flex-1">
         <Chip
-          key={w.key}
           size="sm"
-          selected={visited === w.key}
-          onClick={() => setVisited(w.key)}
-          className={
-            visited === w.key ? 'shadow-card' : 'bg-surface/95 shadow-card backdrop-blur'
-          }
+          selected={activeCount === 0 && filter.scope === 'all' && filter.status.kind === 'any'}
+          onClick={() => setFilter(UNFILTERED_MAP)}
+          className="bg-surface/95 shadow-card backdrop-blur"
         >
-          {w.key === 'any' ? 'Any visit' : w.label}
+          All
         </Chip>
-      ))}
+        {hasRoute && (
+          <Chip
+            size="sm"
+            selected={filter.scope === 'route'}
+            onClick={() =>
+              setFilter((f) => ({ ...f, scope: f.scope === 'route' ? 'all' : 'route' }))
+            }
+            className="bg-surface/95 shadow-card backdrop-blur"
+          >
+            My route
+          </Chip>
+        )}
+      </div>
     </div>
   )
 
@@ -236,7 +348,36 @@ export function MapScreen() {
           setView('map')
         }}
       />
-      <SyncBadge plated onClick={() => nav('/more')} />
+      {/*
+        The row steps aside while the search is being used.
+
+        At 320px this row is [search | sync | map/list] and the search was left
+        about 98px of it — six characters, and one once the clear button
+        appeared. Neither the sync badge nor the view switch is something a rep
+        needs while they are typing an address, so for as long as focus is
+        inside this row they give it the width. Pure `focus-within`: no state to
+        get out of step, and it collapses back the moment focus leaves.
+      */}
+      {/*
+        The badge keeps its signal and loses its word.
+
+        At 320px this row is search, sync badge and the map/list switch, and the
+        search was left about 98px of it — six characters, and one once the
+        clear button appeared. Something had to give. Hiding the badge outright
+        was the first answer and the wrong one: this app is offline-first, and
+        "is my work saved" is not a question to answer only on another screen.
+        The dot and the count say it; the word "Synced" was what cost the room.
+
+        Two earlier attempts made this worse rather than better. Expanding the
+        search on focus and hiding the others sounds right and is not: the
+        layout moves at the exact moment a rep is reaching for a result, and
+        the panel jumps out from under their thumb — `verify:mapsearch` caught
+        it as a result that could not be chosen, which is a real finger missing
+        a real row. Hiding on `focus-within` was worse still: the map/list
+        switch is inside this row, so tapping "List" hid the control that had
+        just been tapped. A breakpoint moves nothing while anybody is using it.
+      */}
+      <SyncBadge plated compact onClick={() => nav('/more')} />
       <div
         role="group"
         aria-label="View"
@@ -308,27 +449,84 @@ export function MapScreen() {
     className: 'min-h-0 flex-1',
     properties: shown,
     position,
-    route: filter === 'route' ? route : null,
+    /*
+      The scope is also the render mode: the route line and its ordered stop
+      numbers only mean anything while the map is showing that route. This was
+      the least obvious thing the old rail did — 'My route' was a filter *and*
+      the switch that drew the polyline — and it is the one piece of it that had
+      to survive the restructure intact.
+    */
+    route: filter.scope === 'route' ? route : null,
     selectedId,
     onSelect: setSelectedId,
     handleRef: mapHandle,
     initialCenter: route?.stops.length ? properties[route.stops[0].propertyId] : undefined,
+    /*
+      Not while a lead's sheet is up. In that state a tap on the map means
+      "close this", which is what it has always meant and what a rep expects —
+      handing it to the picker instead would answer a question nobody asked
+      with a form. Once the sheet is down, a tap on open ground is the new lead.
+    */
+    /*
+      Nor while the filter sheet is up. That sheet is the one on this screen
+      with a scrim, precisely because a tap on the map means "add a lead here" —
+      a rep reaching past it to watch their filter take effect would come back
+      to a draft pin they never asked for.
+    */
+    pick: selected || filtersOpen
+      ? undefined
+      : {
+          at: draftAt,
+          onPick: pickAt,
+          exclusive: adding,
+          label: adding ? 'Tap to move the new lead’s pin' : 'Tap a house to add it as a lead',
+        },
     overlay: (
       <>
         {/*
-          The way into the street view, bottom-left.
+          The bottom-left stack, mirroring the map's own controls on the right.
 
-          Down here rather than in the segmented control at the top, which is
-          the row that also carries the lead search — a third item there pushed
-          the search off screen at 320px. The left edge at thumb height is free
-          (the map's own controls stack on the right), so this costs no
-          horizontal room at any width, which is what a 320px phone needs.
+          These were two separately positioned buttons at the same offset —
+          `absolute left-3` at `bottom: 96px`, both of them — so whenever a rep
+          had a GPS fix and no lead selected, which is the ordinary state of
+          this screen in the field, "Nearest door" was drawn directly on top of
+          "Street". Neither gate caught it because gates run without a position:
+          `nearest` needs one, so in a test only ever one of the two existed.
+
+          One stack, laid out rather than stacked by accident, and the order is
+          by urgency: the nearest door is a thing to do next, the street view is
+          a way of looking. Both are down here because the left edge at thumb
+          height is the one region of a phone screen the map's own controls do
+          not use.
         */}
-        <div className="pointer-events-none absolute inset-0">
+        <div
+          className="pointer-events-none absolute left-3 flex flex-col items-start gap-2"
+          style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+        >
+          {!selected && nearest && (
+            <button
+              onClick={() => {
+                const p = properties[nearest.id]
+                mapHandle.current?.flyTo(p.lat, p.lng, 18)
+                setSelectedId(nearest.id)
+              }}
+              /*
+                `metal-map`, not `metal-quiet`. The quiet face is translucent,
+                and a translucent control over live map imagery is the
+                dark-on-dark failure this codebase has already recorded once —
+                it read as a hole in the map on a bright basemap.
+              */
+              className="metal metal-map press focusable pointer-events-auto flex min-h-[48px] items-center gap-2 rounded-pill px-4 text-[14px] font-semibold !text-accent-strong"
+            >
+              Nearest door
+              <span className="nums font-medium text-ink-mute">
+                {(nearest.d * 5280).toFixed(0)} ft
+              </span>
+            </button>
+          )}
           <button
             onClick={() => nav('/street')}
-            className="focusable metal metal-map pointer-events-auto absolute left-3 flex min-h-[44px] items-center rounded-pill px-4 text-[12.5px] font-semibold text-ink-soft"
-            style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+            className="focusable metal metal-map press pointer-events-auto flex min-h-[44px] items-center rounded-pill px-4 text-[12.5px] font-semibold text-ink-soft"
           >
             Street
           </button>
@@ -345,6 +543,52 @@ export function MapScreen() {
             at, and that their work is still being recorded — and neither is worth
             taking the map away for.
           */}
+          {/*
+            Nothing matched, and why.
+
+            The old rail could be tapped into a state that was empty by
+            construction — "Not knocked" plus "Today" — and it said nothing at
+            all: an empty map and a search box reading "Search 0 leads". That
+            particular contradiction is now unsayable, but a filter can still
+            legitimately find nothing, and an empty map is indistinguishable
+            from a broken one. Only shown when a filter is actually on, so a rep
+            whose territory really is empty is not told it is their fault.
+          */}
+          {shown.length === 0 && (
+            <div
+              role="status"
+              data-testid="no-matches"
+              className="pointer-events-auto mx-3 mt-2 flex items-center gap-2 rounded-field bg-surface px-3 py-2 text-[12.5px] text-ink-soft shadow-card"
+            >
+              {/*
+                Two different nothings, and telling them apart is the whole
+                point. "Your filters match nothing" is something the rep did and
+                can undo in one tap. "You have no leads" is not their doing at
+                all — it means nobody has imported or assigned any yet, and
+                offering them a Clear button for it would send them looking for
+                a filter they never set.
+
+                Only the first of these existed. An empty map with no leads on
+                the device said nothing whatsoever, which is indistinguishable
+                from a map that has failed to draw.
+              */}
+              <span className="flex-1">{emptyReason}</span>
+              {/*
+                Only when there is something to undo. A rep whose device has no
+                leads did not set a filter, and offering them one to clear sends
+                them looking for a control they never touched.
+              */}
+              {scoped.length > 0 && (
+                <button
+                  onClick={() => setFilter(UNFILTERED_MAP)}
+                  className="focusable min-h-[44px] shrink-0 rounded-lg px-2 font-semibold text-accent"
+                >
+                  Show all
+                </button>
+              )}
+            </div>
+          )}
+
           {mapError && (
             <div
               role="status"
@@ -372,23 +616,6 @@ export function MapScreen() {
           )}
         </div>
 
-        {/* Nearest-door shortcut, bottom-left, opposite the zoom controls. */}
-        {!selected && nearest && (
-          <button
-            onClick={() => {
-              const p = properties[nearest.id]
-              mapHandle.current?.flyTo(p.lat, p.lng, 18)
-              setSelectedId(nearest.id)
-            }}
-            className="metal metal-quiet press focusable absolute left-3 flex min-h-[48px] items-center gap-2 rounded-pill px-4 text-[14px] font-semibold !text-accent-strong"
-            style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
-          >
-            Nearest door
-            <span className="nums font-medium text-ink-mute">
-              {(nearest.d * 5280).toFixed(0)} ft
-            </span>
-          </button>
-        )}
       </>
     ),
   }
@@ -488,8 +715,9 @@ export function MapScreen() {
 
           <RouteList
             className="pad-nav min-h-0 flex-1"
+            emptyNotice={emptyReason}
             properties={shown}
-            route={filter === 'route' ? route : null}
+            route={filter.scope === 'route' ? route : null}
             position={position}
             selectedId={selectedId}
             onSelect={setSelectedId}
@@ -497,17 +725,94 @@ export function MapScreen() {
         </div>
       )}
 
+      <FilterSheet
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        filter={filter}
+        onChange={setFilter}
+        matching={shown.length}
+      />
+
+      {/*
+        The Add-lead sheet.
+
+        A sheet rather than the full screen at `/lead/new`, and the reason is
+        the pin: a rep who has just tapped a house needs to keep seeing which
+        house while they type, and a screen that covers the map takes away the
+        thing they were confirming. No scrim, one detent under half the height,
+        and the map stays live behind it — tapping it again moves the pin.
+
+        Not on a tablet or a desktop, where the left pane is doing this job and
+        there is room to show both properly.
+      */}
+      <BottomSheet
+        open={adding && !isWide}
+        onClose={cancelDraft}
+        detents={[SHEET_FRACTION, 0.9]}
+        scrim={false}
+        title="Add lead"
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" size="lg" onClick={cancelDraft} className="shrink-0">
+              Cancel
+            </Button>
+            {/*
+              The one obvious thing to do next, and the widest target on the
+              sheet. Disabled until there is an address *and* a pin, with the
+              readout above saying which of the two is missing — a dead button
+              that does not explain itself is what the old screen offered.
+            */}
+            <Button
+              size="lg"
+              full
+              onClick={() => void leadDraft.save()}
+              disabled={!leadDraft.canSave}
+            >
+              {leadDraft.saving ? 'Saving…' : 'Save lead'}
+            </Button>
+          </div>
+        }
+      >
+        <div data-testid="add-lead-sheet" className="pb-2">
+          <LeadFields draft={leadDraft} autoFocus={false} />
+        </div>
+      </BottomSheet>
+
       {/* Scrim off: the rep should still be able to pan the map behind the sheet. */}
       <BottomSheet
         open={!!selected && !isWide}
         onClose={() => setSelectedId(null)}
         detents={[0.46, 0.86]}
         scrim={false}
+        footer={
+          selected && (
+            /*
+              Pinned, because at this sheet's opening detent on a 320px phone
+              every one of these was below the fold — a sheet whose whole
+              purpose is "tap a pin, then act" was showing an address and
+              nothing to press.
+            */
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="lg"
+                className="shrink-0"
+                onClick={() => nav(`/property/${selected.id}`)}
+              >
+                Profile
+              </Button>
+              <Button size="lg" full buzz onClick={() => nav(`/property/${selected.id}?start=1`)}>
+                Start visit
+              </Button>
+            </div>
+          )
+        }
       >
         {selected && (
           <PropertyPeek
             property={selected}
             position={position}
+            actionsInFooter
             onOpenFull={() => nav(`/property/${selected.id}`)}
           />
         )}

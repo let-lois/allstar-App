@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Field } from '../ui/Input'
 import { gmapsConfigured, loadGmaps } from '../../lib/gmaps'
+import { fromPlaces, partsToAddress } from '../../lib/address'
 
 /**
  * Address entry with suggestions, for a rep standing in front of a house.
@@ -58,10 +59,13 @@ interface Suggestion {
 }
 
 /**
- * Google returns address parts as a list of typed components rather than fields.
- * `route` is the street name and `street_number` the number; a city can arrive
- * as any of three types depending on how the place is administered, which is why
- * this walks a preference order instead of reading one key.
+ * A picked suggestion, as the four fields this app stores.
+ *
+ * The preference order that turns Google's typed components into those fields
+ * moved to lib/address.ts when the map learned to ask for the address under a
+ * tapped pin: that answer arrives in a different shape with the same meaning,
+ * and two copies of "which component is the city" is the kind of pair that
+ * agrees on the day it is written and disagrees a year later.
  */
 function componentsToAddress(
   parts: google.maps.places.AddressComponent[],
@@ -69,23 +73,11 @@ function componentsToAddress(
   formatted: string,
 ): PickedAddress | null {
   if (!location) return null
-  const find = (...types: string[]) =>
-    parts.find((c) => types.some((t) => c.types.includes(t)))
-
-  const number = find('street_number')?.longText ?? ''
-  const street = find('route')?.longText ?? ''
-  const city =
-    find('locality', 'postal_town', 'sublocality_level_1', 'sublocality')?.longText ?? ''
-  // Short text: "TX" rather than "Texas", matching what the rest of the app stores.
-  const state = find('administrative_area_level_1')?.shortText ?? ''
-  const zip = find('postal_code')?.longText ?? ''
-
-  const address1 = [number, street].filter(Boolean).join(' ')
-  // No street means this is a city or a region, not a door. Refusing it here is
-  // better than saving a lead whose address is "Austin".
-  if (!address1) return null
-
-  return { address1, city, state, zip, lat: location.lat(), lng: location.lng(), formatted }
+  const fields = partsToAddress(fromPlaces(parts))
+  // No street means this is a city or a region, not a door — `partsToAddress`
+  // refuses those, so that a lead is never saved with "Austin" as its address.
+  if (!fields) return null
+  return { ...fields, lat: location.lat(), lng: location.lng(), formatted }
 }
 
 export function AddressAutocomplete({
@@ -95,6 +87,7 @@ export function AddressAutocomplete({
   near,
   label = 'Address',
   hint,
+  autoFocus = true,
 }: {
   value: string
   onChange: (v: string) => void
@@ -104,6 +97,16 @@ export function AddressAutocomplete({
   near?: { lat: number; lng: number } | null
   label?: string
   hint?: string
+  /**
+   * Whether to take the keyboard on mount. On by default, which is right on the
+   * Add-lead *screen*: it exists for nothing else, so a rep arrives ready to
+   * type.
+   *
+   * The map's sheet turns it off. There the rep has just tapped a house and the
+   * pin is the confirmation they are looking for — throwing a keyboard over the
+   * map to cover it, unasked, would take away the one thing the tap was for.
+   */
+  autoFocus?: boolean
 }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [open, setOpen] = useState(false)
@@ -222,7 +225,7 @@ export function AddressAutocomplete({
         onKeyDown={(e) => {
           if (e.key === 'Escape') setOpen(false)
         }}
-        autoFocus
+        autoFocus={autoFocus}
         autoComplete="street-address"
         enterKeyHint="next"
         placeholder="123 Main Street"

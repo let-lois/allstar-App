@@ -164,7 +164,28 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
     authentication — see `diagnosticsAllowed` below, which exists because that
     distinction was got wrong once already.
   */
-  if (!origin || !allowed.includes(origin)) return {}
+  if (!origin || !allowed.includes(origin)) {
+    /*
+      Said out loud, once per rejected origin, because the symptom is silent.
+
+      Every response then goes out with no CORS headers, the browser discards
+      each one, and the app reports something about the network — so the log is
+      the only place the actual cause appears. Naming the origin and the list it
+      was compared against turns "nobody can sign in" into a one-line fix in
+      `wrangler tail`.
+
+      Only when an origin was sent: a Worker-to-Worker call or a `curl` has none
+      and is not a misconfiguration, so logging those would bury the real one.
+    */
+    if (origin) {
+      console.warn(
+        `CORS: refused origin ${origin}; ALLOWED_ORIGINS holds ${
+          allowed.filter(Boolean).length
+        } entr${allowed.filter(Boolean).length === 1 ? 'y' : 'ies'}`,
+      )
+    }
+    return {}
+  }
   return {
     'access-control-allow-origin': origin,
     'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS',

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as db from '../lib/db'
 import { rangeStart } from '../lib/day'
+import { isOpenStatus } from '../data/outcomes'
 import { useAppStore } from '../store/useAppStore'
 import type { DailyStat, LeadStatus, OutcomeCode, Property } from '../types'
 
@@ -307,7 +308,7 @@ export function useTerritories(properties: Property[]): TerritoryRow[] {
           knocked,
           coverage: rows.length ? Math.round((knocked / rows.length) * 100) : 0,
           openValue: rows
-            .filter((p) => !['won', 'lost', 'dnc'].includes(p.status))
+            .filter((p) => isOpenStatus(p.status))
             .reduce((a, p) => a + (p.opportunityValue ?? 0), 0),
           wonValue: rows
             .filter((p) => p.status === 'won')
@@ -334,7 +335,7 @@ export function useTerritories(properties: Property[]): TerritoryRow[] {
  */
 export function useUnassigned(properties: Property[]): { count: number; total: number } {
   return useMemo(() => {
-    const open = properties.filter((p) => !['won', 'lost', 'dnc'].includes(p.status))
+    const open = properties.filter((p) => isOpenStatus(p.status))
     return { count: open.filter((p) => !p.assignedRepId).length, total: open.length }
   }, [properties])
 }

@@ -72,7 +72,13 @@ for (const width of [320, 390, 768]) {
     walk nobody planned. Reported from a phone as a terrible route, when in fact
     it was no route at all.
   */
-  await page.getByRole('button', { name: /^Open leads$/ }).click()
+  /*
+    "All", not "Open leads": the filter rail became three chips and a sheet, and
+    the status rules moved inside it. What this needs is any scope other than
+    the route, and "All" is the chip that says so in one tap — which is what the
+    old "Open leads" click was actually being used for.
+  */
+  await page.getByRole('button', { name: /^All$/ }).click()
   await page.waitForTimeout(800)
   const unordered = await page
     .getByRole('list', { name: 'Route stops' })
@@ -115,11 +121,24 @@ for (const width of [320, 390, 768]) {
   const box = await list.getByRole('button').first().boundingBox()
   ok((box?.height ?? 0) >= 44, `[${width}] rows clear the 44px tap floor (${Math.round(box?.height ?? 0)}px)`)
 
-  // Tapping a row opens the peek.
+  /*
+    Tapping a row opens the peek.
+
+    This used to look for a button matching /Open|Knock|Log/i, which matched no
+    button the peek has ever had — the peek offers "Start visit" and "View full
+    profile". What it did match was the filter rail: "**Open** leads" and "Not
+    **knock**ed", both of which were on screen at all times. So the assertion
+    passed at every width without once opening a peek, and only failed when the
+    rail was retired and its chips stopped standing in for the thing under test.
+
+    Named exactly now, and against both places a peek can appear: the bottom
+    sheet on a phone, and the side pane on a tablet, where `isWide` puts it
+    instead.
+  */
   await list.getByRole('button').first().click()
   await page.waitForTimeout(600)
-  const peek = await page.getByRole('button', { name: /Open|Knock|Log/i }).count()
-  ok(peek > 0, `[${width}] tapping a stop opens the property peek`)
+  const peek = await page.getByTestId('property-peek').count()
+  ok(peek > 0, `[${width}] tapping a stop opens the property peek (${peek} found)`)
 
   // The peek sheet is a phone thing: at tablet width the selected property
   // expands in the side pane instead, and no dialog is created.

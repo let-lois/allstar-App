@@ -46,8 +46,8 @@ const MAP: TourStep[] = [
   {
     route: '/map',
     target: 'map-filters',
-    title: 'Filter what you are looking at',
-    body: 'Today’s route, everything, only the doors nobody has knocked, or only the leads still open. The map redraws as you tap.',
+    title: 'Narrow what you are looking at',
+    body: 'Every status, when a door was last knocked, and the ones nobody answered. The map redraws as you choose, and the number here says how much is on.',
     prefer: 'below',
   },
   {

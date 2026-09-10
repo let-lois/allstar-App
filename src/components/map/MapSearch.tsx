@@ -158,7 +158,7 @@ export function MapSearch({
         results open lands on the backdrop and does nothing visible — the second
         time an unpainted overlay has quietly eaten taps in this codebase.
       */}
-      <div className="relative z-20 flex min-h-tap items-center gap-1.5 rounded-full border border-line bg-surface/95 px-3 shadow-card backdrop-blur">
+      <div className="relative z-20 flex min-h-tap items-center gap-1 rounded-full border border-line bg-surface/95 pl-3 pr-2.5 shadow-card backdrop-blur">
         <span aria-hidden className="shrink-0 text-[13px] text-ink-mute">
           ⌕
         </span>
@@ -188,7 +188,17 @@ export function MapSearch({
           <button
             onClick={clear}
             aria-label="Clear search"
-            className="focusable -mr-1 grid h-9 w-9 shrink-0 place-items-center rounded-full text-[15px] text-ink-mute"
+            /*
+              A 44px target that only costs the field about 24px of width.
+
+              The button has to clear the tap floor — a rep clears this while
+              walking — but it does not have to reserve 44px of the row. Pulled
+              into the pill's own right padding and over the field's trailing
+              whitespace, it takes its target from space the input was not
+              using. At 320px that is the difference between five characters
+              and eight, on the field where an address gets typed.
+            */
+            className="focusable -mr-2.5 -my-1 grid h-11 w-11 shrink-0 place-items-center rounded-full text-[15px] text-ink-mute"
           >
             ✕
           </button>

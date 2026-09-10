@@ -42,6 +42,7 @@ export function RouteList({
   selectedId,
   onSelect,
   className = '',
+  emptyNotice,
 }: {
   properties: Property[]
   route: Route | null | undefined
@@ -49,6 +50,14 @@ export function RouteList({
   selectedId?: string | null
   onSelect: (id: string) => void
   className?: string
+  /**
+   * What to say when there is nothing to list.
+   *
+   * Supplied by the caller because only the caller knows which nothing this is
+   * — a filter that matched none, a device with no leads, or a first fetch
+   * still running. This component can only see that its array is empty.
+   */
+  emptyNotice?: string
 }) {
   const ordered = useMemo(() => {
     const byId = new Map(properties.map((p) => [p.id, p]))
@@ -75,12 +84,17 @@ export function RouteList({
   if (ordered.length === 0) {
     return (
       <div className={`grid place-items-center p-8 ${className}`}>
-        <p className="text-center text-[15px] text-ink-mute">
-          No doors match this filter.
-          <span className="mt-1 block text-[13px]">
-            Try “All” above, or build a route from Today.
-          </span>
-        </p>
+        {/*
+          Whatever the map is saying, said here too.
+
+          This used to assert "No doors match this filter" whatever the reason —
+          including when no filter was set, when the device had no leads at all,
+          and while the first pull from the server was still running. The map
+          view learned to tell those apart; the list quietly went on blaming a
+          filter, which is the same lie in the half of the screen a rep switches
+          to when the map will not draw.
+        */}
+        <p className="text-center text-[15px] text-ink-mute">{emptyNotice ?? 'No doors match this filter.'}</p>
       </div>
     )
   }

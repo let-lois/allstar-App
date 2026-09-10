@@ -9,7 +9,7 @@ import { KpiCard } from '../components/ui/KpiCard'
 import { ProgressBar } from '../components/ui/ProgressBar'
 import { Avatar } from '../components/ui/Avatar'
 import { useAppStore } from '../store/useAppStore'
-import { PIPELINE_STAGES, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
+import { PIPELINE_STAGES, STATUS_LABEL, isOpenStatus, outcomeByCode } from '../data/outcomes'
 import { money, relative } from '../lib/format'
 import { drain } from '../lib/sync'
 import { useTeamStats, useTeamTotals } from '../store/teamStats'
@@ -56,7 +56,7 @@ export function Overview({ role }: { role: Role }) {
 
   const stats = useMemo(() => {
     const rows = Object.values(properties)
-    const open = rows.filter((p) => !['won', 'lost', 'dnc'].includes(p.status))
+    const open = rows.filter((p) => isOpenStatus(p.status))
     const openValue = open.reduce((s, p) => s + (p.opportunityValue ?? 0), 0)
     const won = rows.filter((p) => p.status === 'won')
     const wonValue = won.reduce((s, p) => s + (p.opportunityValue ?? 0), 0)

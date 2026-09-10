@@ -53,9 +53,24 @@ export function SyncBadge({
   onClick,
   /** Set where the badge floats over the map and has no bar behind it. */
   plated = false,
+  compact = false,
+  className = '',
 }: {
   onClick?: () => void
   plated?: boolean
+  /**
+   * Drop the word, keep the signal.
+   *
+   * Over the map this badge shares the narrowest row in the app with the lead
+   * search and the map/list switch, and at 320px the search was left about
+   * 98px of it. What a rep needs from this control there is "is anything of
+   * mine still waiting" — which the dot and the count carry between them; the
+   * word "Synced" is the part that costs the width. The accessible name is
+   * unchanged, so nothing is lost to a screen reader.
+   */
+  compact?: boolean
+  /** Extra classes from the caller. */
+  className?: string
 }) {
   const snap = useSync()
   const tone = TONE[snap.state]
@@ -69,6 +84,7 @@ export function SyncBadge({
       aria-label={`Sync status: ${tone.label}${count ? `, ${count} waiting` : ''}`}
       className={[
         'focusable inline-flex min-h-[44px] items-center gap-1.5 rounded-full text-[12.5px] font-medium',
+        className,
         /*
           Quiet means "nothing to report", so it carries no fill — on a solid bar
           that is the right amount of nothing.
@@ -87,12 +103,14 @@ export function SyncBadge({
         quiet
           ? `text-ink-mute ${plated ? 'border border-line bg-surface px-2.5' : 'px-1'}`
           : `px-3 font-semibold ${tone.bg} ${tone.text}`,
+        // Still a thumb-sized target once the label is gone.
+        compact ? 'min-w-[44px] justify-center' : '',
       ].join(' ')}
     >
       <span
         className={`h-[7px] w-[7px] rounded-full ${tone.dot} ${snap.state === 'syncing' ? 'animate-pulse' : ''}`}
       />
-      <span>{tone.label}</span>
+      {!compact && <span>{tone.label}</span>}
       {count > 0 && <span className="nums opacity-80">{count}</span>}
     </button>
   )

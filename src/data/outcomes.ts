@@ -45,6 +45,30 @@ export const OUTCOME_TO_STATUS: Record<OutcomeCode, LeadStatus | undefined> = {
   do_not_contact: 'dnc',
 }
 
+/**
+ * The statuses that mean "no more work here".
+ *
+ * Written out by hand in seven places before this — `!['won', 'lost', 'dnc']`
+ * in the map's Open-leads filter, in its No-answer filter, in the route
+ * builder, in the console's two open counts and in Overview — and in the eighth
+ * the hand slipped: "Nearest door" skipped only `['won', 'dnc']`, so the button
+ * that offers a rep somewhere to go would send them to a door that had already
+ * said no, and that "Open leads" refuses to show them.
+ *
+ * Defined by exclusion elsewhere, so that is kept: anything not listed here is
+ * open, and a status added later is open until somebody decides otherwise. That
+ * is the safer default — a new status appearing in a rep's work is a visible
+ * mistake, and one silently vanishing from it is not.
+ *
+ * Distinct from an outcome's `terminal` flag above, which marks the two
+ * *outcomes* that end a conversation at the door. This is about where a lead
+ * stands afterwards, and `lost` has no terminal outcome of its own.
+ */
+export const CLOSED_STATUSES: readonly LeadStatus[] = ['won', 'lost', 'dnc']
+
+/** Is there still work to do on this lead? */
+export const isOpenStatus = (status: LeadStatus): boolean => !CLOSED_STATUSES.includes(status)
+
 export const STATUS_LABEL: Record<LeadStatus, string> = {
   new: 'New',
   contacted: 'Contacted',

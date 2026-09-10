@@ -2,6 +2,7 @@ import type { Property, Route, RouteStop } from '../types'
 import { distanceMiles } from './geo'
 import { startOfToday } from './day'
 import { dayKey } from './format'
+import { isOpenStatus } from '../data/outcomes'
 
 /**
  * Building a day's route.
@@ -42,7 +43,7 @@ export function routableLeads(
 ): Property[] {
   const cutoff = startOfToday(tz, now)
   return properties.filter((p) => {
-    if (['won', 'lost', 'dnc'].includes(p.status)) return false
+    if (!isOpenStatus(p.status)) return false
     // Knocking the same door twice in one day is how a rep annoys a prospect and
     // inflates their own numbers.
     if (p.lastVisitAt && p.lastVisitAt >= cutoff) return false

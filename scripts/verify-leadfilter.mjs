@@ -1,4 +1,12 @@
-import { matchesVisited, VISITED_WINDOWS } from '../src/lib/leadFilter.ts'
+import {
+  activeFilterCount,
+  DEFAULT_MAP_FILTER,
+  UNFILTERED_MAP,
+  matchesMapFilter,
+  matchesVisited,
+  VISITED_WINDOWS,
+} from '../src/lib/leadFilter.ts'
+import { STATUS_LABEL } from '../src/data/outcomes.ts'
 import { startOfDayIn, dayKeyIn, rangeStart } from '../src/lib/day.ts'
 
 /**
@@ -186,10 +194,163 @@ const at = (ts) => ({ lastVisitAt: ts })
   )
 }
 
+/* ==========================================================================
+ * What the map shows
+ *
+ * The other half of this module, and pure for the same reason: what can go
+ * wrong is not whether a chip renders but whether Do Not Contact can reach a
+ * rep's map without being asked for, and whether two answers can contradict
+ * each other into a permanently empty screen. Neither needs a DOM and both are
+ * invisible in one.
+ * ======================================================================= */
+console.log('\n--- the map filter ---')
+
+const lead = (over = {}) => ({ status: 'new', lastVisitAt: undefined, lastOutcome: undefined, ...over })
+const shows = (property, over = {}, opts = {}) =>
+  matchesMapFilter(property, { ...DEFAULT_MAP_FILTER, ...over }, { onRoute: true, now: NOW, ...opts })
+
+/* --- "everything" has to be sayable ------------------------------------- */
+//
+// The first draft of this model had no way to say it: an empty status set meant
+// "open only", so a rep every one of whose leads was won or lost opened the map
+// to nothing and had no control that would widen it. That is not a hypothetical
+// — it is the fixture verify:pin-noanswer builds, and it would have failed for
+// a real reason.
+{
+  const closed = ['won', 'lost', 'dnc'].filter(
+    (s) => !matchesMapFilter(lead({ status: s }), UNFILTERED_MAP, { onRoute: false, now: NOW }),
+  )
+  ok(closed.length === 0, 'nothing at all is filtered out under "All"', closed.length ? closed.join(', ') : 'won, lost and dnc all shown')
+  ok(activeFilterCount(UNFILTERED_MAP) === 0, 'and "All" reads as no filters on')
+}
+
+/* --- the default is open work, and nothing finished --------------------- */
+{
+  ok(shows(lead({ status: 'new' })), 'by default a new lead is on the map')
+  ok(shows(lead({ status: 'follow_up' })), 'and one waiting on a follow-up')
+  const closed = ['won', 'lost', 'dnc'].filter((s) => shows(lead({ status: s })))
+  ok(closed.length === 0, 'and nothing already finished', closed.length ? closed.join(', ') : 'none of won/lost/dnc')
+}
+
+/* --- Do Not Contact only ever by name ----------------------------------- */
+//
+// The one that matters most. DNC leaking onto a rep's map through a default, a
+// widening, or a filter nobody chose is the failure the in-app enforcement
+// exists to prevent, and it must be reachable only by asking for it.
+{
+  ok(!shows(lead({ status: 'dnc' })), 'Do Not Contact is off the map by default')
+  ok(
+    !shows(lead({ status: 'dnc' }), { status: { kind: 'some', set: ['new', 'contacted'] } }),
+    'and stays off under any other status',
+  )
+  ok(
+    shows(lead({ status: 'dnc' }), { status: { kind: 'some', set: ['dnc'] } }),
+    'and appears only when asked for by name',
+  )
+}
+
+/* --- a chosen status is exactly that status ----------------------------- */
+{
+  const some = (...set) => ({ status: { kind: 'some', set } })
+  ok(shows(lead({ status: 'quoted' }), some('quoted')), 'choosing a status shows it')
+  ok(!shows(lead({ status: 'working' }), some('quoted')), 'and only it')
+  ok(
+    shows(lead({ status: 'working' }), some('quoted', 'working')),
+    'choosing two shows either — the compound question the old rail could not ask',
+  )
+  const unreachable = Object.keys(STATUS_LABEL).filter((s) => !shows(lead({ status: s }), some(s)))
+  ok(
+    unreachable.length === 0,
+    'every status the app has can be asked for',
+    unreachable.length ? `unreachable: ${unreachable.join(', ')}` : `all ${Object.keys(STATUS_LABEL).length}`,
+  )
+}
+
+/* --- no combination is empty by construction ---------------------------- */
+//
+// The bug this shape exists to make unsayable. "Not knocked" and "Today" were
+// two chips a divider apart, and picking both asked for a door that had never
+// been knocked and was knocked this morning — a guaranteed-empty map with
+// nothing on screen saying why. There is now one recency question, so the
+// contradiction cannot be expressed.
+{
+  /*
+    Three doors that between them cover the whole timeline — never knocked,
+    knocked this morning, knocked forty days ago. The first draft of this used
+    only the first two, and `stale` matched neither: the assertion failed on the
+    fixture rather than on the code, which is the more useful direction for it
+    to fail in but not a claim worth keeping.
+  */
+  const probes = [lead(), lead({ lastVisitAt: NOW }), lead({ lastVisitAt: NOW - 40 * DAY })]
+  const answers = VISITED_WINDOWS.map((w) => w.key)
+  const empty = answers.filter((v) => !probes.some((p) => shows(p, { visited: v })))
+  ok(
+    empty.length === 0,
+    'every answer to "when was it last knocked" can match something',
+    empty.length ? `empty: ${empty.join(', ')}` : `all ${answers.length} windows`,
+  )
+  // And the contradiction itself, stated directly: there is no way to ask for a
+  // door that has never been knocked *and* was knocked recently, because there
+  // is only one place to answer that question.
+  ok(
+    !shows(lead(), { visited: 'today' }) && !shows(lead({ lastVisitAt: NOW }), { visited: 'never' }),
+    'and "never knocked" and "knocked today" are answers to one question, not two filters to combine',
+  )
+}
+
+/* --- nobody home is an outcome, not a status ---------------------------- */
+{
+  const missed = lead({ lastOutcome: 'no_answer', lastVisitAt: NOW - DAY })
+  const answered = lead({ status: 'working', lastOutcome: 'interested', lastVisitAt: NOW - DAY })
+  ok(shows(missed, { noAnswerOnly: true }), 'a door nobody answered is on the nobody-home list')
+  ok(!shows(answered, { noAnswerOnly: true }), 'and one that answered is not')
+  // The half that is easy to lose: a door that went unanswered and has since
+  // been sold is finished, and handing it back as unfinished business is how a
+  // rep ends up knocking on a customer's door.
+  ok(
+    !shows(lead({ status: 'won', lastOutcome: 'no_answer' }), { noAnswerOnly: true }),
+    'but one that was missed and later sold is not unfinished business',
+  )
+}
+
+/* --- the scope is the route, when asked ---------------------------------- */
+{
+  ok(!shows(lead(), { scope: 'route' }, { onRoute: false }), 'a lead off the route is hidden under "My route"')
+  ok(shows(lead(), { scope: 'route' }, { onRoute: true }), 'and one on it is not')
+  ok(shows(lead(), { scope: 'all' }, { onRoute: false }), 'while "All" ignores the route entirely')
+}
+
+/* --- the number on the button counts questions, not answers ------------- */
+{
+  ok(activeFilterCount(DEFAULT_MAP_FILTER) === 0, 'an untouched map says no filters are on')
+  ok(
+    activeFilterCount({
+      ...DEFAULT_MAP_FILTER,
+      status: { kind: 'some', set: ['new', 'contacted', 'quoted', 'won'] },
+    }) === 1,
+    'four statuses is one filter, not four — it is one answer to one question',
+  )
+  ok(
+    activeFilterCount({
+      ...DEFAULT_MAP_FILTER,
+      status: { kind: 'some', set: ['new'] },
+      visited: 'd7',
+      noAnswerOnly: true,
+    }) === 3,
+    'three different questions answered is three',
+  )
+  // Switching scope is not narrowing anything, and a badge on a screen nobody
+  // has touched is a badge people learn to ignore.
+  ok(
+    activeFilterCount({ ...DEFAULT_MAP_FILTER, scope: 'route' }) === 0,
+    'and the route scope is not counted — it has its own control in plain sight',
+  )
+}
+
 console.log('')
 if (fails.length) {
   console.log(`${fails.length} check(s) failed:`)
   fails.forEach((f) => console.log(`  - ${f}`))
   process.exit(1)
 }
-console.log('=== the visit windows agree on the calendar, and leave no gap ===')
+console.log('=== the windows agree on the calendar, and the map filter cannot contradict itself ===')

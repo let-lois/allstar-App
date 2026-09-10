@@ -4,6 +4,7 @@ import type { Property, Route } from '../../types'
 import { bearing } from '../../lib/geo'
 import type { Position } from '../../lib/geo'
 import { STATUS_COLOR } from '../../data/outcomes'
+import { locationPinElement } from './LocationPin'
 import { GmapsError, gmapId, loadGmaps } from '../../lib/gmaps'
 import { basemapWarning } from '../../lib/basemap'
 import type { MapHandle } from './FieldMap'
@@ -71,6 +72,8 @@ const CLUSTER_RADIUS_PX = 58
 const CLUSTER_EXTENT = 256
 /** brand-500 — the one place on the map allowed to be teal by default. */
 const SELECTED_PIN = '#0A8296'
+/** How far above a covering sheet a revealed pin should sit. One pin's height. */
+const PIN_MARGIN = 44
 
 interface Props {
   properties: Property[]
@@ -104,6 +107,22 @@ interface Props {
    * promise, and the promise is the part a rep acts on.
    */
   pathKind?: 'route' | 'flight'
+  /**
+   * Location picking, matching `FieldMap`'s prop of the same name so the map
+   * screen can hand either renderer the same picker.
+   *
+   * While it is present a tap on open map reports a coordinate rather than
+   * clearing the selection; a tap on a lead still opens that lead unless
+   * `exclusive` is set. The reasoning for that split is written out at
+   * `FieldMap`'s copy of this prop, which is the one place it belongs.
+   */
+  pick?: {
+    at: { lat: number; lng: number } | null
+    onPick: (point: { lat: number; lng: number }) => void
+    label?: string
+    /** Whether picking takes every tap, lead dots included. See `FieldMap`. */
+    exclusive?: boolean
+  }
   /**
    * Called when the map cannot be shown, with the reason. The parent decides
    * what to do about it — this component never renders its own dead state,
@@ -208,6 +227,7 @@ export function GoogleFieldMap({
   handleRef,
   path,
   pathKind = 'route',
+  pick,
   onUnavailable,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
@@ -218,6 +238,7 @@ export function GoogleFieldMap({
   const lineRef = useRef<google.maps.Polyline | null>(null)
   const pathRef = useRef<google.maps.Polyline | null>(null)
   const planeRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
+  const pickRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
   const [ready, setReady] = useState(false)
   const [satellite, setSatellite] = useState(false)
 
@@ -227,6 +248,16 @@ export function GoogleFieldMap({
   onSelectRef.current = onSelect
   const onUnavailableRef = useRef(onUnavailable)
   onUnavailableRef.current = onUnavailable
+  /*
+    The picker, in a ref for the same reason and one more: the map's click
+    listener is attached once at construction and must see whether picking is on
+    *now*, not whether it was on when the map was made. Reading a prop through a
+    ref is what lets one listener stay correct for the life of the map, which is
+    the only way to avoid tearing the listener down and rebuilding it — and a
+    rebuilt listener on a live Google map is how you end up with two.
+  */
+  const pickRefProp = useRef(pick)
+  pickRefProp.current = pick
 
   /* --- create the map once ------------------------------------------------ */
   useEffect(() => {
@@ -318,6 +349,35 @@ export function GoogleFieldMap({
           if (warning) console.warn(`[allstar] Google basemap: ${warning}`)
         })
 
+        /*
+          A tap on the map itself, which until now this renderer ignored.
+
+          Two jobs, and which one it does is read from the ref at tap time
+          rather than baked in here — this listener is attached once for the
+          life of the map, because tearing one off a live Google map and
+          re-attaching it on every prop change is how you end up with two of
+          them and every tap handled twice.
+
+          Google only fires `click` for a real tap on the basemap: a drag, a
+          pinch and a fling do not produce one, and marker taps arrive as
+          `gmp-click` on the marker instead. So the gesture safety this needs is
+          the map library's own, and `clickableIcons: false` above already keeps
+          Google's points of interest out of it.
+        */
+        mapRef.current.addListener('click', (ev: google.maps.MapMouseEvent) => {
+          const at = ev.latLng?.toJSON()
+          if (!at) return
+          const picking = pickRefProp.current
+          if (picking) {
+            picking.onPick(at)
+            return
+          }
+          // Parity with the self-rendered map, which has always dismissed the
+          // property sheet this way. On Google it did not, so the sheet could
+          // only be closed by dragging it down.
+          onSelectRef.current(null)
+        })
+
         setReady(true)
       })
       .catch((err: unknown) => {
@@ -378,7 +438,25 @@ export function GoogleFieldMap({
         })
         // `gmp-click`, not `click`: advanced markers deprecated the DOM event
         // name and warn about it on every listener attached.
-        marker.addListener('gmp-click', () => onSelectRef.current(p.id))
+        marker.addListener('gmp-click', (ev: { latLng?: google.maps.LatLng | null }) => {
+          const picking = pickRefProp.current
+          /*
+            While the form is open every tap answers "which house?" — including
+            one that lands on a lead the rep already has. See `pick.exclusive`
+            in FieldMap, where the reasoning lives.
+
+            The event's own coordinate, not the marker's: a rep aiming at the
+            house next door lands on the edge of a 22px dot, and snapping their
+            pin onto the existing lead would put it on the wrong roof. The
+            marker's position is the fallback for a Maps version that does not
+            carry one.
+          */
+          if (picking?.exclusive) {
+            picking.onPick(ev?.latLng?.toJSON() ?? { lat: p.lat, lng: p.lng })
+            return
+          }
+          onSelectRef.current(p.id)
+        })
         live.set(p.id, marker)
       }
 
@@ -403,6 +481,20 @@ export function GoogleFieldMap({
         },
         // Constructed rather than passed as `algorithmOptions`, which is typed
         // to `maxZoom` alone — `radius` and `extent` belong to the algorithm.
+        /*
+          Replaces the library's default, which zooms to the cluster's bounds.
+          That is still what happens — the one line below — except while the
+          form is open, when a tap is an answer rather than navigation.
+        */
+        onClusterClick: (ev, cluster, clusterMap) => {
+          const picking = pickRefProp.current
+          const at = ev.latLng?.toJSON()
+          if (picking?.exclusive && at) {
+            picking.onPick(at)
+            return
+          }
+          if (cluster.bounds) clusterMap.fitBounds(cluster.bounds)
+        },
         algorithm: new SuperClusterAlgorithm({
           maxZoom: CLUSTER_MAX_ZOOM,
           radius: CLUSTER_RADIUS_PX,
@@ -415,6 +507,49 @@ export function GoogleFieldMap({
       cancelled = true
     }
   }, [ready, properties, selectedId, disableClustering])
+
+  /* --- the pin under the rep's finger ------------------------------------- */
+  //
+  // Its own effect, and deliberately not part of the lead-marker one above:
+  // that effect rebuilds the clusterer every time the filters change, and the
+  // one marker that must not blink or move while a rep is looking at it is the
+  // one showing where they just tapped.
+  useEffect(() => {
+    if (!ready || !mapRef.current) return
+    let cancelled = false
+    ;(async () => {
+      const { AdvancedMarkerElement } = (await google.maps.importLibrary(
+        'marker',
+      )) as google.maps.MarkerLibrary
+      if (cancelled || !mapRef.current) return
+
+      const at = pick?.at
+      if (!at) {
+        if (pickRef.current) pickRef.current.map = null
+        return
+      }
+      if (pickRef.current) {
+        // Moved rather than replaced, so tapping a different house slides the
+        // same pin instead of flickering a new one into place.
+        pickRef.current.position = at
+        pickRef.current.map = mapRef.current
+      } else {
+        pickRef.current = new AdvancedMarkerElement({
+          map: mapRef.current,
+          position: at,
+          content: locationPinElement(),
+          title: pick?.label ?? 'Selected location',
+          // Above every lead dot and every cluster bubble. A pin the rep just
+          // placed that hides behind a house they already have is the one
+          // moment this has to get right.
+          zIndex: 1200,
+        })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [ready, pick?.at, pick?.label])
 
   /* --- the rep's own position --------------------------------------------- */
   useEffect(() => {
@@ -562,9 +697,39 @@ export function GoogleFieldMap({
     if (zoom) map.setZoom(zoom)
   }, [])
 
+  /*
+    Lift a point clear of the sheet that is about to cover it — the shared
+    contract, worked out from the map's own bounds.
+
+    Bounds rather than a projection object: `getProjection()` is only valid once
+    the map has drawn, and this is called the instant a rep taps. Mercator is
+    not linear in latitude, but across one phone screen at the zoom a rep works
+    at the error is a fraction of a pixel, and the answer only has to be right
+    to within "clear of the sheet".
+  */
+  const reveal = useCallback((at: { lat: number; lng: number }, covered: number) => {
+    const map = mapRef.current
+    const box = boxRef.current
+    const bounds = map?.getBounds()
+    if (!map || !box || !bounds) return
+    const north = bounds.getNorthEast().lat()
+    const south = bounds.getSouthWest().lat()
+    if (north === south) return
+    const y = ((north - at.lat) / (north - south)) * box.clientHeight
+    /*
+      A fraction of the screen, not of the map: the sheet is anchored to the
+      viewport's bottom edge and the map's bottom edge is a nav bar above it.
+      Same correction as the self-rendered map — see the longer note there.
+    */
+    const limit = window.innerHeight * (1 - covered) - box.getBoundingClientRect().top
+    // Only when it would actually be covered, and positive y pans the centre
+    // south, which moves the map's contents up.
+    if (y > limit) map.panBy(0, y - limit + PIN_MARGIN)
+  }, [])
+
   useEffect(() => {
-    if (handleRef) handleRef.current = { flyTo }
-  }, [handleRef, flyTo])
+    if (handleRef) handleRef.current = { flyTo, reveal }
+  }, [handleRef, flyTo, reveal])
 
   const zoomBy = (d: number) => {
     const map = mapRef.current
@@ -590,6 +755,29 @@ export function GoogleFieldMap({
         role="application"
         data-tour="map-canvas"
       />
+
+      {/*
+        Something between "asked for a map" and "has a map".
+
+        Until tiles arrive this box is an empty rectangle with filter chips
+        floating on it, and on a slow connection it stays that way for up to
+        twelve seconds before the load timeout gives up and says why. Twelve
+        seconds of nothing is indistinguishable from broken, and a rep on a
+        rural road spends it wondering whether to close the app.
+
+        Removed by `ready`, which is set on `tilesloaded` — the same event the
+        undrawable watchdog waits for — so this says "loading" for exactly as
+        long as the map is actually loading, and never after pixels exist.
+      */}
+      {!ready && (
+        <div
+          role="status"
+          data-testid="map-loading"
+          className="pointer-events-none absolute inset-0 grid place-items-center bg-surface-sunk"
+        >
+          <p className="text-[13px] font-medium text-ink-mute">Loading the map…</p>
+        </div>
+      )}
 
       {/* Thumb-sized controls, bottom-right, matching the self-rendered map. */}
       <div

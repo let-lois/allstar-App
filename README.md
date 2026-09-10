@@ -2371,6 +2371,55 @@ over instead of becoming Google teardrops, and they are focusable, which sprite
 markers are not. Without a Map ID they silently do not appear — so a key with no
 Map ID is treated as unconfigured, and says so in the console.
 
+### Reverse geocoding is a third API, a third switch, and a per-tap bill
+
+Tapping a house on the map fills the Add-lead form's address in. That lookup is
+the **Geocoding API** — not Maps JavaScript and not Places, which are the two the
+map and the address suggestions use. It is enabled separately in the Cloud
+console and billed separately, per request.
+
+Per request, in an app a rep taps all day, is the worst shape a cost can have, so
+three things hold it down and all three are load-bearing:
+
+- It runs only once the Add-lead form is open. Panning, zooming and stray taps
+  cost nothing; a lookup happens when somebody has said they are adding a house.
+- Answers are cached for the life of the tab, keyed to five decimal places —
+  about a metre. Correcting a pin by a thumb-width is one request, not two, and
+  a point with no address is remembered as such rather than re-bought.
+- The cache is in memory only. Google's terms permit caching geocoding results
+  for around thirty days and no longer; a cache that dies with the tab cannot
+  outstay that and needs no expiry logic to prove it.
+
+A question that could not be *asked* is never cached, which matters more here
+than it would in most apps. "Google has no address for this point" is an answer
+and is remembered. Offline, no key, or the API not enabled are not answers — and
+since this app spends much of its life with no signal, caching one would leave a
+house blank for the rest of the session, long after the rep walked back into
+coverage.
+
+`verify:address` covers all of that with no key, no browser and no network — the
+cache, the coarse-answer rule, and the single preference order that both Google
+APIs now share. What it cannot cover is a real lookup, for the same reason
+`verify:googlemap` cannot: that needs a key on an allowed origin.
+
+**If the Geocoding API is not enabled, nothing breaks and nothing is said on
+screen.** Every request comes back `REQUEST_DENIED`, the form falls back to what
+it did before — an empty address field the rep types into — and the console
+carries one named warning saying which switch is off. That is deliberate: a
+prefill that quietly never happens is indistinguishable from one that is turned
+off, and the only person who can fix it is whoever deployed it.
+
+**A coarse answer loses its street number.** When Google reports
+`GEOMETRIC_CENTER` or `APPROXIMATE` it is describing the middle of a road or of a
+postcode, and any house number it offers is a guess about a door the rep is
+standing in front of and can read. The town, state and postcode are kept — those
+are genuinely the ones containing the tapped point — and the number is left for
+the rep. The form says which half is missing.
+
+**The rep's tap stays authoritative.** The coordinates saved on the lead are the
+ones under their finger, never the geocoder's idea of where that address is, and
+nothing a lookup returns is ever written over a field the rep has typed in.
+
 Two gates need a build with placeholder Google values, because with the vars unset
 the code under test is not in the bundle. Both skip cleanly rather than failing,
 detected from the absence of any request:
