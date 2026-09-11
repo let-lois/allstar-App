@@ -1,3 +1,4 @@
+import { Glyph } from '../components/ui/Glyph'
 import { useMemo, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
@@ -382,7 +383,7 @@ export function Today() {
                           className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[13px]"
                           aria-hidden
                         >
-                          {def?.glyph ?? '·'}
+                          {def ? <Glyph name={def.icon} className="icon-xs" /> : '·'}
                         </span>
                         <span className="min-w-0 flex-1 truncate text-[14px] text-ink-soft">
                           {ev.summary}

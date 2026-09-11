@@ -1,3 +1,4 @@
+import { Glyph } from '../components/ui/Glyph'
 import { IconCheck } from '../components/nav/icons'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -310,8 +311,9 @@ export function VisitMode() {
                   Change
                 </button>
               </div>
-              <p className="mt-1 text-[19px] font-semibold">
-                {outcomeDef?.glyph} {outcomeDef?.label}
+              <p className="mt-1 flex items-center gap-2 text-[19px] font-semibold">
+                {outcomeDef && <Glyph name={outcomeDef.icon} className="icon-sm" />}
+                {outcomeDef?.label}
               </p>
             </Card>
 
@@ -353,10 +355,10 @@ export function VisitMode() {
             <div className="grid grid-cols-2 gap-2.5">
               {(
                 [
-                  { key: 'none', label: 'Nothing', glyph: '—' },
-                  { key: 'follow_up', label: 'Follow up', glyph: '↻' },
-                  { key: 'appointment', label: 'Appointment', glyph: '◷' },
-                  { key: 'quote', label: 'Send quote', glyph: '$' },
+                  { key: 'none', label: 'Nothing', icon: null },
+                  { key: 'follow_up', label: 'Follow up', icon: 'refresh' },
+                  { key: 'appointment', label: 'Appointment', icon: 'calendar' },
+                  { key: 'quote', label: 'Send quote', icon: 'money' },
                 ] as const
               ).map((o) => (
                 <button
@@ -373,9 +375,9 @@ export function VisitMode() {
                       : 'bg-surface text-ink ring-1 ring-line active:bg-surface-field'
                   }`}
                 >
-                  <span className="text-xl" aria-hidden>
-                    {o.glyph}
-                  </span>
+                  {/* "Nothing" is the absence of a next action — a shape for it
+                      would be inventing one. */}
+                  {o.icon && <Glyph name={o.icon} />}
                   {o.label}
                 </button>
               ))}

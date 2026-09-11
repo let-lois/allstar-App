@@ -1,3 +1,4 @@
+import { Glyph } from '../components/ui/Glyph'
 import { IconChevron } from '../components/nav/icons'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -234,7 +235,7 @@ export function AdminDashboard() {
                 className="flex items-center gap-3 border-t border-line-soft px-5 py-2 text-sm"
               >
                 <span className="w-5 shrink-0 text-center" aria-hidden>
-                  {def?.glyph ?? '·'}
+                  {def ? <Glyph name={def.icon} className="icon-xs" /> : '·'}
                 </span>
                 <span className="min-w-0 flex-1 truncate">{ev.summary}</span>
                 <span className="shrink-0 text-xs text-ink-mute">{def?.label}</span>

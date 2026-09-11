@@ -1,12 +1,18 @@
 import type { GlyphName } from '../../lib/glyphs'
 import {
+  IconBan,
   IconCalendar,
+  IconCheck,
+  IconClose,
+  IconDoor,
   IconDoc,
   IconFlame,
   IconLeads,
   IconMoney,
+  IconRefresh,
   IconRoof,
   IconSofa,
+  IconStar,
   IconTrophy,
   IconWarn,
 } from '../nav/icons'
@@ -35,6 +41,12 @@ const MAP: Record<GlyphName, () => React.JSX.Element> = {
   warn: IconWarn,
   sofa: IconSofa,
   doc: IconDoc,
+  door: IconDoor,
+  star: IconStar,
+  refresh: IconRefresh,
+  close: IconClose,
+  check: IconCheck,
+  ban: IconBan,
 }
 
 export function Glyph({ name, className = '' }: { name: GlyphName; className?: string }) {

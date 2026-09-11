@@ -346,3 +346,42 @@ export const IconDoc = () => (
     <path d="M13 3.5V9h5.5M8.5 13h7M8.5 17h5" />
   </svg>
 )
+
+/* ==========================================================================
+ * Outcomes
+ *
+ * The last characters in this app that were doing an icon's job: ★ ↻ ◷ $ ✕ ✓
+ * ⊘ and an em dash, on the eight buttons a rep presses at a door. They were a
+ * deliberate set rather than emoji, which is why they outlived the rest — but
+ * they are still text, and the two that matter most are the two that suffer
+ * most: at 15px in a pill, `✓` and `✕` are a tick and a cross in whatever
+ * shape the system font has, and `◷` is a circle with a line in it.
+ *
+ * Reused where the meaning already has an icon — a star is interest, a loop is
+ * a follow-up, a calendar is an appointment, a banknote is a quote, a cross is
+ * a refusal, a tick is a sale. Only two are new.
+ * ======================================================================= */
+
+/**
+ * Nobody answered.
+ *
+ * A door, not a dash. The em dash said "nothing happened", which is true of a
+ * blank row and not of this: somebody walked to a house and knocked. It is the
+ * most-pressed button on the outcome grid, and it deserves a shape rather than
+ * a piece of punctuation.
+ */
+export const IconDoor = () => (
+  <svg {...base}>
+    <path d="M6 3.5h12v17H6z" />
+    <path d="M4.5 20.5h15" />
+    <circle cx="14.5" cy="12" r="1.1" fill="currentColor" stroke="none" />
+  </svg>
+)
+
+/** Do not contact — the international "no", which needs no gloss anywhere. */
+export const IconBan = () => (
+  <svg {...base}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M6 18L18 6" />
+  </svg>
+)

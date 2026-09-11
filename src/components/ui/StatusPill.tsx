@@ -1,3 +1,4 @@
+import { Glyph } from './Glyph'
 import type { LeadStatus, OutcomeCode } from '../../types'
 import { STATUS_LABEL, STATUS_TONE, outcomeByCode } from '../../data/outcomes'
 
@@ -34,7 +35,7 @@ export function OutcomePill({ code }: { code?: OutcomeCode }) {
   if (!def) return <span className="text-[12.5px] text-ink-mute">Not visited</span>
   return (
     <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-surface-field px-2 py-0.5 text-[11px] font-semibold text-ink-soft">
-      <span aria-hidden>{def.glyph}</span>
+      <Glyph name={def.icon} className="icon-xs" />
       {def.label}
     </span>
   )

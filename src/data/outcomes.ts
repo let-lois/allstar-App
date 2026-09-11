@@ -11,20 +11,20 @@ import type { LeadStatus, NoteTag, OutcomeCode, OutcomeDef, PhotoCategory } from
  * thirds of all knocks, so it sits first and largest.
  */
 export const OUTCOMES: OutcomeDef[] = [
-  { code: 'no_answer', label: 'No Answer', tone: 'noanswer', glyph: '—' },
-  { code: 'interested', label: 'Interested', tone: 'interested', glyph: '★', promptsFollowUp: true },
-  { code: 'follow_up', label: 'Follow Up', tone: 'followup', glyph: '↻', promptsFollowUp: true },
+  { code: 'no_answer', label: 'No Answer', tone: 'noanswer', icon: 'door' },
+  { code: 'interested', label: 'Interested', tone: 'interested', icon: 'star', promptsFollowUp: true },
+  { code: 'follow_up', label: 'Follow Up', tone: 'followup', icon: 'refresh', promptsFollowUp: true },
   {
     code: 'appointment',
     label: 'Appointment',
     tone: 'appointment',
-    glyph: '◷',
+    icon: 'calendar',
     promptsFollowUp: true,
   },
-  { code: 'quote_requested', label: 'Quote', tone: 'quote', glyph: '$', promptsFollowUp: true },
-  { code: 'not_interested', label: 'Not Interested', tone: 'notinterested', glyph: '✕' },
-  { code: 'sold', label: 'Sold', tone: 'sold', glyph: '✓', terminal: true },
-  { code: 'do_not_contact', label: 'Do Not Contact', tone: 'dnc', glyph: '⊘', terminal: true },
+  { code: 'quote_requested', label: 'Quote', tone: 'quote', icon: 'money', promptsFollowUp: true },
+  { code: 'not_interested', label: 'Not Interested', tone: 'notinterested', icon: 'close' },
+  { code: 'sold', label: 'Sold', tone: 'sold', icon: 'check', terminal: true },
+  { code: 'do_not_contact', label: 'Do Not Contact', tone: 'dnc', icon: 'ban', terminal: true },
 ]
 
 export const outcomeByCode = (code?: OutcomeCode): OutcomeDef | undefined =>
