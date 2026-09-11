@@ -34,7 +34,13 @@ import {
   setActive,
   setPassword,
   setRole,
+  setUserTeam,
+  setUserTitle,
 } from './users'
+import { readMe, touchLastSeen } from './me'
+import { createTeam, deleteTeam, listTeams, renameTeam } from './teams'
+import { updateCompany } from './company'
+import { badgeStatus, displayName, invitationStatus, onboardingStatus } from './onboarding'
 import { ensureSchema, migrationState } from './migrate'
 import {
   geocodeKeysFor,
@@ -619,7 +625,20 @@ export default {
         // A correct password means this was never an attack; don't leave the
         // bucket primed to lock out the person who just proved who they are.
         await clearFailures(env, email, ip)
-        return json(result, 200, cors)
+        await touchLastSeen(env, result.user.id)
+        // The full person — profile, onboarding, badge, company — not just the
+        // session's eight fields, so the app knows on arrival whether to open
+        // onboarding or the map. A strict superset of what this returned before.
+        //
+        // And never the reason sign-in fails. `readMe` reads columns migration
+        // 016 adds; on a database where that migration failed, the session user
+        // goes out as it always did and the failure stays where it is reported,
+        // in /api/health — sabotaging the runner proved this returned a 500.
+        const me = await readMe(env, result.user.id).catch((err) => {
+          console.error('readMe failed at sign-in; sending the session user', String(err))
+          return null
+        })
+        return json({ token: result.token, user: me ?? result.user }, 200, cors)
       }
 
       if (path === '/api/auth/logout' && req.method === 'POST') {
@@ -670,10 +689,14 @@ export default {
       if (!user) return json({ error: 'Not signed in.' }, 401, cors)
 
       if (path === '/api/me') {
-        return json({ user }, 200, cors)
+        // Same fallback as sign-in: a failed migration must not make "who am I"
+        // unanswerable.
+        const me = await readMe(env, user.id).catch(() => null)
+        return json({ user: me ?? user }, 200, cors)
       }
 
       if (path === '/api/bootstrap' && req.method === 'GET') {
+        await touchLastSeen(env, user.id)
         return json(await bootstrap(env, user), 200, cors)
       }
 
@@ -717,6 +740,7 @@ export default {
           return json({ error: 'Batch too large; send at most 200.' }, 413, cors)
         }
         const results = await applyMutations(env, user, mutations)
+        await touchLastSeen(env, user.id)
         return json({ results, serverTime: Date.now() }, 200, cors)
       }
 
@@ -726,26 +750,80 @@ export default {
       // colleagues' accounts, and the console is the only thing that needs it.
       if (path === '/api/users' && req.method === 'GET') {
         if (!canImport(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        /*
+          One row per person with the facts three statuses are derived from.
+          The newest *invitation* token rides along (never a reset link — those
+          share the table, see schema.sql) so "did they ever get their link" is
+          answerable without a second query per person.
+        */
         const rows = await env.DB.prepare(
-          `SELECT id, name, email, role, phone, active,
-                  CASE WHEN password_hash IS NULL THEN 1 ELSE 0 END AS pending
-             FROM users WHERE client_id = ?1 ORDER BY name`,
+          `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.phone, u.active,
+                  u.job_title, u.team_id, t.name AS team_name, u.created_at, u.last_seen_at,
+                  u.onboarding_step, u.onboarding_version, u.onboarding_completed_at,
+                  u.badge_id, u.badge_expires_at, u.badge_confirmed_at,
+                  CASE WHEN u.password_hash IS NULL THEN 1 ELSE 0 END AS pending,
+                  i.accepted_at AS inv_accepted_at, i.revoked_at AS inv_revoked_at,
+                  i.expires_at AS inv_expires_at, i.created_at AS inv_created_at
+             FROM users u
+             LEFT JOIN teams t ON t.id = u.team_id
+             LEFT JOIN invites i ON i.token_hash = (
+               SELECT token_hash FROM invites
+                WHERE user_id = u.id AND kind = 'invite'
+                ORDER BY created_at DESC LIMIT 1)
+            WHERE u.client_id = ?1 ORDER BY u.name`,
         )
           .bind(user.clientId)
           .all()
+        const now = Date.now()
         return json(
           {
-            users: (rows.results as Record<string, unknown>[]).map((u) => ({
-              id: u.id,
-              name: u.name,
-              email: u.email,
-              role: u.role,
-              phone: u.phone ?? undefined,
-              active: !!u.active,
-              // An invited user who hasn't set a password yet. The console shows
-              // this so an admin can tell "hasn't accepted" from "isn't working".
-              pending: !!u.pending,
-            })),
+            users: (rows.results as Record<string, string | number | null>[]).map((u) => {
+              const facts = {
+                name: u.name == null ? null : String(u.name),
+                first_name: u.first_name == null ? null : String(u.first_name),
+                last_name: u.last_name == null ? null : String(u.last_name),
+                onboarding_step: u.onboarding_step == null ? null : String(u.onboarding_step),
+                onboarding_version: Number(u.onboarding_version ?? 0),
+                onboarding_completed_at:
+                  u.onboarding_completed_at == null ? null : Number(u.onboarding_completed_at),
+                badge_id: u.badge_id == null ? null : String(u.badge_id),
+                badge_expires_at: u.badge_expires_at == null ? null : Number(u.badge_expires_at),
+                badge_confirmed_at:
+                  u.badge_confirmed_at == null ? null : Number(u.badge_confirmed_at),
+              }
+              const invite =
+                u.inv_created_at == null
+                  ? null
+                  : {
+                      accepted_at: u.inv_accepted_at == null ? null : Number(u.inv_accepted_at),
+                      revoked_at: u.inv_revoked_at == null ? null : Number(u.inv_revoked_at),
+                      expires_at: Number(u.inv_expires_at),
+                    }
+              return {
+                id: u.id,
+                name: displayName({ ...facts, email: String(u.email) }),
+                firstName: u.first_name ?? undefined,
+                lastName: u.last_name ?? undefined,
+                email: u.email,
+                role: u.role,
+                phone: u.phone ?? undefined,
+                jobTitle: u.job_title ?? undefined,
+                teamId: u.team_id ?? undefined,
+                teamName: u.team_name ?? undefined,
+                active: !!u.active,
+                // An invited user who hasn't set a password yet. The console shows
+                // this so an admin can tell "hasn't accepted" from "isn't working".
+                pending: !!u.pending,
+                invitation: invitationStatus(invite, now),
+                invitedAt: invite ? Number(u.inv_created_at) : undefined,
+                onboarding: onboardingStatus(facts, now),
+                onboardingStep: facts.onboarding_step ?? undefined,
+                badge: badgeStatus(facts, now),
+                badgeExpiresAt: facts.badge_expires_at ?? undefined,
+                createdAt: Number(u.created_at),
+                lastSeenAt: u.last_seen_at == null ? undefined : Number(u.last_seen_at),
+              }
+            }),
           },
           200,
           cors,
@@ -761,6 +839,20 @@ export default {
         const rest = path.slice('/api/users/'.length)
         const [targetId, action] = rest.split('/')
         const a = { env, actor: user, userId: targetId }
+
+        if (action === 'team' && req.method === 'POST') {
+          const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+          const result = await setUserTeam(a, typeof body.teamId === 'string' ? body.teamId : null)
+          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          return json(result, 200, cors)
+        }
+
+        if (action === 'title' && req.method === 'POST') {
+          const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+          const result = await setUserTitle(a, body.jobTitle)
+          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          return json(result, 200, cors)
+        }
 
         if (action === 'footprint' && req.method === 'GET') {
           const result = await footprint(a)
@@ -1265,6 +1357,46 @@ export default {
             return json(result, 200, cors)
           }
         }
+      }
+
+      /* --- teams and offices ----------------------------------------------- */
+      //
+      // Read by anyone signed in: a rep's badge names their team. Written by
+      // the admins, decided inside teams.ts.
+      if (path === '/api/teams' && req.method === 'GET') {
+        return json({ teams: await listTeams(env, user.clientId) }, 200, cors)
+      }
+
+      if (path === '/api/teams' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await createTeam(env, user, body)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 201, cors)
+      }
+
+      {
+        const m = /^\/api\/teams\/([A-Za-z0-9_-]{1,40})$/.exec(path)
+        if (m) {
+          if (req.method === 'PATCH') {
+            const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+            const result = await renameTeam(env, user, m[1]!, body)
+            if ('error' in result) return json({ error: result.error }, result.status, cors)
+            return json(result, 200, cors)
+          }
+          if (req.method === 'DELETE') {
+            const result = await deleteTeam(env, user, m[1]!)
+            if ('error' in result) return json({ error: result.error }, result.status, cors)
+            return json(result, 200, cors)
+          }
+        }
+      }
+
+      /* --- the company, as it appears on a badge ---------------------------- */
+      if (path === '/api/company' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await updateCompany(env, user, body)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json({ company: result }, 200, cors)
       }
 
       if (path === '/api/import/properties' && req.method === 'POST') {

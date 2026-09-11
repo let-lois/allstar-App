@@ -30,6 +30,12 @@ export type AuditAction =
   | 'user.reactivated'
   | 'user.deleted'
   | 'user.role_changed'
+  | 'user.team_changed'
+  | 'user.title_changed'
+  | 'team.created'
+  | 'team.renamed'
+  | 'team.deleted'
+  | 'company.changed'
   | 'territory.assigned'
   | 'territory.created'
   | 'list.created'
@@ -65,7 +71,17 @@ export type AuditAction =
 
 export interface AuditEntry {
   action: AuditAction
-  targetType?: 'user' | 'territory' | 'list' | 'import' | 'settings' | 'integration' | 'geocoder' | 'lead'
+  targetType?:
+    | 'user'
+    | 'territory'
+    | 'list'
+    | 'import'
+    | 'settings'
+    | 'integration'
+    | 'geocoder'
+    | 'lead'
+    | 'team'
+    | 'company'
   targetId?: string
   /** The name as it read at the time. Never resolved later. */
   targetLabel?: string

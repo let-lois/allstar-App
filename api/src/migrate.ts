@@ -25,9 +25,21 @@ import type { Env } from './types'
  *   reported through /api/health rather than by taking the API down.
  */
 
+/**
+ * One statement, optionally guarded by the column it adds.
+ *
+ * Migration 016 adds fifteen columns to `users`. With a single guard on the
+ * whole migration, a failure on the ninth statement releases the claim, the
+ * next boot retries, the first statement fails with "duplicate column name",
+ * and the migration is wedged forever — while the guard column, added last,
+ * is still missing, so nothing skips it either. Guarding each `ALTER TABLE`
+ * by its own column makes a retry pick up exactly where it stopped.
+ */
+type Statement = string | { sql: string; skipIfColumn: { table: string; column: string } }
+
 interface Migration {
   id: string
-  statements: string[]
+  statements: Statement[]
   /**
    * Skip the whole migration when this column already exists.
    *
@@ -360,6 +372,155 @@ const MIGRATIONS: Migration[] = [
       'CREATE INDEX IF NOT EXISTS lead_list_reps_by_user ON lead_list_reps(user_id)',
     ],
   },
+  /*
+    Team member onboarding, in five migrations rather than one.
+
+    Split by table so each can be guarded by what it adds, and so the backfill
+    at the end is its own recorded step — a statement that changes rows should
+    be visible in the ledger as a thing that happened, not folded into DDL.
+    Mirrors schema.sql; the commentary on each column lives there.
+  */
+  {
+    id: '015-teams',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS teams (
+         id          TEXT PRIMARY KEY,
+         client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+         name        TEXT NOT NULL,
+         created_at  INTEGER NOT NULL
+       )`,
+      'CREATE UNIQUE INDEX IF NOT EXISTS teams_client_name ON teams(client_id, lower(name))',
+    ],
+  },
+  {
+    id: '016-users-onboarding',
+    // Written out rather than generated from a list: a migration is frozen
+    // history and should read as the SQL it ran, and `verify:schema` checks
+    // each literal ALTER against schema.sql — a generated one is invisible to it.
+    statements: [
+      {
+        sql: 'ALTER TABLE users ADD COLUMN first_name TEXT',
+        skipIfColumn: { table: 'users', column: 'first_name' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN last_name TEXT',
+        skipIfColumn: { table: 'users', column: 'last_name' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN job_title TEXT',
+        skipIfColumn: { table: 'users', column: 'job_title' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN team_id TEXT REFERENCES teams(id) ON DELETE SET NULL',
+        skipIfColumn: { table: 'users', column: 'team_id' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN onboarding_step TEXT',
+        skipIfColumn: { table: 'users', column: 'onboarding_step' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN onboarding_version INTEGER NOT NULL DEFAULT 0',
+        skipIfColumn: { table: 'users', column: 'onboarding_version' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN onboarding_completed_at INTEGER',
+        skipIfColumn: { table: 'users', column: 'onboarding_completed_at' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN walkthrough_completed_at INTEGER',
+        skipIfColumn: { table: 'users', column: 'walkthrough_completed_at' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN setup_completed_at INTEGER',
+        skipIfColumn: { table: 'users', column: 'setup_completed_at' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN location_status TEXT',
+        skipIfColumn: { table: 'users', column: 'location_status' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN badge_id TEXT',
+        skipIfColumn: { table: 'users', column: 'badge_id' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN badge_issued_at INTEGER',
+        skipIfColumn: { table: 'users', column: 'badge_issued_at' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN badge_expires_at INTEGER',
+        skipIfColumn: { table: 'users', column: 'badge_expires_at' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN badge_confirmed_at INTEGER',
+        skipIfColumn: { table: 'users', column: 'badge_confirmed_at' },
+      },
+      {
+        sql: 'ALTER TABLE users ADD COLUMN last_seen_at INTEGER',
+        skipIfColumn: { table: 'users', column: 'last_seen_at' },
+      },
+      'CREATE UNIQUE INDEX IF NOT EXISTS users_badge_id ON users(badge_id)',
+    ],
+  },
+  {
+    id: '017-invites-kind',
+    statements: [
+      {
+        sql: 'ALTER TABLE invites ADD COLUMN revoked_at INTEGER',
+        skipIfColumn: { table: 'invites', column: 'revoked_at' },
+      },
+      {
+        sql: "ALTER TABLE invites ADD COLUMN kind TEXT NOT NULL DEFAULT 'invite'",
+        skipIfColumn: { table: 'invites', column: 'kind' },
+      },
+    ],
+  },
+  {
+    id: '018-clients-company',
+    statements: [
+      {
+        sql: 'ALTER TABLE clients ADD COLUMN logo_url TEXT',
+        skipIfColumn: { table: 'clients', column: 'logo_url' },
+      },
+      {
+        sql: 'ALTER TABLE clients ADD COLUMN website TEXT',
+        skipIfColumn: { table: 'clients', column: 'website' },
+      },
+      {
+        sql: 'ALTER TABLE clients ADD COLUMN join_code TEXT',
+        skipIfColumn: { table: 'clients', column: 'join_code' },
+      },
+      {
+        sql: 'ALTER TABLE clients ADD COLUMN join_code_created_at INTEGER',
+        skipIfColumn: { table: 'clients', column: 'join_code_created_at' },
+      },
+      'CREATE UNIQUE INDEX IF NOT EXISTS clients_join_code ON clients(join_code)',
+    ],
+  },
+  {
+    /*
+      Everyone who already had an account is not asked to onboard.
+
+      Forcing every existing rep through six screens on their next sign-in is
+      the wrong first impression of a feature meant to welcome new people, and
+      they have what the flow exists to collect: a name, a role, a working
+      login. What they lack — a photo, a badge — is offered to them, not
+      required of them (see the badge card on Today).
+
+      The literal `1` is ONBOARDING_VERSION as it stood when this migration was
+      written. A migration is frozen history and must not read a constant that
+      moves: when the version is bumped to ask everyone again, these rows must
+      still say they completed version 1, not whatever the constant says today.
+
+      Pending invitees — no password yet — are left untouched. They have never
+      signed in, and they onboard in full.
+    */
+    id: '019-onboarding-backfill',
+    statements: [
+      `UPDATE users
+          SET onboarding_completed_at = created_at, onboarding_version = 1
+        WHERE password_hash IS NOT NULL AND onboarding_completed_at IS NULL`,
+    ],
+  },
 ]
 
 async function hasColumn(
@@ -424,8 +585,13 @@ export async function ensureSchema(env: Env): Promise<void> {
       if (!claimed.meta.changes) continue
 
       try {
-        for (const sql of migration.statements) {
-          await env.DB.prepare(sql).run()
+        for (const statement of migration.statements) {
+          if (typeof statement === 'string') {
+            await env.DB.prepare(statement).run()
+            continue
+          }
+          if (await hasColumn(env, statement.skipIfColumn)) continue
+          await env.DB.prepare(statement.sql).run()
         }
       } catch (err) {
         // Release the claim so the next deploy retries rather than skipping a

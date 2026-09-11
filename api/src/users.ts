@@ -293,6 +293,84 @@ export async function setRole(a: Actorable, role: Role): Promise<{ ok: true } | 
   return { ok: true }
 }
 
+/* --- which team, and what it says under their name ------------------------- */
+
+/**
+ * Put somebody on a team, or take them off one (`null`).
+ *
+ * Admin only, through the same guard as every other change to a person's
+ * account: a team decides what a roster filter shows and what a badge says,
+ * and letting reps move themselves between offices is a feature nobody asked
+ * for. The team has to belong to this company — an id from another tenant
+ * reads as "no such team", not as a cross-tenant write.
+ */
+export async function setUserTeam(
+  a: Actorable,
+  teamId: string | null,
+): Promise<{ ok: true; teamName: string | null } | Failure> {
+  const g = await guard(a, { allowSelf: true })
+  if ('error' in g) return g
+
+  let teamName: string | null = null
+  if (teamId !== null) {
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(teamId)) return fail('No such team.', 404)
+    const team = await a.env.DB.prepare('SELECT name FROM teams WHERE id = ?1 AND client_id = ?2')
+      .bind(teamId, a.actor.clientId)
+      .first<{ name: string }>()
+    if (!team) return fail('No such team.', 404)
+    teamName = team.name
+  }
+
+  await a.env.DB.prepare('UPDATE users SET team_id = ?2 WHERE id = ?1 AND client_id = ?3')
+    .bind(g.target.id, teamId, a.actor.clientId)
+    .run()
+
+  await record(a.env, a.actor, {
+    action: 'user.team_changed',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+    detail: { teamId, teamName },
+  })
+  return { ok: true, teamName }
+}
+
+export const MAX_JOB_TITLE = 60
+
+/**
+ * The line under their name on the badge — "Sales Representative".
+ *
+ * Distinct from `role`, which is a permission. A rep may write their own title
+ * during onboarding (that path is `PATCH /api/me/profile`, self only); this is
+ * the admin overwriting it, through the guard.
+ */
+export async function setUserTitle(
+  a: Actorable,
+  title: unknown,
+): Promise<{ ok: true; jobTitle: string | null } | Failure> {
+  const g = await guard(a, { allowSelf: true })
+  if ('error' in g) return g
+
+  const clean = typeof title === 'string' ? title.trim().replace(/\s+/g, ' ') : ''
+  if (clean.length > MAX_JOB_TITLE) {
+    return fail(`Keep the title under ${MAX_JOB_TITLE} characters.`, 400)
+  }
+  const jobTitle = clean || null
+
+  await a.env.DB.prepare('UPDATE users SET job_title = ?2 WHERE id = ?1 AND client_id = ?3')
+    .bind(g.target.id, jobTitle, a.actor.clientId)
+    .run()
+
+  await record(a.env, a.actor, {
+    action: 'user.title_changed',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+    detail: { jobTitle },
+  })
+  return { ok: true, jobTitle }
+}
+
 /* --- what a delete would actually destroy --------------------------------- */
 
 export interface Footprint {

@@ -30,8 +30,36 @@ CREATE TABLE IF NOT EXISTS clients (
   -- the fix when it sets its zone, which is also the moment its history wants
   -- rebuilding.
   timezone    TEXT NOT NULL DEFAULT 'UTC',
+  -- What a team member's badge shows about the company. The logo is an inline
+  -- compressed data URL, the same shape and size rule as a user's avatar (see
+  -- migration 005 and `user.avatar` in mutations.ts): every phone renders the
+  -- badge offline, so the bytes have to travel with the account.
+  logo_url    TEXT,
+  website     TEXT,
+  -- The company's join code. A rep who downloads the app before anyone invites
+  -- them has no way to say which company they belong to — email is unique per
+  -- tenant, not globally, and `users.client_id` is NOT NULL — so an admin
+  -- shares this once and a rep who enters it lands in the right company as a
+  -- field rep. NULL means self sign-up is switched off. Rotating it is a
+  -- replacement, not a second code; the old one stops working at once.
+  join_code   TEXT,
+  join_code_created_at INTEGER,
   created_at  INTEGER NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS clients_join_code ON clients(join_code);
+
+-- A team or office within a company: "Austin", "North crew". Its own table
+-- rather than free text on the user, because a badge and a roster filter both
+-- read it and "Austin" and "austin " must be one team. Deliberately tiny — a
+-- name and nothing else. It is not a territory, which is geographic and has one
+-- rep; a team is people.
+CREATE TABLE IF NOT EXISTS teams (
+  id          TEXT PRIMARY KEY,
+  client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  created_at  INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS teams_client_name ON teams(client_id, lower(name));
 
 CREATE TABLE IF NOT EXISTS users (
   id             TEXT PRIMARY KEY,
@@ -47,8 +75,42 @@ CREATE TABLE IF NOT EXISTS users (
   -- Profile photo, as a compressed data URL (~20KB). Inline because every
   -- device wants the roster's faces offline; see migration 005.
   avatar_url     TEXT,
+  -- `name` stays the canonical display name and is re-derived whenever these
+  -- two are written, so nothing that reads `name` had to change. They exist
+  -- because a badge and a form both want the halves.
+  first_name     TEXT,
+  last_name      TEXT,
+  -- Display text for the badge ("Sales Representative"). Not `role`, which is
+  -- a permission and stays admin-controlled.
+  job_title      TEXT,
+  team_id        TEXT REFERENCES teams(id) ON DELETE SET NULL,
+  -- Onboarding, server-authoritative. Status is never stored — it is derived
+  -- from these in src/onboarding.ts, so it cannot drift from the facts.
+  --   step:      the last step reached, so a phone (any phone) resumes there
+  --   version:   the flow version completed; bumping ONBOARDING_VERSION asks
+  --              everyone again, which is the only planned way to do that
+  --   completed: NULL until the whole flow was finished on some device
+  onboarding_step         TEXT,
+  onboarding_version      INTEGER NOT NULL DEFAULT 0,
+  onboarding_completed_at INTEGER,
+  walkthrough_completed_at INTEGER,
+  setup_completed_at      INTEGER,
+  -- The last answer the phone gave about location: granted, denied or skipped.
+  -- A snapshot for the console; the phone reads the live permission itself.
+  location_status         TEXT,
+  -- The team member badge. Minted once, never regenerated on view. Expiry is
+  -- stored per badge rather than computed from a constant, so changing the
+  -- default validity later never moves a badge already issued.
+  badge_id                TEXT,
+  badge_issued_at         INTEGER,
+  badge_expires_at        INTEGER,
+  badge_confirmed_at      INTEGER,
+  -- Touched at sign-in, bootstrap and every mutation push — not per request,
+  -- which would be a write on every read.
+  last_seen_at            INTEGER,
   created_at     INTEGER NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS users_badge_id ON users(badge_id);
 -- Email is the login handle, unique per tenant rather than globally: the same
 -- person can legitimately be a rep at two contracting companies.
 CREATE UNIQUE INDEX IF NOT EXISTS users_client_email ON users(client_id, lower(email));
@@ -265,7 +327,14 @@ CREATE TABLE IF NOT EXISTS invites (
   created_by  TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_at  INTEGER NOT NULL,
   expires_at  INTEGER NOT NULL,
-  accepted_at INTEGER
+  accepted_at INTEGER,
+  -- Set when an admin resends or cancels. Re-sending revokes every earlier
+  -- unaccepted token, so "sent twice" leaves exactly one working link.
+  revoked_at  INTEGER,
+  -- 'invite' or 'reset'. The two share this table because they are the same
+  -- object — one token, one password — but the console reports invitation
+  -- status, and a password-reset link must not read as a pending invitation.
+  kind        TEXT NOT NULL DEFAULT 'invite'
 );
 CREATE INDEX IF NOT EXISTS invites_by_user ON invites(user_id);
 

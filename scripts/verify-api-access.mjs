@@ -63,6 +63,12 @@ const ROUTES = {
 
   "/api/invites|POST": { how: 'inline', guard: 'canInvite' },
   "/api/users|GET": { how: 'inline', guard: 'canImport' },
+  // Anyone signed in may read the team list — a rep's badge names their team.
+  // Every write is decided inside teams.ts.
+  "/api/teams|GET": { how: 'session' },
+  "/api/teams|POST": { how: 'delegate', fn: 'createTeam', file: 'teams.ts' },
+  // The company's badge identity. Admin only, decided in company.ts.
+  "/api/company|POST": { how: 'delegate', fn: 'updateCompany', file: 'company.ts' },
   "/api/audit|GET": { how: 'inline', guard: 'canInvite' },
   // Super admin alone: the payload describes the database's size over time, and
   // the database is every customer's rather than one company's.
@@ -132,9 +138,11 @@ const FAMILIES = {
     // Every action resolves its target through one `guard`, which is checked
     // separately below. Listing them individually so a new action added to the
     // subtree has to be added here too.
-    actions: ['footprint', 'password', 'reset-link', 'role', 'active', ''],
+    actions: ['team', 'title', 'footprint', 'password', 'reset-link', 'role', 'active', ''],
     file: 'users.ts',
     fns: {
+      team: 'setUserTeam',
+      title: 'setUserTitle',
       footprint: 'footprint',
       password: 'setPassword',
       'reset-link': 'createResetLink',
@@ -178,6 +186,13 @@ const REGEX_ROUTES = {
     handler region actually calls each of them rather than something else with
     a similar name.
   */
+  // One team: rename or delete. Both delegate to teams.ts, which decides the
+  // role and refuses an id from another company as "no such team".
+  '/^\\/api\\/teams\\/([A-Za-z0-9_-]{1,40})$/': {
+    match: "/^\\/api\\/teams\\/([A-Za-z0-9_-]{1,40})$/.exec(path)",
+    delegates: ['renameTeam', 'deleteTeam'],
+    file: 'teams.ts',
+  },
   '/^\\/api\\/lists\\/([A-Za-z0-9_-]{1,40})(?:\\/(members|reps))?$/': {
     match: "/^\\/api\\/lists\\/([A-Za-z0-9_-]{1,40})(?:\\/(members|reps))?$/.exec(path)",
     delegates: ['updateList', 'deleteList', 'updateMembers', 'setReps'],
