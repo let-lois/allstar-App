@@ -269,7 +269,7 @@ try {
   await mgr.getByRole('button', { name: /^Create with/ }).click()
   await mgr.waitForTimeout(3000)
   const after = await text(mgr)
-  ok(new RegExp(`Created ${LIST} with 4 leads\\. Handed to Dana\\.`).test(after), 'the server creates it with four houses, handed to Dana')
+  ok(new RegExp(`Created ${LIST} with 4 leads\\. Handed to Dana Whitfield\\.`).test(after), 'the server creates it with four houses, handed to Dana')
   const row = mgr.locator('tbody tr', { hasText: LIST })
   ok((await row.count()) === 1 && /Dana/.test(await row.innerText()) && /\b4\b/.test(await row.innerText()), 'and the console, re-read from the server, shows it')
 
@@ -306,7 +306,7 @@ try {
   await mgr.waitForTimeout(500)
   await mgr.locator('[data-list-editor]').getByLabel('Dana').click()
   await mgr.waitForTimeout(2500)
-  ok(/Dana no longer has/.test(await text(mgr)), 'the manager unassigns Dana')
+  ok(/Dana Whitfield no longer has/.test(await text(mgr)), 'the manager unassigns Dana')
   ok(!/Dana/.test(await mgr.locator('tbody tr', { hasText: LIST }).innerText()), 'and the row, re-read from the server, drops her')
 
   // Her phone re-reads on load, the way it does every morning.
