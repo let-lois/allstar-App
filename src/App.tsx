@@ -29,6 +29,8 @@ import * as db from './lib/db'
 import { TOUR_KEY } from './data/tour'
 import { Tour } from './components/system/Tour'
 import { Onboarding } from './onboarding/Onboarding'
+import { MyBadge } from './screens/MyBadge'
+import { MyProfile } from './screens/MyProfile'
 
 /**
  * The office console is lazy-loaded.
@@ -162,6 +164,8 @@ export function App() {
             {/* A rep's own day, or anyone's for the office. Gated inside. */}
             <Route path="/rep/:repId" element={<RepDetail />} />
             <Route path="/more" element={<More />} />
+            <Route path="/badge" element={<MyBadge />} />
+            <Route path="/profile" element={<MyProfile />} />
             {/* Office console — desktop-first, role-gated inside the layout. */}
             <Route
               path="/admin"

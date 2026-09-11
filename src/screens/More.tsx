@@ -394,6 +394,12 @@ export function More() {
                 label="Show the tutorial again"
                 onClick={() => void replayTour()}
               />
+              {mode === 'live' && (
+                <>
+                  <MoreLink label="My badge" onClick={() => nav('/badge')} />
+                  <MoreLink label="Edit profile" onClick={() => nav('/profile')} />
+                </>
+              )}
               <MoreLink label="Standings" onClick={() => nav('/standings')} />
               <MoreLink label="Today's route" onClick={() => nav('/route')} />
               <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
