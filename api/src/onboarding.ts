@@ -128,3 +128,121 @@ export function mintBadgeId(random: () => number = Math.random): string {
   // A leading zero prints fine but reads oddly on a badge; keep the first digit 1-9.
   return out[0] === '0' ? `${1 + Math.floor(random() * 9)}${out.slice(1)}` : out
 }
+
+/* --- the checklist, and where to resume ------------------------------------ */
+
+/**
+ * One line on the Ready-to-Sell screen.
+ *
+ * `required` is the split the brief asked to be decided rather than assumed:
+ * what actually stops a rep working, versus what merely helps. A name, a
+ * photo and a confirmed badge are required — the badge is the point of the
+ * flow and it is blank without them. Location is *recommended*: a rep who
+ * denied it can still knock, the map degrades, and the checklist says so.
+ * Making it mandatory would lock people out on a prompt they misread.
+ */
+export interface ChecklistItem {
+  key:
+    | 'profile_complete'
+    | 'photo_added'
+    | 'role_assigned'
+    | 'location_enabled'
+    | 'walkthrough_completed'
+    | 'badge_created'
+    | 'badge_confirmed'
+  label: string
+  done: boolean
+  required: boolean
+  /** A short reason or hint shown under the line. */
+  detail?: string
+}
+
+export interface ChecklistRow extends OnboardingRow {
+  avatar_url: string | null
+  location_status: string | null
+  walkthrough_completed_at: number | null
+  role: string
+  team_name?: string | null
+}
+
+export function checklistFor(row: ChecklistRow, now: number): ChecklistItem[] {
+  const hasName = !!(row.first_name?.trim() && row.last_name?.trim())
+  const badge = badgeStatus(row, now)
+  return [
+    {
+      key: 'profile_complete',
+      label: 'Profile complete',
+      done: hasName,
+      required: true,
+      detail: hasName ? undefined : 'First and last name — they go on your badge.',
+    },
+    {
+      key: 'photo_added',
+      label: 'Profile photo added',
+      done: !!row.avatar_url,
+      required: true,
+      detail: row.avatar_url ? undefined : 'Your badge shows your face, not your initials.',
+    },
+    {
+      key: 'role_assigned',
+      label: 'Team / role assigned',
+      // A role is NOT NULL on the row, so this is always true; a team is
+      // optional and named when there is one.
+      done: true,
+      required: true,
+      detail: row.team_name ? row.team_name : 'Your admin can put you on a team later.',
+    },
+    {
+      key: 'location_enabled',
+      label: 'Location enabled',
+      done: row.location_status === 'granted',
+      required: false,
+      detail:
+        row.location_status === 'granted'
+          ? undefined
+          : 'Recommended. Without it the map cannot find the nearest door for you.',
+    },
+    {
+      key: 'walkthrough_completed',
+      label: 'App walkthrough completed',
+      done: row.walkthrough_completed_at != null,
+      required: true,
+    },
+    {
+      key: 'badge_created',
+      label: 'Team member badge created',
+      done: badge !== 'none',
+      required: true,
+    },
+    {
+      key: 'badge_confirmed',
+      label: 'Badge information confirmed',
+      done: badge === 'active',
+      required: true,
+      detail: badge === 'expired' ? 'Your badge has expired — renew it first.' : undefined,
+    },
+  ]
+}
+
+/** Everything required is done. Recommended items never hold this back. */
+export const canComplete = (items: ChecklistItem[]): boolean =>
+  items.every((i) => i.done || !i.required)
+
+export const stepIndex = (step: OnboardingStep): number => ONBOARDING_STEPS.indexOf(step)
+
+/** The step after this one, or null after the last. */
+export function nextStep(step: OnboardingStep): OnboardingStep | null {
+  return ONBOARDING_STEPS[stepIndex(step) + 1] ?? null
+}
+
+/**
+ * Where a phone — any phone — should open the flow.
+ *
+ * The stored step is the one not yet completed, written when the previous one
+ * was. Nothing stored means the beginning. A stored value this build does not
+ * recognise (a step renamed in a later version) also means the beginning,
+ * rather than a screen that does not exist.
+ */
+export function resumeStep(stored: string | null | undefined): OnboardingStep {
+  return ONBOARDING_STEPS.includes(stored as OnboardingStep) ? (stored as OnboardingStep) : 'profile'
+}

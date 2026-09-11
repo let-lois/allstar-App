@@ -36,9 +36,20 @@ import {
   setActive,
   setPassword,
   setRole,
+  regenerateBadge,
+  renewBadge,
+  resetOnboarding,
   setUserTeam,
   setUserTitle,
 } from './users'
+import {
+  completeStep,
+  confirmBadge,
+  mintBadge,
+  readOnboarding,
+  renewOwnBadge,
+  updateProfile,
+} from './onboardingFlow'
 import { readMe, touchLastSeen } from './me'
 import { createTeam, deleteTeam, listTeams, renameTeam } from './teams'
 import { updateCompany } from './company'
@@ -719,6 +730,44 @@ export default {
         return json({ user: me ?? user }, 200, cors)
       }
 
+      /* --- my own onboarding and badge ------------------------------------ */
+      //
+      // Every one of these acts on the signed-in person and nobody else — the
+      // handlers take `user.id` and no other id. The admin's versions of reset,
+      // renew and regenerate are under /api/users/:id, behind the guard.
+      if (path === '/api/me/onboarding' && req.method === 'GET') {
+        const result = await readOnboarding(env, user)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
+      }
+      if (path === '/api/me/onboarding/step' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await completeStep(env, user, body)
+        if ('error' in result) return json({ error: result.error, missing: result.missing }, result.status, cors)
+        return json(result, 200, cors)
+      }
+      if (path === '/api/me/profile' && req.method === 'PATCH') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await updateProfile(env, user, body)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json({ user: result }, 200, cors)
+      }
+      if (path === '/api/me/badge' && req.method === 'POST') {
+        const result = await mintBadge(env, user)
+        if (result && 'error' in result) return json({ error: result.error, missing: result.missing }, result.status, cors)
+        return json({ badge: result }, 200, cors)
+      }
+      if (path === '/api/me/badge/confirm' && req.method === 'POST') {
+        const result = await confirmBadge(env, user)
+        if (result && 'error' in result) return json({ error: result.error }, result.status, cors)
+        return json({ badge: result }, 200, cors)
+      }
+      if (path === '/api/me/badge/renew' && req.method === 'POST') {
+        const result = await renewOwnBadge(env, user)
+        if (result && 'error' in result) return json({ error: result.error }, result.status, cors)
+        return json({ badge: result }, 200, cors)
+      }
+
       if (path === '/api/bootstrap' && req.method === 'GET') {
         await touchLastSeen(env, user.id)
         return json(await bootstrap(env, user), 200, cors)
@@ -912,6 +961,24 @@ export default {
           const result = await setUserTitle(a, body.jobTitle)
           if ('error' in result) return json({ error: result.error }, result.status, cors)
           return json(result, 200, cors)
+        }
+
+        if (action === 'onboarding-reset' && req.method === 'POST') {
+          const result = await resetOnboarding(a)
+          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          return json(result, 200, cors)
+        }
+
+        if (action === 'badge-renew' && req.method === 'POST') {
+          const result = await renewBadge(a)
+          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          return json({ badge: result }, 200, cors)
+        }
+
+        if (action === 'badge-regenerate' && req.method === 'POST') {
+          const result = await regenerateBadge(a)
+          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          return json({ badge: result }, 200, cors)
         }
 
         if (action === 'footprint' && req.method === 'GET') {

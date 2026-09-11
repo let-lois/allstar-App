@@ -23,6 +23,7 @@ await build({ entryPoints: ['src/onboarding.ts'], bundle: true, format: 'esm', o
 const {
   ONBOARDING_VERSION, BADGE_VALID_DAYS, ONBOARDING_STEPS,
   displayName, onboardingStatus, badgeStatus, invitationStatus, mintBadgeId,
+  checklistFor, canComplete, nextStep, resumeStep,
 } = await import(out)
 
 const fails = []
@@ -124,6 +125,47 @@ ok(invitationStatus({ accepted_at: null, revoked_at: null, expires_at: NOW }, NO
   const zeros = mintBadgeId(() => 0)
   ok(/^[1-9]0{7}$/.test(zeros), 'a run of zeros still gets a non-zero first digit', zeros)
   ok(new Set(ids).size > 190, 'two hundred mints are nearly all distinct — uniqueness is enforced by the database, but the space is wide', `${new Set(ids).size} distinct`)
+}
+
+/* --- the checklist: what is required, and what merely helps ---------------- */
+{
+  const full = {
+    ...row({ first_name: 'Jordan', last_name: 'Vale', badge_id: '32143567', badge_expires_at: NOW + 300 * DAY, badge_confirmed_at: NOW - DAY }),
+    avatar_url: 'data:image/jpeg;base64,x', location_status: 'granted', walkthrough_completed_at: NOW - DAY, role: 'field_rep', team_name: 'Austin',
+  }
+  const items = checklistFor(full, NOW)
+  ok(items.length === 7, 'the checklist has the brief’s seven lines (notifications replaced by nothing — there is no push)', `${items.length}`)
+  ok(items.every((i) => i.done), 'everything done reads as done')
+  ok(canComplete(items), 'and can complete')
+
+  const denied = checklistFor({ ...full, location_status: 'denied' }, NOW)
+  ok(!denied.find((i) => i.key === 'location_enabled').done, 'a denied location is not done')
+  ok(canComplete(denied), 'but does NOT block completion — a rep who denied location can still knock', denied.find((i) => i.key === 'location_enabled').required ? 'required' : 'recommended')
+  ok(/map/i.test(denied.find((i) => i.key === 'location_enabled').detail ?? ''), 'and the line says what is lost')
+
+  const noPhoto = checklistFor({ ...full, avatar_url: null }, NOW)
+  ok(!canComplete(noPhoto), 'no photo blocks completion — the badge would show initials', noPhoto.find((i) => i.key === 'photo_added').required ? 'required' : 'recommended')
+
+  const unconfirmed = checklistFor({ ...full, badge_confirmed_at: null }, NOW)
+  ok(!canComplete(unconfirmed), 'an unconfirmed badge blocks completion')
+  ok(unconfirmed.find((i) => i.key === 'badge_created').done && !unconfirmed.find((i) => i.key === 'badge_confirmed').done, 'created and confirmed are two lines, and only the first is done')
+
+  const expired = checklistFor({ ...full, badge_expires_at: NOW - 1 }, NOW)
+  ok(!expired.find((i) => i.key === 'badge_confirmed').done && /renew/i.test(expired.find((i) => i.key === 'badge_confirmed').detail ?? ''), 'an expired badge un-does confirmation and says to renew')
+
+  const noTeam = checklistFor({ ...full, team_name: null }, NOW)
+  ok(noTeam.find((i) => i.key === 'role_assigned').done && canComplete(noTeam), 'no team never blocks — a role is always assigned, a team is the admin’s to add')
+
+  const halfName = checklistFor({ ...full, last_name: null }, NOW)
+  ok(!canComplete(halfName), 'a first name alone is not a complete profile')
+}
+
+/* --- the order, and where to resume ----------------------------------------- */
+{
+  ok(nextStep('profile') === 'setup' && nextStep('badge') === 'checklist' && nextStep('checklist') === null, 'steps chain in the brief’s order and end')
+  ok(resumeStep(null) === 'profile' && resumeStep(undefined) === 'profile', 'nothing stored means the beginning')
+  ok(resumeStep('walkthrough') === 'walkthrough', 'a stored step is where a phone reopens')
+  ok(resumeStep('some-step-from-a-later-version') === 'profile', 'a step this build does not know means the beginning, not a screen that does not exist')
 }
 
 console.log('')

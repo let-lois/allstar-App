@@ -62,6 +62,14 @@ const ROUTES = {
   "/api/auth/logout|POST": { how: 'public' },
 
   "/api/me": { how: 'session' },
+  // The signed-in person's own onboarding and badge. Self-scoped by
+  // construction: every handler takes `user.id` and accepts no other id.
+  "/api/me/onboarding|GET": { how: 'session' },
+  "/api/me/onboarding/step|POST": { how: 'session' },
+  "/api/me/profile|PATCH": { how: 'session' },
+  "/api/me/badge|POST": { how: 'session' },
+  "/api/me/badge/confirm|POST": { how: 'session' },
+  "/api/me/badge/renew|POST": { how: 'session' },
   "/api/bootstrap|GET": { how: 'session' },
   // Any rep may ask for a walking line to a door. On the Worker because the
   // browser key cannot spend routing quota.
@@ -149,9 +157,12 @@ const FAMILIES = {
     // Every action resolves its target through one `guard`, which is checked
     // separately below. Listing them individually so a new action added to the
     // subtree has to be added here too.
-    actions: ['team', 'title', 'footprint', 'password', 'reset-link', 'role', 'active', ''],
+    actions: ['onboarding-reset', 'badge-renew', 'badge-regenerate', 'team', 'title', 'footprint', 'password', 'reset-link', 'role', 'active', ''],
     file: 'users.ts',
     fns: {
+      'onboarding-reset': 'resetOnboarding',
+      'badge-renew': 'renewBadge',
+      'badge-regenerate': 'regenerateBadge',
       team: 'setUserTeam',
       title: 'setUserTitle',
       footprint: 'footprint',

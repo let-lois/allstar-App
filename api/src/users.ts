@@ -1,6 +1,7 @@
 import { PBKDF2_ITERATIONS, hashPassword, randomId } from './auth'
 import { record } from './audit'
 import { canInvite, grantableRoles, revokeLiveInvites } from './invites'
+import { regenerateBadgeFor, renewBadgeDates } from './onboardingFlow'
 import type { Env, Role, SessionUser } from './types'
 
 /**
@@ -389,6 +390,75 @@ export async function setUserTitle(
     detail: { jobTitle },
   })
   return { ok: true, jobTitle }
+}
+
+/* --- onboarding and the badge, from the office ----------------------------- */
+
+/**
+ * Ask somebody to go through onboarding again.
+ *
+ * Keeps everything they entered — name, photo, badge — and clears only the
+ * record of having finished, so the flow opens at the top with every field
+ * already filled and walks them to the checklist. Their sessions are revoked
+ * so it takes effect on the phone in their hand rather than at their next
+ * sign-out, the same way a role change does.
+ */
+export async function resetOnboarding(a: Actorable): Promise<{ ok: true } | Failure> {
+  const g = await guard(a, {})
+  if ('error' in g) return g
+  await a.env.DB.prepare(
+    `UPDATE users SET onboarding_completed_at = NULL, onboarding_step = NULL,
+                      walkthrough_completed_at = NULL, setup_completed_at = NULL
+      WHERE id = ?1 AND client_id = ?2`,
+  )
+    .bind(g.target.id, a.actor.clientId)
+    .run()
+  await revokeAll(a.env, g.target.id)
+  await record(a.env, a.actor, {
+    action: 'user.onboarding_reset',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+  })
+  return { ok: true }
+}
+
+/** New dates on the same badge id; the person confirms it again. */
+export async function renewBadge(a: Actorable) {
+  const g = await guard(a, { allowSelf: true })
+  if ('error' in g) return g
+  const renewed = await renewBadgeDates(a.env, g.target.id, Date.now())
+  if ('error' in renewed) return renewed
+  await record(a.env, a.actor, {
+    action: 'badge.renewed',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+    detail: { badgeId: renewed.id, expiresAt: renewed.expiresAt, self: false },
+  })
+  return renewed
+}
+
+/**
+ * A new badge id. For a badge that was misprinted, lost, or is being carried
+ * by somebody who should not have it. The old number stops meaning anything.
+ */
+export async function regenerateBadge(a: Actorable) {
+  const g = await guard(a, { allowSelf: true })
+  if ('error' in g) return g
+  const before = await a.env.DB.prepare('SELECT badge_id FROM users WHERE id = ?1')
+    .bind(g.target.id)
+    .first<{ badge_id: string | null }>()
+  const issued = await regenerateBadgeFor(a.env, g.target.id, Date.now())
+  if ('error' in issued) return issued
+  await record(a.env, a.actor, {
+    action: 'badge.regenerated',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+    detail: { from: before?.badge_id ?? null, to: issued.id },
+  })
+  return issued
 }
 
 /* --- what a delete would actually destroy --------------------------------- */

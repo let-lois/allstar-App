@@ -121,6 +121,7 @@ const TESTS = [
   { script: 'smoke:onboarding-schema', kind: 'hosted', port: 8861 },
   { script: 'smoke:onboarding-flow', kind: 'hosted', port: 8871 },
   { script: 'smoke:mail', kind: 'hosted', port: 8881 },
+  { script: 'smoke:onboarding-steps', kind: 'hosted', port: 8891 },
 
   // --- manual -----------------------------------------------------------
   {
