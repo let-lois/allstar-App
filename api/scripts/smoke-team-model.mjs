@@ -59,10 +59,11 @@ const stamp = Date.now()
   ok(typeof u.lastSeenAt === 'number' && Date.now() - u.lastSeenAt < 60_000, 'signing in is being here: last seen is now', new Date(u.lastSeenAt ?? 0).toISOString())
   /*
     The first administrator came through /setup after the migrations, so no
-    backfill touched them. They have never onboarded, and the payload says so —
-    the setup admin gets the flow like everyone else.
+    backfill touched them. /setup marks them onboarded itself: they are standing
+    the company up, not joining one, and the profile / walkthrough / badge steps
+    are written for a rep about to knock a door. The payload says so.
   */
-  ok(u.onboarding.status === 'not_started', 'the setup administrator has not onboarded, and is told so rather than assumed complete', u.onboarding.status)
+  ok(u.onboarding.status === 'complete', 'the administrator who set the company up is onboarded by definition — the flow is written for a rep about to knock', u.onboarding.status)
 }
 
 const me = await (await api('/api/me', {}, A)).json()

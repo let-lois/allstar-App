@@ -252,6 +252,62 @@ const readyForBadge = (over = {}) =>
   await ctx.close()
 }
 
+/* ========================================================================== */
+/* Today nudges someone from before badges, once, and remembers "not now"      */
+/* ========================================================================== */
+{
+  const s = makeState({
+    firstName: 'Dana', lastName: 'Whitfield', hasPhoto: true, completedAt: Date.now() - 200 * DAY, version: 1, step: null, started: true, website: SITE, badge: null,
+  })
+  const ctx = await phone()
+  const page = await ctx.newPage()
+  await mockApi(page, s)
+  await signIn(page, s.email)
+  await dismissTour(page)
+  await page.waitForTimeout(500)
+  const nudge = page.getByTestId('badge-nudge')
+  // Absence is a failure to report, not a locator to wait thirty seconds on.
+  const shown = (await nudge.count()) === 1
+  ok(shown && (await nudge.getAttribute('data-reason')) === 'none' && /Create your team badge/.test(await body(page)), 'Today tells a backfilled rep they have no badge yet', shown ? await nudge.getAttribute('data-reason') : 'no card')
+  ok(s.mints === 0, 'and the card itself minted nothing', `${s.mints}`)
+  if (shown) {
+  await nudge.getByTestId('badge-nudge-go').click()
+  await page.waitForTimeout(700)
+  ok(/\/badge$/.test(page.url()) && (await page.getByTestId('badge-create').count()) === 1, 'its button opens My badge, where Create is', page.url())
+  await page.goBack({ waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(900)
+  await nudge.getByTestId('badge-nudge-dismiss').click()
+  await page.waitForTimeout(400)
+  ok((await nudge.count()) === 0, 'Not now removes the card')
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1200)
+  ok((await nudge.count()) === 0, 'and it stays gone after a reload — a rep is not asked every morning')
+  // The reason changes: the badge exists but has since expired. That is a new fact, and a new card.
+  s.badge = { id: '32143567', issuedAt: Date.now() - 400 * DAY, expiresAt: Date.now() - DAY, confirmedAt: Date.now() - 399 * DAY }
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1200)
+  const back = (await nudge.count()) === 1
+  ok(back && (await nudge.getAttribute('data-reason')) === 'expired' && /expired/i.test(await nudge.innerText()), 'an expired badge is a new reason, so the card returns and says why', back ? await nudge.getAttribute('data-reason') : 'no card')
+  }
+  await ctx.close()
+}
+
+/* Someone with an active badge is never nudged. */
+{
+  const s = makeState({
+    firstName: 'Marcus', lastName: 'Vance', hasPhoto: true, completedAt: Date.now() - DAY, version: 1, step: null, started: true, website: SITE,
+    badge: { id: '32143567', issuedAt: Date.now() - 2 * DAY, expiresAt: Date.now() + 363 * DAY, confirmedAt: Date.now() - DAY },
+  })
+  const ctx = await phone()
+  const page = await ctx.newPage()
+  await mockApi(page, s)
+  await signIn(page, s.email)
+  await dismissTour(page)
+  await page.waitForTimeout(500)
+  ok((await page.getByTestId('badge-nudge').count()) === 0, 'no card for someone whose badge is active')
+  await ctx.close()
+}
+
 await browser.close()
 if (fails.length) {
   console.log(`\n${fails.length} FAILED`)
