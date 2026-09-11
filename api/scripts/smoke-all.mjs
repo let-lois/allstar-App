@@ -119,6 +119,7 @@ const TESTS = [
   { script: 'smoke:deadkey', kind: 'hosted', port: 8841 },
   { script: 'smoke:lists', kind: 'hosted', port: 8851 },
   { script: 'smoke:onboarding-schema', kind: 'hosted', port: 8861 },
+  { script: 'smoke:onboarding-flow', kind: 'hosted', port: 8871 },
 
   // --- manual -----------------------------------------------------------
   {

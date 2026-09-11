@@ -11,6 +11,8 @@ import {
   canInvite,
   createInvite,
   readInvite,
+  resendInvite,
+  revokeInvite,
   runSetup,
 } from './invites'
 import {
@@ -40,6 +42,7 @@ import {
 import { readMe, touchLastSeen } from './me'
 import { createTeam, deleteTeam, listTeams, renameTeam } from './teams'
 import { updateCompany } from './company'
+import { disableJoinCode, joinWithCode, readJoinLink, rotateJoinCode } from './join'
 import { badgeStatus, displayName, invitationStatus, onboardingStatus } from './onboarding'
 import { ensureSchema, migrationState } from './migrate'
 import {
@@ -641,6 +644,22 @@ export default {
         return json({ token: result.token, user: me ?? result.user }, 200, cors)
       }
 
+      /*
+        Redeeming a company join code. Public by necessity — the person has no
+        account yet — and rate-limited inside `joinWithCode` on the same buckets
+        as a password guess, because the code is the only thing between the
+        internet and a field-rep account in somebody's company.
+      */
+      if (path === '/api/join' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await joinWithCode(env, body, req.headers.get('cf-connecting-ip'))
+        if ('error' in result) {
+          const headers = result.retryAfter ? { ...cors, 'retry-after': String(result.retryAfter) } : cors
+          return json({ error: result.error, code: result.code }, result.status, headers)
+        }
+        return json(result, 201, cors)
+      }
+
       if (path === '/api/auth/logout' && req.method === 'POST') {
         const token = bearerToken(req)
         if (token) await revokeSession(env, token)
@@ -722,12 +741,48 @@ export default {
         // every invited rep to a URL that has no route for it.
         const created = await createInvite(env, user, url.origin, {
           email: String(body.email ?? ''),
-          name: String(body.name ?? ''),
           role: (String(body.role ?? 'field_rep') as Role),
-          phone: body.phone ? String(body.phone) : undefined,
+          name: body.name,
+          firstName: body.firstName,
+          lastName: body.lastName,
+          phone: body.phone,
+          jobTitle: body.jobTitle,
+          teamId: body.teamId,
         })
         if ('error' in created) return json({ error: created.error }, created.status, cors)
         return json(created, 200, cors)
+      }
+
+      {
+        const m = /^\/api\/invites\/([A-Za-z0-9_-]{1,40})\/(resend|revoke)$/.exec(path)
+        if (m && req.method === 'POST') {
+          const result =
+            m[2] === 'resend'
+              ? await resendInvite(env, user, url.origin, m[1]!)
+              : await revokeInvite(env, user, m[1]!)
+          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          return json(result, 200, cors)
+        }
+      }
+
+      /* --- the company join link ------------------------------------------- */
+      //
+      // Admin only, all three: the code is a credential for making accounts in
+      // this company, and reading it is handing it out.
+      if (path === '/api/join-link' && req.method === 'GET') {
+        const result = await readJoinLink(env, user, appUrl)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
+      }
+      if (path === '/api/join-link' && req.method === 'POST') {
+        const result = await rotateJoinCode(env, user, appUrl)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
+      }
+      if (path === '/api/join-link' && req.method === 'DELETE') {
+        const result = await disableJoinCode(env, user)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
       }
 
       if (path === '/api/mutations' && req.method === 'POST') {

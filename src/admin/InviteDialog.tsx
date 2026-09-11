@@ -85,7 +85,7 @@ export function InviteDialog({
   }
 
   async function copy() {
-    if (!created) return
+    if (!created || created.alreadyMember) return
     try {
       await navigator.clipboard.writeText(created.url)
       setCopied(true)
@@ -108,7 +108,24 @@ export function InviteDialog({
       }}
     >
       <div className="w-full max-w-lg rounded-card bg-surface p-6 shadow-float">
-        {created ? (
+        {created?.alreadyMember ? (
+          /*
+            The address already belongs to somebody who can sign in. Nothing
+            was minted and nothing was sent, and the screen says exactly that —
+            an admin left believing an invitation went out is the failure.
+          */
+          <>
+            <h2 className="text-[19px] font-semibold tracking-[-0.01em]">
+              {created.email} already has an account
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink-mute">{created.message}</p>
+            <div className="mt-5 flex gap-2 border-t border-line-soft pt-4">
+              <Button variant="secondary" onClick={onClose}>
+                Done
+              </Button>
+            </div>
+          </>
+        ) : created ? (
           <>
             <h2 className="text-[19px] font-semibold tracking-[-0.01em]">Invite ready for {created.email}</h2>
             <p className="mt-2 text-sm leading-relaxed text-ink-mute">

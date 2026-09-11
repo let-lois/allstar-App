@@ -35,6 +35,9 @@ const ok = (cond, msg) => {
  * How each route decides.
  *
  *   public    deliberately unauthenticated, and safe to be
+ *   ratelimited  unauthenticated by necessity, and refused past a rate —
+ *             checked in the named delegate, since that is where the
+ *             decision lives
  *   token     unauthenticated by necessity, gated on SETUP_TOKEN — the
  *             diagnostics, which have to work when nobody can sign in
  *   session   any signed-in user, scoped to their own company by the handler
@@ -48,6 +51,14 @@ const ROUTES = {
   // deployment can be diagnosed when sign-in is the thing that is broken.
   "/api/health": { how: 'public' },
   "/api/auth/login|POST": { how: 'public' },
+  // Redeeming a company join code: the code is the credential, and guessing
+  // one is bounded on the same buckets as guessing a password.
+  "/api/join|POST": { how: 'ratelimited', fn: 'joinWithCode', file: 'join.ts' },
+  // The code itself is a credential for making accounts; reading it is
+  // handing it out. All three decided inside join.ts.
+  "/api/join-link|GET": { how: 'delegate', fn: 'readJoinLink', file: 'join.ts' },
+  "/api/join-link|POST": { how: 'delegate', fn: 'rotateJoinCode', file: 'join.ts' },
+  "/api/join-link|DELETE": { how: 'delegate', fn: 'disableJoinCode', file: 'join.ts' },
   "/api/auth/logout|POST": { how: 'public' },
 
   "/api/me": { how: 'session' },
@@ -186,6 +197,12 @@ const REGEX_ROUTES = {
     handler region actually calls each of them rather than something else with
     a similar name.
   */
+  // Resend or cancel somebody's invitation. Both delegate to invites.ts.
+  '/^\\/api\\/invites\\/([A-Za-z0-9_-]{1,40})\\/(resend|revoke)$/': {
+    match: "/^\\/api\\/invites\\/([A-Za-z0-9_-]{1,40})\\/(resend|revoke)$/.exec(path)",
+    delegates: ['resendInvite', 'revokeInvite'],
+    file: 'invites.ts',
+  },
   // One team: rename or delete. Both delegate to teams.ts, which decides the
   // role and refuses an id from another company as "no such team".
   '/^\\/api\\/teams\\/([A-Za-z0-9_-]{1,40})$/': {
@@ -258,6 +275,17 @@ for (const route of found) {
     case 'public':
       ok(route.line < authLine, `${route.key} is public and sits before authentication`)
       break
+
+    case 'ratelimited': {
+      ok(route.line < authLine, `${route.key} is public by necessity and sits before authentication`)
+      const fnSrc = readFileSync(new URL(`../api/src/${decl.file}`, import.meta.url), 'utf8')
+      const at = fnSrc.indexOf(`export async function ${decl.fn}`)
+      if (at < 0) throw new Error(`${decl.fn} is gone from ${decl.file} — update this gate`)
+      const fnBody = fnSrc.slice(at, at + 1600)
+      ok(/checkLoginRate\(env,/.test(fnBody), `${route.key} is rate-limited inside ${decl.fn} before it does anything`)
+      ok(/recordFailure\(env,/.test(fnBody), `and ${decl.fn} counts a wrong code as a failed attempt`)
+      break
+    }
 
     case 'token':
       // The one that was wrong. It must refuse before it does anything, and it

@@ -1,6 +1,6 @@
 import { PBKDF2_ITERATIONS, hashPassword, randomId } from './auth'
 import { record } from './audit'
-import { canInvite, grantableRoles } from './invites'
+import { canInvite, grantableRoles, revokeLiveInvites } from './invites'
 import type { Env, Role, SessionUser } from './types'
 
 /**
@@ -130,7 +130,23 @@ export async function setPassword(
 
   const salt = randomId(16)
   const hash = await hashPassword(password, salt, a.env.SESSION_PEPPER ?? '')
-  await a.env.DB.prepare('UPDATE users SET password_hash = ?2, password_salt = ?3 WHERE id = ?1')
+  /*
+    A first password switches the account on; a replacement does not.
+
+    An invited person is `active = 0` until they accept, and only `acceptInvite`
+    flipped that — so an admin setting a password for somebody who never opened
+    their link produced an account with a working password that still could not
+    sign in, while the Manage sheet promised it would. The CASE reads the *old*
+    hash: NULL means this is their first password and they were only ever
+    waiting; anything else means a reset, and a reset must never quietly undo a
+    deactivation somebody chose.
+  */
+  await a.env.DB.prepare(
+    `UPDATE users
+        SET password_hash = ?2, password_salt = ?3,
+            active = CASE WHEN password_hash IS NULL THEN 1 ELSE active END
+      WHERE id = ?1`,
+  )
     .bind(g.target.id, hash, salt)
     .run()
 
@@ -173,9 +189,13 @@ export async function createResetLink(
 
   // Reuses the invite table: an invite and a reset are the same object — a
   // one-time token that lets exactly one person choose exactly one password.
+  // Marked 'reset' so the console never reports it as a pending invitation,
+  // and so `acceptInvite` knows this one is allowed to replace a password.
+  // Earlier unused reset links die here: one live link per person.
+  await revokeLiveInvites(a.env, g.target.id, 'reset')
   await a.env.DB.prepare(
-    `INSERT INTO invites (token_hash, user_id, created_by, created_at, expires_at)
-     VALUES (?1, ?2, ?3, ?4, ?5)`,
+    `INSERT INTO invites (token_hash, user_id, created_by, created_at, expires_at, kind)
+     VALUES (?1, ?2, ?3, ?4, ?5, 'reset')`,
   )
     .bind(hashed, g.target.id, a.actor.id, now, expiresAt)
     .run()

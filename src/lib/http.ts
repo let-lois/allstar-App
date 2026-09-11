@@ -356,15 +356,31 @@ export function apiDeleteUser(token: string, userId: string) {
   return request<{ ok: true }>(`/api/users/${userId}`, { method: 'DELETE', token })
 }
 
-export interface CreatedInviteDTO {
-  url: string
-  email: string
-  expiresAt: number
-}
+/**
+ * What inviting somebody produced.
+ *
+ * `alreadyMember` is the case the console has to say out loud: the address
+ * already belongs to a working account, so nothing was minted and nothing was
+ * sent — an admin left believing an invitation went out to somebody who can
+ * already sign in is the bug this field exists to prevent.
+ */
+export type CreatedInviteDTO =
+  | { alreadyMember: false; url: string; email: string; expiresAt: number; userId: string; resent: boolean }
+  | { alreadyMember: true; email: string; userId: string; message: string }
 
 export function apiInvite(
   token: string,
-  input: { email: string; name: string; role: Role; phone?: string },
+  input: {
+    email: string
+    role: Role
+    /** Either the halves or the whole; all optional — an address is enough. */
+    firstName?: string
+    lastName?: string
+    name?: string
+    phone?: string
+    jobTitle?: string
+    teamId?: string | null
+  },
 ) {
   return request<CreatedInviteDTO>('/api/invites', { method: 'POST', body: input, token })
 }

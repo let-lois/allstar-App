@@ -30,6 +30,12 @@ export type AuditAction =
   | 'user.reactivated'
   | 'user.deleted'
   | 'user.role_changed'
+  | 'user.invite_resent'
+  | 'user.invite_revoked'
+  /* Somebody made their own account with the company join code. */
+  | 'user.joined'
+  | 'company.join_code_rotated'
+  | 'company.join_code_disabled'
   | 'user.team_changed'
   | 'user.title_changed'
   | 'team.created'
