@@ -1,4 +1,4 @@
-import type { BadgeInfo, LeadStatus, OnboardingStatus, OnboardingStep, Role } from '../types'
+import type { BadgeInfo, BadgeStatus, LeadStatus, OnboardingStatus, OnboardingStep, Role } from '../types'
 
 /**
  * The API client.
@@ -373,6 +373,8 @@ export async function apiFetchPhoto(token: string, photoId: string): Promise<Blo
   return await res.blob()
 }
 
+export type InvitationStatus = 'not_sent' | 'pending' | 'accepted' | 'expired' | 'revoked'
+
 export interface TeamUserDTO {
   id: string
   name: string
@@ -382,6 +384,20 @@ export interface TeamUserDTO {
   active: boolean
   /** Invited but hasn't set a password yet. */
   pending: boolean
+  firstName?: string
+  lastName?: string
+  jobTitle?: string
+  teamId?: string
+  teamName?: string
+  /** Derived on the server from the newest invitation token. */
+  invitation: InvitationStatus
+  invitedAt?: number
+  onboarding: OnboardingStatus
+  onboardingStep?: OnboardingStep
+  badge: BadgeStatus
+  badgeExpiresAt?: number
+  createdAt: number
+  lastSeenAt?: number
 }
 
 export function apiUsers(token: string) {
@@ -452,6 +468,84 @@ export function apiAudit(token: string, opts: { limit?: number; before?: number 
   if (opts.before) q.set('before', String(opts.before))
   const suffix = q.toString() ? `?${q}` : ''
   return request<{ entries: AuditRowDTO[] }>(`/api/audit${suffix}`, { token })
+}
+
+/* --- the admin's per-person actions -------------------------------------- */
+
+/** Re-send an invitation; a fresh link, the old one revoked. 409 once they have a password. */
+export function apiResendInvite(token: string, userId: string) {
+  return request<{ url: string; email: string; expiresAt: number; revoked: number; emailed: boolean; mailError?: string }>(
+    `/api/invites/${encodeURIComponent(userId)}/resend`,
+    { method: 'POST', token },
+  )
+}
+
+export function apiRevokeInvite(token: string, userId: string) {
+  return request<{ ok: true; revoked: number }>(`/api/invites/${encodeURIComponent(userId)}/revoke`, { method: 'POST', token })
+}
+
+export function apiSetUserTeam(token: string, userId: string, teamId: string | null) {
+  return request<{ ok: true }>(`/api/users/${encodeURIComponent(userId)}/team`, { method: 'POST', body: { teamId }, token })
+}
+
+export function apiSetUserTitle(token: string, userId: string, jobTitle: string) {
+  return request<{ ok: true }>(`/api/users/${encodeURIComponent(userId)}/title`, { method: 'POST', body: { jobTitle }, token })
+}
+
+/** Clears completion so the flow opens again on their next sign-in; what they entered stays. */
+export function apiResetOnboarding(token: string, userId: string) {
+  return request<{ ok: true }>(`/api/users/${encodeURIComponent(userId)}/onboarding-reset`, { method: 'POST', token })
+}
+
+/** Same id, later expiry, confirmation cleared. */
+export function apiRenewBadge(token: string, userId: string) {
+  return request<{ badge: BadgeInfo }>(`/api/users/${encodeURIComponent(userId)}/badge-renew`, { method: 'POST', token })
+}
+
+/** A different id — for a badge that was lost or copied. */
+export function apiRegenerateBadge(token: string, userId: string) {
+  return request<{ badge: BadgeInfo }>(`/api/users/${encodeURIComponent(userId)}/badge-regenerate`, { method: 'POST', token })
+}
+
+/* --- the company: join link, badge details, teams ------------------------- */
+
+export interface JoinLinkDTO {
+  /** null when self-signup is switched off. */
+  code: string | null
+  createdAt?: number
+  url?: string
+}
+
+export function apiJoinLink(token: string) {
+  return request<JoinLinkDTO>('/api/join-link', { token })
+}
+
+export function apiRotateJoinCode(token: string) {
+  return request<JoinLinkDTO>('/api/join-link', { method: 'POST', token })
+}
+
+export function apiDisableJoinCode(token: string) {
+  return request<{ ok: true }>('/api/join-link', { method: 'DELETE', token })
+}
+
+export interface CompanyDTO {
+  name: string
+  timezone: string
+  logoUrl?: string
+  website?: string
+}
+
+/** `null` clears a field; a key left out is left alone. */
+export function apiUpdateCompany(token: string, input: { website?: string | null; logo?: string | null }) {
+  return request<{ company: CompanyDTO }>('/api/company', { method: 'POST', body: input, token })
+}
+
+export function apiRenameTeam(token: string, teamId: string, name: string) {
+  return request<TeamDTO>(`/api/teams/${encodeURIComponent(teamId)}`, { method: 'PATCH', body: { name }, token })
+}
+
+export function apiDeleteTeam(token: string, teamId: string) {
+  return request<{ ok: true }>(`/api/teams/${encodeURIComponent(teamId)}`, { method: 'DELETE', token })
 }
 
 export function apiDeleteUser(token: string, userId: string) {

@@ -16,6 +16,7 @@ import { IntegrationsPanel } from './IntegrationsPanel'
 import { GeocodingPanel } from './GeocodingPanel'
 import { GoogleStatusPanel } from './GoogleStatusPanel'
 import { ReportingPanel } from './ReportingPanel'
+import { CompanyPanel } from './CompanyPanel'
 
 /**
  * Client configuration.
@@ -32,7 +33,7 @@ import { ReportingPanel } from './ReportingPanel'
  */
 export function AdminSettings() {
   const [tab, setTab] = useState<
-    'outcomes' | 'notes' | 'photos' | 'reporting' | 'integrations' | 'geocoding'
+    'outcomes' | 'notes' | 'photos' | 'reporting' | 'integrations' | 'geocoding' | 'company'
   >('outcomes')
 
   const stored = useAppStore((s) => s.settings)
@@ -117,6 +118,7 @@ export function AdminSettings() {
             ['reporting', 'Reporting'],
             ['integrations', 'Integrations'],
             ['geocoding', 'Address lookup'],
+            ['company', 'Company'],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -339,6 +341,7 @@ export function AdminSettings() {
         </section>
       )}
 
+      {tab === 'company' && <CompanyPanel />}
       {tab === 'reporting' && <ReportingPanel />}
       {tab === 'integrations' && <IntegrationsPanel />}
       {tab === 'geocoding' && (
@@ -363,7 +366,7 @@ export function AdminSettings() {
         do. It would be actively wrong under the integrations tab — nothing
         there is a label, and none of it reaches a rep's phone.
       */}
-      {tab !== 'integrations' && tab !== 'reporting' && tab !== 'geocoding' && (
+      {tab !== 'integrations' && tab !== 'reporting' && tab !== 'geocoding' && tab !== 'company' && (
       <p className="mt-4 rounded-field bg-surface-sunk px-4 py-3 text-xs leading-relaxed text-ink-mute">
         {mode === 'live'
           ? 'These are the words reps see. Codes never change, so renaming an outcome keeps every report and every pipeline rule intact — and a rep whose phone is offline keeps the last labels it synced.'

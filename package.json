@@ -17,6 +17,7 @@
     "verify:no-emoji": "node scripts/verify-no-emoji.mjs",
     "verify:badge": "node scripts/verify-badge.mjs",
     "verify:onboarding": "node scripts/verify-onboarding.mjs",
+    "verify:roster": "node scripts/verify-roster.mjs",
     "verify:leadsheet": "node scripts/verify-leadsheet.mjs",
     "verify:leadlists": "node scripts/verify-leadlists.mjs",
     "verify:legibility": "node scripts/verify-legibility.mjs",

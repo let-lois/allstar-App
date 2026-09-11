@@ -624,6 +624,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         active: u.active,
         pending: u.pending,
         initials: initialsOf(u.name),
+        firstName: u.firstName,
+        lastName: u.lastName,
+        jobTitle: u.jobTitle,
+        teamId: u.teamId,
+        teamName: u.teamName,
+        invitation: u.invitation,
+        invitedAt: u.invitedAt,
+        onboarding: u.onboarding,
+        onboardingStep: u.onboardingStep,
+        badge: u.badge,
+        badgeExpiresAt: u.badgeExpiresAt,
+        createdAt: u.createdAt,
+        lastSeenAt: u.lastSeenAt,
       }))
       await db.clear('team')
       await db.putAll('team', team)

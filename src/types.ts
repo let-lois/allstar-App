@@ -283,6 +283,25 @@ export interface TeamMember {
   initials: string
   /** A profile photo, as a compressed data URL. See `User.avatarUrl`. */
   avatarUrl?: string
+  /*
+    The onboarding facts the console's roster shows. Derived on the server
+    (see api/src/onboarding.ts) and cached here with the rest of the roster,
+    so the console reads the same way with no signal. Absent on the demo
+    roster and on a cache written before these existed.
+  */
+  firstName?: string
+  lastName?: string
+  jobTitle?: string
+  teamId?: string
+  teamName?: string
+  invitation?: 'not_sent' | 'pending' | 'accepted' | 'expired' | 'revoked'
+  invitedAt?: number
+  onboarding?: OnboardingStatus
+  onboardingStep?: OnboardingStep
+  badge?: BadgeStatus
+  badgeExpiresAt?: number
+  createdAt?: number
+  lastSeenAt?: number
 }
 
 export interface Territory {
