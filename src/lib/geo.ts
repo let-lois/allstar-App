@@ -245,6 +245,15 @@ let lastFix: Position | null = null
 let inflight: Promise<Position | null> | null = null
 
 /**
+ * The location permission as the browser reports it, without asking.
+ *
+ * Exported for the onboarding setup screen, which has to show "on", "off" or
+ * "not yet asked" before offering a button — and must never raise a prompt
+ * just by being looked at. `undefined` where the browser cannot say.
+ */
+export const locationPermission = (): Promise<PermissionState | undefined> => permissionState()
+
+/**
  * Whether asking is worth it, without asking.
  *
  * `permissions.query` does not prompt — that is the whole point of it. A denied

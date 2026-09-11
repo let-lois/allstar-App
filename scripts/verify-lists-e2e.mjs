@@ -125,16 +125,38 @@ const reps = {
 }
 
 /** Invite a rep and set their password — the production path, not a row insert. */
+/* A one-pixel PNG: the checklist wants a face on the badge, not a good one. */
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+const SURNAME = { Dana: 'Whitfield', Marcus: 'Bell' }
+
+/*
+  Invite, accept, and then do what a new rep does before the app lets them at
+  their lists: finish onboarding. Since onboarding shipped, an account that has
+  not been through it opens on the onboarding shell rather than on Today, so a
+  gate about lists has to walk each rep to the end first — through the same
+  endpoints the phone uses, so a change to that order breaks here honestly.
+*/
 async function mintRep(adminToken, name) {
   const { email, password } = reps[name]
   const invite = await (await call('/api/invites', {
-    method: 'POST', body: JSON.stringify({ email, name, role: 'field_rep' }),
+    method: 'POST', body: JSON.stringify({ email, firstName: name, lastName: SURNAME[name], role: 'field_rep' }),
   }, adminToken)).json()
   await fetch(invite.url, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ password }),
   })
+  const { token, user } = await (await call('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })).json()
+  const step = (s, data) => call('/api/me/onboarding/step', { method: 'POST', body: JSON.stringify({ step: s, data }) }, token)
+  await step('profile', {})
+  await step('setup', { locationStatus: 'skipped' })
+  await step('walkthrough')
+  await call('/api/me/badge', { method: 'POST' }, token)
+  await call('/api/me/badge/confirm', { method: 'POST' }, token)
+  await step('badge')
+  await call('/api/mutations', { method: 'POST', body: JSON.stringify({ mutations: [{ id: `avatar-${name}-${stamp}`, kind: 'user.avatar', payload: { userId: user.id, dataUrl: PNG }, createdAt: Date.now() }] }) }, token)
+  const done = await (await step('checklist')).json()
+  if (done.status !== 'complete') throw new Error(`${name} did not finish onboarding: ${JSON.stringify(done)}`)
 }
 
 /*

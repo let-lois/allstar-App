@@ -28,6 +28,7 @@ import { ListDetail } from './screens/ListDetail'
 import * as db from './lib/db'
 import { TOUR_KEY } from './data/tour'
 import { Tour } from './components/system/Tour'
+import { Onboarding } from './onboarding/Onboarding'
 
 /**
  * The office console is lazy-loaded.
@@ -62,7 +63,7 @@ const AdminClients = lazy(() =>
 )
 
 export function App() {
-  const { ready, user, boot, setPosition } = useAppStore()
+  const { ready, user, mode, boot, setPosition } = useAppStore()
   const location = useLocation()
 
   useEffect(() => {
@@ -90,6 +91,19 @@ export function App() {
 
   if (!ready) return <Splash />
   if (!user) return <Login />
+
+  /*
+    Onboarding owns the whole viewport until the server says it is complete.
+
+    Keyed on what the server said about this person, and only when it said
+    anything: a session cached before the field existed, a bootstrap mock, and
+    the demo all carry no `onboarding`, and absent means "nothing to do". An
+    upgrade must never throw a working rep into a flow they finished under
+    another name, and the demo has no server to finish it against.
+  */
+  if (mode === 'live' && user.onboarding && user.onboarding.status !== 'complete') {
+    return <Onboarding />
+  }
 
   const isRep = user.role === 'field_rep'
   // Visit Mode owns the whole viewport — it renders its own shell.

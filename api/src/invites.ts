@@ -2,7 +2,7 @@ import { hashPassword, randomId } from './auth'
 import { record } from './audit'
 import { mailConfigured, sendMail } from './mail'
 import { inviteEmail } from './mailTemplates'
-import { displayName } from './onboarding'
+import { displayName, ONBOARDING_VERSION } from './onboarding'
 import type { Env, Role, SessionUser } from './types'
 
 /**
@@ -86,10 +86,18 @@ export async function runSetup(
       input.clientName || 'My Company',
       now,
     ),
+    /*
+      The founder is onboarded by definition: they are standing up the company,
+      not joining one, and the profile, walkthrough and badge steps are written
+      for a rep about to knock a door. Without this the first thing the console
+      showed its new administrator was the phone's onboarding shell, and the
+      only way past it was a badge nobody had asked for.
+    */
     env.DB.prepare(
-      `INSERT INTO users (id, client_id, email, name, role, password_hash, password_salt, active, created_at)
-       VALUES (?1, ?2, ?3, ?4, 'super_admin', ?5, ?6, 1, ?7)`,
-    ).bind(userId, clientId, input.email, input.name || 'Administrator', hash, salt, now),
+      `INSERT INTO users (id, client_id, email, name, role, password_hash, password_salt, active, created_at,
+                          onboarding_completed_at, onboarding_version)
+       VALUES (?1, ?2, ?3, ?4, 'super_admin', ?5, ?6, 1, ?7, ?7, ?8)`,
+    ).bind(userId, clientId, input.email, input.name || 'Administrator', hash, salt, now, ONBOARDING_VERSION),
   ])
 
   return { ok: true }

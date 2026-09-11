@@ -88,9 +88,9 @@ try {
   const admin = await (await login(ADMIN.email, ADMIN.password)).json()
   const A = admin.token
 
-  /* ===== 0. the setup admin has the flow ahead of them too ==================== */
+  /* ===== 0. the founder is onboarded by definition ============================ */
   let r = await j(await call('/api/me/onboarding', {}, A))
-  ok(r.status === 200 && r.body.status === 'not_started' && r.body.step === 'profile', 'the administrator’s own onboarding opens at the top', `${r.body.status} / ${r.body.step}`)
+  ok(r.status === 200 && r.body.status === 'complete' && !!r.body.completedAt, 'the administrator who set the company up is not walked through a rep’s setup', `${r.body.status} / ${r.body.completedAt}`)
 
   /* ===== 1. a rep, added with a first name and a title, accepts =============== */
   const REP = `jordan-${Date.now()}@example.com`

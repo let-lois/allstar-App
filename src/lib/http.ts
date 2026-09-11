@@ -1,4 +1,4 @@
-import type { LeadStatus, Role } from '../types'
+import type { BadgeInfo, LeadStatus, OnboardingStatus, OnboardingStep, Role } from '../types'
 
 /**
  * The API client.
@@ -24,6 +24,108 @@ export interface SessionUserDTO {
   name: string
   role: Role
   phone?: string
+  /*
+    The rest is what /api/me and the login payload carry beyond the session
+    fields. All optional: a bootstrap mock, or a server from before onboarding
+    existed, sends none of it, and the app treats "absent" as "nothing to do".
+  */
+  firstName?: string
+  lastName?: string
+  jobTitle?: string
+  teamId?: string
+  teamName?: string
+  avatarUrl?: string
+  onboarding?: { status: OnboardingStatus; step?: OnboardingStep; version: number; completedAt?: number }
+  badge?: BadgeInfo | null
+  company?: { name: string; timezone: string; logoUrl?: string; website?: string }
+}
+
+export function apiMe(token: string) {
+  return request<{ user: SessionUserDTO }>('/api/me', { token })
+}
+
+/** Redeem a company join code: creates the account (or claims a pending one) and signs in. */
+export function apiJoin(input: {
+  code: string
+  email: string
+  password: string
+  firstName?: string
+  lastName?: string
+}) {
+  return request<{ token: string; user: SessionUserDTO; claimedInvite: boolean }>('/api/join', {
+    method: 'POST',
+    body: input,
+    // Hashes a password server-side; give it room, as login does.
+    timeoutMs: 30_000,
+  })
+}
+
+/* --- onboarding --------------------------------------------------------- */
+
+export interface ChecklistItemDTO {
+  key: string
+  label: string
+  done: boolean
+  required: boolean
+  detail?: string
+}
+
+/** Mirrors `OnboardingView` in api/src/onboardingFlow.ts. */
+export interface OnboardingViewDTO {
+  status: OnboardingStatus
+  step: OnboardingStep
+  steps: OnboardingStep[]
+  version: number
+  requiredVersion: number
+  completedAt?: number
+  profile: {
+    firstName?: string
+    lastName?: string
+    email: string
+    phone?: string
+    jobTitle?: string
+    teamName?: string
+    hasPhoto: boolean
+    editable: ('firstName' | 'lastName' | 'phone' | 'jobTitle')[]
+    locked: ('email' | 'role' | 'team')[]
+  }
+  missing: ('firstName' | 'lastName' | 'photo')[]
+  setup: { completedAt?: number; locationStatus?: string }
+  walkthrough: { completedAt?: number }
+  badge: BadgeInfo | null
+  checklist: ChecklistItemDTO[]
+  canComplete: boolean
+}
+
+export function apiOnboarding(token: string) {
+  return request<OnboardingViewDTO>('/api/me/onboarding', { token })
+}
+
+export function apiOnboardingStep(token: string, step: OnboardingStep, data?: Record<string, unknown>) {
+  return request<OnboardingViewDTO>('/api/me/onboarding/step', {
+    method: 'POST',
+    body: { step, data: data ?? {} },
+    token,
+  })
+}
+
+export function apiUpdateProfile(
+  token: string,
+  input: { firstName?: string; lastName?: string; phone?: string; jobTitle?: string },
+) {
+  return request<{ user: SessionUserDTO }>('/api/me/profile', { method: 'PATCH', body: input, token })
+}
+
+export function apiMintBadge(token: string) {
+  return request<{ badge: BadgeInfo }>('/api/me/badge', { method: 'POST', token })
+}
+
+export function apiConfirmBadge(token: string) {
+  return request<{ badge: BadgeInfo }>('/api/me/badge/confirm', { method: 'POST', token })
+}
+
+export function apiRenewOwnBadge(token: string) {
+  return request<{ badge: BadgeInfo }>('/api/me/badge/renew', { method: 'POST', token })
 }
 
 /**
