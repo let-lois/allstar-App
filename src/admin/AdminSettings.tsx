@@ -14,6 +14,7 @@ import {
 import { STATUS } from './charts/tokens'
 import { IntegrationsPanel } from './IntegrationsPanel'
 import { GeocodingPanel } from './GeocodingPanel'
+import { GoogleStatusPanel } from './GoogleStatusPanel'
 import { ReportingPanel } from './ReportingPanel'
 
 /**
@@ -212,7 +213,7 @@ export function AdminSettings() {
                   </td>
                   <td className="px-3 py-3">
                     <span className="flex items-center gap-2">
-                      <span aria-hidden>{o.glyph}</span>
+                      <Glyph name={o.icon} className="icon-xs" />
                       <input
                         value={o.label}
                         onChange={(e) =>
@@ -340,7 +341,22 @@ export function AdminSettings() {
 
       {tab === 'reporting' && <ReportingPanel />}
       {tab === 'integrations' && <IntegrationsPanel />}
-      {tab === 'geocoding' && <GeocodingPanel />}
+      {tab === 'geocoding' && (
+        /*
+          Google's own status sits above the provider list, and outside
+          `GeocodingPanel`, because the two answer different questions. That
+          panel is about a company's account — which vendor turns their imported
+          addresses into pins, billed to them — and it has nothing to show in
+          demo mode. This is about the build in front of you: whether the key
+          compiled into this bundle can draw a map, suggest an address and name
+          the house under a rep's finger. That is true or false regardless of
+          which company is signed in.
+        */
+        <>
+          <GoogleStatusPanel />
+          <GeocodingPanel />
+        </>
+      )}
 
       {/*
         The footer is about relabelling, which is what three of the four tabs

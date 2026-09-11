@@ -22,12 +22,12 @@ import { globSync } from 'node:fs'
  * to type when you need a glyph in a hurry is an emoji.
  *
  * **What is deliberately allowed.** Typographic marks that are *text* rather
- * than icons: the ellipsis in "Saving…", the bullet between fields, en and em
- * dashes, the "no value" en dash in a table cell, `•` in a password
- * placeholder, and the outcome set's own marks (★ ↻ ◷ ✕ ✓ ⊘ — a designed
- * family that lives inside coloured pills and is chosen per outcome by a client
- * admin). Those are listed by codepoint below rather than waved through by
- * category, so adding one is a decision somebody makes on purpose.
+ * than icons: em dashes and interpuncts anywhere, because they are punctuation
+ * in prose; and six marks in six named files — a password placeholder, an en
+ * dash for a skipped stop, a tick for a knocked door, and the arrow in a menu
+ * path written out in a sentence. Named file by file below, so reaching for one
+ * somewhere new is a decision somebody makes on purpose rather than a character
+ * that happens to be on a list.
  */
 
 const SRC = globSync('src/**/*.{ts,tsx}')
@@ -49,32 +49,36 @@ const ok = (cond, msg, measured) => {
 const SUSPECT = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{25A0}-\u{25FF}\u{FE0F}\u{2022}]/u
 
 /**
- * Marks that are text, not icons. By codepoint, with the reason.
+ * Marks that are text, not icons — per file, with the reason.
  *
- * `•` earns its place twice over: it is the separator between two facts on a
- * row, and it is what a password field shows.
+ * Per file rather than one global list of marks crossed with one list of files:
+ * the cross product let any exempt file use any exempt mark, which is how ★
+ * kept an exemption in three files that had never typed it. A file may use the
+ * marks named against it and nothing else.
+ *
+ * The outcome family (★ ↻ ◷ ✕ ✓ ⊘) used to be the bulk of this list. It is
+ * gone: all eight outcomes name an icon in `data/outcomes.ts` now, so the
+ * characters this exemption existed for are no longer in the product.
  */
-const ALLOWED = new Set([
-  '•', // separator, and the password placeholder
-  '★', '↻', '◷', '✕', '✓', '⊘', '—', '–', '·', '↳', '↑', '↓', '→', '←', '⚠',
+const TEXT_MARKS = new Map([
+  ['src/screens/Login.tsx', '•'], // the password placeholder
+  ['src/screens/RouteScreen.tsx', '–'], // an en dash for a skipped stop
+  ['src/screens/StreetScreen.tsx', '✓'], // knocked, in a strip of doors
+  ['src/admin/AdminImport.tsx', '↳✓→'], // "matched to", a finished step, and a menu path
+  ['src/lib/csv.ts', '→'], // File → Save As, in a sentence
+  ['src/admin/IntegrationsPanel.tsx', '→'], // Settings → Private Integrations, in a sentence
 ])
 
 /*
-  The outcome set and the few places a typographic mark is still correct. Named
-  files rather than a blanket exemption: a new file reaching for a dingbat has
-  to be added here, which is the conversation this gate exists to start.
+  Dashes and the interpunct are punctuation wherever they appear — 51 files use
+  an em dash and 29 an interpunct, all of it prose, and nobody has ever mistaken
+  one for a button.
+
+  `•` is deliberately NOT here. A bullet is exactly the character somebody
+  reaches for wanting a dot-shaped icon in a hurry, so it is allowed in the one
+  file that draws a password and nowhere else.
 */
-const TEXT_MARK_FILES = new Set([
-  'src/data/outcomes.ts', // ★ ↻ ◷ ✕ ✓ ⊘ — the outcome family, in coloured pills
-  'src/screens/VisitMode.tsx', // the same marks, in the outcome grid
-  'src/screens/StreetScreen.tsx', // · — ✓ as knocked/not-knocked marks in a strip
-  'src/screens/RouteScreen.tsx', // – for a skipped stop
-  'src/admin/AdminImport.tsx', // ↳ "matched to", and ✓ on a finished step
-  'src/lib/csv.ts', // File → Save As, in a sentence
-  'src/lib/http.ts', // ••••abcd, a masked token
-  'src/screens/Login.tsx', // the password placeholder
-  'src/admin/IntegrationsPanel.tsx', // Settings → Private Integrations, in a sentence
-])
+const PUNCTUATION = new Set(['—', '·'])
 
 /**
  * Comments out, line numbers kept.
@@ -114,9 +118,8 @@ for (const file of SRC) {
   lines.forEach((line, i) => {
     for (const ch of line) {
       if (!SUSPECT.test(ch)) continue
-      if (ALLOWED.has(ch) && TEXT_MARK_FILES.has(file)) continue
-      // Separators and dashes are punctuation wherever they appear.
-      if (ch === '•' || ch === '·' || ch === '—' || ch === '–') continue
+      if (PUNCTUATION.has(ch)) continue
+      if (TEXT_MARKS.get(file)?.includes(ch)) continue
       hits.push({ file, line: i + 1, ch, text: line.trim().slice(0, 90) })
     }
   })

@@ -296,6 +296,67 @@ try {
 
   ok(objectsInBucket().length === 0, 'the bucket starts empty, so what appears was put there here')
 
+  /* ===== 0. the console can see whether a backup ever happened ============= */
+  //
+  // `/api/health` reports that the bucket and the secret exist. That pair stays
+  // true through a cron that silently stopped firing, which is the failure this
+  // whole feature exists to make visible — so there is a second endpoint that
+  // reports what is *in* the bucket, and the console reads it.
+  //
+  // Checked here, before anything has been written, because "configured and
+  // empty" is the state that distinguishes the two claims. Anything can report
+  // health once a backup exists.
+  const OWNER_SESSION = await (await call('/api/auth/login', {
+    method: 'POST', body: JSON.stringify(OWNER),
+  })).json()
+  const ADMIN_TOKEN = OWNER_SESSION.token
+  ok(!!ADMIN_TOKEN, 'the first account signs in, so the ops endpoint can be asked as somebody')
+
+  const opsBackups = (token) =>
+    call('/api/ops/backups', token ? { headers: { authorization: `Bearer ${token}` } } : {})
+
+  {
+    const r = await opsBackups(ADMIN_TOKEN)
+    const b = await r.json()
+    ok(r.status === 200, 'a super admin may ask what is in the backup bucket', String(r.status))
+    ok(b.configured === true, 'and is told the nightly job is configured')
+    ok(
+      b.latest === undefined && b.seen === 0,
+      'and that nothing has ever been written — the state health cannot report',
+      JSON.stringify({ latest: b.latest, seen: b.seen }),
+    )
+  }
+
+  /* --- and nobody else may ------------------------------------------------- */
+  //
+  // The payload is a size and a run of dates, and both describe the database —
+  // which is every customer's, not one company's. A field rep is the sharpest
+  // test of that because a rep is signed in: this must refuse an authenticated
+  // caller of the wrong role, not merely an anonymous one.
+  {
+    const anon = await opsBackups(null)
+    ok(anon.status === 401 || anon.status === 403, 'an unauthenticated caller is refused', String(anon.status))
+
+    const email = `backup-rep-${stamp}@example.com`
+    const password = 'rep-password-1234'
+    const invite = await (await call('/api/invites', {
+      method: 'POST',
+      body: JSON.stringify({ email, name: 'Rep', role: 'field_rep' }),
+      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+    })).json()
+    await fetch(invite.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ password }),
+    })
+    const rep = await (await call('/api/auth/login', {
+      method: 'POST', body: JSON.stringify({ email, password }),
+    })).json()
+    ok(!!rep.token, 'a field rep is signed in, so the refusal is about role and not about auth')
+    const r = await opsBackups(rep.token)
+    ok(r.status === 403, 'and a signed-in field rep is refused the backup bucket', String(r.status))
+  }
+
   /* ===== 1. the five-minute tick must not take a backup ==================== */
   //
   // 288 dumps a day of the entire database, every day, is the mistake this
@@ -336,6 +397,27 @@ try {
   }
 
   if (!key) throw new Error('nothing was written to the bucket; the rest cannot be checked')
+
+  /* ===== 3b. and the console now sees it ================================== */
+  //
+  // The same endpoint, after a real backup landed. Asserted against the object
+  // the bucket actually holds rather than against itself: a status panel that
+  // reports its own optimism is the thing being replaced here.
+  {
+    const b = await (await opsBackups(ADMIN_TOKEN)).json()
+    ok(b.latest?.key === key, 'the ops endpoint names the object that landed', `${b.latest?.key}`)
+    ok(b.seen === 1, 'and counts exactly the one backup taken', `${b.seen}`)
+    ok(
+      typeof b.latest?.bytes === 'number' && b.latest.bytes > 512,
+      'with a size, so a dump that collapses overnight is visible',
+      `${b.latest?.bytes} bytes`,
+    )
+    ok(
+      typeof b.latest?.uploadedAt === 'number' && Date.now() - b.latest.uploadedAt < 600_000,
+      'and a timestamp recent enough to answer "did last night work"',
+      new Date(b.latest?.uploadedAt ?? 0).toISOString(),
+    )
+  }
 
   /* ===== 4. what landed in the bucket ====================================== */
   const file = fetchObject(config, key, join(scratch, key))

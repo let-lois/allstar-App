@@ -21,3 +21,10 @@ export type GlyphName =
   | 'warn'
   | 'sofa'
   | 'doc'
+  /* The outcome family. See the note above `IconDoor`. */
+  | 'door'
+  | 'star'
+  | 'refresh'
+  | 'close'
+  | 'check'
+  | 'ban'

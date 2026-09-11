@@ -58,7 +58,7 @@ import { applyMutations } from './mutations'
 import { readSettings, writeSettings, writeTimezone } from './settings'
 import { drainOutbox } from './crm-push'
 import { BUILT_AT, COMMIT, DIRTY } from './version'
-import { BACKUP_CRON, BackupNotConfigured, runBackup } from './backup'
+import { BACKUP_CRON, BackupNotConfigured, canSeeBackups, latestBackup, runBackup } from './backup'
 import { eraseProperty } from './erase'
 import { setLeadStatus } from './lead-edit'
 import { canReviewConflicts, listConflicts, reviewConflict } from './stale'
@@ -1043,6 +1043,19 @@ export default {
         const result = await writeTimezone(env, user, body.timezone)
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 200, cors)
+      }
+
+      /* --- evidence that the nightly backup is happening -------------------- */
+      //
+      // Super admin alone, and not because the payload is dramatic — a key, a
+      // size and a timestamp. It is that the size describes the database and the
+      // run of names describes when this deployment was and was not being backed
+      // up. `/api/health` stops at "the configuration exists", which stays true
+      // through a cron that silently stopped firing; this is the endpoint that
+      // can tell those apart, so it sits behind the strongest role there is.
+      if (path === '/api/ops/backups' && req.method === 'GET') {
+        if (!canSeeBackups(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        return json(await latestBackup(env), 200, cors)
       }
 
       /* --- the audit log ---------------------------------------------------- */

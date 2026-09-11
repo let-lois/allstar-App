@@ -1,3 +1,4 @@
+import type { GlyphName } from './lib/glyphs'
 // Domain model for Allstar field sales.
 //
 // The shapes here are deliberately flat and small: everything in this file gets
@@ -42,8 +43,14 @@ export interface OutcomeDef {
   label: string
   /** Tailwind-ish token used for the pill/target color. */
   tone: string
-  /** Short glyph shown on the big touch target — readable at arm's length. */
-  glyph: string
+  /**
+   * The icon on the big touch target, by name — resolved by `<Glyph>`.
+   *
+   * These were characters: ★ ↻ ◷ $ ✕ ✓ ⊘ and an em dash. A designed set rather
+   * than emoji, which is why they lasted longer than the rest, but still text —
+   * taking the system font's idea of a tick at 15px inside a coloured pill.
+   */
+  icon: GlyphName
   /** Outcomes that advance the pipeline get a follow-up prompt by default. */
   promptsFollowUp?: boolean
   /** Terminal outcomes stop the property from being re-routed. */

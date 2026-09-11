@@ -64,6 +64,9 @@ const ROUTES = {
   "/api/invites|POST": { how: 'inline', guard: 'canInvite' },
   "/api/users|GET": { how: 'inline', guard: 'canImport' },
   "/api/audit|GET": { how: 'inline', guard: 'canInvite' },
+  // Super admin alone: the payload describes the database's size over time, and
+  // the database is every customer's rather than one company's.
+  "/api/ops/backups|GET": { how: 'inline', guard: 'canSeeBackups' },
   "/api/import/geocode|POST": { how: 'inline', guard: 'canImport' },
   "/api/import/properties|POST": { how: 'inline', guard: 'canImport' },
   "/api/integrations|GET": { how: 'inline', guard: 'canManageIntegrations' },

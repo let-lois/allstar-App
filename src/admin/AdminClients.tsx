@@ -4,6 +4,7 @@ import { StatTile } from './charts/StatTile'
 import { Bars } from './charts/Bars'
 import { STATUS } from './charts/tokens'
 import { moneyFull } from '../lib/format'
+import { BackupStatus } from './BackupStatus'
 
 /**
  * Platform view — Super Admin only.
@@ -96,6 +97,13 @@ export function AdminClients() {
           ]}
         />
       </section>
+
+      {/*
+        The one real thing on this screen. It sits here rather than on a
+        company's settings because the dump is the whole database — every
+        customer's — and only this role has a platform-wide view to put it in.
+      */}
+      <BackupStatus />
 
       <section className="mt-4 card p-5">
         <h2 className="text-sm font-bold">Seat utilization</h2>

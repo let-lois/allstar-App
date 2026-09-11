@@ -1,3 +1,4 @@
+import { Glyph } from '../components/ui/Glyph'
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
@@ -371,7 +372,7 @@ export function Overview({ role }: { role: Role }) {
                       className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[13px]"
                       aria-hidden
                     >
-                      {def?.glyph ?? '·'}
+                      {def ? <Glyph name={def.icon} className="icon-xs" /> : '·'}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-[14px] text-ink-soft">
                       {ev.summary}

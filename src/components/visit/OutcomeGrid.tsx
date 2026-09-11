@@ -1,3 +1,5 @@
+import type { GlyphName } from '../../lib/glyphs'
+import { Glyph } from '../ui/Glyph'
 import type { OutcomeCode } from '../../types'
 import { useOutcomes } from '../../lib/useSettings'
 import { haptic } from '../../lib/haptics'
@@ -64,7 +66,7 @@ export function OutcomeGrid({
 }) {
   const [primary, ...rest] = useOutcomes()
 
-  const tile = (code: OutcomeCode, tone: string, glyph: string, label: string, full = false) => {
+  const tile = (code: OutcomeCode, tone: string, icon: GlyphName, label: string, full = false) => {
     const on = value === code
     return (
       <button
@@ -82,7 +84,7 @@ export function OutcomeGrid({
         ].join(' ')}
       >
         <span className={full ? 'text-xl' : 'text-2xl'} aria-hidden>
-          {glyph}
+          <Glyph name={icon} />
         </span>
         <span className="text-center leading-tight">{label}</span>
       </button>
@@ -91,9 +93,9 @@ export function OutcomeGrid({
 
   return (
     <div className="space-y-2.5">
-      {tile(primary.code, primary.tone, primary.glyph, primary.label, true)}
+      {tile(primary.code, primary.tone, primary.icon, primary.label, true)}
       <div className="grid grid-cols-2 gap-2.5">
-        {rest.map((o) => tile(o.code, o.tone, o.glyph, o.label))}
+        {rest.map((o) => tile(o.code, o.tone, o.icon, o.label))}
       </div>
     </div>
   )

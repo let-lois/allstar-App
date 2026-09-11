@@ -1,3 +1,4 @@
+import { Glyph } from '../components/ui/Glyph'
 import { IconRefresh } from '../components/nav/icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -285,7 +286,7 @@ export function PropertyDetail() {
                         className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[13px]"
                         aria-hidden
                       >
-                        {def?.glyph ?? '·'}
+                        {def ? <Glyph name={def.icon} className="icon-xs" /> : '·'}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-[14.5px] font-medium">
