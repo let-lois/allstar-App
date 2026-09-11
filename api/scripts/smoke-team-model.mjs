@@ -76,6 +76,7 @@ await fetch(invite.url, {
   headers: { 'content-type': 'application/x-www-form-urlencoded' },
   body: new URLSearchParams({ password: REP.password }),
 })
+ok(invite.emailed === false && !invite.mailError, 'with no mail secrets, an invitation is honestly not emailed and that is not an error')
 const rep = await (await login(REP.email, REP.password)).json()
 const R = rep.token
 ok(!!R, 'a rep is signed in')

@@ -365,8 +365,33 @@ export function apiDeleteUser(token: string, userId: string) {
  * already sign in is the bug this field exists to prevent.
  */
 export type CreatedInviteDTO =
-  | { alreadyMember: false; url: string; email: string; expiresAt: number; userId: string; resent: boolean }
+  | {
+      alreadyMember: false
+      url: string
+      email: string
+      expiresAt: number
+      userId: string
+      resent: boolean
+      /** True only when the server actually emailed the link. */
+      emailed: boolean
+      mailError?: string
+    }
   | { alreadyMember: true; email: string; userId: string; message: string }
+
+export interface TeamDTO {
+  id: string
+  name: string
+  memberCount: number
+  createdAt: number
+}
+
+export function apiTeams(token: string) {
+  return request<{ teams: TeamDTO[] }>('/api/teams', { token })
+}
+
+export function apiCreateTeam(token: string, name: string) {
+  return request<TeamDTO>('/api/teams', { method: 'POST', body: { name }, token })
+}
 
 export function apiInvite(
   token: string,

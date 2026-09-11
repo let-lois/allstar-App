@@ -64,6 +64,16 @@ export interface Env {
   INTEGRATION_KEY?: string
   /** Overrides where GoHighLevel calls go. See `baseFor` in ghl.ts. */
   GHL_BASE_URL?: string
+  /*
+   * Outbound email — invitations. Both secrets; see mail.ts. With either
+   * missing nothing is sent and the console hands the admin a link instead,
+   * which is what it did before email existed.
+   */
+  MAILCHANNELS_API_KEY?: string
+  /** `Allstar <no-reply@yourdomain.com>` — the domain carrying the DNS records. */
+  MAIL_FROM?: string
+  /** Points the mail API at a stand-in in tests. Unset in every real deployment. */
+  MAIL_BASE_URL?: string
 }
 
 export type Role = 'super_admin' | 'client_admin' | 'manager' | 'field_rep'

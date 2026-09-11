@@ -248,8 +248,8 @@ export function ManageUser({
           {user.pending && user.active && (
             <p className="mt-1 rounded-lg bg-warn-bg p-2.5 text-xs leading-relaxed text-warn">
               {user.name} hasn’t opened their invite yet, so they have no password.
-              Setting one above works, or create a fresh link — the old one keeps
-              working until it expires.
+              Setting one above works and switches their account on; their old
+              invite link then stops working, so tell them the password yourself.
             </p>
           )}
           {user.active ? (

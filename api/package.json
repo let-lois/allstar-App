@@ -33,6 +33,7 @@
     "smoke:lists": "node scripts/smoke-lists.mjs",
     "smoke:onboarding-schema": "node scripts/smoke-onboarding-schema.mjs",
     "smoke:onboarding-flow": "node scripts/smoke-onboarding-flow.mjs",
+    "smoke:mail": "node scripts/smoke-mail.mjs",
     "backup": "node scripts/backup.mjs",
     "backup:open": "node scripts/backup-open.mjs",
     "backup:list": "node scripts/backup-open.mjs --list",

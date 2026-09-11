@@ -1,5 +1,7 @@
 import { hashPassword, randomId } from './auth'
 import { record } from './audit'
+import { mailConfigured, sendMail } from './mail'
+import { inviteEmail } from './mailTemplates'
 import { displayName } from './onboarding'
 import type { Env, Role, SessionUser } from './types'
 
@@ -150,6 +152,14 @@ export type InviteOutcome =
       userId: string
       /** True when this replaced an earlier, still-unaccepted link. */
       resent: boolean
+      /**
+       * Whether the invitation was actually emailed. The console says
+       * "emailed" only when this is true; otherwise it shows the link and says
+       * nothing went out. False with `mailError` set is a provider failure;
+       * false without one means email is not configured here.
+       */
+      emailed: boolean
+      mailError?: string
     }
   | {
       /**
@@ -187,6 +197,26 @@ async function mintInvite(env: Env, actor: SessionUser, origin: string, userId: 
   return { url: `${origin}/invite/${token}`, expiresAt }
 }
 
+/**
+ * Email the link, if this deployment can. Never throws and never blocks the
+ * invitation: the link exists either way, and the caller reports which.
+ */
+async function deliverInvite(
+  env: Env,
+  actor: SessionUser,
+  to: { email: string; name?: string },
+  minted: { url: string; expiresAt: number },
+  appUrl: string,
+  resent: boolean,
+): Promise<{ emailed: boolean; mailError?: string }> {
+  if (!mailConfigured(env)) return { emailed: false }
+  const result = await sendMail(
+    env,
+    inviteEmail({ to, clientName: actor.clientName, invitedBy: actor.name, url: minted.url, expiresAt: minted.expiresAt, appUrl, resent }),
+  )
+  return result.sent ? { emailed: true } : { emailed: false, mailError: result.error }
+}
+
 async function teamInTenant(env: Env, clientId: string, teamId: string): Promise<boolean> {
   if (!ID_SHAPE.test(teamId)) return false
   const row = await env.DB.prepare('SELECT 1 AS ok FROM teams WHERE id = ?1 AND client_id = ?2')
@@ -201,6 +231,8 @@ export async function createInvite(
   /** The Worker's own origin — it serves the acceptance page, not the app. */
   origin: string,
   input: InviteInput,
+  /** Where the app lives, for the email's "then open this and sign in". */
+  appUrl = 'https://allstar.letlois.com',
 ): Promise<InviteOutcome | Failure> {
   if (!canInvite(actor)) return fail('Not permitted.', 403)
   const email = typeof input.email === 'string' ? input.email.trim() : ''
@@ -331,16 +363,17 @@ export async function createInvite(
   }
 
   const minted = await mintInvite(env, actor, origin, userId)
+  const mail = await deliverInvite(env, actor, { email, name: name || undefined }, minted, appUrl, resent)
 
   await record(env, actor, {
     action: 'user.invited',
     targetType: 'user',
     targetId: userId,
     targetLabel: name,
-    detail: { email, role: input.role, resent },
+    detail: { email, role: input.role, resent, emailed: mail.emailed },
   })
 
-  return { alreadyMember: false, url: minted.url, email, expiresAt: minted.expiresAt, userId, resent }
+  return { alreadyMember: false, url: minted.url, email, expiresAt: minted.expiresAt, userId, resent, ...mail }
 }
 
 /**
@@ -352,7 +385,8 @@ export async function resendInvite(
   actor: SessionUser,
   origin: string,
   userId: string,
-): Promise<{ url: string; email: string; expiresAt: number; revoked: number } | Failure> {
+  appUrl = 'https://allstar.letlois.com',
+): Promise<{ url: string; email: string; expiresAt: number; revoked: number; emailed: boolean; mailError?: string } | Failure> {
   if (!canInvite(actor)) return fail('Not permitted.', 403)
   if (!ID_SHAPE.test(userId)) return fail('No such person on this team.', 404)
   const target = await env.DB.prepare(
@@ -366,14 +400,15 @@ export async function resendInvite(
   }
   const revoked = await revokeLiveInvites(env, target.id)
   const minted = await mintInvite(env, actor, origin, target.id)
+  const mail = await deliverInvite(env, actor, { email: target.email, name: target.name || undefined }, minted, appUrl, true)
   await record(env, actor, {
     action: 'user.invite_resent',
     targetType: 'user',
     targetId: target.id,
     targetLabel: target.name,
-    detail: { email: target.email, revoked },
+    detail: { email: target.email, revoked, emailed: mail.emailed },
   })
-  return { url: minted.url, email: target.email, expiresAt: minted.expiresAt, revoked }
+  return { url: minted.url, email: target.email, expiresAt: minted.expiresAt, revoked, ...mail }
 }
 
 /** Cancel every live invitation link this person holds. The row stays, pending. */

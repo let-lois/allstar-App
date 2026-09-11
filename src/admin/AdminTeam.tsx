@@ -8,7 +8,7 @@ import { useTeamStats } from '../store/teamStats'
 import { useRepRangeRows, RANGES, type RangeKey } from './useAdminData'
 import { money, relative } from '../lib/format'
 import { STATUS } from './charts/tokens'
-import { InviteDialog } from './InviteDialog'
+import { AddMemberDialog } from './AddMemberDialog'
 import { DataList } from './DataList'
 import { ManageUser } from './ManageUser'
 import { ROLE_LABEL } from '../lib/roles'
@@ -122,7 +122,7 @@ export function AdminTeam() {
       } in the field`}
       actions={
         <Button size="sm" onClick={() => setInviting(true)}>
-          Invite user
+          Add team member
         </Button>
       }
     >
@@ -179,7 +179,7 @@ export function AdminTeam() {
         rowLabel={(m) => `Manage ${m.name}`}
         empty={
           members.length === 0
-            ? 'Nobody on the team yet. Invite your first rep to get started.'
+            ? 'Nobody on the team yet. Add your first rep to get started.'
             : 'No one matches those filters.'
         }
         columns={[
@@ -282,7 +282,7 @@ export function AdminTeam() {
       </p>
 
       {inviting && (
-        <InviteDialog onClose={() => setInviting(false)} onInvited={loadRoster} />
+        <AddMemberDialog onClose={() => setInviting(false)} onInvited={loadRoster} />
       )}
 
       <BottomSheet

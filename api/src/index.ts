@@ -42,6 +42,7 @@ import {
 import { readMe, touchLastSeen } from './me'
 import { createTeam, deleteTeam, listTeams, renameTeam } from './teams'
 import { updateCompany } from './company'
+import { mailConfigured } from './mail'
 import { disableJoinCode, joinWithCode, readJoinLink, rotateJoinCode } from './join'
 import { badgeStatus, displayName, invitationStatus, onboardingStatus } from './onboarding'
 import { ensureSchema, migrationState } from './migrate'
@@ -578,6 +579,10 @@ export default {
               // customer's token in plaintext — a deliberate refusal, but one
               // that is otherwise indistinguishable from a broken integration.
               integrationKey: !!env.INTEGRATION_KEY,
+              // Present means invitations are emailed; absent means the console
+              // hands the admin a link to send. Both work — but an admin who
+              // believes email is on when it is not finds out a week later.
+              mail: mailConfigured(env),
               appUrl: env.APP_URL ?? null,
               allowedOrigins: (env.ALLOWED_ORIGINS ?? '').split(',').filter(Boolean).length,
               // Surfaced because a failed migration is otherwise invisible:
@@ -748,7 +753,7 @@ export default {
           phone: body.phone,
           jobTitle: body.jobTitle,
           teamId: body.teamId,
-        })
+        }, appUrl)
         if ('error' in created) return json({ error: created.error }, created.status, cors)
         return json(created, 200, cors)
       }
@@ -758,7 +763,7 @@ export default {
         if (m && req.method === 'POST') {
           const result =
             m[2] === 'resend'
-              ? await resendInvite(env, user, url.origin, m[1]!)
+              ? await resendInvite(env, user, url.origin, m[1]!, appUrl)
               : await revokeInvite(env, user, m[1]!)
           if ('error' in result) return json({ error: result.error }, result.status, cors)
           return json(result, 200, cors)
