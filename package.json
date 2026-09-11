@@ -33,6 +33,7 @@
     "verify:all": "node scripts/verify-all.mjs",
     "verify:api-access": "node scripts/verify-api-access.mjs",
     "verify:backups": "node api/scripts/verify-backup-crypto.mjs",
+    "verify:backup-status": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-backup-status.mjs",
     "verify:boot": "node scripts/verify-boot.mjs",
     "verify:geocoders": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-geocoders.mjs",
     "verify:csv": "node scripts/verify-csv.mjs",

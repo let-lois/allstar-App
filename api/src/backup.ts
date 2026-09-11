@@ -472,3 +472,98 @@ export async function runBackup(env: Env, now = new Date()): Promise<BackupRepor
     ms: Date.now() - started,
   }
 }
+
+/**
+ * What the bucket actually holds, newest first.
+ *
+ * ## Why presence was never enough
+ *
+ * `/api/health` reports `backupBucket` and `backupKey` — that both halves of
+ * the configuration exist. That is a claim about the deployment, not about the
+ * backups, and the two come apart in every way that matters: a cron that stopped
+ * firing, a `put` that threw every night at 07:17, a bucket somebody emptied.
+ * All three leave the configuration reporting `true` forever. The nightly job
+ * logs every outcome including the boring one, which is right, but a log is only
+ * seen by somebody already looking — and the reason to look is exactly the thing
+ * the log would have told them.
+ *
+ * So this returns evidence instead of configuration: the newest object, its
+ * size, and when it landed. "Four hours ago, 2.1 MB" and "nineteen days ago"
+ * are different sentences; `backupKey: true` is the same sentence in both cases.
+ *
+ * ## Why this is not on /api/health
+ *
+ * Sizes and timings describe the database. A dump that halves overnight says
+ * something happened to the data, and a run of object names is a map of when
+ * this deployment was and was not being backed up — neither belongs on an
+ * unauthenticated endpoint, whatever else is already there. The route that
+ * serves this is super-admin only.
+ *
+ * ## What it costs
+ *
+ * One R2 list of at most `LATEST_SCAN` keys. R2 list is billed as a Class A
+ * operation and this runs when a person opens a screen, so it is bounded rather
+ * than paginated: nobody needs the full history to answer "did last night work",
+ * and an unbounded scan of a bucket that has been filling for a year is a
+ * surprise nobody asked for.
+ */
+export interface BackupEvidence {
+  configured: boolean
+  /** Why not, when `configured` is false. Never a key, a length or a prefix. */
+  reason?: string
+  latest?: { key: string; bytes: number; uploadedAt: number }
+  /** How many objects the bounded scan saw. `LATEST_SCAN` means "at least". */
+  seen: number
+  scanCapped: boolean
+}
+
+/**
+ * Who may see evidence of backups.
+ *
+ * Super admin alone. Not because a key, a size and a timestamp are dramatic in
+ * themselves, but because the size describes the database and the run of names
+ * describes when this deployment was and was not being backed up — and the
+ * database is every customer's, not one company's. A client admin has no
+ * company-scoped view of this to be given.
+ */
+export const canSeeBackups = (user: { role: string }) => user.role === 'super_admin'
+
+/** Enough to see a pattern, few enough that the list stays one cheap call. */
+const LATEST_SCAN = 60
+
+export async function latestBackup(env: Env): Promise<BackupEvidence> {
+  if (!env.BACKUPS) {
+    return { configured: false, reason: 'No BACKUPS bucket is bound.', seen: 0, scanCapped: false }
+  }
+  if (!env.BACKUP_KEY?.trim()) {
+    return {
+      configured: false,
+      reason: 'No BACKUP_KEY is set, so the nightly job refuses to write a dump in the clear.',
+      seen: 0,
+      scanCapped: false,
+    }
+  }
+
+  const listed = await env.BACKUPS.list({ limit: LATEST_SCAN })
+  /*
+    R2 lists lexicographically, and the key is `allstar-db-<ISO stamp>.sql.enc`
+    with the stamp's colons and dots swapped for dashes. An ISO stamp sorts the
+    same lexicographically as it does chronologically, so the last key is the
+    newest — but that is a property of the naming scheme rather than of R2, and
+    a hand-uploaded file with a different name would break it silently. Sorting
+    on `uploaded`, which R2 records itself, cannot be broken by a filename.
+  */
+  const newest = listed.objects.reduce<R2Object | null>(
+    (best, o) => (!best || o.uploaded > best.uploaded ? o : best),
+    null,
+  )
+
+  return {
+    configured: true,
+    latest: newest
+      ? { key: newest.key, bytes: newest.size, uploadedAt: newest.uploaded.getTime() }
+      : undefined,
+    seen: listed.objects.length,
+    scanCapped: listed.truncated || listed.objects.length >= LATEST_SCAN,
+  }
+}

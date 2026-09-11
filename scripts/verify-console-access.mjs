@@ -256,6 +256,29 @@ for (const width of [390, 412]) {
       const rendered = route.proof.test(body)
       const refused = /Not available for your role/i.test(body)
 
+      /*
+        The backup panel, on every route this loop visits.
+
+        It belongs on /admin/clients — the dump is the whole database, every
+        customer's, and a size beside a run of dates describes it, so only the
+        platform role has somewhere to put it. The route's own role check is
+        asserted below; this is the other half, and it is deliberately checked on
+        *every* path rather than only on the one it should be on. A panel is
+        protected by whatever screen it happens to sit on, so "the right screen
+        is locked" and "the panel is only on that screen" are two claims, and
+        moving it to Settings would satisfy the first while breaking the second.
+      */
+      {
+        const panel = await page.getByTestId('backup-status').count()
+        const belongs = who.role === 'super_admin' && route.path === '/admin/clients'
+        ok(
+          panel === (belongs ? 1 : 0),
+          belongs
+            ? 'super admin: the backup status panel is on the platform screen'
+            : `${who.role}: and no backup evidence on ${route.path}`,
+        )
+      }
+
       if (route.allowed.includes(who.role)) {
         ok(rendered, `${who.role}: ${route.path} opens`)
       } else {

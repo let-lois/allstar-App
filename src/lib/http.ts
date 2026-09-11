@@ -868,6 +868,26 @@ export interface GeocodersDTO {
   usage: GeocodeUsageDTO
 }
 
+/**
+ * Evidence that the nightly backup is happening, as opposed to configured.
+ *
+ * `/api/health` answers "are both halves of the configuration present", which
+ * stays true through a cron that stopped firing and a bucket somebody emptied.
+ * This answers "what is actually in the bucket, and when did it land". Super
+ * admin only on the server, because a dump's size describes the database.
+ */
+export interface BackupEvidenceDTO {
+  configured: boolean
+  reason?: string
+  latest?: { key: string; bytes: number; uploadedAt: number }
+  seen: number
+  scanCapped: boolean
+}
+
+export function apiLatestBackup(token: string) {
+  return request<BackupEvidenceDTO>('/api/ops/backups', { token })
+}
+
 export function apiGeocoders(token: string) {
   return request<GeocodersDTO>('/api/geocoders', { token })
 }
