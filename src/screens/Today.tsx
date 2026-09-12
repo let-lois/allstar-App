@@ -9,6 +9,7 @@ import {
   useRouteProgress,
 } from '../store/useAppStore'
 import { TopBar } from '../components/nav/TopBar'
+import { BadgeNudge } from '../components/badge/BadgeNudge'
 import { SignOutButton } from '../components/nav/SignOutButton'
 import { SyncBadge, SyncDetail } from '../components/sync/SyncBadge'
 import { BottomSheet } from '../components/ui/BottomSheet'
@@ -143,6 +144,13 @@ export function Today() {
         className="pad-nav bg-surface-sunk"
       >
         <div className="content-col page anim-rise">
+          {/*
+            Above the numbers, because it is the one thing here that is not
+            about today and goes away once done — a rep who joined before
+            badges existed has never been asked for one.
+          */}
+          <BadgeNudge />
+
           {/* --- progress ------------------------------------------------- */}
           <Card aria-label="Today's progress" data-tour="progress">
             <div className="flex items-start justify-between gap-4">

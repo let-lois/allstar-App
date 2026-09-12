@@ -4,16 +4,26 @@ import {
   ApiError,
   apiDeleteUser,
   apiFootprint,
+  apiRegenerateBadge,
+  apiRenewBadge,
+  apiResendInvite,
   apiResetLink,
+  apiResetOnboarding,
+  apiRevokeInvite,
   apiSetActive,
   apiSetPassword,
   apiSetRole,
+  apiSetUserTeam,
+  apiSetUserTitle,
+  apiTeams,
   type FootprintDTO,
+  type TeamDTO,
 } from '../lib/http'
 import { liveToken } from '../lib/session'
 import { ROLE_BLURB, ROLE_LABEL, grantableRoles } from '../lib/roles'
 import { useAppStore } from '../store/useAppStore'
-import type { Role } from '../types'
+import type { Role, TeamMember } from '../types'
+import { BADGE_LABEL, INVITATION_LABEL, ONBOARDING_LABEL } from './statusLabels'
 
 /**
  * Managing one person's account.
@@ -40,6 +50,14 @@ export interface ManagedUser {
   role: Role
   active: boolean
   pending?: boolean
+  jobTitle?: string
+  teamId?: string
+  teamName?: string
+  invitation?: TeamMember['invitation']
+  onboarding?: TeamMember['onboarding']
+  onboardingStep?: TeamMember['onboardingStep']
+  badge?: TeamMember['badge']
+  badgeExpiresAt?: number
 }
 
 const MIN_PASSWORD = 10
@@ -50,13 +68,18 @@ export function ManageUser({
   user,
   isSelf,
   onChanged,
+  onRefresh,
   onClose,
 }: {
   user: ManagedUser
   isSelf: boolean
+  /** The change ends the conversation: refresh the roster and close. */
   onChanged: () => void
+  /** The change is one of several: refresh the roster, keep the sheet open. */
+  onRefresh?: () => void
   onClose: () => void
 }) {
+  const refresh = onRefresh ?? onChanged
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -73,6 +96,20 @@ export function ManageUser({
   const [typed, setTyped] = useState('')
   const [foot, setFoot] = useState<FootprintDTO | null>(null)
 
+  const [teams, setTeams] = useState<TeamDTO[] | null>(null)
+  const [title, setTitle] = useState(user.jobTitle ?? '')
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const canInvite = signedIn?.role === 'client_admin' || signedIn?.role === 'super_admin'
+
+  // The team picker needs the list; the rest of the panel does not wait for it.
+  useEffect(() => {
+    const token = liveToken()
+    if (!token || !canInvite) return
+    void apiTeams(token)
+      .then((r) => setTeams(r.teams))
+      .catch(() => setTeams([]))
+  }, [canInvite])
+
   // Load the footprint as soon as delete is considered, not after it's
   // confirmed — the whole point is to inform the decision.
   useEffect(() => {
@@ -84,7 +121,13 @@ export function ManageUser({
       .catch(() => setFoot(null))
   }, [confirming, user.id])
 
-  async function run(label: string, fn: (token: string) => Promise<void>) {
+  /*
+    `stay`: refresh the roster behind the sheet but leave it open. Setting a
+    team, a title or re-sending a link are edits an admin makes two or three of
+    in a row; closing after each would send them back to the table every time.
+    Access and role changes still close — those end the conversation.
+  */
+  async function run(label: string, fn: (token: string) => Promise<void>, stay = false) {
     const token = liveToken()
     if (!token) {
       setError('This needs a live account. The demo has no real team.')
@@ -95,7 +138,8 @@ export function ManageUser({
     setNotice(null)
     try {
       await fn(token)
-      onChanged()
+      if (stay) refresh()
+      else onChanged()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'That didn’t work. Nothing was changed.')
     } finally {
@@ -120,8 +164,205 @@ export function ManageUser({
         </p>
       )}
 
+      {/* --- invitation -------------------------------------------------- */}
+      {!isSelf && canInvite && user.pending && (
+        <section data-testid="manage-invitation">
+          <h3 className="text-sm font-bold">Invitation</h3>
+          <p className="mt-1 text-xs leading-relaxed text-ink-mute">
+            {INVITATION_LABEL[user.invitation ?? 'not_sent']}
+            {user.invitation === 'pending' && ' — they have a link that still works.'}
+            {user.invitation === 'expired' && ' — their link has run out; send a fresh one.'}
+            {user.invitation === 'revoked' && ' — their link was cancelled; send a fresh one if they should still join.'}
+            {(!user.invitation || user.invitation === 'not_sent') && ' — no link has been made for them yet.'}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              disabled={busy !== null}
+              onClick={() =>
+                void run('resend', async (token) => {
+                  const r = await apiResendInvite(token, user.id)
+                  setInviteLink(r.url)
+                  setNotice(r.emailed ? `A fresh invitation is in ${r.email}’s inbox. Their old link no longer works.` : `Fresh link made for ${r.email}. Nothing was emailed — ${r.mailError ?? 'email is not set up on this deployment'}; send it yourself.`)
+                }, true)
+              }
+            >
+              {busy === 'resend' ? 'Sending…' : user.invitation === 'pending' ? 'Re-send invite' : 'Send invite'}
+            </Button>
+            {user.invitation === 'pending' && (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy !== null}
+                onClick={() =>
+                  void run('revoke', async (token) => {
+                    await apiRevokeInvite(token, user.id)
+                    setInviteLink(null)
+                    setNotice(`${user.name}’s invite link no longer works. Their account stays here, without access, until you send another or remove them.`)
+                  }, true)
+                }
+              >
+                {busy === 'revoke' ? 'Revoking…' : 'Revoke invite'}
+              </Button>
+            )}
+          </div>
+          {inviteLink && (
+            <div className="mt-3 rounded-lg bg-surface-sunk p-3 ring-1 ring-line">
+              <p className="break-all font-mono text-xs" data-testid="manage-invite-link">{inviteLink}</p>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="mt-2"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(inviteLink)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 2000)
+                  } catch {
+                    /* the link is on screen and selectable */
+                  }
+                }}
+              >
+                {copied ? 'Copied' : 'Copy link'}
+              </Button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* --- team and title ---------------------------------------------- */}
+      {canInvite && (
+        <section className={!isSelf && user.pending ? 'border-t border-line-soft pt-4' : ''} data-testid="manage-team">
+          <h3 className="text-sm font-bold">Team and title</h3>
+          <p className="mt-1 text-xs leading-relaxed text-ink-mute">
+            Both print on the badge and the roster. A person can change their own title; only an admin moves them between teams.
+          </p>
+          <label className="mt-2 block">
+            <span className="text-xs font-semibold text-ink-mute">Team / office</span>
+            <select
+              value={user.teamId ?? ''}
+              disabled={busy !== null || teams === null}
+              data-testid="manage-team-select"
+              onChange={(e) =>
+                void run('team', async (token) => {
+                  const next = e.target.value || null
+                  await apiSetUserTeam(token, user.id, next)
+                  const name = teams?.find((t) => t.id === next)?.name
+                  setNotice(next ? `${user.name} is now on ${name ?? 'that team'}.` : `${user.name} is on no team.`)
+                }, true)
+              }
+              className="focusable mt-1 h-11 w-full rounded-lg border border-ink/15 bg-surface px-3 text-sm disabled:opacity-60"
+            >
+              <option value="">No team</option>
+              {(teams ?? []).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {teams !== null && teams.length === 0 && (
+            <p className="mt-1 text-xs text-ink-mute">No teams yet — add them under Settings, on the Company tab.</p>
+          )}
+          <div className="mt-3 flex gap-2">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Job title, as printed on the badge"
+              autoCapitalize="words"
+              data-testid="manage-title"
+              className="focusable h-11 flex-1 rounded-lg border border-ink/15 px-3 text-sm"
+            />
+            <Button
+              variant="secondary"
+              disabled={busy !== null || title.trim() === (user.jobTitle ?? '')}
+              data-testid="manage-title-save"
+              onClick={() =>
+                void run('title', async (token) => {
+                  await apiSetUserTitle(token, user.id, title.trim())
+                  setNotice(title.trim() ? `${user.name}’s title is now “${title.trim()}”.` : `${user.name}’s title was cleared.`)
+                }, true)
+              }
+            >
+              {busy === 'title' ? 'Saving…' : 'Save title'}
+            </Button>
+          </div>
+        </section>
+      )}
+
+      {/* --- onboarding -------------------------------------------------- */}
+      {!isSelf && canInvite && !user.pending && user.onboarding && (
+        <section className="border-t border-line-soft pt-4" data-testid="manage-onboarding">
+          <h3 className="text-sm font-bold">Onboarding</h3>
+          <p className="mt-1 text-xs leading-relaxed text-ink-mute">
+            {ONBOARDING_LABEL[user.onboarding]}
+            {user.onboarding !== 'complete' && user.onboardingStep ? `, at the ${user.onboardingStep} step.` : '.'}{' '}
+            Resetting signs {user.name.split(' ')[0]} out and opens the flow again on their next sign-in. What they entered stays — it asks
+            them to check it, not to type it again.
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="mt-2"
+            disabled={busy !== null}
+            data-testid="manage-onboarding-reset"
+            onClick={() =>
+              void run('onboarding', async (token) => {
+                await apiResetOnboarding(token, user.id)
+                setNotice(`${user.name} will go through setup again the next time they open the app.`)
+              }, true)
+            }
+          >
+            {busy === 'onboarding' ? 'Resetting…' : 'Reset onboarding'}
+          </Button>
+        </section>
+      )}
+
+      {/* --- badge ------------------------------------------------------- */}
+      {canInvite && !user.pending && user.badge && user.badge !== 'none' && (
+        <section className="border-t border-line-soft pt-4" data-testid="manage-badge">
+          <h3 className="text-sm font-bold">Badge</h3>
+          <p className="mt-1 text-xs leading-relaxed text-ink-mute">
+            {BADGE_LABEL[user.badge]}
+            {user.badgeExpiresAt ? `, ${user.badge === 'expired' ? 'expired' : 'expires'} ${new Date(user.badgeExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.` : '.'}{' '}
+            Renew keeps the id and sets a new expiry. Regenerate gives a different id — for a badge that was lost or copied. Either way they
+            confirm it again on their phone.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy !== null}
+              data-testid="manage-badge-renew"
+              onClick={() =>
+                void run('badge-renew', async (token) => {
+                  const r = await apiRenewBadge(token, user.id)
+                  setNotice(`Badge #${r.badge.id} renewed. ${user.name.split(' ')[0]} confirms it again on their phone.`)
+                }, true)
+              }
+            >
+              {busy === 'badge-renew' ? 'Renewing…' : 'Renew badge'}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy !== null}
+              data-testid="manage-badge-regenerate"
+              onClick={() =>
+                void run('badge-regenerate', async (token) => {
+                  const r = await apiRegenerateBadge(token, user.id)
+                  setNotice(`New badge #${r.badge.id} issued. The old id no longer belongs to anyone.`)
+                }, true)
+              }
+            >
+              {busy === 'badge-regenerate' ? 'Issuing…' : 'Regenerate id'}
+            </Button>
+          </div>
+        </section>
+      )}
+
       {/* --- password ---------------------------------------------------- */}
-      <section>
+      <section className={canInvite ? 'border-t border-line-soft pt-4' : ''}>
         <h3 className="text-sm font-bold">Password</h3>
         <p className="mt-1 text-xs leading-relaxed text-ink-mute">
           Setting one here signs {isSelf ? 'you' : user.name.split(' ')[0]} out of every
@@ -248,8 +489,8 @@ export function ManageUser({
           {user.pending && user.active && (
             <p className="mt-1 rounded-lg bg-warn-bg p-2.5 text-xs leading-relaxed text-warn">
               {user.name} hasn’t opened their invite yet, so they have no password.
-              Setting one above works, or create a fresh link — the old one keeps
-              working until it expires.
+              Setting one above works and switches their account on; their old
+              invite link then stops working, so tell them the password yourself.
             </p>
           )}
           {user.active ? (

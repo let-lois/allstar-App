@@ -145,5 +145,16 @@ export function userFromDTO(dto: SessionUserDTO): User {
     avatarInitials: initialsOf(dto.name),
     phone: dto.phone,
     email: dto.email,
+    firstName: dto.firstName,
+    lastName: dto.lastName,
+    jobTitle: dto.jobTitle,
+    teamId: dto.teamId,
+    teamName: dto.teamName,
+    // Deliberately not `avatarUrl`: the photo is overlaid from the device and
+    // the roster in `loadLocal`, and keeping it out of here keeps a 20KB image
+    // out of the session record — see the note there.
+    onboarding: dto.onboarding,
+    badge: dto.badge,
+    company: dto.company,
   }
 }

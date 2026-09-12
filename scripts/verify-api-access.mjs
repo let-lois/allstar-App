@@ -35,6 +35,9 @@ const ok = (cond, msg) => {
  * How each route decides.
  *
  *   public    deliberately unauthenticated, and safe to be
+ *   ratelimited  unauthenticated by necessity, and refused past a rate —
+ *             checked in the named delegate, since that is where the
+ *             decision lives
  *   token     unauthenticated by necessity, gated on SETUP_TOKEN — the
  *             diagnostics, which have to work when nobody can sign in
  *   session   any signed-in user, scoped to their own company by the handler
@@ -48,9 +51,25 @@ const ROUTES = {
   // deployment can be diagnosed when sign-in is the thing that is broken.
   "/api/health": { how: 'public' },
   "/api/auth/login|POST": { how: 'public' },
+  // Redeeming a company join code: the code is the credential, and guessing
+  // one is bounded on the same buckets as guessing a password.
+  "/api/join|POST": { how: 'ratelimited', fn: 'joinWithCode', file: 'join.ts' },
+  // The code itself is a credential for making accounts; reading it is
+  // handing it out. All three decided inside join.ts.
+  "/api/join-link|GET": { how: 'delegate', fn: 'readJoinLink', file: 'join.ts' },
+  "/api/join-link|POST": { how: 'delegate', fn: 'rotateJoinCode', file: 'join.ts' },
+  "/api/join-link|DELETE": { how: 'delegate', fn: 'disableJoinCode', file: 'join.ts' },
   "/api/auth/logout|POST": { how: 'public' },
 
   "/api/me": { how: 'session' },
+  // The signed-in person's own onboarding and badge. Self-scoped by
+  // construction: every handler takes `user.id` and accepts no other id.
+  "/api/me/onboarding|GET": { how: 'session' },
+  "/api/me/onboarding/step|POST": { how: 'session' },
+  "/api/me/profile|PATCH": { how: 'session' },
+  "/api/me/badge|POST": { how: 'session' },
+  "/api/me/badge/confirm|POST": { how: 'session' },
+  "/api/me/badge/renew|POST": { how: 'session' },
   "/api/bootstrap|GET": { how: 'session' },
   // Any rep may ask for a walking line to a door. On the Worker because the
   // browser key cannot spend routing quota.
@@ -63,6 +82,12 @@ const ROUTES = {
 
   "/api/invites|POST": { how: 'inline', guard: 'canInvite' },
   "/api/users|GET": { how: 'inline', guard: 'canImport' },
+  // Anyone signed in may read the team list — a rep's badge names their team.
+  // Every write is decided inside teams.ts.
+  "/api/teams|GET": { how: 'session' },
+  "/api/teams|POST": { how: 'delegate', fn: 'createTeam', file: 'teams.ts' },
+  // The company's badge identity. Admin only, decided in company.ts.
+  "/api/company|POST": { how: 'delegate', fn: 'updateCompany', file: 'company.ts' },
   "/api/audit|GET": { how: 'inline', guard: 'canInvite' },
   // Super admin alone: the payload describes the database's size over time, and
   // the database is every customer's rather than one company's.
@@ -132,9 +157,14 @@ const FAMILIES = {
     // Every action resolves its target through one `guard`, which is checked
     // separately below. Listing them individually so a new action added to the
     // subtree has to be added here too.
-    actions: ['footprint', 'password', 'reset-link', 'role', 'active', ''],
+    actions: ['onboarding-reset', 'badge-renew', 'badge-regenerate', 'team', 'title', 'footprint', 'password', 'reset-link', 'role', 'active', ''],
     file: 'users.ts',
     fns: {
+      'onboarding-reset': 'resetOnboarding',
+      'badge-renew': 'renewBadge',
+      'badge-regenerate': 'regenerateBadge',
+      team: 'setUserTeam',
+      title: 'setUserTitle',
       footprint: 'footprint',
       password: 'setPassword',
       'reset-link': 'createResetLink',
@@ -178,6 +208,19 @@ const REGEX_ROUTES = {
     handler region actually calls each of them rather than something else with
     a similar name.
   */
+  // Resend or cancel somebody's invitation. Both delegate to invites.ts.
+  '/^\\/api\\/invites\\/([A-Za-z0-9_-]{1,40})\\/(resend|revoke)$/': {
+    match: "/^\\/api\\/invites\\/([A-Za-z0-9_-]{1,40})\\/(resend|revoke)$/.exec(path)",
+    delegates: ['resendInvite', 'revokeInvite'],
+    file: 'invites.ts',
+  },
+  // One team: rename or delete. Both delegate to teams.ts, which decides the
+  // role and refuses an id from another company as "no such team".
+  '/^\\/api\\/teams\\/([A-Za-z0-9_-]{1,40})$/': {
+    match: "/^\\/api\\/teams\\/([A-Za-z0-9_-]{1,40})$/.exec(path)",
+    delegates: ['renameTeam', 'deleteTeam'],
+    file: 'teams.ts',
+  },
   '/^\\/api\\/lists\\/([A-Za-z0-9_-]{1,40})(?:\\/(members|reps))?$/': {
     match: "/^\\/api\\/lists\\/([A-Za-z0-9_-]{1,40})(?:\\/(members|reps))?$/.exec(path)",
     delegates: ['updateList', 'deleteList', 'updateMembers', 'setReps'],
@@ -243,6 +286,17 @@ for (const route of found) {
     case 'public':
       ok(route.line < authLine, `${route.key} is public and sits before authentication`)
       break
+
+    case 'ratelimited': {
+      ok(route.line < authLine, `${route.key} is public by necessity and sits before authentication`)
+      const fnSrc = readFileSync(new URL(`../api/src/${decl.file}`, import.meta.url), 'utf8')
+      const at = fnSrc.indexOf(`export async function ${decl.fn}`)
+      if (at < 0) throw new Error(`${decl.fn} is gone from ${decl.file} — update this gate`)
+      const fnBody = fnSrc.slice(at, at + 1600)
+      ok(/checkLoginRate\(env,/.test(fnBody), `${route.key} is rate-limited inside ${decl.fn} before it does anything`)
+      ok(/recordFailure\(env,/.test(fnBody), `and ${decl.fn} counts a wrong code as a failed attempt`)
+      break
+    }
 
     case 'token':
       // The one that was wrong. It must refuse before it does anything, and it

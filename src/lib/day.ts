@@ -34,7 +34,7 @@
  * "Tomorrow, 10am" said at a door means 10am where the rep and the homeowner
  * are, not 10am at head office; an invite expiry is a deadline for whoever is
  * reading it. Those are rendered in the device's zone deliberately, and
- * `ScheduleNew`, `VisitMode`'s scheduling copy and `InviteDialog` are all
+ * `ScheduleNew`, `VisitMode`'s scheduling copy and `AddMemberDialog` are all
  * correct as they stand. Routing them through here would be a regression that
  * looks like a fix.
  *

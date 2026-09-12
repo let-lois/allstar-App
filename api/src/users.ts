@@ -1,6 +1,7 @@
 import { PBKDF2_ITERATIONS, hashPassword, randomId } from './auth'
 import { record } from './audit'
-import { canInvite, grantableRoles } from './invites'
+import { canInvite, grantableRoles, revokeLiveInvites } from './invites'
+import { regenerateBadgeFor, renewBadgeDates } from './onboardingFlow'
 import type { Env, Role, SessionUser } from './types'
 
 /**
@@ -130,7 +131,23 @@ export async function setPassword(
 
   const salt = randomId(16)
   const hash = await hashPassword(password, salt, a.env.SESSION_PEPPER ?? '')
-  await a.env.DB.prepare('UPDATE users SET password_hash = ?2, password_salt = ?3 WHERE id = ?1')
+  /*
+    A first password switches the account on; a replacement does not.
+
+    An invited person is `active = 0` until they accept, and only `acceptInvite`
+    flipped that — so an admin setting a password for somebody who never opened
+    their link produced an account with a working password that still could not
+    sign in, while the Manage sheet promised it would. The CASE reads the *old*
+    hash: NULL means this is their first password and they were only ever
+    waiting; anything else means a reset, and a reset must never quietly undo a
+    deactivation somebody chose.
+  */
+  await a.env.DB.prepare(
+    `UPDATE users
+        SET password_hash = ?2, password_salt = ?3,
+            active = CASE WHEN password_hash IS NULL THEN 1 ELSE active END
+      WHERE id = ?1`,
+  )
     .bind(g.target.id, hash, salt)
     .run()
 
@@ -173,9 +190,13 @@ export async function createResetLink(
 
   // Reuses the invite table: an invite and a reset are the same object — a
   // one-time token that lets exactly one person choose exactly one password.
+  // Marked 'reset' so the console never reports it as a pending invitation,
+  // and so `acceptInvite` knows this one is allowed to replace a password.
+  // Earlier unused reset links die here: one live link per person.
+  await revokeLiveInvites(a.env, g.target.id, 'reset')
   await a.env.DB.prepare(
-    `INSERT INTO invites (token_hash, user_id, created_by, created_at, expires_at)
-     VALUES (?1, ?2, ?3, ?4, ?5)`,
+    `INSERT INTO invites (token_hash, user_id, created_by, created_at, expires_at, kind)
+     VALUES (?1, ?2, ?3, ?4, ?5, 'reset')`,
   )
     .bind(hashed, g.target.id, a.actor.id, now, expiresAt)
     .run()
@@ -291,6 +312,153 @@ export async function setRole(a: Actorable, role: Role): Promise<{ ok: true } | 
   })
 
   return { ok: true }
+}
+
+/* --- which team, and what it says under their name ------------------------- */
+
+/**
+ * Put somebody on a team, or take them off one (`null`).
+ *
+ * Admin only, through the same guard as every other change to a person's
+ * account: a team decides what a roster filter shows and what a badge says,
+ * and letting reps move themselves between offices is a feature nobody asked
+ * for. The team has to belong to this company — an id from another tenant
+ * reads as "no such team", not as a cross-tenant write.
+ */
+export async function setUserTeam(
+  a: Actorable,
+  teamId: string | null,
+): Promise<{ ok: true; teamName: string | null } | Failure> {
+  const g = await guard(a, { allowSelf: true })
+  if ('error' in g) return g
+
+  let teamName: string | null = null
+  if (teamId !== null) {
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(teamId)) return fail('No such team.', 404)
+    const team = await a.env.DB.prepare('SELECT name FROM teams WHERE id = ?1 AND client_id = ?2')
+      .bind(teamId, a.actor.clientId)
+      .first<{ name: string }>()
+    if (!team) return fail('No such team.', 404)
+    teamName = team.name
+  }
+
+  await a.env.DB.prepare('UPDATE users SET team_id = ?2 WHERE id = ?1 AND client_id = ?3')
+    .bind(g.target.id, teamId, a.actor.clientId)
+    .run()
+
+  await record(a.env, a.actor, {
+    action: 'user.team_changed',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+    detail: { teamId, teamName },
+  })
+  return { ok: true, teamName }
+}
+
+export const MAX_JOB_TITLE = 60
+
+/**
+ * The line under their name on the badge — "Sales Representative".
+ *
+ * Distinct from `role`, which is a permission. A rep may write their own title
+ * during onboarding (that path is `PATCH /api/me/profile`, self only); this is
+ * the admin overwriting it, through the guard.
+ */
+export async function setUserTitle(
+  a: Actorable,
+  title: unknown,
+): Promise<{ ok: true; jobTitle: string | null } | Failure> {
+  const g = await guard(a, { allowSelf: true })
+  if ('error' in g) return g
+
+  const clean = typeof title === 'string' ? title.trim().replace(/\s+/g, ' ') : ''
+  if (clean.length > MAX_JOB_TITLE) {
+    return fail(`Keep the title under ${MAX_JOB_TITLE} characters.`, 400)
+  }
+  const jobTitle = clean || null
+
+  await a.env.DB.prepare('UPDATE users SET job_title = ?2 WHERE id = ?1 AND client_id = ?3')
+    .bind(g.target.id, jobTitle, a.actor.clientId)
+    .run()
+
+  await record(a.env, a.actor, {
+    action: 'user.title_changed',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+    detail: { jobTitle },
+  })
+  return { ok: true, jobTitle }
+}
+
+/* --- onboarding and the badge, from the office ----------------------------- */
+
+/**
+ * Ask somebody to go through onboarding again.
+ *
+ * Keeps everything they entered — name, photo, badge — and clears only the
+ * record of having finished, so the flow opens at the top with every field
+ * already filled and walks them to the checklist. Their sessions are revoked
+ * so it takes effect on the phone in their hand rather than at their next
+ * sign-out, the same way a role change does.
+ */
+export async function resetOnboarding(a: Actorable): Promise<{ ok: true } | Failure> {
+  const g = await guard(a, {})
+  if ('error' in g) return g
+  await a.env.DB.prepare(
+    `UPDATE users SET onboarding_completed_at = NULL, onboarding_step = NULL,
+                      walkthrough_completed_at = NULL, setup_completed_at = NULL
+      WHERE id = ?1 AND client_id = ?2`,
+  )
+    .bind(g.target.id, a.actor.clientId)
+    .run()
+  await revokeAll(a.env, g.target.id)
+  await record(a.env, a.actor, {
+    action: 'user.onboarding_reset',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+  })
+  return { ok: true }
+}
+
+/** New dates on the same badge id; the person confirms it again. */
+export async function renewBadge(a: Actorable) {
+  const g = await guard(a, { allowSelf: true })
+  if ('error' in g) return g
+  const renewed = await renewBadgeDates(a.env, g.target.id, Date.now())
+  if ('error' in renewed) return renewed
+  await record(a.env, a.actor, {
+    action: 'badge.renewed',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+    detail: { badgeId: renewed.id, expiresAt: renewed.expiresAt, self: false },
+  })
+  return renewed
+}
+
+/**
+ * A new badge id. For a badge that was misprinted, lost, or is being carried
+ * by somebody who should not have it. The old number stops meaning anything.
+ */
+export async function regenerateBadge(a: Actorable) {
+  const g = await guard(a, { allowSelf: true })
+  if ('error' in g) return g
+  const before = await a.env.DB.prepare('SELECT badge_id FROM users WHERE id = ?1')
+    .bind(g.target.id)
+    .first<{ badge_id: string | null }>()
+  const issued = await regenerateBadgeFor(a.env, g.target.id, Date.now())
+  if ('error' in issued) return issued
+  await record(a.env, a.actor, {
+    action: 'badge.regenerated',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+    detail: { from: before?.badge_id ?? null, to: issued.id },
+  })
+  return issued
 }
 
 /* --- what a delete would actually destroy --------------------------------- */

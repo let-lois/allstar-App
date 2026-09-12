@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { DEMO_USERS } from '../data/seed'
 import type { Role } from '../types'
@@ -32,7 +32,63 @@ export function Login() {
   const nav = useNavigate()
   const signInLive = useAppStore((s) => s.signInLive)
   const signInDemo = useAppStore((s) => s.signInDemo)
+  const joinWithCode = useAppStore((s) => s.joinWithCode)
   const sessionExpired = useAppStore((s) => s.sessionExpired)
+  const location = useLocation()
+
+  /*
+    The third door: an account made with the company's join code.
+
+    A rep who opened the app before anyone invited them has no way to say
+    which company they belong to — an email is unique per company, not across
+    them — so an admin shares an eight-character code once and the rep types
+    it here. A link of the form /join/CODE opens this panel with the code
+    already in; the server decides whether it is real.
+  */
+  const linkedCode = /^\/join\/([A-Za-z0-9-]{4,16})/.exec(location.pathname)?.[1] ?? ''
+  const [showJoin, setShowJoin] = useState(!!linkedCode)
+  const [code, setCode] = useState(linkedCode.toUpperCase())
+  const [joinEmail, setJoinEmail] = useState('')
+  const [joinPassword, setJoinPassword] = useState('')
+  const [joinReveal, setJoinReveal] = useState(false)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [joinBusy, setJoinBusy] = useState(false)
+  const [joinError, setJoinError] = useState<string | null>(null)
+  useEffect(() => {
+    if (linkedCode) {
+      setShowJoin(true)
+      setCode(linkedCode.toUpperCase())
+    }
+  }, [linkedCode])
+
+  async function join(e: React.FormEvent) {
+    e.preventDefault()
+    if (joinBusy) return
+    if (!code.replace(/[^A-Za-z0-9]/g, '').length) {
+      setJoinError('Enter the company code your manager gave you.')
+      return
+    }
+    if (!joinEmail.trim().includes('@')) {
+      setJoinError('Enter the email you want to sign in with.')
+      return
+    }
+    if (joinPassword.length < 10) {
+      setJoinError('Choose a password of at least 10 characters.')
+      return
+    }
+    setJoinBusy(true)
+    setJoinError(null)
+    try {
+      await joinWithCode({ code, email: joinEmail, password: joinPassword, firstName, lastName })
+      // Onboarding takes the whole screen from here; the path no longer matters.
+      nav('/', { replace: true })
+    } catch (err) {
+      setJoinError(messageFor(err))
+    } finally {
+      setJoinBusy(false)
+    }
+  }
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -223,6 +279,124 @@ export function Login() {
               {busy ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+
+          {/* --- create an account, with the company's code ----------------- */}
+          {!showJoin ? (
+            <button
+              type="button"
+              onClick={() => setShowJoin(true)}
+              className="focusable mt-4 grid min-h-[48px] w-full place-items-center rounded-field text-[15px] font-semibold text-accent"
+              data-testid="create-account"
+            >
+              New here? Create an account
+            </button>
+          ) : (
+            <form onSubmit={join} noValidate className="mt-6 border-t border-line pt-5" data-testid="join-form">
+              <h2 className="text-[17px] font-semibold tracking-[-0.01em]">Create an account</h2>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-mute">
+                Your manager gave you an 8-character company code. Enter it with the email and password you want to sign in with.
+              </p>
+              <label className="mt-4 block">
+                <span className="text-[13px] font-medium text-ink-mute">Company code</span>
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  maxLength={12}
+                  enterKeyHint="next"
+                  className="field-sunk mt-1.5 h-14 w-full rounded-field px-4 font-mono text-[18px] uppercase tracking-[0.18em] text-ink placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-ink-faint"
+                  placeholder="ABCD2345"
+                  data-testid="join-code"
+                />
+              </label>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-[13px] font-medium text-ink-mute">First name</span>
+                  <input
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    autoComplete="given-name"
+                    autoCapitalize="words"
+                    className="field-sunk mt-1.5 h-14 w-full rounded-field px-4 text-base text-ink placeholder:text-ink-faint"
+                    placeholder="Optional"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[13px] font-medium text-ink-mute">Last name</span>
+                  <input
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    autoComplete="family-name"
+                    autoCapitalize="words"
+                    className="field-sunk mt-1.5 h-14 w-full rounded-field px-4 text-base text-ink placeholder:text-ink-faint"
+                    placeholder="Optional"
+                  />
+                </label>
+              </div>
+              <label className="mt-3 block">
+                <span className="text-[13px] font-medium text-ink-mute">Email</span>
+                <input
+                  type="email"
+                  value={joinEmail}
+                  onChange={(e) => setJoinEmail(e.target.value)}
+                  autoComplete="email"
+                  inputMode="email"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="next"
+                  className="field-sunk mt-1.5 h-14 w-full rounded-field px-4 text-base text-ink placeholder:text-ink-faint"
+                  placeholder="you@company.com"
+                  data-testid="join-email"
+                />
+              </label>
+              <label className="mt-3 block">
+                <span className="text-[13px] font-medium text-ink-mute">Choose a password</span>
+                <span className="relative mt-1.5 block">
+                  <input
+                    type={joinReveal ? 'text' : 'password'}
+                    value={joinPassword}
+                    onChange={(e) => setJoinPassword(e.target.value)}
+                    autoComplete="new-password"
+                    enterKeyHint="go"
+                    className="field-sunk h-14 w-full rounded-field pl-4 pr-[76px] text-base text-ink placeholder:text-ink-faint"
+                    placeholder="At least 10 characters"
+                    data-testid="join-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setJoinReveal((v) => !v)}
+                    aria-pressed={joinReveal}
+                    className="metal metal-dark focusable absolute right-1.5 top-1.5 grid h-11 w-[64px] place-items-center rounded-field text-xs font-semibold uppercase tracking-wide"
+                  >
+                    {joinReveal ? 'Hide' : 'Show'}
+                  </button>
+                </span>
+              </label>
+              {joinError && (
+                <p role="alert" className="mt-3 text-sm font-medium text-[#FCA5A5]">
+                  {joinError}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={joinBusy}
+                className="metal metal-brand press focusable mt-5 grid h-14 w-full place-items-center rounded-field text-[17px] font-semibold disabled:opacity-60"
+                data-testid="join-submit"
+              >
+                {joinBusy ? 'Creating your account…' : 'Create account'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowJoin(false)}
+                className="focusable mt-2 grid min-h-[44px] w-full place-items-center rounded-field text-[14px] font-medium text-ink-mute"
+              >
+                I already have an account
+              </button>
+            </form>
+          )}
 
           {/* --- the demo, kept alongside rather than behind a flag --------- */}
           <div className="mt-8 flex items-center gap-3">

@@ -1,5 +1,6 @@
 import { readSettings } from './settings'
 import { dayKeyIn } from './day'
+import { readMe } from './me'
 import type { Env, SessionUser } from './types'
 import { parseBoundary } from './territories'
 import { listsFor, repScopeSql } from './lists'
@@ -216,7 +217,15 @@ export async function bootstrap(env: Env, user: SessionUser) {
   const settings = await readSettings(env, user.clientId)
 
   return {
-    user,
+    /*
+      The whole person, not the session's eight fields. The phone re-reads its
+      user from every bootstrap, and a bootstrap that carried less than the
+      login payload would erase `onboarding` from state mid-flow — the shell
+      would vanish under a rep at step three the first time the outbox
+      refreshed. Falls back to the session user if the read fails, so a
+      failed migration still degrades this and never the bootstrap.
+    */
+    user: (await readMe(env, user.id).catch(() => null)) ?? user,
     settings,
     erased: (erased.results ?? []).map((r) => r.entity_id),
     properties: (properties.results as Record<string, unknown>[]).map((p) => ({

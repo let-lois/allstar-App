@@ -30,6 +30,25 @@ export type AuditAction =
   | 'user.reactivated'
   | 'user.deleted'
   | 'user.role_changed'
+  | 'user.invite_resent'
+  | 'user.invite_revoked'
+  /* Somebody made their own account with the company join code. */
+  | 'user.joined'
+  | 'company.join_code_rotated'
+  | 'company.join_code_disabled'
+  | 'user.profile_updated'
+  | 'user.onboarding_completed'
+  | 'user.onboarding_reset'
+  | 'badge.issued'
+  | 'badge.confirmed'
+  | 'badge.renewed'
+  | 'badge.regenerated'
+  | 'user.team_changed'
+  | 'user.title_changed'
+  | 'team.created'
+  | 'team.renamed'
+  | 'team.deleted'
+  | 'company.changed'
   | 'territory.assigned'
   | 'territory.created'
   | 'list.created'
@@ -65,7 +84,17 @@ export type AuditAction =
 
 export interface AuditEntry {
   action: AuditAction
-  targetType?: 'user' | 'territory' | 'list' | 'import' | 'settings' | 'integration' | 'geocoder' | 'lead'
+  targetType?:
+    | 'user'
+    | 'territory'
+    | 'list'
+    | 'import'
+    | 'settings'
+    | 'integration'
+    | 'geocoder'
+    | 'lead'
+    | 'team'
+    | 'company'
   targetId?: string
   /** The name as it read at the time. Never resolved later. */
   targetLabel?: string

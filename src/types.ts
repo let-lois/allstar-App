@@ -25,6 +25,39 @@ export interface User {
   avatarUrl?: string
   phone?: string
   email?: string
+  firstName?: string
+  lastName?: string
+  /** Display text for the badge — not `role`, which is a permission. */
+  jobTitle?: string
+  teamId?: string
+  teamName?: string
+  /**
+   * Where this person is in onboarding, as the server says. Absent on a
+   * session cached before the field existed and on the demo — and absent
+   * means "nothing to do", so an upgrade never throws a working rep into a
+   * flow they finished under another name.
+   */
+  onboarding?: {
+    status: OnboardingStatus
+    step?: OnboardingStep
+    version: number
+    completedAt?: number
+  }
+  badge?: BadgeInfo | null
+  /** The company as it appears on a badge. */
+  company?: { name: string; timezone: string; logoUrl?: string; website?: string }
+}
+
+export type OnboardingStatus = 'not_started' | 'in_progress' | 'complete' | 'required'
+export type OnboardingStep = 'profile' | 'setup' | 'walkthrough' | 'badge' | 'checklist'
+export type BadgeStatus = 'none' | 'awaiting_confirmation' | 'active' | 'expired'
+
+export interface BadgeInfo {
+  id: string
+  status: BadgeStatus
+  issuedAt?: number
+  expiresAt?: number
+  confirmedAt?: number
 }
 
 /** Outcome codes are stable; labels/colors are client-configurable (see OutcomeDef). */
@@ -250,6 +283,25 @@ export interface TeamMember {
   initials: string
   /** A profile photo, as a compressed data URL. See `User.avatarUrl`. */
   avatarUrl?: string
+  /*
+    The onboarding facts the console's roster shows. Derived on the server
+    (see api/src/onboarding.ts) and cached here with the rest of the roster,
+    so the console reads the same way with no signal. Absent on the demo
+    roster and on a cache written before these existed.
+  */
+  firstName?: string
+  lastName?: string
+  jobTitle?: string
+  teamId?: string
+  teamName?: string
+  invitation?: 'not_sent' | 'pending' | 'accepted' | 'expired' | 'revoked'
+  invitedAt?: number
+  onboarding?: OnboardingStatus
+  onboardingStep?: OnboardingStep
+  badge?: BadgeStatus
+  badgeExpiresAt?: number
+  createdAt?: number
+  lastSeenAt?: number
 }
 
 export interface Territory {

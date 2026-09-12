@@ -33,6 +33,9 @@ import {
   apiLogout,
   apiSetListReps,
   apiUsers,
+  apiJoin,
+  apiMe,
+  type SessionUserDTO,
 } from '../lib/http'
 import { canSee, leadIdsViaLists, listsContaining, listsFor, withMembers } from '../lib/leadLists'
 import { applyBootstrap, leadListFromDTO, outboxPending, wipeCachedData } from '../lib/hydrate'
@@ -132,6 +135,25 @@ interface AppState {
   signInLive: (email: string, password: string) => Promise<void>
   /** The seeded pitch dataset — no account, no network. */
   signInDemo: (userId: string) => Promise<void>
+  /**
+   * Redeem a company join code: the account is made (or a pending invitation
+   * claimed) and the person is signed in, with onboarding ahead of them.
+   * Throws like `signInLive` — the person is looking at a form.
+   */
+  joinWithCode: (input: {
+    code: string
+    email: string
+    password: string
+    firstName?: string
+    lastName?: string
+  }) => Promise<void>
+  /**
+   * Re-read who I am from the server — profile, onboarding, badge, company.
+   * Called after every onboarding step, and at boot, so an admin's reset or a
+   * new required version reaches the phone. Quiet on failure: the cached user
+   * stands until the server can be asked.
+   */
+  refreshMe: () => Promise<void>
   /** Pull the server's view of the world down again. Live mode only. */
   refreshFromServer: () => Promise<void>
   /** Re-read the team roster. Office roles only — a rep has no business with it. */
@@ -261,6 +283,39 @@ function seedTeam(mode: 'demo' | 'live'): TeamMember[] {
   ]
 }
 
+/**
+ * Everything a sign-in does after the server has said yes.
+ *
+ * Shared by the password door and the join-code door, which both arrive here
+ * holding a token and a person. Whoever was here before — a demo, or another
+ * rep on a shared phone — their cached rows go before this account's arrive.
+ * Queued work is left alone.
+ */
+async function enterLive(token: string, dto: SessionUserDTO): Promise<void> {
+  const user = userFromDTO(dto)
+  await wipeCachedData()
+  await saveSession({ mode: 'live', token, user })
+
+  try {
+    const dtoBundle = await fetchBootstrap()
+    // A fresh sign-in has no local rows worth preserving — the cache was
+    // wiped above — so this is a clean replace.
+    if (dtoBundle) await applyBootstrap(dtoBundle)
+  } catch {
+    // Signed in, but the data didn't arrive. That's a legitimate state for
+    // this app: the session is real, the cache is empty, and the next refresh
+    // fills it. Better than refusing a login that actually succeeded.
+  }
+
+  const store = useAppStore.getState()
+  await store.loadLocal(user, 'live')
+  void store.loadTeam()
+  useAppStore.setState({ sessionExpired: false })
+  void store.refreshPosition()
+  // Anything queued before the session lapsed can go up now.
+  void drain()
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   ready: false,
   user: null,
@@ -362,6 +417,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().loadLocal(session.user, 'live')
       void get().refreshFromServer()
       void get().loadTeam()
+      // An admin's reset, or a new required version, reaches this phone here.
+      void get().refreshMe()
     } else if (session?.mode === 'demo') {
       // Installs the demo on first run, and regenerates it when the calendar day
       // has rolled over so the pitch never opens to empty sections.
@@ -501,30 +558,34 @@ export const useAppStore = create<AppState>((set, get) => ({
     // app where the rep is standing still, looking at a form, and a failure has
     // to be shown rather than queued.
     const { token, user: dto } = await apiLogin(email.trim(), password)
-    const user = userFromDTO(dto)
+    await enterLive(token, dto)
+  },
 
-    // Whoever was here before — a demo, or another rep on a shared phone — their
-    // cached rows go before this account's arrive. Queued work is left alone.
-    await wipeCachedData()
-    await saveSession({ mode: 'live', token, user })
+  async joinWithCode(input) {
+    const { token, user: dto } = await apiJoin({
+      code: input.code.trim(),
+      email: input.email.trim(),
+      password: input.password,
+      firstName: input.firstName?.trim() || undefined,
+      lastName: input.lastName?.trim() || undefined,
+    })
+    await enterLive(token, dto)
+  },
 
+  async refreshMe() {
+    const token = liveToken()
+    if (!token || get().mode !== 'live') return
     try {
-      const dtoBundle = await fetchBootstrap()
-      // A fresh sign-in has no local rows worth preserving — the cache was
-      // wiped above — so this is a clean replace.
-      if (dtoBundle) await applyBootstrap(dtoBundle)
+      const { user: dto } = await apiMe(token)
+      const current = get().user
+      // The photo is overlaid from the device and never in /api/me's mapping;
+      // keep the one already on screen.
+      const user = { ...userFromDTO(dto), avatarUrl: current?.avatarUrl }
+      set({ user })
+      await saveSession({ mode: 'live', token, user: { ...user, avatarUrl: undefined } })
     } catch {
-      // Signed in, but the data didn't arrive. That's a legitimate state for
-      // this app: the session is real, the cache is empty, and the next refresh
-      // fills it. Better than refusing a login that actually succeeded.
+      // Offline, or the server is unhappy. What the phone already knows stands.
     }
-
-    await get().loadLocal(user, 'live')
-    void get().loadTeam()
-    set({ sessionExpired: false })
-    void get().refreshPosition()
-    // Anything queued before the session lapsed can go up now.
-    void drain()
   },
 
   async signInDemo(userId) {
@@ -563,6 +624,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         active: u.active,
         pending: u.pending,
         initials: initialsOf(u.name),
+        firstName: u.firstName,
+        lastName: u.lastName,
+        jobTitle: u.jobTitle,
+        teamId: u.teamId,
+        teamName: u.teamName,
+        invitation: u.invitation,
+        invitedAt: u.invitedAt,
+        onboarding: u.onboarding,
+        onboardingStep: u.onboardingStep,
+        badge: u.badge,
+        badgeExpiresAt: u.badgeExpiresAt,
+        createdAt: u.createdAt,
+        lastSeenAt: u.lastSeenAt,
       }))
       await db.clear('team')
       await db.putAll('team', team)

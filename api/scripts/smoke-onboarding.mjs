@@ -109,6 +109,7 @@ const adminLogin = await (
 ).json()
 ok(!!adminLogin.token, 'the new administrator can sign in')
 ok(adminLogin.user?.role === 'super_admin', 'the first user is an administrator')
+ok(adminLogin.user?.onboarding?.status === 'complete', 'and is onboarded from the start — the founder is not walked through a rep’s setup', adminLogin.user?.onboarding?.status)
 
 /* --- the admin invites a rep ---------------------------------------------- */
 const invite = await (

@@ -7,10 +7,12 @@ import { dismissTour } from './lib/tour.mjs'
  * Inviting someone onto the team.
  *
  * The assertion that matters most is not that a form submits. It's that the
- * screen never claims an email was sent — because none is. There's no mail
- * service wired up, and an admin who believes a rep was notified will find out a
- * week later that nobody ever got anything. A product that quietly overstates
- * what it did is worse than one that does less.
+ * screen says an email was sent when, and only when, the server says it sent
+ * one. Email exists now (api/src/mail.ts) but is a deployment choice; an admin
+ * who believes a rep was notified will find out a week later that nobody ever
+ * got anything. A product that quietly overstates what it did is worse than
+ * one that does less — so both answers are driven here, and each is checked
+ * against the words on the screen.
  *
  * The API is mocked so a failure here means the client is wrong, not that a
  * deployment was down. The server side is covered by api/scripts/smoke-onboarding.
@@ -64,13 +66,16 @@ await page.route('**/api/bootstrap', json(200, {
 await page.route('**/api/users', async (route) =>
   route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ users: roster }) }),
 )
+// The server's answer about email, switched below to drive both states.
+let emailed = false
+await page.route('**/api/teams', json(200, { teams: [{ id: 't_austin', name: 'Austin office', memberCount: 2, createdAt: 1 }] }))
 await page.route('**/api/invites', async (route) => {
   invitePosted = JSON.parse(route.request().postData() || '{}')
   roster = [
     ...roster,
     {
       id: 'u_new',
-      name: invitePosted.name,
+      name: [invitePosted.firstName, invitePosted.lastName].filter(Boolean).join(' ') || invitePosted.email.split('@')[0],
       email: invitePosted.email,
       role: invitePosted.role,
       active: true,
@@ -82,9 +87,13 @@ await page.route('**/api/invites', async (route) => {
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
+      alreadyMember: false,
       url: 'https://api.example.test/invite/abc123token',
       email: invitePosted.email,
       expiresAt: Date.now() + 7 * 86_400_000,
+      userId: 'u_new',
+      resent: false,
+      emailed,
     }),
   })
 })
@@ -109,39 +118,48 @@ ok(
 ok(/1 person/.test(await body()), 'the count is singular for one person, not "1 people"')
 
 /* --- inviting ------------------------------------------------------------ */
-await page.getByRole('button', { name: /Invite user/ }).click()
+await page.getByRole('button', { name: /Add team member/ }).click()
 await page.waitForTimeout(400)
-ok((await page.getByRole('dialog').count()) === 1, 'the invite dialog opens')
+ok((await page.getByRole('dialog').count()) === 1, 'the add-member dialog opens')
 
-// An empty submit must be caught locally rather than round-tripping.
-await page.getByRole('button', { name: /Create invite/ }).click()
+// An empty submit must be caught locally rather than round-tripping. Only the
+// email is required now — everything else the person fills in themselves.
+await page.getByRole('button', { name: /Send invite/ }).click()
 await page.waitForTimeout(300)
-ok(/name and an email/i.test(await body()), 'a missing name or email is caught before sending')
+ok(/email address is needed/i.test(await body()), 'a missing email is caught before sending')
 ok(invitePosted === null, 'nothing was sent to the server for an incomplete form')
+ok(/Only the email is needed/.test(await body()), 'and the form says the rest is optional')
 
 // Scoped to the dialog throughout: the page behind it has a search box and a
 // row of role filter chips whose labels collide with the form's own.
 const dialog = page.getByRole('dialog')
-await dialog.locator('input[type="text"], input:not([type])').first().fill('Marcus Vance')
+const textInputs = dialog.locator('input:not([type]), input[type="text"]')
+await textInputs.nth(0).fill('Marcus')
+await textInputs.nth(1).fill('Vance')
+await textInputs.nth(2).fill('Sales Representative')
 await dialog.locator('input[type="email"]').fill('marcus@ridgeline.test')
+await dialog.getByTestId('team-select').selectOption('t_austin')
 await dialog.getByText('Field Rep', { exact: true }).click()
-await page.getByRole('button', { name: /Create invite/ }).click()
+await page.getByRole('button', { name: /Send invite/ }).click()
 await page.waitForTimeout(800)
 
-ok(invitePosted?.name === 'Marcus Vance', 'the name reaches the server')
+ok(invitePosted?.firstName === 'Marcus' && invitePosted?.lastName === 'Vance', 'first and last name reach the server as two fields')
+ok(invitePosted?.jobTitle === 'Sales Representative', 'the title reaches the server')
+ok(invitePosted?.teamId === 't_austin', 'the chosen team reaches the server as its id')
 ok(invitePosted?.email === 'marcus@ridgeline.test', 'the email reaches the server')
 ok(invitePosted?.role === 'field_rep', `the chosen role reaches the server (${invitePosted?.role})`)
 
 /* --- THE assertion: no false claim of having sent anything --------------- */
 const after = await body()
 ok(
-  /nothing has been emailed|no mail service/i.test(after),
-  'the screen says plainly that no email was sent',
+  /nothing has been emailed/i.test(after),
+  'when the server says it did not email, the screen says plainly that no email was sent',
 )
 ok(
-  !/invitation sent|invite sent|we.{0,3}ve emailed|email sent/i.test(after),
-  'the screen never claims an email went out',
+  !/invitation emailed|invitation sent|invite sent|we.{0,3}ve emailed|email sent/i.test(after),
+  'and never claims one went out',
 )
+ok(/not set up on this deployment/i.test(after), 'and says why — configuration, not failure')
 ok(after.includes('invite/abc123token'), 'the link is shown in full so it can be sent by hand')
 ok(
   /expires/i.test(after),
@@ -168,6 +186,26 @@ ok(
   !/Deactivated/.test(roster2),
   'pending is not confused with deactivated — an admin chasing a missing link needs to tell them apart',
 )
+
+/* --- and the other answer: the server DID email ------------------------- */
+{
+  emailed = true
+  await page.getByRole('button', { name: /Add team member/ }).click()
+  await page.waitForTimeout(400)
+  const d = page.getByRole('dialog')
+  await d.locator('input[type="email"]').fill('priya@ridgeline.test')
+  await page.getByRole('button', { name: /Send invite/ }).click()
+  await page.waitForTimeout(800)
+  const said = await body()
+  ok(/Invitation emailed to priya@ridgeline.test/.test(said), 'when the server says it emailed, the screen says so, naming the address')
+  ok(!/nothing has been emailed/i.test(said), 'and does not also say nothing was sent')
+  ok(said.includes('invite/abc123token'), 'but still shows the link — "it never arrived" is a sentence every admin hears')
+  ok((await page.getByRole('link', { name: /Open in email/ }).count()) === 0, 'and does not offer to open a mail client for something already sent')
+  ok(invitePosted?.firstName === undefined && invitePosted?.lastName === undefined, 'an address alone was enough — no name was sent, none was invented')
+  await page.getByRole('button', { name: /^Done$/ }).click()
+  await page.waitForTimeout(500)
+  emailed = false
+}
 
 /* --- managing an existing person ----------------------------------------- */
 {
@@ -289,7 +327,7 @@ ok(
 // through a failure.
 {
   const roleOptions = async (p) => {
-    await p.getByRole('button', { name: /Invite user/ }).click()
+    await p.getByRole('button', { name: /Add team member/ }).click()
     await p.waitForTimeout(400)
     const labels = await p.getByRole('dialog').locator('label').allInnerTexts()
     await p.keyboard.press('Escape')
@@ -319,11 +357,12 @@ ok(
     activity: [], dailyStats: [], territories: [], serverTime: Date.now(),
   }))
   let invitedRole = null
+  await superPage.route('**/api/teams', json(200, { teams: [] }))
   await superPage.route('**/api/invites', async (route) => {
     invitedRole = JSON.parse(route.request().postData() || '{}').role
     await route.fulfill({ status: 200, contentType: 'application/json',
-      body: JSON.stringify({ url: 'https://api.example.test/invite/tok', email: 'x@y.test',
-        expiresAt: Date.now() + 86_400_000 }) })
+      body: JSON.stringify({ alreadyMember: false, url: 'https://api.example.test/invite/tok', email: 'x@y.test',
+        expiresAt: Date.now() + 86_400_000, userId: 'u_x', resent: false, emailed: false }) })
   })
 
   await superPage.goto(BASE, { waitUntil: 'networkidle' })
@@ -343,15 +382,14 @@ ok(
   )
 
   // And it actually sends that role.
-  await superPage.getByRole('button', { name: /Invite user/ }).click()
+  await superPage.getByRole('button', { name: /Add team member/ }).click()
   await superPage.waitForTimeout(400)
   {
     const d = superPage.getByRole('dialog')
-    await d.locator('input[type="text"], input:not([type])').first().fill('Second Super')
     await d.locator('input[type="email"]').fill('second@ridgeline.test')
     await d.getByText('Super Admin', { exact: true }).click()
   }
-  await superPage.getByRole('button', { name: /Create invite/ }).click()
+  await superPage.getByRole('button', { name: /Send invite/ }).click()
   await superPage.waitForTimeout(700)
   ok(invitedRole === 'super_admin', `the super admin role is what gets sent (${invitedRole})`)
 
@@ -361,14 +399,13 @@ ok(
 /* --- a rejection is surfaced, not swallowed ------------------------------- */
 await page.unroute('**/api/invites')
 await page.route('**/api/invites', json(409, { error: 'That person already has an account.' }))
-await page.getByRole('button', { name: /Invite user/ }).click()
+await page.getByRole('button', { name: /Add team member/ }).click()
 await page.waitForTimeout(300)
 {
   const dialog2 = page.getByRole('dialog')
-  await dialog2.locator('input[type="text"], input:not([type])').first().fill('Marcus Vance')
   await dialog2.locator('input[type="email"]').fill('marcus@ridgeline.test')
 }
-await page.getByRole('button', { name: /Create invite/ }).click()
+await page.getByRole('button', { name: /Send invite/ }).click()
 await page.waitForTimeout(700)
 ok(
   /already has an account/i.test(await body()),
@@ -733,12 +770,11 @@ async function visibleText(page, testId) {
   ok(/Demo roster/.test(t), 'the demo says its roster is not real')
   ok(/Dana Whitfield/.test(t), 'and still shows a full team, so the pitch works')
 
-  await page2.getByRole('button', { name: /Invite user/ }).click()
+  await page2.getByRole('button', { name: /Add team member/ }).click()
   await page2.waitForTimeout(300)
   const d = page2.getByRole('dialog')
-  await d.locator('input[type="text"], input:not([type])').first().fill('Someone New')
   await d.locator('input[type="email"]').fill('someone@example.com')
-  await page2.getByRole('button', { name: /Create invite/ }).click()
+  await page2.getByRole('button', { name: /Send invite/ }).click()
   await page2.waitForTimeout(600)
   ok(called === false, 'the demo makes no invite request')
   ok(

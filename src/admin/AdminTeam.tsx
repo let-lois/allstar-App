@@ -8,39 +8,50 @@ import { useTeamStats } from '../store/teamStats'
 import { useRepRangeRows, RANGES, type RangeKey } from './useAdminData'
 import { money, relative } from '../lib/format'
 import { STATUS } from './charts/tokens'
-import { InviteDialog } from './InviteDialog'
+import { AddMemberDialog } from './AddMemberDialog'
 import { DataList } from './DataList'
 import { ManageUser } from './ManageUser'
 import { ROLE_LABEL } from '../lib/roles'
-import type { Role } from '../types'
+import type { Role, TeamMember } from '../types'
+import { BADGE_LABEL, INVITATION_LABEL, ONBOARDING_LABEL } from './statusLabels'
 
 /**
  * User management.
  *
- * The table is the product here: one row per person, every column a number a
- * manager actually acts on, and the row itself the handle for changing
- * assignment or access. Deliberately dense — this is the screen where density
- * is the feature, not a compromise.
+ * Two views of one roster. *People* is the onboarding brief's list — who has
+ * been invited, who has accepted, who has finished setting up, whose badge is
+ * live — every column a status the server derives, never a checkmark the
+ * console decides for itself. *Performance* is the older table: doors,
+ * contact rate, won, over a range. They share the search, the role filter and
+ * the row (Manage), because they are the same twenty people.
+ *
+ * Deliberately dense — this is the screen where density is the feature.
  */
 
-interface Member {
-  id: string
-  name: string
-  initials: string
-  role: Role
-  email?: string
-  phone?: string
-  territory?: string
-  active: boolean
-  /** Invited but hasn't set a password yet — distinct from deactivated. */
-  pending?: boolean
+type View = 'people' | 'performance'
+type Attention = 'all' | 'invited' | 'setting_up' | 'badge' | 'inactive'
+
+const shortDate = (ms?: number) =>
+  ms ? new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+
+/** Which attention filter a person falls under. */
+function needs(m: TeamMember): Attention[] {
+  const out: Attention[] = []
+  if (m.pending || m.invitation === 'expired' || m.invitation === 'revoked') out.push('invited')
+  if (!m.pending && m.active && m.onboarding && m.onboarding !== 'complete') out.push('setting_up')
+  if (!m.pending && m.active && m.badge && m.badge !== 'active') out.push('badge')
+  // Pending invitees are inactive until they accept — that is the invite filter's business, not this one's.
+  if (!m.active && !m.pending) out.push('inactive')
+  return out
 }
 
 export function AdminTeam() {
+  const [view, setView] = useState<View>('people')
   const [range, setRange] = useState<RangeKey>('14d')
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all')
-  const [editing, setEditing] = useState<Member | null>(null)
+  const [attention, setAttention] = useState<Attention>('all')
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [inviting, setInviting] = useState(false)
 
   const properties = useAppStore((s) => s.properties)
@@ -57,72 +68,176 @@ export function AdminTeam() {
   */
   const team = useAppStore((s) => s.team)
   const loadTeam = useAppStore((s) => s.loadTeam)
+  // Looked up, not held: after a change the sheet must show the refreshed row.
+  const editing = editingId ? team.find((m) => m.id === editingId) ?? null : null
   const loadRoster = useCallback(() => void loadTeam(), [loadTeam])
 
-  /**
-   * The roster.
-   *
-   * Live: whoever actually has an account, straight from the server, including
-   * people who were invited and haven't accepted yet — "hasn't set a password"
-   * and "was switched off" look identical in a list that only has an active
-   * flag, and an admin chasing a rep who never got their link needs to tell
-   * those apart.
-   *
-   * Demo: assembled from the seed, because the pitch needs a full team and there
-   * is no server to ask.
-   */
-  const members = useMemo<Member[]>(() => {
-    const territoryOf = (userId: string) => {
+  const territoryOf = useCallback(
+    (userId: string) => {
       const owned = Object.values(properties).filter((p) => p.assignedRepId === userId)
       const ids = [...new Set(owned.map((p) => p.territoryId).filter(Boolean))] as string[]
       const named = ids.map((id) => territories[id]?.name ?? id)
       if (named.length === 0) return owned.length ? `${owned.length} unassigned leads` : undefined
       return named.join(', ')
-    }
-
-    return team.map((u) => ({
-      id: u.id,
-      name: u.name,
-      initials: u.initials,
-      role: u.role,
-      email: u.email,
-      phone: u.phone,
-      territory: territoryOf(u.id),
-      active: u.active,
-      pending: u.pending,
-    }))
-  }, [properties, territories, team])
+    },
+    [properties, territories],
+  )
 
   const admins = useMemo(
-    () =>
-      members.filter(
-        (m) => (m.role === 'client_admin' || m.role === 'super_admin') && m.active && !m.pending,
-      ),
-    [members],
+    () => team.filter((m) => (m.role === 'client_admin' || m.role === 'super_admin') && m.active && !m.pending),
+    [team],
   )
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return members.filter(
+    return team.filter(
       (m) =>
         (roleFilter === 'all' || m.role === roleFilter) &&
-        (!q || m.name.toLowerCase().includes(q) || (m.email ?? '').toLowerCase().includes(q)),
+        (attention === 'all' || needs(m).includes(attention)) &&
+        (!q || m.name.toLowerCase().includes(q) || (m.email ?? '').toLowerCase().includes(q) || (m.teamName ?? '').toLowerCase().includes(q)),
     )
-  }, [members, query, roleFilter])
+  }, [team, query, roleFilter, attention])
+
+  const counts = useMemo(() => {
+    const c: Record<Attention, number> = { all: team.length, invited: 0, setting_up: 0, badge: 0, inactive: 0 }
+    for (const m of team) for (const k of needs(m)) c[k] += 1
+    return c
+  }, [team])
 
   const rangeById = new Map(rangeRows.map((r) => [r.id, r]))
   const todayById = new Map(today.map((r) => [r.id, r]))
+
+  /* Never colour alone: a dot, and the word beside it. */
+  const dot = (tone: 'good' | 'warn' | 'bad' | 'mute') => (
+    <span
+      aria-hidden
+      className="h-2 w-2 shrink-0 rounded-full"
+      style={{ backgroundColor: tone === 'good' ? STATUS.good : tone === 'warn' ? STATUS.warning : tone === 'bad' ? STATUS.serious : 'var(--ink-faint)' }}
+    />
+  )
+  const status = (tone: 'good' | 'warn' | 'bad' | 'mute', label: string, testid: string) => (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-ink-soft" data-testid={testid} data-value={label}>
+      {dot(tone)}
+      {label}
+    </span>
+  )
+
+  const peopleColumns = [
+    {
+      header: 'Name',
+      phone: 'title' as const,
+      cell: (m: TeamMember) => (
+        <span className="flex items-center gap-2.5">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-tint text-[11px] font-semibold text-accent">{m.initials}</span>
+          <span className="min-w-0">
+            <span className="block truncate font-medium">{m.name}</span>
+            {m.email && <span className="block truncate text-xs text-ink-mute">{m.email}</span>}
+          </span>
+        </span>
+      ),
+    },
+    { header: 'Role', cell: (m: TeamMember) => <span className="text-ink-mute">{ROLE_LABEL[m.role]}{m.jobTitle ? ` · ${m.jobTitle}` : ''}</span> },
+    { header: 'Team / office', cell: (m: TeamMember) => <span className="text-ink-mute">{m.teamName ?? '—'}</span> },
+    {
+      header: 'Invitation',
+      phone: 'meta' as const,
+      cell: (m: TeamMember) => {
+        const v = m.invitation ?? (m.pending ? 'pending' : 'not_sent')
+        return status(v === 'accepted' ? 'good' : v === 'pending' ? 'warn' : v === 'not_sent' ? 'mute' : 'bad', INVITATION_LABEL[v], 'col-invitation')
+      },
+    },
+    {
+      header: 'Account',
+      phone: 'trailing' as const,
+      cell: (m: TeamMember) =>
+        status(m.pending ? 'warn' : m.active ? 'good' : 'bad', m.pending ? 'Invite pending' : m.active ? 'Active' : 'Deactivated', 'col-account'),
+    },
+    {
+      header: 'Onboarding',
+      phone: 'meta' as const,
+      cell: (m: TeamMember) => {
+        const v = m.onboarding
+        if (!v) return <span className="text-ink-mute">—</span>
+        return status(v === 'complete' ? 'good' : v === 'not_started' ? 'mute' : 'warn', ONBOARDING_LABEL[v], 'col-onboarding')
+      },
+    },
+    {
+      header: 'Badge',
+      phone: 'meta' as const,
+      cell: (m: TeamMember) => {
+        const v = m.badge
+        if (!v) return <span className="text-ink-mute">—</span>
+        return status(v === 'active' ? 'good' : v === 'none' ? 'mute' : v === 'expired' ? 'bad' : 'warn', BADGE_LABEL[v], 'col-badge')
+      },
+    },
+    { header: 'Last active', cell: (m: TeamMember) => <span className="text-ink-mute">{m.lastSeenAt ? relative(m.lastSeenAt) : 'Never'}</span> },
+    { header: 'Date added', cell: (m: TeamMember) => <span className="text-ink-mute">{shortDate(m.createdAt)}</span> },
+  ]
+
+  const performanceColumns = [
+    peopleColumns[0]!,
+    {
+      header: 'Status',
+      phone: 'trailing' as const,
+      cell: (m: TeamMember) =>
+        status(m.pending ? 'warn' : m.active ? 'good' : 'bad', m.pending ? 'Invite pending' : m.active ? 'Active' : 'Deactivated', 'col-account'),
+    },
+    { header: 'Role', cell: (m: TeamMember) => <span className="text-ink-mute">{ROLE_LABEL[m.role]}</span> },
+    { header: 'Territory', cell: (m: TeamMember) => <span className="text-ink-mute">{territoryOf(m.id) ?? '—'}</span> },
+    {
+      header: 'Today',
+      align: 'right' as const,
+      cell: (m: TeamMember) => {
+        const t = todayById.get(m.id)
+        return m.role === 'field_rep' && t ? `${t.done}/${t.total}` : '—'
+      },
+    },
+    {
+      header: 'Doors',
+      align: 'right' as const,
+      cell: (m: TeamMember) => {
+        const r = rangeById.get(m.id)
+        return m.role === 'field_rep' && r ? r.knocks.toLocaleString() : '—'
+      },
+    },
+    {
+      header: 'Contact rate',
+      align: 'right' as const,
+      className: 'font-semibold',
+      cell: (m: TeamMember) => {
+        const r = rangeById.get(m.id)
+        return m.role === 'field_rep' && r ? `${r.contactRate}%` : '—'
+      },
+    },
+    {
+      header: 'Won',
+      align: 'right' as const,
+      cell: (m: TeamMember) => {
+        const r = rangeById.get(m.id)
+        return m.role === 'field_rep' && r ? r.sold : '—'
+      },
+    },
+  ]
+
+  const manageColumn = {
+    header: 'Actions',
+    phone: 'off' as const,
+    align: 'right' as const,
+    cell: (m: TeamMember) => (
+      <button onClick={() => setEditingId(m.id)} className="focusable min-h-[32px] rounded-lg px-2 text-xs font-semibold text-accent hover:bg-surface-tint">
+        Manage
+      </button>
+    ),
+  }
 
   return (
     <AdminPage
       tour="console-team"
       title="Team"
-      description={`${members.length} ${members.length === 1 ? 'person' : 'people'} · ${
-        members.filter((m) => m.role === 'field_rep').length
-      } in the field`}
+      description={`${team.length} ${team.length === 1 ? 'person' : 'people'} · ${team.filter((m) => m.role === 'field_rep').length} in the field`}
       actions={
         <Button size="sm" onClick={() => setInviting(true)}>
-          Invite user
+          Add team member
         </Button>
       }
     >
@@ -135,9 +250,8 @@ export function AdminTeam() {
         <div className="mb-4 rounded-field bg-warn-bg p-4 text-sm text-warn ring-1 ring-warn/25">
           <p className="font-semibold">You’re the only administrator.</p>
           <p className="mt-1 leading-relaxed">
-            There’s no password recovery by email yet, so if you lose this password
-            nobody can let you back in — not even us. Invite a second Client Admin and
-            the two of you can reset each other.
+            There’s no password recovery by email yet, so if you lose this password nobody can let you back in — not even us. Invite a
+            second Client Admin and the two of you can reset each other.
           </p>
           <Button size="sm" className="mt-3" onClick={() => setInviting(true)}>
             Invite a second admin
@@ -146,11 +260,24 @@ export function AdminTeam() {
       )}
 
       <FilterBar>
+        <div className="flex gap-1" data-testid="roster-view">
+          {(
+            [
+              ['people', 'People'],
+              ['performance', 'Performance'],
+            ] as const
+          ).map(([key, label]) => (
+            <Chip key={key} size="sm" selected={view === key} onClick={() => setView(key)}>
+              {label}
+            </Chip>
+          ))}
+        </div>
+        <span className="mx-2 h-6 w-px bg-line" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           type="search"
-          placeholder="Search name or email"
+          placeholder="Search name, email or team"
           className="focusable min-h-[40px] w-64 rounded-field border border-line px-3 text-sm"
         />
         {(['all', 'field_rep', 'manager', 'client_admin'] as const).map((r) => (
@@ -159,138 +286,55 @@ export function AdminTeam() {
           </Chip>
         ))}
         <span className="mx-2 h-6 w-px bg-line" />
-        {RANGES.map((r) => (
-          <Chip key={r.key} size="sm" selected={range === r.key} onClick={() => setRange(r.key)}>
-            {r.label}
-          </Chip>
-        ))}
+        {view === 'people' ? (
+          (
+            [
+              ['all', 'Everyone'],
+              ['invited', 'Invite open'],
+              ['setting_up', 'Still setting up'],
+              ['badge', 'Badge not active'],
+              ['inactive', 'Removed from team'],
+            ] as const
+          ).map(([key, label]) => (
+            <Chip key={key} size="sm" selected={attention === key} onClick={() => setAttention(key)}>
+              {label}
+              {key !== 'all' && counts[key] > 0 ? ` · ${counts[key]}` : ''}
+            </Chip>
+          ))
+        ) : (
+          RANGES.map((r) => (
+            <Chip key={r.key} size="sm" selected={range === r.key} onClick={() => setRange(r.key)}>
+              {r.label}
+            </Chip>
+          ))
+        )}
       </FilterBar>
 
       {/*
-        Nine columns of table, or a card per person — see `DataList`. The three
-        numbers a manager actually opens this screen for on a phone (today's
-        stops, doors, contact rate) are the card's meta grid; e-mail is the
-        subtitle; the status dot rides beside the name.
+        Nine columns of table, or a card per person — see `DataList`. On a phone
+        the People card carries the four statuses as its meta grid; the
+        Performance card the three numbers a manager opens this screen for.
       */}
-      <DataList
-        rows={filtered}
-        keyOf={(m) => m.id}
-        onRow={(m) => setEditing(m)}
-        rowLabel={(m) => `Manage ${m.name}`}
-        empty={
-          members.length === 0
-            ? 'Nobody on the team yet. Invite your first rep to get started.'
-            : 'No one matches those filters.'
-        }
-        columns={[
-          {
-            header: 'Name',
-            phone: 'title',
-            cell: (m) => (
-              <span className="flex items-center gap-2.5">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-tint text-[11px] font-semibold text-accent">
-                  {m.initials}
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate font-medium">{m.name}</span>
-                  {m.email && (
-                    <span className="block truncate text-xs text-ink-mute">{m.email}</span>
-                  )}
-                </span>
-              </span>
-            ),
-          },
-          {
-            header: 'Status',
-            phone: 'trailing',
-            cell: (m) => (
-              /* An icon and a word, never colour alone. */
-              <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-ink-soft">
-                <span
-                  aria-hidden
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{
-                    backgroundColor: m.pending
-                      ? STATUS.warning
-                      : m.active
-                        ? STATUS.good
-                        : STATUS.serious,
-                  }}
-                />
-                {m.pending ? 'Invite pending' : m.active ? 'Active' : 'Deactivated'}
-              </span>
-            ),
-          },
-          { header: 'Role', cell: (m) => <span className="text-ink-mute">{ROLE_LABEL[m.role]}</span> },
-          {
-            header: 'Territory',
-            cell: (m) => <span className="text-ink-mute">{m.territory ?? '—'}</span>,
-          },
-          {
-            header: 'Today',
-            align: 'right',
-            cell: (m) => {
-              const t = todayById.get(m.id)
-              return m.role === 'field_rep' && t ? `${t.done}/${t.total}` : '—'
-            },
-          },
-          {
-            header: 'Doors',
-            align: 'right',
-            cell: (m) => {
-              const r = rangeById.get(m.id)
-              return m.role === 'field_rep' && r ? r.knocks.toLocaleString() : '—'
-            },
-          },
-          {
-            header: 'Contact rate',
-            align: 'right',
-            className: 'font-semibold',
-            cell: (m) => {
-              const r = rangeById.get(m.id)
-              return m.role === 'field_rep' && r ? `${r.contactRate}%` : '—'
-            },
-          },
-          {
-            header: 'Won',
-            align: 'right',
-            cell: (m) => {
-              const r = rangeById.get(m.id)
-              return m.role === 'field_rep' && r ? r.sold : '—'
-            },
-          },
-          {
-            header: 'Actions',
-            phone: 'off',
-            align: 'right',
-            cell: (m) => (
-              <button
-                onClick={() => setEditing(m)}
-                className="focusable min-h-[32px] rounded-lg px-2 text-xs font-semibold text-accent hover:bg-surface-tint"
-              >
-                Manage
-              </button>
-            ),
-          },
-        ]}
-      />
+      <div data-testid={`roster-${view}`}>
+        <DataList
+          rows={filtered}
+          keyOf={(m) => m.id}
+          onRow={(m) => setEditingId(m.id)}
+          rowLabel={(m) => `Manage ${m.name}`}
+          empty={team.length === 0 ? 'Nobody on the team yet. Add your first rep to get started.' : 'No one matches those filters.'}
+          columns={[...(view === 'people' ? peopleColumns : performanceColumns), manageColumn]}
+        />
+      </div>
 
       <p className="mt-3 text-xs text-ink-mute">
         {mode === 'live'
-          ? 'Manage a person to reset their password, remove them, or delete the account. Role changes are still read-only.'
+          ? 'Every status here is the server’s: invitations from the newest link, onboarding and badge from what the person has actually done. Manage a person to re-send an invite, change their role, team or title, reset their setup, renew a badge, or remove them.'
           : 'Demo roster. Managing people needs a live account.'}
       </p>
 
-      {inviting && (
-        <InviteDialog onClose={() => setInviting(false)} onInvited={loadRoster} />
-      )}
+      {inviting && <AddMemberDialog onClose={() => setInviting(false)} onInvited={loadRoster} />}
 
-      <BottomSheet
-        open={!!editing}
-        onClose={() => setEditing(null)}
-        title={editing?.name}
-        detents={[0.7]}
-      >
+      <BottomSheet open={!!editing} onClose={() => setEditingId(null)} title={editing?.name} detents={[0.9]}>
         {editing && (
           <MemberDetail
             member={editing}
@@ -298,9 +342,10 @@ export function AdminTeam() {
             signedInId={signedInUser?.id}
             onChanged={() => {
               loadRoster()
-              setEditing(null)
+              setEditingId(null)
             }}
-            onClose={() => setEditing(null)}
+            onRefresh={loadRoster}
+            onClose={() => setEditingId(null)}
           />
         )}
       </BottomSheet>
@@ -313,29 +358,56 @@ function MemberDetail({
   mode,
   signedInId,
   onChanged,
+  onRefresh,
   onClose,
 }: {
-  member: Member
+  member: TeamMember
   mode: 'demo' | 'live'
   signedInId?: string
   onChanged: () => void
+  onRefresh: () => void
   onClose: () => void
 }) {
   const today = useTeamStats().find((r) => r.id === member.id)
   return (
-    <div className="space-y-4 pt-1">
+    <div className="space-y-4 pt-1" data-testid="member-detail">
       <div className="flex items-center gap-3">
-        <span className="grid h-12 w-12 place-items-center rounded-full bg-surface-tint font-bold text-accent">
-          {member.initials}
-        </span>
-        <div>
+        <span className="grid h-12 w-12 place-items-center rounded-full bg-surface-tint font-bold text-accent">{member.initials}</span>
+        <div className="min-w-0">
           <p className="font-bold">{member.name}</p>
-          <p className="text-xs text-ink-mute">
+          <p className="truncate text-xs text-ink-mute">
             {ROLE_LABEL[member.role]}
+            {member.jobTitle && ` · ${member.jobTitle}`}
+            {member.teamName && ` · ${member.teamName}`}
             {member.email && ` · ${member.email}`}
           </p>
         </div>
       </div>
+
+      {/* The statuses the roster shows, stated for this one person. */}
+      {member.onboarding && (
+        <dl className="grid grid-cols-2 gap-3 rounded-field bg-surface-sunk p-3 text-sm" data-testid="member-statuses">
+          <div>
+            <dt className="text-xs text-ink-mute">Invitation</dt>
+            <dd className="font-semibold">{INVITATION_LABEL[member.invitation ?? 'not_sent']}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-ink-mute">Onboarding</dt>
+            <dd className="font-semibold">
+              {ONBOARDING_LABEL[member.onboarding]}
+              {member.onboarding !== 'complete' && member.onboardingStep ? ` — at ${member.onboardingStep}` : ''}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-ink-mute">Badge</dt>
+            <dd className="font-semibold">{BADGE_LABEL[member.badge ?? 'none']}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-ink-mute">Last active</dt>
+            <dd className="font-semibold">{member.lastSeenAt ? relative(member.lastSeenAt) : 'Never'}</dd>
+          </div>
+        </dl>
+      )}
 
       {today && (
         <dl className="grid grid-cols-2 gap-3 rounded-field bg-surface-sunk p-3 text-sm">
@@ -361,30 +433,13 @@ function MemberDetail({
       )}
 
       {mode === 'live' ? (
-        <ManageUser
-          user={{
-            id: member.id,
-            name: member.name,
-            email: member.email,
-            role: member.role,
-            active: member.active,
-            pending: member.pending,
-          }}
-          isSelf={member.id === signedInId}
-          onChanged={onChanged}
-          onClose={onClose}
-        />
+        <ManageUser user={member} isSelf={member.id === signedInId} onChanged={onChanged} onRefresh={onRefresh} onClose={onClose} />
       ) : (
         <p className="rounded-field bg-warn-bg px-3 py-2.5 text-xs leading-relaxed text-warn">
-          This is the demo roster — nobody here has a real account, so there's nothing to
-          reset or remove. Sign in with real credentials to manage people.
+          This is the demo roster — nobody here has a real account, so there's nothing to reset or remove. Sign in with real credentials
+          to manage people.
         </p>
       )}
-
-      <p className="text-xs text-ink-mute">
-        Role changes are still read-only. A control that silently discards input is worse
-        than one that says so.
-      </p>
     </div>
   )
 }

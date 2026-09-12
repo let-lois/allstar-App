@@ -86,7 +86,7 @@ const signIn = async (ctx, name, url = BASE) => {
     shipped invisibly, because a clipped table looks like a table.
   */
   const reaches = [
-    ['/admin/team', /Contact rate/i, "a rep's contact rate"],
+    ['/admin/team', /Onboarding|Contact rate/i, "the roster's status columns"],
     ['/admin/leads', /Territory/i, "a lead's territory"],
     ['/admin/territories', /Coverage/i, 'territory coverage'],
   ]

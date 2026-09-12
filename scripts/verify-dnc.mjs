@@ -116,12 +116,12 @@ const TEL_ALLOWED = new Set([
   'src/screens/RepDetail.tsx',
 ])
 
-/* Hand-rolled links, for the same reason. InviteDialog mails a *teammate* an
-   invite; that is not a homeowner and has no property attached. */
+/* Hand-rolled links, for the same reason. AddMemberDialog mails a *teammate*
+   an invite; that is not a homeowner and has no property attached. */
 const RAW_ALLOWED = new Set([
   'src/lib/contact.ts',
   'src/lib/format.ts',
-  'src/admin/InviteDialog.tsx',
+  'src/admin/AddMemberDialog.tsx',
 ])
 
 function walk(dir) {

@@ -125,16 +125,38 @@ const reps = {
 }
 
 /** Invite a rep and set their password — the production path, not a row insert. */
+/* A one-pixel PNG: the checklist wants a face on the badge, not a good one. */
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+const SURNAME = { Dana: 'Whitfield', Marcus: 'Bell' }
+
+/*
+  Invite, accept, and then do what a new rep does before the app lets them at
+  their lists: finish onboarding. Since onboarding shipped, an account that has
+  not been through it opens on the onboarding shell rather than on Today, so a
+  gate about lists has to walk each rep to the end first — through the same
+  endpoints the phone uses, so a change to that order breaks here honestly.
+*/
 async function mintRep(adminToken, name) {
   const { email, password } = reps[name]
   const invite = await (await call('/api/invites', {
-    method: 'POST', body: JSON.stringify({ email, name, role: 'field_rep' }),
+    method: 'POST', body: JSON.stringify({ email, firstName: name, lastName: SURNAME[name], role: 'field_rep' }),
   }, adminToken)).json()
   await fetch(invite.url, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ password }),
   })
+  const { token, user } = await (await call('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })).json()
+  const step = (s, data) => call('/api/me/onboarding/step', { method: 'POST', body: JSON.stringify({ step: s, data }) }, token)
+  await step('profile', {})
+  await step('setup', { locationStatus: 'skipped' })
+  await step('walkthrough')
+  await call('/api/me/badge', { method: 'POST' }, token)
+  await call('/api/me/badge/confirm', { method: 'POST' }, token)
+  await step('badge')
+  await call('/api/mutations', { method: 'POST', body: JSON.stringify({ mutations: [{ id: `avatar-${name}-${stamp}`, kind: 'user.avatar', payload: { userId: user.id, dataUrl: PNG }, createdAt: Date.now() }] }) }, token)
+  const done = await (await step('checklist')).json()
+  if (done.status !== 'complete') throw new Error(`${name} did not finish onboarding: ${JSON.stringify(done)}`)
 }
 
 /*
@@ -247,7 +269,7 @@ try {
   await mgr.getByRole('button', { name: /^Create with/ }).click()
   await mgr.waitForTimeout(3000)
   const after = await text(mgr)
-  ok(new RegExp(`Created ${LIST} with 4 leads\\. Handed to Dana\\.`).test(after), 'the server creates it with four houses, handed to Dana')
+  ok(new RegExp(`Created ${LIST} with 4 leads\\. Handed to Dana Whitfield\\.`).test(after), 'the server creates it with four houses, handed to Dana')
   const row = mgr.locator('tbody tr', { hasText: LIST })
   ok((await row.count()) === 1 && /Dana/.test(await row.innerText()) && /\b4\b/.test(await row.innerText()), 'and the console, re-read from the server, shows it')
 
@@ -284,7 +306,7 @@ try {
   await mgr.waitForTimeout(500)
   await mgr.locator('[data-list-editor]').getByLabel('Dana').click()
   await mgr.waitForTimeout(2500)
-  ok(/Dana no longer has/.test(await text(mgr)), 'the manager unassigns Dana')
+  ok(/Dana Whitfield no longer has/.test(await text(mgr)), 'the manager unassigns Dana')
   ok(!/Dana/.test(await mgr.locator('tbody tr', { hasText: LIST }).innerText()), 'and the row, re-read from the server, drops her')
 
   // Her phone re-reads on load, the way it does every morning.

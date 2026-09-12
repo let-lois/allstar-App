@@ -112,11 +112,27 @@ export function setupPage(opts: { error?: string; done?: boolean; appUrl: string
 
 export function invitePage(opts: {
   token: string
-  invite?: { email: string; name: string; clientName: string }
+  invite?: { email: string; name: string; clientName: string; alreadyActive?: boolean }
   error?: string
   done?: boolean
   appUrl: string
 }): Response {
+  /*
+    An invitation link for somebody who already has a password — they joined
+    with the company code, or set it through an earlier link. No form: a form
+    here is how a forwarded email becomes a way to lock the real owner out.
+  */
+  if (opts.invite?.alreadyActive) {
+    return shell(
+      'You already have an account',
+      `<div class="mark">A</div>
+       <h1>You're already set up</h1>
+       <div class="ok">This ${escapeHtml(opts.invite.clientName)} account already has a password.</div>
+       <p class="sub">Open <a href="${escapeHtml(opts.appUrl)}">${escapeHtml(opts.appUrl)}</a> and sign in with it.</p>
+       <p class="hint">Forgotten it? Ask your administrator for a reset link — this invitation cannot change it.</p>`,
+    )
+  }
+
   if (opts.done) {
     return shell(
       'Password set',
@@ -134,8 +150,9 @@ export function invitePage(opts: {
       'Invite unavailable',
       `<div class="mark">A</div>
        <h1>This link has expired</h1>
-       <p class="sub">Invites are single-use and last seven days.</p>
-       <p class="hint">Ask your administrator to send a new one.</p>`,
+       <p class="sub">Invites are single-use, last seven days, and stop working when a newer one is sent.</p>
+       <p class="hint">Already set a password? Just open <a href="${escapeHtml(opts.appUrl)}">${escapeHtml(opts.appUrl)}</a>
+       and sign in. Otherwise, ask your administrator to send a new link.</p>`,
     )
   }
 

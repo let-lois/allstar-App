@@ -1,4 +1,4 @@
-import type { LeadStatus, Role } from '../types'
+import type { BadgeInfo, BadgeStatus, LeadStatus, OnboardingStatus, OnboardingStep, Role } from '../types'
 
 /**
  * The API client.
@@ -24,6 +24,108 @@ export interface SessionUserDTO {
   name: string
   role: Role
   phone?: string
+  /*
+    The rest is what /api/me and the login payload carry beyond the session
+    fields. All optional: a bootstrap mock, or a server from before onboarding
+    existed, sends none of it, and the app treats "absent" as "nothing to do".
+  */
+  firstName?: string
+  lastName?: string
+  jobTitle?: string
+  teamId?: string
+  teamName?: string
+  avatarUrl?: string
+  onboarding?: { status: OnboardingStatus; step?: OnboardingStep; version: number; completedAt?: number }
+  badge?: BadgeInfo | null
+  company?: { name: string; timezone: string; logoUrl?: string; website?: string }
+}
+
+export function apiMe(token: string) {
+  return request<{ user: SessionUserDTO }>('/api/me', { token })
+}
+
+/** Redeem a company join code: creates the account (or claims a pending one) and signs in. */
+export function apiJoin(input: {
+  code: string
+  email: string
+  password: string
+  firstName?: string
+  lastName?: string
+}) {
+  return request<{ token: string; user: SessionUserDTO; claimedInvite: boolean }>('/api/join', {
+    method: 'POST',
+    body: input,
+    // Hashes a password server-side; give it room, as login does.
+    timeoutMs: 30_000,
+  })
+}
+
+/* --- onboarding --------------------------------------------------------- */
+
+export interface ChecklistItemDTO {
+  key: string
+  label: string
+  done: boolean
+  required: boolean
+  detail?: string
+}
+
+/** Mirrors `OnboardingView` in api/src/onboardingFlow.ts. */
+export interface OnboardingViewDTO {
+  status: OnboardingStatus
+  step: OnboardingStep
+  steps: OnboardingStep[]
+  version: number
+  requiredVersion: number
+  completedAt?: number
+  profile: {
+    firstName?: string
+    lastName?: string
+    email: string
+    phone?: string
+    jobTitle?: string
+    teamName?: string
+    hasPhoto: boolean
+    editable: ('firstName' | 'lastName' | 'phone' | 'jobTitle')[]
+    locked: ('email' | 'role' | 'team')[]
+  }
+  missing: ('firstName' | 'lastName' | 'photo')[]
+  setup: { completedAt?: number; locationStatus?: string }
+  walkthrough: { completedAt?: number }
+  badge: BadgeInfo | null
+  checklist: ChecklistItemDTO[]
+  canComplete: boolean
+}
+
+export function apiOnboarding(token: string) {
+  return request<OnboardingViewDTO>('/api/me/onboarding', { token })
+}
+
+export function apiOnboardingStep(token: string, step: OnboardingStep, data?: Record<string, unknown>) {
+  return request<OnboardingViewDTO>('/api/me/onboarding/step', {
+    method: 'POST',
+    body: { step, data: data ?? {} },
+    token,
+  })
+}
+
+export function apiUpdateProfile(
+  token: string,
+  input: { firstName?: string; lastName?: string; phone?: string; jobTitle?: string },
+) {
+  return request<{ user: SessionUserDTO }>('/api/me/profile', { method: 'PATCH', body: input, token })
+}
+
+export function apiMintBadge(token: string) {
+  return request<{ badge: BadgeInfo }>('/api/me/badge', { method: 'POST', token })
+}
+
+export function apiConfirmBadge(token: string) {
+  return request<{ badge: BadgeInfo }>('/api/me/badge/confirm', { method: 'POST', token })
+}
+
+export function apiRenewOwnBadge(token: string) {
+  return request<{ badge: BadgeInfo }>('/api/me/badge/renew', { method: 'POST', token })
 }
 
 /**
@@ -271,6 +373,8 @@ export async function apiFetchPhoto(token: string, photoId: string): Promise<Blo
   return await res.blob()
 }
 
+export type InvitationStatus = 'not_sent' | 'pending' | 'accepted' | 'expired' | 'revoked'
+
 export interface TeamUserDTO {
   id: string
   name: string
@@ -280,6 +384,20 @@ export interface TeamUserDTO {
   active: boolean
   /** Invited but hasn't set a password yet. */
   pending: boolean
+  firstName?: string
+  lastName?: string
+  jobTitle?: string
+  teamId?: string
+  teamName?: string
+  /** Derived on the server from the newest invitation token. */
+  invitation: InvitationStatus
+  invitedAt?: number
+  onboarding: OnboardingStatus
+  onboardingStep?: OnboardingStep
+  badge: BadgeStatus
+  badgeExpiresAt?: number
+  createdAt: number
+  lastSeenAt?: number
 }
 
 export function apiUsers(token: string) {
@@ -352,19 +470,138 @@ export function apiAudit(token: string, opts: { limit?: number; before?: number 
   return request<{ entries: AuditRowDTO[] }>(`/api/audit${suffix}`, { token })
 }
 
+/* --- the admin's per-person actions -------------------------------------- */
+
+/** Re-send an invitation; a fresh link, the old one revoked. 409 once they have a password. */
+export function apiResendInvite(token: string, userId: string) {
+  return request<{ url: string; email: string; expiresAt: number; revoked: number; emailed: boolean; mailError?: string }>(
+    `/api/invites/${encodeURIComponent(userId)}/resend`,
+    { method: 'POST', token },
+  )
+}
+
+export function apiRevokeInvite(token: string, userId: string) {
+  return request<{ ok: true; revoked: number }>(`/api/invites/${encodeURIComponent(userId)}/revoke`, { method: 'POST', token })
+}
+
+export function apiSetUserTeam(token: string, userId: string, teamId: string | null) {
+  return request<{ ok: true }>(`/api/users/${encodeURIComponent(userId)}/team`, { method: 'POST', body: { teamId }, token })
+}
+
+export function apiSetUserTitle(token: string, userId: string, jobTitle: string) {
+  return request<{ ok: true }>(`/api/users/${encodeURIComponent(userId)}/title`, { method: 'POST', body: { jobTitle }, token })
+}
+
+/** Clears completion so the flow opens again on their next sign-in; what they entered stays. */
+export function apiResetOnboarding(token: string, userId: string) {
+  return request<{ ok: true }>(`/api/users/${encodeURIComponent(userId)}/onboarding-reset`, { method: 'POST', token })
+}
+
+/** Same id, later expiry, confirmation cleared. */
+export function apiRenewBadge(token: string, userId: string) {
+  return request<{ badge: BadgeInfo }>(`/api/users/${encodeURIComponent(userId)}/badge-renew`, { method: 'POST', token })
+}
+
+/** A different id — for a badge that was lost or copied. */
+export function apiRegenerateBadge(token: string, userId: string) {
+  return request<{ badge: BadgeInfo }>(`/api/users/${encodeURIComponent(userId)}/badge-regenerate`, { method: 'POST', token })
+}
+
+/* --- the company: join link, badge details, teams ------------------------- */
+
+export interface JoinLinkDTO {
+  /** null when self-signup is switched off. */
+  code: string | null
+  createdAt?: number
+  url?: string
+}
+
+export function apiJoinLink(token: string) {
+  return request<JoinLinkDTO>('/api/join-link', { token })
+}
+
+export function apiRotateJoinCode(token: string) {
+  return request<JoinLinkDTO>('/api/join-link', { method: 'POST', token })
+}
+
+export function apiDisableJoinCode(token: string) {
+  return request<{ ok: true }>('/api/join-link', { method: 'DELETE', token })
+}
+
+export interface CompanyDTO {
+  name: string
+  timezone: string
+  logoUrl?: string
+  website?: string
+}
+
+/** `null` clears a field; a key left out is left alone. */
+export function apiUpdateCompany(token: string, input: { website?: string | null; logo?: string | null }) {
+  return request<{ company: CompanyDTO }>('/api/company', { method: 'POST', body: input, token })
+}
+
+export function apiRenameTeam(token: string, teamId: string, name: string) {
+  return request<TeamDTO>(`/api/teams/${encodeURIComponent(teamId)}`, { method: 'PATCH', body: { name }, token })
+}
+
+export function apiDeleteTeam(token: string, teamId: string) {
+  return request<{ ok: true }>(`/api/teams/${encodeURIComponent(teamId)}`, { method: 'DELETE', token })
+}
+
 export function apiDeleteUser(token: string, userId: string) {
   return request<{ ok: true }>(`/api/users/${userId}`, { method: 'DELETE', token })
 }
 
-export interface CreatedInviteDTO {
-  url: string
-  email: string
-  expiresAt: number
+/**
+ * What inviting somebody produced.
+ *
+ * `alreadyMember` is the case the console has to say out loud: the address
+ * already belongs to a working account, so nothing was minted and nothing was
+ * sent — an admin left believing an invitation went out to somebody who can
+ * already sign in is the bug this field exists to prevent.
+ */
+export type CreatedInviteDTO =
+  | {
+      alreadyMember: false
+      url: string
+      email: string
+      expiresAt: number
+      userId: string
+      resent: boolean
+      /** True only when the server actually emailed the link. */
+      emailed: boolean
+      mailError?: string
+    }
+  | { alreadyMember: true; email: string; userId: string; message: string }
+
+export interface TeamDTO {
+  id: string
+  name: string
+  memberCount: number
+  createdAt: number
+}
+
+export function apiTeams(token: string) {
+  return request<{ teams: TeamDTO[] }>('/api/teams', { token })
+}
+
+export function apiCreateTeam(token: string, name: string) {
+  return request<TeamDTO>('/api/teams', { method: 'POST', body: { name }, token })
 }
 
 export function apiInvite(
   token: string,
-  input: { email: string; name: string; role: Role; phone?: string },
+  input: {
+    email: string
+    role: Role
+    /** Either the halves or the whole; all optional — an address is enough. */
+    firstName?: string
+    lastName?: string
+    name?: string
+    phone?: string
+    jobTitle?: string
+    teamId?: string | null
+  },
 ) {
   return request<CreatedInviteDTO>('/api/invites', { method: 'POST', body: input, token })
 }

@@ -80,44 +80,88 @@ export interface LoginResult {
   user: SessionUser
 }
 
-export async function login(
-  env: Env,
-  email: string,
-  password: string,
-): Promise<LoginResult | null> {
-  const row = await env.DB.prepare(
-    `SELECT u.id, u.client_id, u.email, u.name, u.role, u.phone,
-            u.password_hash, u.password_salt, u.active, c.name AS client_name,
-            c.timezone AS client_tz
-       FROM users u JOIN clients c ON c.id = u.client_id
-      WHERE lower(u.email) = lower(?1)`,
-  )
-    .bind(email)
-    .first<Record<string, string | number | null>>()
-
-  // Hash anyway when the user is missing, so a wrong email and a wrong password
-  // take the same time — otherwise the endpoint tells you which accounts exist.
-  if (!row || !row.password_hash || !row.password_salt) {
-    await hashPassword(password, 'decoy-salt', env.SESSION_PEPPER ?? '')
-    return null
-  }
-  if (!row.active) return null
-
-  const attempt = await hashPassword(
-    password,
-    String(row.password_salt),
-    env.SESSION_PEPPER ?? '',
-  )
-  if (!safeEqual(attempt, String(row.password_hash))) return null
-
+/**
+ * A signed-in session for a user, as a bearer token.
+ *
+ * Its own function because two doors now lead here: a password checked by
+ * `login`, and a company join code redeemed by `joinWithCode` — which has just
+ * *set* the password and must not hash it a second time to sign the person in.
+ */
+export async function createSession(env: Env, userId: string): Promise<string> {
   const token = randomId(32)
   const now = Date.now()
   await env.DB.prepare(
     `INSERT INTO sessions (id, user_id, created_at, expires_at, revoked)
      VALUES (?1, ?2, ?3, ?4, 0)`,
   )
-    .bind(token, row.id, now, now + SESSION_DAYS * 86_400_000)
+    .bind(token, userId, now, now + SESSION_DAYS * 86_400_000)
     .run()
+  return token
+}
+
+/**
+ * How many accounts sharing one email address a sign-in will try.
+ *
+ * Email is unique per company, not globally — the same person can be a rep at
+ * two contractors — and the login form carries no company. Each attempt is a
+ * full PBKDF2 derivation against the Worker's CPU budget, so this is bounded
+ * rather than "all of them"; two is the realistic ceiling for one human.
+ */
+const MAX_TENANTS_PER_LOGIN = 2
+
+export async function login(
+  env: Env,
+  email: string,
+  password: string,
+): Promise<LoginResult | null> {
+  /*
+    Every account with this address, not the first one SQLite happens to hand
+    back. The unique index is (client_id, lower(email)) on purpose; reading
+    one row here quietly made the same address at a second company a coin
+    toss. Oldest first, so the account that has always signed in with these
+    words keeps winning ties.
+  */
+  const rows = await env.DB.prepare(
+    `SELECT u.id, u.client_id, u.email, u.name, u.role, u.phone,
+            u.password_hash, u.password_salt, u.active, c.name AS client_name,
+            c.timezone AS client_tz
+       FROM users u JOIN clients c ON c.id = u.client_id
+      WHERE lower(u.email) = lower(?1)
+      ORDER BY u.created_at`,
+  )
+    .bind(email)
+    .all<Record<string, string | number | null>>()
+
+  const candidates = (rows.results ?? []).filter(
+    (r) => r.password_hash && r.password_salt && r.active,
+  )
+
+  // Hash anyway when nobody can sign in with this address, so a wrong email
+  // and a wrong password take the same time — otherwise the endpoint tells
+  // you which accounts exist.
+  if (candidates.length === 0) {
+    await hashPassword(password, 'decoy-salt', env.SESSION_PEPPER ?? '')
+    return null
+  }
+  if (candidates.length > MAX_TENANTS_PER_LOGIN) {
+    console.warn(`[allstar] ${candidates.length} accounts share one email; trying the oldest ${MAX_TENANTS_PER_LOGIN}`)
+  }
+
+  let row: Record<string, string | number | null> | null = null
+  for (const candidate of candidates.slice(0, MAX_TENANTS_PER_LOGIN)) {
+    const attempt = await hashPassword(
+      password,
+      String(candidate.password_salt),
+      env.SESSION_PEPPER ?? '',
+    )
+    if (safeEqual(attempt, String(candidate.password_hash))) {
+      row = candidate
+      break
+    }
+  }
+  if (!row) return null
+
+  const token = await createSession(env, String(row.id))
 
   return {
     token,

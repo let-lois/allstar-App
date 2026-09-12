@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
 import './index.css'
 import { apply, readChoice } from './lib/theme'
+import { armInstallPrompt } from './lib/install'
 
 /**
  * Apply the theme before React renders anything.
@@ -24,6 +25,10 @@ import { apply, readChoice } from './lib/theme'
  * on every screen, so a stale shell costs a flash rather than a wrong theme.
  */
 apply(readChoice())
+
+// Catch the browser's install offer before any screen exists to ask for it.
+// It fires once, early, and an offer nobody was listening for is gone.
+armInstallPrompt()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
