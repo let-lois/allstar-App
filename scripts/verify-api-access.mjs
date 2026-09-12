@@ -54,6 +54,8 @@ const ROUTES = {
   // Redeeming a company join code: the code is the credential, and guessing
   // one is bounded on the same buckets as guessing a password.
   "/api/join|POST": { how: 'ratelimited', fn: 'joinWithCode', file: 'join.ts' },
+  // A homeowner checking the badge they were shown. No login exists for them.
+  "/api/verify|GET": { how: 'ratelimited', fn: 'verifyBadge', file: 'verify.ts' },
   // The code itself is a credential for making accounts; reading it is
   // handing it out. All three decided inside join.ts.
   "/api/join-link|GET": { how: 'delegate', fn: 'readJoinLink', file: 'join.ts' },
