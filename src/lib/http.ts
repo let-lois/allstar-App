@@ -116,6 +116,21 @@ export function apiUpdateProfile(
   return request<{ user: SessionUserDTO }>('/api/me/profile', { method: 'PATCH', body: input, token })
 }
 
+/* --- a badge, checked by whoever it was shown to ------------------------- */
+
+export type VerifyStatus = 'active' | 'expired' | 'pending' | 'inactive'
+export interface VerifyDTO {
+  status: VerifyStatus
+  badge: { id: string; issuedAt?: number; expiresAt?: number }
+  person: { name: string; title?: string; photoUrl?: string }
+  company: { name: string; logoUrl?: string; website?: string }
+}
+
+/** Public: no session. 404 for an unknown number, 429 after too many misses. */
+export function apiVerifyBadge(badgeId: string) {
+  return request<VerifyDTO>(`/api/verify?badge=${encodeURIComponent(badgeId)}`)
+}
+
 export function apiMintBadge(token: string) {
   return request<{ badge: BadgeInfo }>('/api/me/badge', { method: 'POST', token })
 }

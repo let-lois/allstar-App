@@ -13,7 +13,7 @@ guarded per statement, so a partial earlier run cannot wedge them.
 | Invitations | One link per person; a second invite made a second row; no email | One canonical row per person per company; re-invite merges and re-mints; email through MailChannels when configured, link-only otherwise |
 | Self sign-up | None | Company join code / link, admin-controlled, rate-limited, field-rep only |
 | Onboarding | None | Five-step flow, server-held state, resumable, one shared flow for both ways in |
-| Badge | None | Permanent 8-digit id minted once, 1-year expiry, confirmation timestamp, QR to company website, admin renew / regenerate |
+| Badge | None | Permanent 8-digit id minted once, 1-year expiry, confirmation timestamp, QR to the badge's public verification page, admin renew / regenerate |
 | Console roster | Name, status dot, role, performance numbers | People view with Invitation / Account / Onboarding / Badge / Last active / Date added, filters, and a Performance view with the old numbers |
 | Company settings | Outcomes, notes, photos, reporting, integrations, geocoding | + Company tab: logo, website, join link, teams |
 
@@ -46,6 +46,7 @@ New or changed routes (all declared in `verify:api-access`):
 - `POST /api/invites/:userId/resend|revoke` — admin.
 - `GET|POST /api/teams`, `PATCH|DELETE /api/teams/:id` — admin.
 - `POST /api/company` — admin; website (normalised, https assumed) and logo (data URL ≤ 64 KB); `null` clears.
+- `GET /api/verify?badge=NNNNNNNN` — public, rate-limited per caller; answers active / expired / pending / inactive with the name, photo, title and company, 404 for an unknown number. The badge's QR code opens `/verify/NNNNNNNN` on the app, which renders this before any sign-in.
 - `GET /api/me` — now the full person: onboarding block, badge, company.
 - `GET /api/me/onboarding`, `POST /api/me/onboarding/step`, `PATCH /api/me/profile`, `POST /api/me/badge`, `POST /api/me/badge/confirm`, `POST /api/me/badge/renew` — session.
 - `POST /api/users/:id/team|title|onboarding-reset|badge-renew|badge-regenerate` — admin, through `guard()`.
@@ -62,7 +63,7 @@ inactive; login for an email that exists in two companies.
 - **1 Profile** — only what is missing is asked loudly; admin-entered values prefilled and editable; email, role and team locked; photo through the outbox.
 - **2 App setup** — location asked once via a button, never on arrival, never re-asked once granted; Add to Home Screen via the install prompt or iOS instructions; camera explained as ask-on-use. Notifications deferred until push exists.
 - **3 Learn the basics** — five cards (Map & Territory, Knock a Door, Log the Result, Manage Leads, Track Performance), ~60 s, with the full tour offered at the end.
-- **4 Badge** — minted once on first open; the id never changes on view; **Confirm badge information** records a timestamp.
+- **4 Badge** — minted once on first open; the id never changes on view; **Confirm badge information** records a timestamp. The QR code opens the badge's public verification page, so it works whether or not the company has a website; the website, when set, is a link on that page.
 - **5 Ready-to-sell checklist** — every line is the server's; required vs recommended is the server's; Complete is disabled until the server says it can.
 - **6 You're ready** — Start knocking → map (reps) or Today (office).
 - **More** — My badge (create / confirm / renew), Edit profile (name, phone, title).
@@ -103,7 +104,7 @@ Worker secrets / vars (operator, never in the repo):
 - `APP_URL` — the public app origin used in emails and join links (defaults to `https://allstar.letlois.com`).
 
 In the console after deploy: Settings → Company — upload the logo, set the
-website (the badge's QR code has nowhere to go without it), turn on self
+website (linked from every badge's verification page), turn on self
 sign-up if wanted, create teams; Team → Add team member for existing staff
 who should have a badge, or let them use My badge from More.
 

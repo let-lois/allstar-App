@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Avatar } from '../ui/Avatar'
 import { qrModules, qrPath } from '../../lib/qr'
+import { verifyUrl } from '../../lib/badge'
 import type { BadgeInfo } from '../../types'
 
 /**
@@ -14,10 +15,11 @@ import type { BadgeInfo } from '../../types'
  *
  * The company sits at the top. A logo the admin uploaded is used as-is; with
  * no logo, the company's name is set as a lockup so the badge is never
- * headed by an empty rectangle. The QR code points at the company's website,
- * because a homeowner's real question is "is this company real?" — and when
- * no website is set, the badge says so instead of encoding nothing, so the
- * gap gets fixed rather than scanned.
+ * headed by an empty rectangle. The QR code opens this badge's public
+ * verification page — the homeowner's real question is "is this person who
+ * they say they are", and that page answers it with the name, the photo, the
+ * company and whether the badge is still good. There is no code until there
+ * is a badge, because there is nothing to verify.
  */
 export interface TeamBadgeProps {
   badge: BadgeInfo | null
@@ -28,6 +30,8 @@ export interface TeamBadgeProps {
   avatarInitials: string
   /** Shown while the server is minting — the id slot reads as pending. */
   minting?: boolean
+  /** Off on the verification page itself, where a code to this page is noise. */
+  showQr?: boolean
   className?: string
 }
 
@@ -38,9 +42,9 @@ export const BADGE_STATUS_LABEL: Record<BadgeInfo['status'], string> = {
   expired: 'Expired',
 }
 
-export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitials, minting = false, className = '' }: TeamBadgeProps) {
-  const website = company.website?.trim() || undefined
-  const qr = useMemo(() => (website ? qrModules(website) : null), [website])
+export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitials, minting = false, showQr = true, className = '' }: TeamBadgeProps) {
+  const target = badge ? verifyUrl(badge.id) : undefined
+  const qr = useMemo(() => (target && showQr ? qrModules(target) : null), [target, showQr])
   const status = badge?.status ?? 'none'
   const tz = company.timezone
   const fmt = (ms?: number) =>
@@ -105,25 +109,25 @@ export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitia
             <dd className={`nums font-semibold ${status === 'expired' ? 'text-bad' : ''}`} data-testid="badge-expires">{fmt(badge?.expiresAt)}</dd>
           </div>
         </dl>
-        {qr && website ? (
+        {qr && target ? (
           <a
-            href={website}
+            href={target}
             target="_blank"
             rel="noopener noreferrer"
             className="focusable shrink-0 rounded-md bg-white p-1.5"
-            aria-label={`Company website, ${website}`}
+            aria-label="Verify this badge"
             data-testid="badge-qr"
-            data-target={website}
+            data-target={target}
           >
             <svg viewBox={`0 0 ${qr.length} ${qr.length}`} width="84" height="84" shapeRendering="crispEdges" aria-hidden="true">
               <path d={qrPath(qr)} fill="#0B1220" />
             </svg>
           </a>
-        ) : (
+        ) : showQr ? (
           <p className="max-w-[46%] text-[12px] leading-snug text-ink-mute" data-testid="badge-qr-missing">
-            No QR code yet — your admin can add the company website under Settings, and it appears here.
+            The QR code appears once the badge is created. Scanning it shows a homeowner this badge is real.
           </p>
-        )}
+        ) : null}
       </div>
     </div>
   )

@@ -116,7 +116,7 @@ export function MyBadge() {
               )}
               {status === 'active' && (
                 <p className="mt-5 text-[14px] leading-relaxed text-ink-mute" data-testid="badge-active-copy">
-                  Show this at the door. Homeowners can scan the code to reach the company’s website.
+                  Show this at the door. Homeowners can scan the code to see that this badge is real and still good.
                 </p>
               )}
 

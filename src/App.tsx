@@ -31,6 +31,8 @@ import { Tour } from './components/system/Tour'
 import { Onboarding } from './onboarding/Onboarding'
 import { MyBadge } from './screens/MyBadge'
 import { MyProfile } from './screens/MyProfile'
+import { VerifyBadge } from './screens/VerifyBadge'
+import { badgeIdFromPath } from './lib/badge'
 
 /**
  * The office console is lazy-loaded.
@@ -90,6 +92,14 @@ export function App() {
     vv.addEventListener('resize', apply)
     return () => vv.removeEventListener('resize', apply)
   }, [])
+
+  /*
+    The one public screen. A homeowner who scanned a badge has no account and
+    is not going to make one; this must render before sign-in, before the
+    store has booted, and regardless of who (if anyone) is signed in on this
+    phone. Matched on the path alone, so nothing else in the app can catch it.
+  */
+  if (badgeIdFromPath(location.pathname)) return <VerifyBadge />
 
   if (!ready) return <Splash />
   if (!user) return <Login />

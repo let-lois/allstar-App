@@ -235,6 +235,33 @@ try {
   ok(r.body.profile.firstName === 'Jordan' && r.body.profile.lastName === 'Vale' && r.body.profile.hasPhoto && r.body.badge?.id === newBadge, 'with everything they entered still there — a reset asks again, it does not erase')
   ok(r.body.missing.length === 0, 'so the profile step has nothing to ask')
 
+  /* ===== 13b. a stranger checks the badge: public, honest, rate-limited ========== */
+  const pub = async (id) => j(await fetch(`${BASE}/api/verify?badge=${encodeURIComponent(id)}`))
+  r = await pub(newBadge)
+  ok(r.status === 200 && r.body.status === 'pending' && r.body.person.name === 'Jordan Vale' && r.body.company.name === 'Summit Exteriors', 'with no session at all, the regenerated badge reads as pending — issued, not yet confirmed', `${r.status} ${r.body.status}`)
+  ok(!('email' in r.body.person) && !('role' in r.body.person) && !('id' in r.body.person), 'and the answer carries no email, role or user id — only what a homeowner needs')
+  r = await j(await call('/api/me/badge/confirm', { method: 'POST' }, again.token))
+  r = await pub(newBadge)
+  ok(r.status === 200 && r.body.status === 'active' && typeof r.body.person.photoUrl === 'string' && r.body.person.title === 'Senior Sales Representative', 'once confirmed it reads as active, with the photo and the title the rep chose to compare at the door', r.body.status)
+  r = await pub(badge.id)
+  ok(r.status === 404, 'the id that was regenerated away belongs to nobody now', `${r.status}`)
+  r = await pub('abc')
+  ok(r.status === 404, 'a malformed number is a miss, not an error', `${r.status}`)
+  await call(`/api/users/${repId}/active`, { method: 'POST', body: JSON.stringify({ active: false }) }, A)
+  r = await pub(newBadge)
+  ok(r.status === 200 && r.body.status === 'inactive' && r.body.person.name === 'Jordan Vale' && !r.body.person.photoUrl, 'a removed team member’s badge reads as no longer valid — the name, and no photo of someone who has left', r.body.status)
+  await call(`/api/users/${repId}/active`, { method: 'POST', body: JSON.stringify({ active: true }) }, A)
+  r = await pub(newBadge)
+  ok(r.status === 200 && r.body.status === 'active', 'and restoring access restores the badge — nothing about it was changed', r.body.status)
+  let limited = null
+  for (let i = 0; i < 12 && !limited; i++) {
+    const miss = await fetch(`${BASE}/api/verify?badge=${10000000 + i}`)
+    if (miss.status === 429) limited = miss
+  }
+  ok(!!limited && Number(limited.headers.get('retry-after')) > 0, 'a run of misses from one caller is refused with a retry-after, like a wrong password', limited ? `429 after misses, retry-after ${limited.headers.get('retry-after')}s` : 'never limited')
+  r = await pub(newBadge)
+  ok(r.status === 429, 'and the limit is per caller, not per badge — the same phone cannot keep guessing by mixing in a real number', `${r.status}`)
+
   /* ===== 14. the audit trail ================================================== */
   const { entries } = await (await call('/api/audit?limit=100', {}, A)).json()
   const actions = new Set(entries.map((e) => e.action))

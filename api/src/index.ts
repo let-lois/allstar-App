@@ -55,6 +55,7 @@ import { createTeam, deleteTeam, listTeams, renameTeam } from './teams'
 import { updateCompany } from './company'
 import { mailConfigured } from './mail'
 import { disableJoinCode, joinWithCode, readJoinLink, rotateJoinCode } from './join'
+import { verifyBadge } from './verify'
 import { badgeStatus, displayName, invitationStatus, onboardingStatus } from './onboarding'
 import { ensureSchema, migrationState } from './migrate'
 import {
@@ -666,6 +667,19 @@ export default {
         as a password guess, because the code is the only thing between the
         internet and a field-rep account in somebody's company.
       */
+      /* --- a badge, checked by the homeowner it was shown to ----------------- */
+      //
+      // Public and rate-limited like /api/join, for the same reason: no login
+      // exists for the person asking, and a miss costs an attempt.
+      if (path === '/api/verify' && req.method === 'GET') {
+        const result = await verifyBadge(env, url.searchParams.get('badge'), req.headers.get('cf-connecting-ip'))
+        if ('error' in result) {
+          const headers = result.retryAfter ? { ...cors, 'retry-after': String(result.retryAfter) } : cors
+          return json({ error: result.error }, result.status, headers)
+        }
+        return json(result, 200, cors)
+      }
+
       if (path === '/api/join' && req.method === 'POST') {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
         const result = await joinWithCode(env, body, req.headers.get('cf-connecting-ip'))
