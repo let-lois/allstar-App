@@ -10,8 +10,8 @@ import { DAY, makeState, mockApi, body, phone as newPhone, signIn as signInAt, t
  * One component draws it — in the onboarding step, in More → My badge — so
  * this pins the component's promises once and the two screens' own behaviour
  * around it:
- *   the QR code encodes the company's website, and only when there is one;
- *     with none, the badge says what is missing rather than showing nothing
+ *   the QR code encodes the badge's own verification URL, as soon as there
+ *     is a badge; the company website is a link on that page, not the target
  *   the company's logo heads the badge when set; a lettered lockup when not
  *   viewing a badge never mints one — the id is minted once and read forever
  *   an expired badge offers Renew, and renewal asks for confirmation again
@@ -69,7 +69,7 @@ const readyForBadge = (over = {}) =>
   })
 
 /* ========================================================================== */
-/* The badge step draws the real badge: logo, QR to the website, status         */
+/* The badge step draws the real badge: logo, QR to its own check, status       */
 /* ========================================================================== */
 {
   const s = readyForBadge()
@@ -87,11 +87,12 @@ const readyForBadge = (over = {}) =>
   ok(/#32143567/.test(await page.getByTestId('badge-id').innerText()), 'the id', await page.getByTestId('badge-id').innerText())
   ok((await badge.getAttribute('data-status')) === 'awaiting_confirmation' && /awaiting confirmation/i.test(await page.getByTestId('badge-status').innerText()), 'unconfirmed reads as awaiting confirmation', await badge.getAttribute('data-status'))
   const qrEl = page.getByTestId('badge-qr')
-  ok((await qrEl.count()) === 1 && (await qrEl.getAttribute('data-target')) === SITE && (await qrEl.getAttribute('href')) === SITE, 'the QR code targets the company website', await qrEl.getAttribute('data-target'))
-  const want = expectedQr(SITE)
+  const VERIFY = `${BASE}/verify/32143567`
+  ok((await qrEl.count()) === 1 && (await qrEl.getAttribute('data-target')) === VERIFY && (await qrEl.getAttribute('href')) === VERIFY, 'the QR code targets this badge’s own verification page', await qrEl.getAttribute('data-target'))
+  const want = expectedQr(VERIFY)
   const got = await drawnQr(page)
   ok(got && got.n === want.n && got.dark === want.dark && got.dark > 0, 'and what is drawn is the encoder’s grid for that URL — same size, same dark cells', `${got?.n}x${got?.n}, ${got?.dark} dark vs ${want.n}x${want.n}, ${want.dark}`)
-  ok((await page.getByTestId('badge-qr-missing').count()) === 0, 'no missing-website message when there is a website')
+  ok((await page.getByTestId('badge-qr-missing').count()) === 0, 'no placeholder once there is a badge')
   const box = await qrEl.boundingBox()
   ok(box && box.width >= 44 && box.height >= 44, 'the code is big enough to scan and to tap', `${Math.round(box?.width ?? 0)}px`)
   await page.getByTestId('badge-confirm').click()
@@ -102,7 +103,7 @@ const readyForBadge = (over = {}) =>
 }
 
 /* ========================================================================== */
-/* No website, no logo: the badge says so instead of encoding nothing          */
+/* No website, no logo: the code still works, because it never needed either  */
 /* ========================================================================== */
 {
   const s = readyForBadge({ website: null, logoUrl: null })
@@ -111,11 +112,63 @@ const readyForBadge = (over = {}) =>
   await mockApi(page, s)
   await signIn(page, s.email)
   await page.waitForTimeout(600)
-  ok((await page.getByTestId('badge-qr').count()) === 0, 'no QR code without a website')
-  const missing = page.getByTestId('badge-qr-missing')
-  ok((await missing.count()) === 1 && /website/i.test(await missing.innerText()) && /admin/i.test(await missing.innerText()), 'and the badge says what is missing and who can fix it', await missing.innerText())
+  ok((await page.getByTestId('badge-qr').count()) === 1 && (await page.getByTestId('badge-qr').getAttribute('data-target')) === `${BASE}/verify/32143567`, 'the QR code is there with no website — it points at the badge’s check, not at a site')
+  ok((await page.getByTestId('badge-qr-missing').count()) === 0, 'and no placeholder')
   ok((await page.getByTestId('badge-logo').count()) === 0 && (await page.getByTestId('badge-lockup').innerText()) === 'R', 'a lettered lockup stands in for a logo', await page.getByTestId('badge-lockup').innerText())
-  ok(!(await page.getByTestId('badge-confirm').isDisabled()), 'neither gap blocks confirming — the badge is still valid without them')
+  ok(!(await page.getByTestId('badge-confirm').isDisabled()), 'neither gap blocks confirming — the badge is valid without them')
+  await ctx.close()
+}
+
+/* ========================================================================== */
+/* The verification page: a stranger with a phone, no account, five answers   */
+/* ========================================================================== */
+{
+  const people = {
+    32143567: { status: 'active', badge: { id: '32143567', issuedAt: Date.now() - 2 * DAY, expiresAt: Date.now() + 363 * DAY }, person: { name: 'Marcus Vance', title: 'Sales Representative', photoUrl: LOGO }, company: { name: 'Ridgeline Roofing', logoUrl: LOGO, website: SITE } },
+    41234567: { status: 'expired', badge: { id: '41234567', issuedAt: Date.now() - 400 * DAY, expiresAt: Date.now() - 35 * DAY }, person: { name: 'Sam Okafor', title: 'Sales Representative' }, company: { name: 'Ridgeline Roofing' } },
+    51234567: { status: 'pending', badge: { id: '51234567', issuedAt: Date.now() - DAY, expiresAt: Date.now() + 364 * DAY }, person: { name: 'Dana Whitfield' }, company: { name: 'Ridgeline Roofing' } },
+    61234567: { status: 'inactive', badge: { id: '61234567', issuedAt: Date.now() - 200 * DAY, expiresAt: Date.now() + 165 * DAY }, person: { name: 'Lee Tran' }, company: { name: 'Ridgeline Roofing' } },
+  }
+  let lookups = 0
+  const ctx = await phone()
+  const page = await ctx.newPage()
+  const errors = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.route('**/api/**', (r) => r.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'Sign in.' }) }))
+  await page.route('**/api/verify?*', (r) => {
+    lookups += 1
+    const id = new URL(r.request().url()).searchParams.get('badge')
+    if (id === '99999999') return r.fulfill({ status: 429, contentType: 'application/json', headers: { 'retry-after': '600' }, body: JSON.stringify({ error: 'Too many lookups.' }) })
+    const hit = people[id]
+    return r.fulfill(hit ? { status: 200, contentType: 'application/json', body: JSON.stringify(hit) } : { status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'No badge with that number.' }) })
+  })
+  const open = async (id) => {
+    await page.goto(`${BASE}/verify/${id}`, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(900)
+    return page.getByTestId('verify-page')
+  }
+  let v = await open('32143567')
+  ok((await v.count()) === 1 && (await page.getByTestId('onboarding').count()) === 0 && (await page.locator('input[type="email"]').count()) === 0, 'the page renders with no sign-in and no app around it')
+  ok(lookups === 1 && (await v.getAttribute('data-state')) === 'active' && /valid/i.test(await page.getByTestId('verify-verdict').innerText()), 'an active badge is called valid', await v.getAttribute('data-state'))
+  ok((await page.getByTestId('badge-name').innerText()) === 'Marcus Vance' && /Ridgeline Roofing/.test(await body(page)) && /#32143567/.test(await page.getByTestId('badge-id').innerText()), 'with the name, the company and the number to compare against the badge in hand')
+  ok((await page.getByTestId('badge-qr').count()) === 0, 'and no QR code — a code to the page you are on is noise')
+  ok((await page.getByTestId('verify-website').count()) === 1 && (await page.getByTestId('verify-website').getAttribute('href')) === SITE, 'the company website is a link when the company set one')
+  const small = await targets(page)
+  ok(small.length === 0, 'every target is at least 44px', small.join(', '))
+  v = await open('41234567')
+  ok((await v.getAttribute('data-state')) === 'expired' && /expired/i.test(await page.getByTestId('verify-verdict').innerText()) && (await page.getByTestId('verify-website').count()) === 0, 'an expired badge says so, and no website link when none is set')
+  v = await open('51234567')
+  ok((await v.getAttribute('data-state')) === 'pending' && /not active yet/i.test(await page.getByTestId('verify-verdict').innerText()), 'an unconfirmed badge reads as not active yet')
+  v = await open('61234567')
+  ok((await v.getAttribute('data-state')) === 'inactive' && /no longer/i.test(await page.getByTestId('verify-verdict').innerText()) && (await page.getByTestId('badge-name').innerText()) === 'Lee Tran', 'a removed team member’s badge reads as no longer valid, with the name')
+  v = await open('71234567')
+  ok((await v.getAttribute('data-state')) === 'unknown' && /no badge with this number/i.test(await page.getByTestId('verify-verdict').innerText()) && (await page.getByTestId('team-badge').count()) === 0, 'a number nobody holds says so and draws no badge')
+  v = await open('99999999')
+  ok((await v.getAttribute('data-state')) === 'limited' && /too many/i.test(await page.getByTestId('verify-verdict').innerText()), 'a rate-limited caller is told to wait, not shown an error')
+  await page.goto(`${BASE}/verify/abc`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(700)
+  ok((await page.getByTestId('verify-page').count()) === 0, 'a malformed path is not the verification page')
+  ok(errors.length === 0, 'no page errors', errors.join(' | '))
   await ctx.close()
 }
 
@@ -313,4 +366,4 @@ if (fails.length) {
   console.log(`\n${fails.length} FAILED`)
   process.exit(1)
 }
-console.log('\n=== the team badge: drawn once, minted once, renewed and edited from More ===')
+console.log('\n=== the team badge: drawn once, minted once, checked by a stranger, renewed and edited from More ===')

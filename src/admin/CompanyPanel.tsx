@@ -23,7 +23,8 @@ import { useAppStore } from '../store/useAppStore'
  * people get in.
  *
  * Three things live here because they are all "the company, as a team member
- * sees it": the logo and website that print on every badge; the join link
+ * sees it": the logo on every badge and the website its verification page
+ * links to; the join link
  * that lets a rep who downloaded the app first create their own account; and
  * the teams/offices an admin sorts people into. None of it is a rep's to
  * change, which is why it is in the console and not in More.
@@ -134,8 +135,8 @@ export function CompanyPanel() {
         <section className="card p-4" data-testid="company-badge-details">
           <h3 className="text-sm font-bold">On every badge</h3>
           <p className="mt-1 text-xs leading-relaxed text-ink-mute">
-            The logo heads each team member’s badge; the website is where its QR code sends a homeowner. Without a website the badge
-            carries no code and says so.
+            The logo heads each team member’s badge. Scanning a badge opens its verification page, which shows the person, the
+            company and whether the badge is still good; the website is linked from that page when you set one.
           </p>
 
           <div className="mt-4 flex items-center gap-4">
@@ -198,7 +199,7 @@ export function CompanyPanel() {
                 inputMode="url"
                 autoCapitalize="none"
                 placeholder="ridgelineroofing.com"
-                hint="Where the badge’s QR code sends a homeowner. https is assumed."
+                hint="Linked from the badge’s verification page. Optional; https is assumed."
                 data-testid="company-website"
               />
             </div>
@@ -210,7 +211,7 @@ export function CompanyPanel() {
                   const next = website.trim()
                   await apiUpdateCompany(token, { website: next || null })
                   await refreshMe()
-                  setNotice(next ? 'Website saved. Badges carry its QR code from now on.' : 'Website cleared. Badges carry no QR code until one is set.')
+                  setNotice(next ? 'Website saved. Verification pages link to it from now on.' : 'Website cleared. Verification pages no longer link anywhere.')
                 })
               }
             >
@@ -424,7 +425,7 @@ export function CompanyPanel() {
           avatarInitials={user?.avatarInitials ?? 'TM'}
           avatarUrl={user?.avatarUrl}
         />
-        <p className="mt-2 text-xs leading-relaxed text-ink-mute">A sample — your own name, a sample id. The QR code updates as you type the website.</p>
+        <p className="mt-2 text-xs leading-relaxed text-ink-mute">A sample — your own name, a sample id. Scanning a real badge opens its verification page.</p>
       </aside>
     </div>
   )

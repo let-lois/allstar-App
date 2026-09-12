@@ -279,16 +279,14 @@ const called = (w, method, path) => w.calls.filter((c) => c.method === method &&
   const panel = page.getByTestId('company-panel')
   ok((await panel.count()) === 1, 'Settings has a Company tab')
 
-  /* --- website → QR ----------------------------------------------------------- */
-  ok((await panel.getByTestId('badge-qr-missing').count()) === 1 && (await panel.getByTestId('badge-qr').count()) === 0, 'the sample badge shows there is no website yet')
+  /* --- website, and the sample's QR ------------------------------------------- */
+  ok((await panel.getByTestId('badge-qr').count()) === 1 && /\/verify\/12345678$/.test((await panel.getByTestId('badge-qr').getAttribute('data-target')) ?? ''), 'the sample badge carries a QR code to its own check, website or not', await panel.getByTestId('badge-qr').getAttribute('data-target'))
   await panel.getByTestId('company-website').fill('ridgelineroofing.com')
-  await page.waitForTimeout(300)
-  ok((await panel.getByTestId('badge-qr').count()) === 1, 'typing a website puts the QR code on the sample before saving')
   await panel.getByTestId('company-website-save').click()
   await page.waitForTimeout(800)
   const site = called(w, 'POST', '/api/company').find((c) => 'website' in c.body)
   ok(site && site.body.website === 'ridgelineroofing.com', 'Save posts the website as typed — the server normalises', JSON.stringify(site?.body))
-  ok(w.company.website === 'https://ridgelineroofing.com' && (await panel.getByTestId('badge-qr').getAttribute('data-target')) === 'https://ridgelineroofing.com', 'and the sample carries the saved, normalised URL', await panel.getByTestId('badge-qr').getAttribute('data-target'))
+  ok(w.company.website === 'https://ridgelineroofing.com' && (await panel.getByTestId('company-website').inputValue()) === 'https://ridgelineroofing.com', 'and the field reads back the saved, normalised URL', await panel.getByTestId('company-website').inputValue())
 
   /* --- logo ------------------------------------------------------------------- */
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
