@@ -110,8 +110,11 @@ const resend: MailProvider = {
         authorization: `Bearer ${env.RESEND_API_KEY ?? ''}`,
       },
       body: JSON.stringify({
-        from: from.name ? `${from.name} <${from.email}>` : from.email,
-        to: [msg.to.email],
+        from: formatAddress(from),
+        // By name, the way MailChannels is addressed. Sending the bare address
+        // here would show the rep their own email in the From column of their
+        // inbox instead of who it is from and who it is to.
+        to: [formatAddress(msg.to)],
         subject: msg.subject,
         html: msg.html,
         text: msg.text,
@@ -165,6 +168,26 @@ function active(env: Env): { provider: MailProvider; from: { email: string; name
   if (env.RESEND_API_KEY?.trim()) return { provider: resend, from }
   if (env.MAILCHANNELS_API_KEY?.trim()) return { provider: mailchannels, from }
   return null
+}
+
+/**
+ * One address as a mail header: `"Name" <addr@example.com>`, or bare.
+ *
+ * The display name is always quoted, never conditionally. A name is allowed to
+ * contain commas, dots and parentheses, and unquoted every one of them is a
+ * delimiter — `Allstar, Inc. <no-reply@…>` is not a company with a comma in
+ * its name, it is two addresses, the first of them invalid. That bug does not
+ * exist for a provider taking structured JSON, which is why it arrived with
+ * the one that parses the string itself.
+ *
+ * Control characters are stripped before quoting rather than escaped. Nothing
+ * legitimate puts a newline in a display name, and a provider that splits
+ * headers on one should never see it from us.
+ */
+function formatAddress(a: { email: string; name?: string }): string {
+  const name = a.name?.replace(/[\r\n\t\0]/g, ' ').trim()
+  if (!name) return a.email
+  return `"${name.replace(/[\\"]/g, (c) => `\\${c}`)}" <${a.email}>`
 }
 
 /** `Name <addr@example.com>` or a bare address. Null when unusable. */

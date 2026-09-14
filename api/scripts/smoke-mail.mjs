@@ -35,7 +35,9 @@ const STATE = resolve(api, '.wrangler/mail-state')
 const SETUP_TOKEN = 'local-setup-token'
 const APP_URL = 'https://app.example.test'
 const API_KEY = 'mc-test-key-not-real'
-const FROM = 'Allstar <no-reply@example.test>'
+// The comma is the point: a display name containing one must survive as a
+// single address, not split into two. It is also what a real company is called.
+const FROM = 'Allstar, Inc. <no-reply@example.test>'
 
 const fails = []
 const ok = (cond, msg, measured) => {
@@ -150,7 +152,7 @@ try {
   ok(sent?.headers['x-api-key'] === API_KEY, 'carrying the API key as X-Api-Key')
   ok(sent?.body?.personalizations?.[0]?.to?.[0]?.email === REP, 'addressed to the invited person', sent?.body?.personalizations?.[0]?.to?.[0]?.email)
   ok(sent?.body?.personalizations?.[0]?.to?.[0]?.name === 'Marcus Vance', 'by name')
-  ok(sent?.body?.from?.email === 'no-reply@example.test' && sent?.body?.from?.name === 'Allstar', 'from the configured sender, name and address parsed apart', JSON.stringify(sent?.body?.from))
+  ok(sent?.body?.from?.email === 'no-reply@example.test' && sent?.body?.from?.name === 'Allstar, Inc.', 'from the configured sender, name and address parsed apart', JSON.stringify(sent?.body?.from))
   ok(/Nadia Petrov added you to Ridgeline Roofing/.test(sent?.body?.subject ?? ''), 'the subject names who and where', sent?.body?.subject)
   const text = sent?.body?.content?.find((c) => c.type === 'text/plain')?.value ?? ''
   const html = sent?.body?.content?.find((c) => c.type === 'text/html')?.value ?? ''
@@ -229,13 +231,21 @@ try {
   ok(rs?.method === 'POST' && rs?.url === '/emails', 'at Resend’s send endpoint', `${rs?.method} ${rs?.url}`)
   ok(rs?.headers?.authorization === `Bearer ${RESEND_KEY}`, 'carrying the key as a bearer token, which is the shape Resend takes')
   ok(!JSON.stringify(rs?.body ?? {}).includes(RESEND_KEY), 'and the key is nowhere in the body')
-  ok(rs?.body?.from === FROM, 'from the configured sender, as one string', rs?.body?.from)
-  ok(Array.isArray(rs?.body?.to) && rs.body.to.length === 1 && rs.body.to[0] === RESEND_REP, 'to the invited address, as a list', JSON.stringify(rs?.body?.to))
+  ok(rs?.body?.from === '"Allstar, Inc." <no-reply@example.test>', 'from the configured sender, as one string with the display name quoted', rs?.body?.from)
+  ok(Array.isArray(rs?.body?.to) && rs.body.to.length === 1, 'to exactly one recipient', JSON.stringify(rs?.body?.to))
+  ok(rs?.body?.to?.[0] === '"Priya Natarajan" <priya@example.test>', 'addressed by name, so the rep sees who it is to and not their own address', rs?.body?.to?.[0])
+  // The bug this pins: unquoted, `Allstar, Inc.` is two addresses, the first
+  // of them invalid, and the mail is refused or sent from something else.
+  ok((rs?.body?.from?.match(/@/g) ?? []).length === 1 && !/^[^"]*,/.test(rs?.body?.from ?? ''), 'and the comma in the company name does not split it into two senders', rs?.body?.from)
   ok(typeof rs?.body?.html === 'string' && typeof rs?.body?.text === 'string', 'with both a plain-text and an HTML part')
   ok(rs.body.html.includes(r.body.url) && rs.body.text.includes(r.body.url), 'both carrying the link the API returned')
   ok(/Hi Priya,/.test(rs.body.text), 'and greeting them by first name')
   const withoutLink4 = (rs.body.text + rs.body.html).split(r.body.url).join('')
   ok(!/password_hash|correct-horse|re_test_key|[0-9a-f]{40,}/.test(withoutLink4), 'and nothing secret beyond the link itself')
+
+  const at2 = received.length
+  r = await j(await call('/api/invites', { method: 'POST', body: JSON.stringify({ email: 'sam.okafor@example.test', role: 'field_rep', firstName: 'Sam', lastName: 'Okafor, Jr.' }) }, A4))
+  ok(received[at2]?.body?.to?.[0] === '"Sam Okafor, Jr." <sam.okafor@example.test>', 'a rep whose own name carries a comma is one recipient too, not two', received[at2]?.body?.to?.[0])
 
   // The failure every new Resend account meets before its domain is verified.
   mode = 'fail'
