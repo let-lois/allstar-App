@@ -41,6 +41,16 @@ interface Check {
   detail: string
   /** What a rep loses while this is failing. Empty when it is fine. */
   cost?: string
+  /**
+   * Google's own words, when it refused.
+
+   * The guidance above it is this app's reading of the refusal, and a reading
+   * can be wrong — REQUEST_DENIED covers a key whose restriction list omits
+   * the API, a project that never enabled it, and a project with no billing,
+   * and each is fixed on a different page of the Cloud console. Whoever is
+   * standing in that console needs the sentence Google actually said.
+   */
+  said?: string
 }
 
 const TONE: Record<State, string> = {
@@ -72,9 +82,44 @@ function Row({ check }: { check: Check }) {
         {check.cost && (
           <p className="mt-1 text-[13.5px] leading-relaxed text-warn">{check.cost}</p>
         )}
+        {check.said && (
+          <p className="mt-1 text-[13.5px] leading-relaxed text-ink-soft" data-testid="google-said">
+            Google said: “{check.said}”
+          </p>
+        )}
       </div>
     </li>
   )
+}
+
+/**
+ * Which switch Google is pointing at.
+ *
+ * Google says REQUEST_DENIED for three different omissions and names which in
+ * the sentence after it. The first version of this panel read only the status
+ * and told everyone to "enable the Geocoding API on this key", which sent an
+ * operator whose key already listed it back to the same page three times. Each
+ * case below is a different page of the Cloud console, so each gets its own
+ * sentence — and the raw text is shown underneath regardless, for the case
+ * this list has not met yet.
+ */
+export function explainRefusal(text: string): string {
+  if (/billing/i.test(text)) {
+    return 'Google refused the request because billing is not enabled on the Google Cloud project. Geocoding is billed per request and will not answer without it.'
+  }
+  if (/key is not authorized|not authorized to use this service/i.test(text)) {
+    return 'Google refused the request because this key’s API restrictions do not include the Geocoding API. Add it to the key’s allowed APIs and save — it is a separate switch from Maps JavaScript.'
+  }
+  if (/project is not authorized|not enabled|has not been used/i.test(text)) {
+    return 'Google refused the request because the Geocoding API is not enabled on the Google Cloud project. Enable it in the API Library — it is a separate switch from Maps JavaScript.'
+  }
+  if (/OVER_QUERY_LIMIT|OVER_DAILY_LIMIT|quota/i.test(text)) {
+    return 'Google refused the request because the project is over its Geocoding quota. Raise the cap under Quotas, or wait for it to reset.'
+  }
+  if (/REQUEST_DENIED/.test(text)) {
+    return 'Google refused the request. Check that the Geocoding API is enabled on the project and allowed on this key — it is a separate switch from Maps JavaScript.'
+  }
+  return 'Google refused the request.'
 }
 
 /** A public landmark. Nothing about a customer is sent to see whether the API answers. */
@@ -196,10 +241,9 @@ export function GoogleStatusPanel() {
       setGeo({
         label: 'Geocoding is enabled',
         state: 'bad',
-        detail: /REQUEST_DENIED/.test(text)
-          ? 'Google refused the request. Enable the Geocoding API on this key — it is a separate switch from Maps JavaScript.'
-          : `Google refused the request. (${text.slice(0, 140)})`,
+        detail: explainRefusal(text),
         cost: 'Tapping a house on the map leaves the address blank, with no error shown to the rep.',
+        said: text.replace(/^Error:\s*/, '').slice(0, 200),
       })
     } finally {
       setProbing(false)

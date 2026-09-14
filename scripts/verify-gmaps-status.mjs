@@ -79,6 +79,8 @@ window.google = { maps: { importLibrary: async (name) => {
       window.__geocodes += 1
       ${mode === 'denied'
         ? `throw new Error('Geocoding Service: This API project is not authorized to use this API. REQUEST_DENIED')`
+        : mode === 'denied-key'
+        ? `throw new Error('Geocoding Service: This API key is not authorized to use this service or API. REQUEST_DENIED')`
         : `return { results: [{ formatted_address: '1600 Pennsylvania Ave NW', address_components: [], geometry: { location_type: 'ROOFTOP' } } ] }`}
     }
   } }
@@ -151,9 +153,16 @@ try {
     ok((await geocodes(page)) === 1, 'the button makes exactly one request', `${await geocodes(page)} geocodes`)
 
     const after = await panel.innerText()
+    // The stub's refusal is the project-level one, and the panel must say so
+    // rather than send an operator to the key page for a switch that is on
+    // the API Library page.
     ok(
-      /Enable the Geocoding API on this key/.test(after),
+      /Geocoding API is not enabled on the Google Cloud project/.test(after),
       'a refused geocode names the switch to turn on, not just "failed"',
+    )
+    ok(
+      /Google said: .*This API project is not authorized to use this API/.test(after),
+      'and quotes Google’s own sentence underneath, for the case the reading is wrong',
     )
     ok(
       /separate switch from Maps JavaScript/.test(after),
@@ -172,6 +181,30 @@ try {
     await ctx.close()
   }
 
+  /* --- the other refusal: the project has it, the key does not -------------- */
+  //
+  // Same status word from Google, different page to fix it on. The panel has
+  // to tell the two apart, because the operator who was told "enable it on the
+  // project" while staring at an enabled project has nowhere left to look.
+  {
+    const { ctx, page, errors } = await open({ who: 'Nadia Petrov', mode: 'denied-key' })
+    await toGeocodingTab(page)
+    await page.getByTestId('probe-geocoder').click()
+    await page.waitForTimeout(1200)
+    const body = await page.getByTestId('google-status').innerText()
+    ok(
+      /this key’s API restrictions do not include the Geocoding API/.test(body),
+      'a key-level refusal points at the key’s restriction list',
+    )
+    ok(!/not enabled on the Google Cloud project/.test(body), 'and not at the project, which has it')
+    ok(
+      /Google said: .*This API key is not authorized/.test(body),
+      'and quotes Google underneath',
+    )
+    ok(errors.length === 0, `no page errors${errors.length ? ': ' + errors[0] : ''}`)
+    await ctx.close()
+  }
+
   /* --- the same key with the box ticked ------------------------------------ */
   {
     const { ctx, page, errors } = await open({ who: 'Nadia Petrov', mode: 'working' })
@@ -183,7 +216,8 @@ try {
       /Tapping a house on the map fills in its address/.test(body),
       'a working geocoder is reported working',
     )
-    ok(!/Enable the Geocoding API/.test(body), 'and is not accused of being switched off')
+    ok(!/Geocoding API is not enabled|Google refused/.test(body), 'and is not accused of being switched off')
+    ok((await page.getByTestId('google-said').count()) === 0, 'and nothing is quoted when there was no refusal')
     ok(errors.length === 0, `no page errors${errors.length ? ': ' + errors[0] : ''}`)
     await ctx.close()
   }
