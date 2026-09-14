@@ -228,6 +228,127 @@ try {
       /(\d+) leads? inside/.exec(txt)?.[0])
   }
 
+  /* ===== 5. a selection becomes a list, handed to a rep, in one bar ======= */
+  //
+  // The office's half of "select area, create list, assign rep". The Lists page
+  // can draw the same shape, but a manager who has already lassoed the block
+  // here should not have to draw it again there. What is asserted is the wire:
+  // exactly the selected ids, the name typed, and the rep ticked — not a count
+  // on screen, which a bar that ignored the selection could still get right.
+  const madeLists = []
+  let listPosted = null
+  const mutationsPosted = []
+  await page.route('**/api/bootstrap', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...EMPTY_BOOTSTRAP,
+        properties: leads,
+        territories: [],
+        leadLists: [
+          { id: 'll_monday', name: 'Monday Route', description: null, createdBy: ADMIN.id, archived: false, createdAt: 1, updatedAt: 1, leadIds: [], repIds: [] },
+          ...madeLists,
+        ],
+      }),
+    }),
+  )
+  await page.route('**/api/lists', async (route) => {
+    listPosted = JSON.parse(route.request().postData() || '{}')
+    const list = {
+      id: listPosted.id ?? 'll_made',
+      name: listPosted.name,
+      description: listPosted.description ?? null,
+      createdBy: ADMIN.id,
+      archived: false,
+      createdAt: 2,
+      updatedAt: 2,
+      leadIds: listPosted.propertyIds ?? [],
+      repIds: listPosted.repIds ?? [],
+    }
+    madeLists.push(list)
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ list, skipped: 0 }) })
+  })
+  await page.route('**/api/mutations', async (route) => {
+    const body = JSON.parse(route.request().postData() || '{}')
+    for (const m of body.mutations ?? []) mutationsPosted.push(m)
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ results: (body.mutations ?? []).map((m) => ({ id: m.id, status: 'applied' })) }),
+    })
+  })
+  {
+    // Back to the whole block: the search from case 4 narrowed the map to one.
+    await page.locator('input[type="search"]').fill('')
+    await page.waitForTimeout(700)
+    ok(/3 leads inside/.test(await body()), 'with the search cleared the open shape holds the three again')
+    await page.getByRole('button', { name: /Add 3 to selection/ }).click()
+    await page.waitForTimeout(400)
+    ok(/3 selected/.test(await body()), 'and they are selected')
+
+    await page.getByTestId('bulk-list').click()
+    await page.waitForTimeout(300)
+    const panel = page.getByTestId('bulk-list-panel')
+    ok((await panel.count()) === 1, 'Add to list opens a panel in the bar')
+    ok(/Put 3 leads on a list/.test(await panel.innerText()), 'which says how many it is about to place')
+    await panel.getByLabel('List name').fill('Oak Street Area')
+    await panel.getByLabel('Marcus Vance').check()
+    const apply = page.getByTestId('bulk-list-apply')
+    ok(/Create list with 3/.test(await apply.innerText()), 'the button names the action and the count')
+    await apply.click()
+    await page.waitForTimeout(1500)
+
+    ok(!!listPosted, 'creating posts the list to the server')
+    ok(listPosted?.name === 'Oak Street Area', 'with the name typed', listPosted?.name)
+    ok(
+      JSON.stringify([...(listPosted?.propertyIds ?? [])].sort()) === JSON.stringify(['p1', 'p2', 'p3']),
+      'holding exactly the three selected leads and never the one outside the shape',
+      JSON.stringify(listPosted?.propertyIds),
+    )
+    ok(JSON.stringify(listPosted?.repIds) === JSON.stringify(['u_rep_1']), 'handed to the rep that was ticked', JSON.stringify(listPosted?.repIds))
+    ok(
+      /Created Oak Street Area with 3 leads\. Handed to Marcus Vance\./.test(await body()),
+      'and the bar says what it made and who has it',
+    )
+    ok(!/selected/.test(await body()), 'the selection is cleared behind it')
+    ok((await page.getByTestId('bulk-list-panel').count()) === 0, 'and the panel closes')
+  }
+
+  /* ===== 6. or joins a list that already exists ========================== */
+  {
+    await page.getByRole('button', { name: /Select an area/ }).click()
+    await page.waitForTimeout(300)
+    await tapAt(0.03, 0.03)
+    await tapAt(0.97, 0.03)
+    await tapAt(0.97, 0.97)
+    await tapAt(0.03, 0.97)
+    await page.getByRole('button', { name: /Add 3 to selection/ }).click()
+    await page.waitForTimeout(400)
+    await page.getByTestId('bulk-list').click()
+    await page.waitForTimeout(300)
+    const panel = page.getByTestId('bulk-list-panel')
+    const options = await panel.getByLabel('Which list').locator('option').allInnerTexts()
+    ok(options.some((o) => /Monday Route/.test(o)) && options.some((o) => /Oak Street Area/.test(o)),
+      'the existing lists are offered, including the one just made', options.join(' | '))
+    await panel.getByLabel('Which list').selectOption('ll_monday')
+    await page.waitForTimeout(200)
+    ok((await panel.getByLabel('List name').count()) === 0, 'choosing an existing list hides the name and the hand-to')
+    const apply = page.getByTestId('bulk-list-apply')
+    ok(/Add 3 to list/.test(await apply.innerText()), 'and the button says so')
+    await apply.click()
+    await page.waitForTimeout(1500)
+    const members = mutationsPosted.find((m) => m.kind === 'list.members')
+    ok(!!members, 'adding to an existing list queues a membership change')
+    ok(members?.payload?.id === 'll_monday', 'for the list chosen', members?.payload?.id)
+    ok(
+      JSON.stringify([...(members?.payload?.add ?? [])].sort()) === JSON.stringify(['p1', 'p2', 'p3']),
+      'adding exactly the three selected leads',
+      JSON.stringify(members?.payload?.add),
+    )
+    ok(/Added 3 leads to Monday Route\./.test(await body()), 'and the bar says which list they joined')
+  }
+
   ok(errors.length === 0, 'and the app threw nothing doing it', errors.slice(0, 2).join(' | '))
 } finally {
   await browser.close()

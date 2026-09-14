@@ -4,7 +4,8 @@ import { AdminPage, FilterBar } from './AdminLayout'
 import { Chip } from '../components/ui/Chip'
 import { Button } from '../components/ui/Button'
 import { useAppStore } from '../store/useAppStore'
-import { ApiError, apiAssignProperties, apiEraseLeads, apiSetLeadStatus } from '../lib/http'
+import { ApiError, NetworkError, apiAssignProperties, apiEraseLeads, apiSetLeadStatus } from '../lib/http'
+import { Field } from '../components/ui/Input'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { liveToken } from '../lib/session'
 import { PIPELINE_STAGES, STATUS_COLOR, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
@@ -78,6 +79,27 @@ export default function AdminLeads() {
   const [eraseReason, setEraseReason] = useState('')
   const [erasing, setErasing] = useState(false)
   const [eraseError, setEraseError] = useState<string | null>(null)
+  /*
+    A selection into a list.
+
+    The office's half of "Select area, create list, hand to a rep" in one bar.
+    The console's Lists page can draw a shape and do the same, but a manager who
+    has already lassoed twenty-five houses here should not have to draw them
+    again over there — the selection is the selection, whichever screen made it.
+    Existing lists are offered too, so a second street can join Monday's list
+    instead of becoming a second list.
+  */
+  const [listOpen, setListOpen] = useState(false)
+  const [listTarget, setListTarget] = useState('')
+  const [listName, setListName] = useState('')
+  const [listReps, setListReps] = useState<string[]>([])
+  const leadLists = useAppStore((s) => s.leadLists)
+  const createList = useAppStore((s) => s.createList)
+  const updateListMembers = useAppStore((s) => s.updateListMembers)
+  const lists = useMemo(
+    () => Object.values(leadLists).filter((l) => !l.archived).sort((a, b) => a.name.localeCompare(b.name)),
+    [leadLists],
+  )
 
   const reps = useMemo(() => team.filter((m) => m.active && m.role !== 'super_admin'), [team])
   const nameOf = (id?: string) => (id ? (team.find((m) => m.id === id)?.name ?? id) : null)
@@ -189,6 +211,51 @@ export default function AdminLeads() {
       )
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save that. Nothing was changed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addToList() {
+    const ids = [...selected]
+    const n = ids.length
+    const noun = `${n.toLocaleString()} lead${n === 1 ? '' : 's'}`
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      if (listTarget) {
+        const target = leadLists[listTarget]
+        await updateListMembers(listTarget, { add: ids })
+        setNotice(`Added ${noun} to ${target?.name ?? 'the list'}.`)
+      } else {
+        /*
+          Through the store, which takes a list with reps to the server and a
+          list without them onto the phone first — the same two roads the Lists
+          page uses, so a list made here is indistinguishable from one drawn
+          there. The count is read back from what was made, not from the
+          selection: the server drops ids it does not know.
+        */
+        const made = await createList({ name: listName, propertyIds: ids, repIds: listReps })
+        const handed = made.repIds.map((id) => nameOf(id) ?? id)
+        setNotice(
+          `Created ${made.name} with ${made.leadIds.length.toLocaleString()} lead${made.leadIds.length === 1 ? '' : 's'}.` +
+            (handed.length ? ` Handed to ${handed.join(', ')}.` : ''),
+        )
+      }
+      setSelected(new Set())
+      setListOpen(false)
+      setListTarget('')
+      setListName('')
+      setListReps([])
+    } catch (err) {
+      setError(
+        err instanceof NetworkError
+          ? 'Handing a list to a rep needs a connection. Try again when you are back online.'
+          : err instanceof ApiError || (err instanceof Error && err.message)
+            ? err.message
+            : 'Could not save that. Nothing was changed.',
+      )
     } finally {
       setBusy(false)
     }
@@ -474,6 +541,16 @@ export default function AdminLeads() {
               Delete selected
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => setListOpen((o) => !o)}
+            aria-expanded={listOpen}
+            data-testid="bulk-list"
+          >
+            Add to list
+          </Button>
           <button
             onClick={() => setSelected(new Set())}
             className="focusable text-sm font-medium text-ink-mute underline"
@@ -484,6 +561,98 @@ export default function AdminLeads() {
           {mode !== 'live' && (
             <span className="text-xs text-ink-mute">Demo data — nothing to reassign.</span>
           )}
+        </div>
+      )}
+
+      {selected.size > 0 && listOpen && (
+        <div
+          className="mb-3 space-y-3 rounded-field bg-surface-sunk p-3"
+          data-testid="bulk-list-panel"
+        >
+          <p className="text-sm font-semibold">
+            Put {selected.size.toLocaleString()} lead{selected.size === 1 ? '' : 's'} on a list
+          </p>
+          <select
+            value={listTarget}
+            onChange={(e) => setListTarget(e.target.value)}
+            className="focusable min-h-[38px] rounded-lg border border-ink/15 bg-surface px-2 text-sm"
+            aria-label="Which list"
+          >
+            <option value="">New list…</option>
+            {lists.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name} ({l.leadIds.length.toLocaleString()})
+              </option>
+            ))}
+          </select>
+          {!listTarget && (
+            <>
+              <Field
+                label="List name"
+                value={listName}
+                onChange={(e) => setListName(e.target.value)}
+                placeholder="e.g. Oak Street Area"
+                disabled={busy}
+              />
+              {/*
+                Hand it out here rather than on the Lists page afterwards: the
+                brief for this bar is select, create, assign, with nothing in
+                between. Same control the Lists page draws, so a manager learns
+                it once.
+              */}
+              <fieldset>
+                <legend className="mb-1.5 text-[13px] font-medium text-ink-soft">Hand to</legend>
+                {reps.length === 0 ? (
+                  <p className="text-[13px] text-ink-mute">Nobody on the team yet — you can hand it out later.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {reps.map((r) => {
+                      const on = listReps.includes(r.id)
+                      return (
+                        <label
+                          key={r.id}
+                          className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border px-3 text-[13px] lg:min-h-[36px] ${
+                            on ? 'border-brand-500 bg-brand-500/10 text-ink' : 'border-line text-ink-soft'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-brand-500"
+                            checked={on}
+                            disabled={busy}
+                            onChange={() =>
+                              setListReps((ids) => (on ? ids.filter((x) => x !== r.id) : [...ids, r.id]))
+                            }
+                          />
+                          {r.name}
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </fieldset>
+            </>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              size="sm"
+              disabled={busy || (!listTarget && !listName.trim())}
+              onClick={() => void addToList()}
+              data-testid="bulk-list-apply"
+            >
+              {busy
+                ? 'Saving…'
+                : listTarget
+                  ? `Add ${selected.size.toLocaleString()} to list`
+                  : `Create list with ${selected.size.toLocaleString()}`}
+            </Button>
+            <button
+              onClick={() => setListOpen(false)}
+              className="focusable text-sm font-medium text-ink-mute underline"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
