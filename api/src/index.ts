@@ -906,7 +906,16 @@ export default {
                   u.badge_id, u.badge_expires_at, u.badge_confirmed_at,
                   CASE WHEN u.password_hash IS NULL THEN 1 ELSE 0 END AS pending,
                   i.accepted_at AS inv_accepted_at, i.revoked_at AS inv_revoked_at,
-                  i.expires_at AS inv_expires_at, i.created_at AS inv_created_at
+                  i.expires_at AS inv_expires_at, i.created_at AS inv_created_at,
+                  -- When they were FIRST asked, and how many times. The joined
+                  -- row above is the newest link; on its own it cannot tell
+                  -- "invited on Monday" from "invited Monday, chased Thursday",
+                  -- which is the difference an admin is looking at the list to
+                  -- see. Revoked and expired tokens count: they were still sends.
+                  (SELECT MIN(created_at) FROM invites
+                    WHERE user_id = u.id AND kind = 'invite') AS inv_first_at,
+                  (SELECT COUNT(*) FROM invites
+                    WHERE user_id = u.id AND kind = 'invite') AS inv_sends
              FROM users u
              LEFT JOIN teams t ON t.id = u.team_id
              LEFT JOIN invites i ON i.token_hash = (
@@ -958,7 +967,10 @@ export default {
                 // this so an admin can tell "hasn't accepted" from "isn't working".
                 pending: !!u.pending,
                 invitation: invitationStatus(invite, now),
-                invitedAt: invite ? Number(u.inv_created_at) : undefined,
+                invitedAt: u.inv_first_at == null ? undefined : Number(u.inv_first_at),
+                // Only when there was a chase — otherwise it is the same act
+                // twice on screen, and a date that means nothing new.
+                resentAt: Number(u.inv_sends ?? 0) > 1 ? Number(u.inv_created_at) : undefined,
                 onboarding: onboardingStatus(facts, now),
                 onboardingStep: facts.onboarding_step ?? undefined,
                 badge: badgeStatus(facts, now),

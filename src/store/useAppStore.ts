@@ -631,6 +631,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         teamName: u.teamName,
         invitation: u.invitation,
         invitedAt: u.invitedAt,
+        resentAt: u.resentAt,
         onboarding: u.onboarding,
         onboardingStep: u.onboardingStep,
         badge: u.badge,

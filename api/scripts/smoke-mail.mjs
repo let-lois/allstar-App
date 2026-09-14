@@ -178,9 +178,14 @@ try {
   /* ===== 2. resend sends again, with a different subject ====================== */
   const roster = (await (await call('/api/users', {}, A)).json()).users
   const rep = roster.find((u) => u.email === REP)
+  ok(typeof rep?.invitedAt === 'number', 'the roster records when they were first invited', new Date(rep?.invitedAt ?? 0).toISOString())
+  ok(rep?.resentAt === undefined, 'and nothing about a chase, because there has not been one')
   r = await j(await call(`/api/invites/${rep.id}/resend`, { method: 'POST' }, A))
   ok(r.status === 200 && r.body.emailed === true, 'a resend is emailed too')
   ok(received.length === 2 && /again/.test(received[1]?.body?.subject ?? ''), 'and reads as a second copy, not a first', received[1]?.body?.subject)
+  const after = (await (await call('/api/users', {}, A)).json()).users.find((u) => u.email === REP)
+  ok(after?.invitedAt === rep.invitedAt, 'a resend does not rewrite when they were first asked — that is the date an admin is judging by')
+  ok(typeof after?.resentAt === 'number' && after.resentAt >= rep.invitedAt, 'and it now carries when they were chased', new Date(after?.resentAt ?? 0).toISOString())
 
   /* ===== 3. an already-member invite sends nothing ============================ */
   await form(r.body.url, { password: 'marcus-chose-this-12' })

@@ -296,6 +296,8 @@ export interface TeamMember {
   teamName?: string
   invitation?: 'not_sent' | 'pending' | 'accepted' | 'expired' | 'revoked'
   invitedAt?: number
+  /** When the current link was sent, when that was not the first. */
+  resentAt?: number
   onboarding?: OnboardingStatus
   onboardingStep?: OnboardingStep
   badge?: BadgeStatus
