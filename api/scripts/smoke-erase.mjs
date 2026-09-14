@@ -412,6 +412,82 @@ try {
       'and a live lead is not in it', `${boot.erased?.length} erased`)
     ok(boot.erased?.length === 1, 'exactly the one erasure', `${boot.erased?.length}`)
   }
+
+  /* ===== 12. many at once: the same act, an exact answer ============== */
+  //
+  // The console's bulk bar. Every rule above holds per lead because it is the
+  // same function in a loop; what is pinned here is the shape of the request
+  // and the honesty of the count that comes back.
+  {
+    const seed = await (await call('/api/import/properties', {
+      method: 'POST',
+      body: JSON.stringify({ rows: [
+        { ref: 'b1', address1: '10 Bulk St', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.51, lng: -97.61 },
+        { ref: 'b2', address1: '12 Bulk St', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.52, lng: -97.62 },
+        { ref: 'b3', address1: '14 Bulk St', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.53, lng: -97.63 },
+        { ref: 'b4', address1: '16 Bulk St', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.54, lng: -97.64 },
+      ] }),
+    }, session)).json()
+    const [A, B, C, D] = seed.ids ?? []
+    ok(seed.created === 4 && A && B && C && D, 'four leads are created the way production creates them', `${seed.created}`)
+    await query(`INSERT INTO photos (id,client_id,property_id,category,r2_key,created_at)
+       VALUES ('ph_b_${stamp}','${q(clientId)}','${A}','roof','photos/${q(clientId)}/${A}/ph_b_${stamp}.jpg',${stamp})`)
+    // One of the four is erased singly first, so the batch meets a stale id —
+    // the console's "somebody else removed it while I had it ticked" case.
+    const single = await call('/api/leads/erase', { method: 'DELETE', body: JSON.stringify({ propertyId: D, reason: 'Erased singly before the batch' }) }, session)
+    ok(single.ok, 'one of them is erased singly beforehand')
+    const OTHER = `p_other_${stamp}`
+    const NOPE = `p_nope_${stamp}`
+    const live = () => n(query(`SELECT COUNT(*) FROM properties WHERE id IN ('${A}','${B}','${C}')`))
+    const liveNow = async () => n(await query(`SELECT COUNT(*) FROM properties WHERE id IN ('${A}','${B}','${C}')`))
+    void live
+
+    const anon = await call('/api/leads/erase-bulk', { method: 'POST', body: JSON.stringify({ propertyIds: [A, B], reason: 'anon' }) })
+    ok(anon.status === 401, 'a batch without a session is refused', `${anon.status}`)
+    await query(`UPDATE users SET role='manager' WHERE id='${q(user.id)}'`)
+    const asManager = await call('/api/leads/erase-bulk', { method: 'POST', body: JSON.stringify({ propertyIds: [A, B], reason: 'manager' }) }, session)
+    ok(asManager.status === 403 && (await liveNow()) === 3, 'a manager is refused, with every lead still there', `${asManager.status}, ${await liveNow()} live`)
+    await query(`UPDATE users SET role='client_admin' WHERE id='${q(user.id)}'`)
+
+    const notList = await call('/api/leads/erase-bulk', { method: 'POST', body: JSON.stringify({ propertyIds: A, reason: 'not a list' }) }, session)
+    const empty = await call('/api/leads/erase-bulk', { method: 'POST', body: JSON.stringify({ propertyIds: [], reason: 'empty' }) }, session)
+    const noWhy = await call('/api/leads/erase-bulk', { method: 'POST', body: JSON.stringify({ propertyIds: [A, B] }) }, session)
+    ok(notList.status === 400 && empty.status === 400 && noWhy.status === 400, 'a non-list, an empty list and a missing reason are each refused', `${notList.status} ${empty.status} ${noWhy.status}`)
+    ok((await liveNow()) === 3, 'and none of those refusals touched a row')
+
+    const tombstonesBefore = n(await query(`SELECT COUNT(*) FROM deletions WHERE client_id='${q(clientId)}'`))
+    const perLeadBefore = n(await query(`SELECT COUNT(*) FROM audit_log WHERE client_id='${q(clientId)}' AND action='lead.erased'`))
+    const res = await call('/api/leads/erase-bulk', {
+      method: 'POST',
+      body: JSON.stringify({ propertyIds: [A, A, B, C, D, OTHER, NOPE], reason: 'Scrubbed list came back' }),
+    }, session)
+    const out = await res.json()
+    ok(res.ok && out.ok, `the batch succeeds (${res.status})`, JSON.stringify(out))
+    ok(out.requested === 6, 'the same id ticked twice counts once', `${out.requested}`)
+    ok(out.deleted === 3 && out.alreadyGone === 1, 'three destroyed, one confirmed already gone', `deleted=${out.deleted} alreadyGone=${out.alreadyGone}`)
+    ok(Array.isArray(out.notFound) && out.notFound.length === 2 && out.notFound.includes(OTHER) && out.notFound.includes(NOPE), 'another company’s lead and a made-up id are both "not found", by id, told apart from nothing', JSON.stringify(out.notFound))
+    ok(Array.isArray(out.failed) && out.failed.length === 0, 'nothing failed part way')
+    ok(out.photos === 1, 'and the one photo went with its lead', `${out.photos}`)
+
+    ok((await liveNow()) === 0, 'the three are gone from the database')
+    ok(n(await query(`SELECT COUNT(*) FROM properties WHERE id='${OTHER}'`)) === 1, 'the other company’s lead is untouched')
+    const tombstonesAfter = n(await query(`SELECT COUNT(*) FROM deletions WHERE client_id='${q(clientId)}'`))
+    ok(tombstonesAfter - tombstonesBefore === 3, 'three new tombstones — none for the ids that were not ours', `${tombstonesAfter - tombstonesBefore}`)
+    ok(n(await query(`SELECT COUNT(*) FROM deletions WHERE entity_id IN ('${OTHER}','${NOPE}')`)) === 0, 'and no tombstone was written for an id that is not this company’s')
+    const perLeadAfter = n(await query(`SELECT COUNT(*) FROM audit_log WHERE client_id='${q(clientId)}' AND action='lead.erased'`))
+    ok(perLeadAfter - perLeadBefore === 4, 'one audit line per lead touched, the already-gone one included', `${perLeadAfter - perLeadBefore}`)
+    const summary = await query(`SELECT detail FROM audit_log WHERE client_id='${q(clientId)}' AND action='leads.bulk_erased'`)
+    ok(summary.length === 1 && /"deleted":3/.test(summary[0]?.detail ?? '') && /Scrubbed list/.test(summary[0]?.detail ?? ''), 'and one line for the decision as a whole, with the count and the reason', summary[0]?.detail)
+
+    const boot = await (await call('/api/bootstrap', {}, session)).json()
+    ok([A, B, C, D].every((id) => boot.erased?.includes(id)), 'bootstrap names all four for the phones to purge', `${boot.erased?.length} erased`)
+    ok(!boot.erased?.includes(OTHER) && !boot.erased?.includes(NOPE), 'and neither of the ids that were not ours')
+
+    const again = await (await call('/api/leads/erase-bulk', {
+      method: 'POST', body: JSON.stringify({ propertyIds: [A, B, C, D], reason: 'Second attempt after a retry' }),
+    }, session)).json()
+    ok(again.ok && again.deleted === 0 && again.alreadyGone === 4, 'running the same batch again confirms rather than errors — a retry is safe', JSON.stringify({ deleted: again.deleted, alreadyGone: again.alreadyGone }))
+  }
 } finally {
   await stop().catch(() => {})
   rmSync(STATE, { recursive: true, force: true })

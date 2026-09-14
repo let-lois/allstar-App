@@ -68,6 +68,15 @@ export interface EraseResult {
 
 export type EraseFailure = { ok: false; error: string; status: number }
 
+/**
+ * A reason is required, and not as ceremony. The one question asked afterwards
+ * is always "why is this gone" — by an auditor, by the customer, or by whoever
+ * is trying to work out whether it was a mistake. A blank field there makes
+ * every erasure indistinguishable from an accident.
+ */
+const MIN_REASON = 3
+const NO_REASON = 'Say why this is being erased — it cannot be undone.'
+
 export async function eraseProperty(
   env: Env,
   actor: SessionUser,
@@ -76,18 +85,106 @@ export async function eraseProperty(
 ): Promise<EraseResult | EraseFailure> {
   if (!canErase(actor)) return { ok: false, error: 'Not permitted.', status: 403 }
   if (!propertyId) return { ok: false, error: 'Which lead?', status: 400 }
-
-  /*
-    A reason is required, and not as ceremony. The one question asked afterwards
-    is always "why is this gone" — by an auditor, by the customer, or by whoever
-    is trying to work out whether it was a mistake. A blank field there makes
-    every erasure indistinguishable from an accident.
-  */
   const why = reason.trim()
-  if (why.length < 3) {
-    return { ok: false, error: 'Say why this is being erased — it cannot be undone.', status: 400 }
+  if (why.length < MIN_REASON) return { ok: false, error: NO_REASON, status: 400 }
+  return eraseOne(env, actor, propertyId, why)
+}
+
+/**
+ * Many leads, one decision.
+ *
+ * The console's bulk bar selects by checkbox and by drawing round pins on the
+ * map, and an office that has just had a scrubbed list back, or a street of
+ * households ask to be forgotten, should not have to erase them one at a time
+ * — or worse, be tempted to leave them because it is tedious.
+ *
+ * Every rule of the single erase holds per lead, because it *is* the single
+ * erase, called in a loop: admin only, a reason, tenant-scoped, tombstone
+ * first, cascade, files, audit line each. What this adds is the shape of the
+ * request and the honesty of the answer.
+ *
+ * There is no transaction across the batch, and none is pretended. D1 cannot
+ * span R2, and a tombstone written before its row is destroyed is already the
+ * unit that must not tear. So a lead that fails half way is reported as
+ * failed, by id, and the rest proceed — "8 deleted, 2 could not be" is a true
+ * sentence the console can show; "done" over a batch that was not is the bug
+ * this exists to avoid.
+ *
+ * Ids are deduplicated (the same row ticked in the list and lassoed on the map
+ * arrives twice), capped at the same ceiling as reassignment, and every one is
+ * checked against the caller's company inside `eraseOne` — an id from another
+ * tenant is "not found", the same answer as one that never existed.
+ */
+export interface BulkEraseResult {
+  ok: true
+  /** Distinct ids after deduplication. */
+  requested: number
+  /** Rows destroyed, with tombstones written. */
+  deleted: number
+  /** Already erased before this call; tombstone confirmed, nothing to destroy. */
+  alreadyGone: number
+  /** Not this company's, or never existed. Nothing written for these. */
+  notFound: string[]
+  /** Something went wrong part way for these. Their tombstones may exist. */
+  failed: string[]
+  /** Files removed from object storage across the batch. */
+  photos: number
+}
+
+export const BULK_ERASE_MAX = 500
+
+export async function eraseProperties(
+  env: Env,
+  actor: SessionUser,
+  propertyIds: unknown,
+  reason: unknown,
+): Promise<BulkEraseResult | EraseFailure> {
+  if (!canErase(actor)) return { ok: false, error: 'Not permitted.', status: 403 }
+  if (!Array.isArray(propertyIds)) return { ok: false, error: 'Send the leads as a list of ids.', status: 400 }
+  const ids = [...new Set(propertyIds.filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim()))]
+  if (ids.length === 0) return { ok: false, error: 'No leads selected.', status: 400 }
+  if (ids.length > BULK_ERASE_MAX) return { ok: false, error: `Select at most ${BULK_ERASE_MAX} leads.`, status: 413 }
+  const why = typeof reason === 'string' ? reason.trim() : ''
+  if (why.length < MIN_REASON) return { ok: false, error: NO_REASON, status: 400 }
+
+  const out: BulkEraseResult = { ok: true, requested: ids.length, deleted: 0, alreadyGone: 0, notFound: [], failed: [], photos: 0 }
+  for (const id of ids) {
+    try {
+      const r = await eraseOne(env, actor, id, why)
+      if (!r.ok) {
+        // The only failure eraseOne returns for a checked actor and reason is
+        // "not yours / not there" — nothing was written, so it is safe to say so.
+        out.notFound.push(id)
+        continue
+      }
+      if (r.alreadyGone) out.alreadyGone += 1
+      else out.deleted += 1
+      out.photos += r.photos
+    } catch (err) {
+      console.error('erase-bulk: lead failed part way', id, String(err))
+      out.failed.push(id)
+    }
   }
 
+  // One line for the act as a whole, beside the one per lead. An auditor
+  // reading "lead.erased" forty times wants to know it was one decision.
+  await record(env, actor, {
+    action: 'leads.bulk_erased',
+    targetType: 'lead',
+    targetId: `${ids.length}`,
+    targetLabel: `${out.deleted} erased`,
+    detail: { reason: why, requested: out.requested, deleted: out.deleted, alreadyGone: out.alreadyGone, notFound: out.notFound.length, failed: out.failed.length },
+  })
+  return out
+}
+
+/** One lead, for a caller that has already checked who is asking and why. */
+async function eraseOne(
+  env: Env,
+  actor: SessionUser,
+  propertyId: string,
+  why: string,
+): Promise<EraseResult | EraseFailure> {
   // Tenant-scoped, like every id crossing this boundary. Erasing another
   // company's lead would be the worst possible version of this bug.
   const property = await env.DB.prepare(
