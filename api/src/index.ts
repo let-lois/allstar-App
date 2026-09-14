@@ -53,7 +53,7 @@ import {
 import { readMe, touchLastSeen } from './me'
 import { createTeam, deleteTeam, listTeams, renameTeam } from './teams'
 import { updateCompany } from './company'
-import { mailConfigured } from './mail'
+import { mailConfigured, mailProvider } from './mail'
 import { disableJoinCode, joinWithCode, readJoinLink, rotateJoinCode } from './join'
 import { verifyBadge } from './verify'
 import { badgeStatus, displayName, invitationStatus, onboardingStatus } from './onboarding'
@@ -595,6 +595,9 @@ export default {
               // hands the admin a link to send. Both work — but an admin who
               // believes email is on when it is not finds out a week later.
               mail: mailConfigured(env),
+              // Which provider, so "did that go through Resend?" is answerable
+              // from outside. A name, never a key.
+              mailProvider: mailProvider(env),
               appUrl: env.APP_URL ?? null,
               allowedOrigins: (env.ALLOWED_ORIGINS ?? '').split(',').filter(Boolean).length,
               // Surfaced because a failed migration is otherwise invisible:

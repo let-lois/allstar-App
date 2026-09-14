@@ -100,16 +100,33 @@ ALLOWED_ORIGINS = "https://allstar.letlois.com,https://allstar-app.pages.dev,htt
 #                           that nobody ends up with an unencrypted dump of every
 #                           customer's addresses and password hashes sitting in
 #                           a bucket.
-#   MAILCHANNELS_API_KEY  — emails invitations. Without it (or MAIL_FROM) the
-#                           console hands the admin a link to send by hand,
-#                           exactly as before; /api/health reports `mail`.
-#                           MailChannels' Workers tier has been a paid plan
-#                           since mid-2024. The sending domain needs their
-#                           Domain Lockdown TXT record and an SPF include
-#                           (DKIM recommended) before mail is accepted — the
-#                           provider's own docs name the current values.
-#   MAIL_FROM             — "Allstar <no-reply@yourdomain.com>". The domain
-#                           must be the one carrying the DNS records above.
+#   RESEND_API_KEY        — emails invitations through Resend. This is the
+#                           provider this deployment uses; set it and mail goes
+#                           that way. Create the key at resend.com/api-keys with
+#                           "Sending access" only — it never needs to read.
+#                           Until the sending domain is verified there, Resend
+#                           accepts mail ONLY to the address that owns the
+#                           account and refuses everything else with a 403 that
+#                           says so; that sentence is shown to the admin as-is,
+#                           so a half-finished setup is visible rather than
+#                           silent. Verify the domain at resend.com/domains and
+#                           add the DNS records it prints (an MX and a TXT for
+#                           SPF, plus a DKIM TXT).
+#   RESEND_FROM_EMAIL     — "Allstar <no-reply@yourdomain.com>". The domain must
+#                           be the one verified above. Read as MAIL_FROM too, so
+#                           an older deployment keeps working.
+#   MAILCHANNELS_API_KEY  — the other implemented provider, used only when
+#                           RESEND_API_KEY is unset. Their Workers tier has been
+#                           a paid plan since mid-2024, and the sending domain
+#                           needs their Domain Lockdown TXT record and an SPF
+#                           include before mail is accepted.
+#   MAIL_FROM             — the older name for RESEND_FROM_EMAIL. Either works
+#                           for either provider.
+#
+#                           With no key, or no from-address, nothing is sent and
+#                           the console hands the admin a link to pass on by
+#                           hand — exactly as before email existed.
+#                           /api/health reports `mail` and `mailProvider`.
 #   MAPTILER_API_KEY      — NO LONGER USED. MapTiler was the third link in the
 #                           geocoding chain and has been removed. The Worker
 #                           needs no MapTiler key; if one is still set as a

@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /**
- * Invitations by email — against a real Worker and a stand-in MailChannels.
+ * Invitations by email — against a real Worker and a stand-in provider.
  *
  * The provider is reached over HTTPS and cannot be reached from a sandbox, so
  * it is stood in for by a small server that records what the Worker sent it.
@@ -16,9 +16,14 @@ import { fileURLToPath } from 'node:url'
  *
  * Nothing here asserts a real email arrived. Nothing can, from here. What is
  * pinned is that a deployment with the two secrets set makes exactly the call
- * MailChannels documents, and that a deployment without them, or with a
- * provider having a bad day, still hands the admin a working link and never
- * claims otherwise.
+ * the provider documents — both providers, each in its own shape — that Resend
+ * is chosen over MailChannels when both are configured, and that a deployment
+ * without them, or with a provider having a bad day, still hands the admin a
+ * working link and never claims otherwise.
+ *
+ * The 403 Resend returns before a domain is verified gets its own assertion,
+ * because it is the failure every new setup meets and the one most likely to
+ * be mistaken for a bug in this app.
  */
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -38,6 +43,8 @@ const ok = (cond, msg, measured) => {
   if (!cond) fails.push(msg)
 }
 
+const ADMIN = { email: 'owner@example.com', password: 'correct-horse-battery' }
+
 /* --- the stand-in provider ------------------------------------------------- */
 let mode = 'accept' // or 'fail'
 const received = []
@@ -46,9 +53,25 @@ const mail = createServer((req, res) => {
   req.on('data', (d) => (body += d))
   req.on('end', () => {
     received.push({ method: req.method, url: req.url, headers: req.headers, body: body ? JSON.parse(body) : null })
+    // One stand-in, two APIs, told apart by path — the same way the real
+    // hostnames differ. Each answers in its own provider's shape, success and
+    // failure alike, so the Worker's parsing is tested rather than assumed.
+    const isResend = (req.url ?? '').startsWith('/emails')
     if (mode === 'fail') {
+      if (isResend) {
+        res.writeHead(403, { 'content-type': 'application/json' })
+        return res.end(JSON.stringify({
+          statusCode: 403,
+          name: 'validation_error',
+          message: `You can only send testing emails to your own email address (${ADMIN.email}). To send emails to other recipients, please verify a domain at resend.com/domains`,
+        }))
+      }
       res.writeHead(401, { 'content-type': 'application/json' })
       return res.end(JSON.stringify({ errors: ['Unauthorized: bad API key'] }))
+    }
+    if (isResend) {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      return res.end(JSON.stringify({ id: '3f8c1a2e-stub' }))
     }
     res.writeHead(202, { 'content-type': 'application/json' })
     res.end(JSON.stringify({ message: 'accepted' }))
@@ -95,7 +118,6 @@ const j = async (res) => ({ status: res.status, body: await res.json().catch(() 
 const form = (url, body) =>
   fetch(url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) })
 
-const ADMIN = { email: 'owner@example.com', password: 'correct-horse-battery' }
 
 let config
 try {
@@ -108,6 +130,7 @@ try {
     `MAILCHANNELS_API_KEY:${API_KEY}`, `MAIL_FROM:${FROM}`, `MAIL_BASE_URL:http://127.0.0.1:${MAIL_PORT}`,
   ])
   ok(health.config?.mail === true, 'health reports that this deployment emails invitations', JSON.stringify(health.config?.mail))
+  ok(health.config?.mailProvider === 'mailchannels', 'and names the provider carrying them', String(health.config?.mailProvider))
 
   await form(`${BASE}/setup`, { token: SETUP_TOKEN, clientName: 'Ridgeline Roofing', name: 'Nadia Petrov', email: ADMIN.email, password: ADMIN.password })
   const admin = await (await call('/api/auth/login', { method: 'POST', body: JSON.stringify(ADMIN) })).json()
@@ -173,7 +196,7 @@ try {
   /* ===== 6. not configured: nothing is claimed ================================= */
   await start(config, [`SETUP_TOKEN:${SETUP_TOKEN}`, 'SESSION_PEPPER:local-mail-pepper', `APP_URL:${APP_URL}`])
   const health2 = await (await fetch(`${BASE}/api/health`)).json()
-  ok(health2.config?.mail === false, 'without the secrets, health reports no email')
+  ok(health2.config?.mail === false && health2.config?.mailProvider === null, 'without the secrets, health reports no email and no provider', String(health2.config?.mailProvider))
   const admin2 = await (await call('/api/auth/login', { method: 'POST', body: JSON.stringify(ADMIN) })).json()
   const before = received.length
   r = await j(await call('/api/invites', { method: 'POST', body: JSON.stringify({ email: 'sam@example.test', role: 'field_rep' }) }, admin2.token))
@@ -185,6 +208,65 @@ try {
   await start(config, [`SETUP_TOKEN:${SETUP_TOKEN}`, 'SESSION_PEPPER:local-mail-pepper', `MAILCHANNELS_API_KEY:${API_KEY}`, 'MAIL_FROM:not an address'])
   const health3 = await (await fetch(`${BASE}/api/health`)).json()
   ok(health3.config?.mail === false, 'a key with an unusable MAIL_FROM reads as not configured, rather than sending from garbage')
+
+  /* ===== 8. Resend: its own call shape, its own refusal ======================== */
+  await stop()
+  const RESEND_KEY = 're_test_key_not_real'
+  await start(config, [
+    `SETUP_TOKEN:${SETUP_TOKEN}`, 'SESSION_PEPPER:local-mail-pepper', `APP_URL:${APP_URL}`,
+    `RESEND_API_KEY:${RESEND_KEY}`, `RESEND_FROM_EMAIL:${FROM}`, `RESEND_BASE_URL:http://127.0.0.1:${MAIL_PORT}`,
+  ])
+  const health4 = await (await fetch(`${BASE}/api/health`)).json()
+  ok(health4.config?.mail === true && health4.config?.mailProvider === 'resend', 'with only Resend configured, health names Resend', String(health4.config?.mailProvider))
+  const admin4 = await (await call('/api/auth/login', { method: 'POST', body: JSON.stringify(ADMIN) })).json()
+  const A4 = admin4.token
+  const RESEND_REP = 'priya@example.test'
+  const at = received.length
+  r = await j(await call('/api/invites', { method: 'POST', body: JSON.stringify({ email: RESEND_REP, role: 'field_rep', firstName: 'Priya', lastName: 'Natarajan' }) }, A4))
+  ok(r.status === 200 && r.body.emailed === true, 'an invitation goes out through Resend', `${r.status} emailed=${r.body.emailed}`)
+  ok(received.length === at + 1, 'exactly one request reached it', `${received.length - at}`)
+  const rs = received[at]
+  ok(rs?.method === 'POST' && rs?.url === '/emails', 'at Resend’s send endpoint', `${rs?.method} ${rs?.url}`)
+  ok(rs?.headers?.authorization === `Bearer ${RESEND_KEY}`, 'carrying the key as a bearer token, which is the shape Resend takes')
+  ok(!JSON.stringify(rs?.body ?? {}).includes(RESEND_KEY), 'and the key is nowhere in the body')
+  ok(rs?.body?.from === FROM, 'from the configured sender, as one string', rs?.body?.from)
+  ok(Array.isArray(rs?.body?.to) && rs.body.to.length === 1 && rs.body.to[0] === RESEND_REP, 'to the invited address, as a list', JSON.stringify(rs?.body?.to))
+  ok(typeof rs?.body?.html === 'string' && typeof rs?.body?.text === 'string', 'with both a plain-text and an HTML part')
+  ok(rs.body.html.includes(r.body.url) && rs.body.text.includes(r.body.url), 'both carrying the link the API returned')
+  ok(/Hi Priya,/.test(rs.body.text), 'and greeting them by first name')
+  const withoutLink4 = (rs.body.text + rs.body.html).split(r.body.url).join('')
+  ok(!/password_hash|correct-horse|re_test_key|[0-9a-f]{40,}/.test(withoutLink4), 'and nothing secret beyond the link itself')
+
+  // The failure every new Resend account meets before its domain is verified.
+  mode = 'fail'
+  r = await j(await call('/api/invites', { method: 'POST', body: JSON.stringify({ email: 'lee@example.test', role: 'field_rep' }) }, A4))
+  ok(r.status === 200 && r.body.emailed === false, 'an unverified domain does not fail the invitation', `${r.status} emailed=${r.body.emailed}`)
+  ok(/verify a domain/.test(r.body.mailError ?? '') && /403/.test(r.body.mailError ?? ''), 'and the console is told, in Resend’s own words, what to go and fix', r.body.mailError)
+  ok(/\/invite\//.test(r.body.url), 'with the link still there to send by hand meanwhile')
+  mode = 'accept'
+
+  /* ===== 9. both configured: Resend wins ====================================== */
+  await stop()
+  await start(config, [
+    `SETUP_TOKEN:${SETUP_TOKEN}`, 'SESSION_PEPPER:local-mail-pepper', `APP_URL:${APP_URL}`,
+    `RESEND_API_KEY:${RESEND_KEY}`, `RESEND_FROM_EMAIL:${FROM}`, `RESEND_BASE_URL:http://127.0.0.1:${MAIL_PORT}`,
+    `MAILCHANNELS_API_KEY:${API_KEY}`, `MAIL_BASE_URL:http://127.0.0.1:${MAIL_PORT}`,
+  ])
+  const health5 = await (await fetch(`${BASE}/api/health`)).json()
+  ok(health5.config?.mailProvider === 'resend', 'with both keys set, Resend is the one in use', String(health5.config?.mailProvider))
+  const admin5 = await (await call('/api/auth/login', { method: 'POST', body: JSON.stringify(ADMIN) })).json()
+  const at5 = received.length
+  await call('/api/invites', { method: 'POST', body: JSON.stringify({ email: 'jordan@example.test', role: 'field_rep' }) }, admin5.token)
+  ok(received.length === at5 + 1 && received[at5]?.url === '/emails', 'and the send goes to Resend, not to both and not to the other one', received[at5]?.url)
+
+  /* ===== 10. Resend with only the older from-name still works ================== */
+  await stop()
+  await start(config, [
+    `SETUP_TOKEN:${SETUP_TOKEN}`, 'SESSION_PEPPER:local-mail-pepper', `APP_URL:${APP_URL}`,
+    `RESEND_API_KEY:${RESEND_KEY}`, `MAIL_FROM:${FROM}`, `RESEND_BASE_URL:http://127.0.0.1:${MAIL_PORT}`,
+  ])
+  const health6 = await (await fetch(`${BASE}/api/health`)).json()
+  ok(health6.config?.mail === true && health6.config?.mailProvider === 'resend', 'a deployment that set MAIL_FROM before Resend existed keeps sending', String(health6.config?.mailProvider))
 } catch (err) {
   ok(false, `the run completed: ${err instanceof Error ? err.message : String(err)}`)
   if (log) console.log('\n--- worker log ---\n' + log.slice(-3000))
