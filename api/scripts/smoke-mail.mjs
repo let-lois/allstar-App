@@ -153,17 +153,27 @@ try {
   ok(sent?.body?.personalizations?.[0]?.to?.[0]?.email === REP, 'addressed to the invited person', sent?.body?.personalizations?.[0]?.to?.[0]?.email)
   ok(sent?.body?.personalizations?.[0]?.to?.[0]?.name === 'Marcus Vance', 'by name')
   ok(sent?.body?.from?.email === 'no-reply@example.test' && sent?.body?.from?.name === 'Allstar, Inc.', 'from the configured sender, name and address parsed apart', JSON.stringify(sent?.body?.from))
-  ok(/Nadia Petrov added you to Ridgeline Roofing/.test(sent?.body?.subject ?? ''), 'the subject names who and where', sent?.body?.subject)
+  ok(/You're invited to join Ridgeline Roofing on Allstar/.test(sent?.body?.subject ?? ''), 'the subject says where they are being invited', sent?.body?.subject)
   const text = sent?.body?.content?.find((c) => c.type === 'text/plain')?.value ?? ''
   const html = sent?.body?.content?.find((c) => c.type === 'text/html')?.value ?? ''
   ok(text.includes(r.body.url) && html.includes(r.body.url), 'both parts carry the link the API returned — the same one the admin sees')
   ok(/Hi Marcus,/.test(text), 'and greet them by first name')
   ok(text.includes(APP_URL) && /Add to Home Screen/.test(text), 'and say where the app is and how to install it')
+  ok(/invited by Nadia Petrov/.test(text), 'and name the colleague who invited them — an invitation from nobody is phishing')
+  ok(/Creating your Team Member Badge/.test(text) && /about a minute/.test(text), 'and say what setup is and how long it takes', text.match(/about a minute/)?.[0])
+  ok(/already provided/.test(text), 'and promise that what the admin typed is not asked for again')
   // The link itself carries the invite token, so it is removed before looking
   // for anything token-shaped — the point is nothing ELSE secret is in there.
   const withoutLink = (text + html).split(r.body.url).join('')
   ok(!/password_hash|correct-horse|[0-9a-f]{40,}/.test(withoutLink), 'and contain no password, hash or token other than the link')
   ok(/expires on/.test(text), 'and say when the link expires')
+
+  /* ===== 1b. the documented link shape reaches the same page ================== */
+  const token = r.body.url.split('/invite/')[1]
+  const alias = await fetch(`${BASE}/onboarding/invite?token=${encodeURIComponent(token)}`, { redirect: 'manual' })
+  ok(alias.status === 302 && alias.headers.get('location') === `/invite/${token}`, 'a /onboarding/invite?token= link forwards to the one canonical invite page', `${alias.status} ${alias.headers.get('location')}`)
+  const followed = await fetch(`${BASE}/onboarding/invite?token=${encodeURIComponent(token)}`)
+  ok(followed.ok && /Set your password|Welcome/.test(await followed.text()), 'and following it lands on the page that sets the password')
 
   /* ===== 2. resend sends again, with a different subject ====================== */
   const roster = (await (await call('/api/users', {}, A)).json()).users

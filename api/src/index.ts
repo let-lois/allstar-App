@@ -399,6 +399,23 @@ export default {
         }
       }
 
+      /*
+        The link shape the setup brief writes. Minting still produces
+        /invite/TOKEN — one canonical URL, one page, one form target — so this
+        forwards rather than rendering a second copy of the same screen. It
+        exists so a link written by hand, or copied out of documentation,
+        lands somewhere instead of 404ing.
+      */
+      if (path === '/onboarding/invite' && req.method === 'GET') {
+        const token = url.searchParams.get('token') ?? ''
+        // 302, not 301: a browser that cached a permanent redirect for one
+        // token would send the next rep to somebody else's invitation.
+        return new Response(null, {
+          status: 302,
+          headers: { location: `/invite/${encodeURIComponent(token)}`, ...cors },
+        })
+      }
+
       if (path.startsWith('/invite/')) {
         const token = path.slice('/invite/'.length)
         if (req.method === 'GET') {
