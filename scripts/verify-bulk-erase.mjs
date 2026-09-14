@@ -122,7 +122,15 @@ const rows = (page) => page.locator('tbody tr')
   await del.click()
   await page.waitForTimeout(400)
   const dlg = page.getByTestId('bulk-delete-dialog')
-  ok((await dlg.count()) === 1 && (await dlg.getAttribute('role')) === 'alertdialog', 'the button opens a dialog rather than deleting', await dlg.getAttribute('role'))
+  const opened = (await dlg.count()) === 1
+  // Stated as a failure and the section abandoned, not a thirty-second wait on
+  // a locator: a button that deletes on the first tap is the exact bug this
+  // gate exists for, and it must read as FAIL, never as a crash.
+  ok(opened && (await dlg.getAttribute('role')) === 'alertdialog', 'the button opens a dialog rather than deleting', opened ? await dlg.getAttribute('role') : `no dialog; ${w.calls.length} request(s) sent, ${await rows(page).count()} rows left`)
+  if (!opened) {
+    ok(w.calls.length === 0 && (await rows(page).count()) === 5, 'and nothing was deleted by the first tap', `${w.calls.length} request(s), ${await rows(page).count()} rows`)
+    await ctx.close()
+  } else {
   ok(/^Delete 3 leads\?/.test(await text(dlg.locator('h2'))), 'titled with the count, plural', await text(dlg.locator('h2')))
   ok(/permanently/.test(await text(dlg)) && /cannot be undone/.test(await text(dlg)) && /map/.test(await text(dlg)), 'and it says what will happen: permanent, gone from the map, no undo')
   const confirm = dlg.getByTestId('bulk-delete-dialog-confirm')
@@ -176,6 +184,7 @@ const rows = (page) => page.locator('tbody tr')
   ok((await rows(page).count()) === 2 || (await page.locator('[data-marker="pin"]').count()) === 2, 'and after a reload they stay gone — nothing cached brings them back')
   ok(errors.length === 0, 'no page errors', errors.join(' | '))
   await ctx.close()
+  }
 }
 
 /* ========================================================================== */
