@@ -4,7 +4,8 @@ import { AdminPage, FilterBar } from './AdminLayout'
 import { Chip } from '../components/ui/Chip'
 import { Button } from '../components/ui/Button'
 import { useAppStore } from '../store/useAppStore'
-import { ApiError, apiAssignProperties, apiSetLeadStatus } from '../lib/http'
+import { ApiError, apiAssignProperties, apiEraseLeads, apiSetLeadStatus } from '../lib/http'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { liveToken } from '../lib/session'
 import { PIPELINE_STAGES, STATUS_COLOR, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
 import { money, relative } from '../lib/format'
@@ -36,6 +37,9 @@ export default function AdminLeads() {
   const territories = useAppStore((s) => s.territories)
   const team = useAppStore((s) => s.team)
   const mode = useAppStore((s) => s.mode)
+  const signedIn = useAppStore((s) => s.user)
+  const forgetProperties = useAppStore((s) => s.forgetProperties)
+  const canErase = signedIn?.role === 'client_admin' || signedIn?.role === 'super_admin'
   // The company's calendar, so "today" here is the day the reporting counts on.
   const timezone = useAppStore((s) => s.timezone)
   const refreshFromServer = useAppStore((s) => s.refreshFromServer)
@@ -67,6 +71,13 @@ export default function AdminLeads() {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Erasure: the one bulk action with no undo, so it has its own confirmation
+  // step, its own busy flag (a slow erase must not grey out the other
+  // controls' meaning), and a reason — required by the server, and rightly.
+  const [confirmErase, setConfirmErase] = useState(false)
+  const [eraseReason, setEraseReason] = useState('')
+  const [erasing, setErasing] = useState(false)
+  const [eraseError, setEraseError] = useState<string | null>(null)
 
   const reps = useMemo(() => team.filter((m) => m.active && m.role !== 'super_admin'), [team])
   const nameOf = (id?: string) => (id ? (team.find((m) => m.id === id)?.name ?? id) : null)
@@ -219,6 +230,63 @@ export default function AdminLeads() {
     }
   }
 
+  /*
+    Erasing a selection.
+
+    Two taps by design: the bar's button only opens the dialog, and the dialog's
+    button does the work. The dialog asks for a reason because the server does,
+    and the server does because the only question anyone asks afterwards is
+    "why is this gone". The answer that comes back is exact — destroyed,
+    already gone, not ours, failed — and the notice says all four rather than
+    "done", because a batch that half-succeeded and reports success is the
+    failure this whole feature is shaped to avoid.
+
+    The rows leave the screen and the map on the tap, through the same purge a
+    bootstrap runs for an erased id, and the refresh afterwards reconciles with
+    the server. Nothing waits for the round trip to disappear.
+  */
+  async function eraseSelected() {
+    const token = liveToken()
+    if (!token) {
+      setEraseError('Deleting leads needs a live account. The demo has nothing to delete.')
+      return
+    }
+    if (erasing) return
+    const ids = [...selected]
+    setErasing(true)
+    setEraseError(null)
+    setError(null)
+    setNotice(null)
+    try {
+      const res = await apiEraseLeads(token, { propertyIds: ids, reason: eraseReason.trim() })
+      const gone = ids.filter((id) => !res.failed.includes(id) && !res.notFound.includes(id))
+      await forgetProperties(gone)
+      setConfirmErase(false)
+      setEraseReason('')
+      setSelected(new Set())
+      const parts = [`${res.deleted} lead${res.deleted === 1 ? '' : 's'} deleted`]
+      if (res.alreadyGone) parts.push(`${res.alreadyGone} ${res.alreadyGone === 1 ? 'was' : 'were'} already gone`)
+      if (res.notFound.length) parts.push(`${res.notFound.length} no longer exist${res.notFound.length === 1 ? 's' : ''} on this team`)
+      if (res.failed.length) parts.push(`${res.failed.length} could not be deleted — refresh and try again`)
+      if (res.failed.length) setError(`${parts.join('. ')}.`)
+      else setNotice(`${parts.join('. ')}.`)
+      void refreshFromServer()
+    } catch (err) {
+      setEraseError(
+        err instanceof ApiError
+          ? err.status === 403
+            ? 'You do not have permission to delete leads.'
+            : err.message
+          : 'Could not reach the server. Nothing was deleted — check your connection and try again.',
+      )
+    } finally {
+      setErasing(false)
+    }
+  }
+
+  const eraseCount = selected.size
+  const eraseNoun = `${eraseCount.toLocaleString()} lead${eraseCount === 1 ? '' : 's'}`
+
   return (
     <AdminPage
       tour="console-leads"
@@ -332,7 +400,7 @@ export default function AdminLeads() {
           bar is a permanently available way to move the wrong things. */}
       {selected.size > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-3 rounded-field bg-surface-tint p-3 ring-1 ring-brand-500">
-          <span className="text-sm font-semibold">
+          <span className="text-sm font-semibold" data-testid="bulk-count">
             {selected.size.toLocaleString()} selected
           </span>
           {/*
@@ -386,9 +454,30 @@ export default function AdminLeads() {
           >
             {busy ? 'Saving…' : 'Set'}
           </Button>
+          {/*
+            Offered only to who the server would allow. A manager sees the two
+            controls above and not this one, rather than a button that answers
+            "not permitted" — see canErase in api/src/erase.ts for why the line
+            sits where it does. It opens a dialog; it never deletes.
+          */}
+          {canErase && (
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={busy || erasing || mode !== 'live'}
+              onClick={() => {
+                setEraseError(null)
+                setConfirmErase(true)
+              }}
+              data-testid="bulk-delete"
+            >
+              Delete selected
+            </Button>
+          )}
           <button
             onClick={() => setSelected(new Set())}
             className="focusable text-sm font-medium text-ink-mute underline"
+            data-testid="bulk-clear"
           >
             Clear selection
           </button>
@@ -614,6 +703,47 @@ export default function AdminLeads() {
         >
           Show {Math.min(PAGE, rows.length - shown)} more · {rows.length - shown} remaining
         </Button>
+      )}
+
+      {confirmErase && (
+        <ConfirmDialog
+          title={`Delete ${eraseNoun}?`}
+          confirmLabel={`Delete ${eraseNoun}`}
+          busyLabel="Deleting leads…"
+          busy={erasing}
+          destructive
+          confirmDisabled={eraseReason.trim().length < 3}
+          onConfirm={() => void eraseSelected()}
+          onCancel={() => {
+            if (erasing) return
+            setConfirmErase(false)
+            setEraseError(null)
+          }}
+          testId="bulk-delete-dialog"
+        >
+          <p>
+            You are about to permanently delete {eraseNoun}. This removes {eraseCount === 1 ? 'it' : 'them'} from the map, from
+            every rep’s phone, from assignments and lists, and takes every note, visit and photo along. It cannot be undone, and the
+            {eraseCount === 1 ? ' address' : ' addresses'} cannot be re-imported afterwards.
+          </p>
+          <label className="mt-4 block">
+            <span className="text-[13px] font-semibold text-ink">Why?</span>
+            <input
+              value={eraseReason}
+              onChange={(e) => setEraseReason(e.target.value)}
+              placeholder="e.g. Scrubbed list came back, homeowners asked to be removed"
+              disabled={erasing}
+              data-testid="bulk-delete-reason"
+              className="focusable mt-1 h-11 w-full rounded-lg border border-ink/15 bg-surface px-3 text-[15px]"
+            />
+            <span className="mt-1 block text-[12.5px] text-ink-mute">Recorded in the audit log beside each lead. Required — a blank reason makes every deletion look like an accident.</span>
+          </label>
+          {eraseError && (
+            <p role="alert" className="mt-3 rounded-field bg-bad-bg px-3 py-2.5 text-[14px] font-medium text-bad" data-testid="bulk-delete-error">
+              {eraseError}
+            </p>
+          )}
+        </ConfirmDialog>
       )}
     </AdminPage>
   )

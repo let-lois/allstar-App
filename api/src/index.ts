@@ -81,7 +81,7 @@ import { readSettings, writeSettings, writeTimezone } from './settings'
 import { drainOutbox } from './crm-push'
 import { BUILT_AT, COMMIT, DIRTY } from './version'
 import { BACKUP_CRON, BackupNotConfigured, canSeeBackups, latestBackup, runBackup } from './backup'
-import { eraseProperty } from './erase'
+import { eraseProperties, eraseProperty } from './erase'
 import { setLeadStatus } from './lead-edit'
 import { canReviewConflicts, listConflicts, reviewConflict } from './stale'
 import { applyInbound, clientForSecret, webhookSecret } from './crm-inbound'
@@ -1155,6 +1155,14 @@ export default {
 
         Narrower than importing on purpose. See `canErase`.
       */
+      // The same act over a selection. Admin only, a reason, an exact count back.
+      if (path === '/api/leads/erase-bulk' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await eraseProperties(env, user, body.propertyIds, body.reason)
+        if (!result.ok) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
+      }
+
       if (path === '/api/leads/erase' && req.method === 'DELETE') {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
         const result = await eraseProperty(

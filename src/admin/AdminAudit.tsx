@@ -262,6 +262,17 @@ function describe(e: AuditRowDTO): React.ReactNode {
           {d.reason ? ` — “${String(d.reason)}”` : ''}
         </>
       )
+    // The one line for the batch, beside the one per lead above. It reads as a
+    // count rather than a name because there is no single thing it refers to.
+    case 'leads.bulk_erased':
+      return (
+        <>
+          {who} <span className="font-semibold text-bad">erased {String(d.deleted ?? 0)} lead{d.deleted === 1 ? '' : 's'}</span> in one action
+          {Number(d.alreadyGone) > 0 ? `, ${String(d.alreadyGone)} already gone` : ''}
+          {Number(d.failed) > 0 ? `, ${String(d.failed)} failed` : ''}
+          {d.reason ? ` — “${String(d.reason)}”` : ''}
+        </>
+      )
     default:
       return (
         <>

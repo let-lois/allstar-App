@@ -81,6 +81,7 @@ export type AuditAction =
     can identify afterwards cannot be checked by an auditor or by the customer.
   */
   | 'lead.erased'
+  | 'leads.bulk_erased'
 
 export interface AuditEntry {
   action: AuditAction
