@@ -407,6 +407,8 @@ export interface TeamUserDTO {
   /** Derived on the server from the newest invitation token. */
   invitation: InvitationStatus
   invitedAt?: number
+  /** When the current link was sent, when that was not the first. */
+  resentAt?: number
   onboarding: OnboardingStatus
   onboardingStep?: OnboardingStep
   badge: BadgeStatus

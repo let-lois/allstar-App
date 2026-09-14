@@ -65,14 +65,21 @@ export interface Env {
   /** Overrides where GoHighLevel calls go. See `baseFor` in ghl.ts. */
   GHL_BASE_URL?: string
   /*
-   * Outbound email — invitations. Both secrets; see mail.ts. With either
-   * missing nothing is sent and the console hands the admin a link instead,
-   * which is what it did before email existed.
+   * Outbound email — invitations. A key and a from-address, both secrets; see
+   * mail.ts. With either missing nothing is sent and the console hands the
+   * admin a link instead, which is what it did before email existed.
+   *
+   * Two providers are implemented and the first configured one wins: Resend,
+   * then MailChannels. Either from-address works for either provider.
    */
+  RESEND_API_KEY?: string
+  /** `Allstar <no-reply@yourdomain.com>` — the domain verified with the provider. */
+  RESEND_FROM_EMAIL?: string
   MAILCHANNELS_API_KEY?: string
-  /** `Allstar <no-reply@yourdomain.com>` — the domain carrying the DNS records. */
+  /** The older name for the same thing. Still read, so nothing breaks. */
   MAIL_FROM?: string
-  /** Points the mail API at a stand-in in tests. Unset in every real deployment. */
+  /** Point a provider's API at a stand-in in tests. Unset in every real deployment. */
+  RESEND_BASE_URL?: string
   MAIL_BASE_URL?: string
 }
 

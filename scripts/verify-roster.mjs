@@ -38,7 +38,7 @@ function makeWorld() {
   const people = [
     { id: 'u_admin', name: 'Nadia Petrov', firstName: 'Nadia', lastName: 'Petrov', email: 'nadia@ridgeline.test', role: 'super_admin', active: true, pending: false, invitation: 'not_sent', onboarding: 'complete', badge: 'active', badgeExpiresAt: NOW + 300 * DAY, createdAt: NOW - 100 * DAY, lastSeenAt: NOW - 60_000 },
     { id: 'u_marcus', name: 'Marcus Vance', firstName: 'Marcus', lastName: 'Vance', email: 'marcus@ridgeline.test', role: 'field_rep', jobTitle: 'Sales Representative', teamId: 't_austin', teamName: 'Austin', active: true, pending: false, invitation: 'accepted', invitedAt: NOW - 30 * DAY, onboarding: 'complete', badge: 'active', badgeExpiresAt: NOW + 335 * DAY, createdAt: NOW - 30 * DAY, lastSeenAt: NOW - 2 * 3_600_000 },
-    { id: 'u_dana', name: 'Dana Whitfield', firstName: 'Dana', lastName: 'Whitfield', email: 'dana@ridgeline.test', role: 'field_rep', active: false, pending: true, invitation: 'pending', invitedAt: NOW - DAY, onboarding: 'not_started', badge: 'none', createdAt: NOW - DAY },
+    { id: 'u_dana', name: 'Dana Whitfield', firstName: 'Dana', lastName: 'Whitfield', email: 'dana@ridgeline.test', role: 'field_rep', active: false, pending: true, invitation: 'pending', invitedAt: NOW - 8 * DAY, resentAt: NOW - DAY, onboarding: 'not_started', badge: 'none', createdAt: NOW - 8 * DAY },
     { id: 'u_lee', name: 'Lee Tran', firstName: 'Lee', lastName: 'Tran', email: 'lee@ridgeline.test', role: 'field_rep', active: false, pending: true, invitation: 'expired', invitedAt: NOW - 20 * DAY, onboarding: 'not_started', badge: 'none', createdAt: NOW - 20 * DAY },
     { id: 'u_priya', name: 'Priya Natarajan', firstName: 'Priya', lastName: 'Natarajan', email: 'priya@ridgeline.test', role: 'manager', active: true, pending: false, invitation: 'accepted', invitedAt: NOW - 3 * DAY, onboarding: 'in_progress', onboardingStep: 'walkthrough', badge: 'awaiting_confirmation', badgeExpiresAt: NOW + 362 * DAY, createdAt: NOW - 3 * DAY, lastSeenAt: NOW - 20 * 60_000 },
     { id: 'u_sam', name: 'Sam Okafor', firstName: 'Sam', lastName: 'Okafor', email: 'sam@ridgeline.test', role: 'field_rep', active: false, pending: false, invitation: 'accepted', invitedAt: NOW - 400 * DAY, onboarding: 'complete', badge: 'expired', badgeExpiresAt: NOW - 30 * DAY, createdAt: NOW - 400 * DAY, lastSeenAt: NOW - 60 * DAY },
@@ -211,6 +211,9 @@ const called = (w, method, path) => w.calls.filter((c) => c.method === method &&
   const detail = page.getByTestId('member-detail')
   ok((await detail.count()) === 1 && /Pending/.test(await text(detail.getByTestId('member-statuses'))), 'the sheet opens with the person’s statuses stated')
   ok((await detail.getByTestId('manage-invitation').count()) === 1 && (await detail.getByTestId('manage-onboarding').count()) === 0 && (await detail.getByTestId('manage-badge').count()) === 0, 'an invited rep gets invitation actions, and no onboarding or badge ones — there is nothing there yet')
+  const dates = await text(detail.getByTestId('manage-invite-dates'))
+  ok(/^Invited \w{3} \d{1,2}, \d{4}/.test(dates) && /Resent \w{3} \d{1,2}, \d{4}$/.test(dates), 'the sheet says when they were first asked and when they were chased', dates)
+  ok(!dates.includes(new Date(NOW).getFullYear() + '-'), 'as dates a person reads, not timestamps')
   await detail.getByRole('button', { name: /^Re-send invite$/ }).click()
   await page.waitForTimeout(800)
   ok(called(w, 'POST', '/api/invites/u_dana/resend').length === 1, 'Re-send calls the resend endpoint for that person')

@@ -54,6 +54,8 @@ export interface ManagedUser {
   teamId?: string
   teamName?: string
   invitation?: TeamMember['invitation']
+  invitedAt?: number
+  resentAt?: number
   onboarding?: TeamMember['onboarding']
   onboardingStep?: TeamMember['onboardingStep']
   badge?: TeamMember['badge']
@@ -61,6 +63,10 @@ export interface ManagedUser {
 }
 
 const MIN_PASSWORD = 10
+
+/** `Sep 15, 2026` — a date an admin reads out over the phone, not a timestamp. */
+const inviteDate = (ms: number) =>
+  new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
 
 
@@ -175,6 +181,19 @@ export function ManageUser({
             {user.invitation === 'revoked' && ' — their link was cancelled; send a fresh one if they should still join.'}
             {(!user.invitation || user.invitation === 'not_sent') && ' — no link has been made for them yet.'}
           </p>
+          {/*
+            When they were first asked, and when they were last chased. Two
+            dates rather than one because "invited three weeks ago" and
+            "invited three weeks ago, chased yesterday" call for different
+            things from the person reading this, and the newest token alone
+            cannot tell them apart.
+          */}
+          {user.invitedAt && (
+            <p className="mt-1 text-xs text-ink-mute" data-testid="manage-invite-dates">
+              Invited {inviteDate(user.invitedAt)}
+              {user.resentAt ? ` · Resent ${inviteDate(user.resentAt)}` : ''}
+            </p>
+          )}
           <div className="mt-2 flex flex-wrap gap-2">
             <Button
               size="sm"
