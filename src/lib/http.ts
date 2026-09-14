@@ -677,6 +677,22 @@ export function apiSetLeadStatus(token: string, input: { propertyIds: string[]; 
   })
 }
 
+/** What a bulk erase reports. Exact, by id — see api/src/erase.ts. */
+export interface BulkEraseDTO {
+  ok: true
+  requested: number
+  deleted: number
+  alreadyGone: number
+  notFound: string[]
+  failed: string[]
+  photos: number
+}
+
+/** Admin only; the server refuses anyone else. A reason is required. */
+export function apiEraseLeads(token: string, input: { propertyIds: string[]; reason: string }) {
+  return request<BulkEraseDTO>('/api/leads/erase-bulk', { method: 'POST', body: input, token })
+}
+
 export function apiAssignProperties(
   token: string,
   input: { propertyIds: string[]; repId: string | null },

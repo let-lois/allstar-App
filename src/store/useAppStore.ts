@@ -19,6 +19,7 @@ import type {
   LeadList,
 } from '../types'
 import * as db from '../lib/db'
+import { purgeErased } from '../lib/erase-local'
 import { uid } from '../lib/id'
 import { enqueue, drain, initSync } from '../lib/sync'
 import { initPhotoSync, onPhotoUpdated } from '../lib/photos'
@@ -156,6 +157,13 @@ interface AppState {
   refreshMe: () => Promise<void>
   /** Pull the server's view of the world down again. Live mode only. */
   refreshFromServer: () => Promise<void>
+  /**
+   * Drop leads this device should no longer hold — memory and IndexedDB both —
+   * because the server has just erased them. The map and every list read from
+   * the same `properties`, so this is what makes pins vanish on the tap rather
+   * than on the next refresh.
+   */
+  forgetProperties: (ids: string[]) => Promise<void>
   /** Re-read the team roster. Office roles only — a rep has no business with it. */
   loadTeam: () => Promise<void>
   /** Demo-only: hand the next pitch a pristine dataset. */
@@ -646,6 +654,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       // The cached roster is still on screen; a failed refresh shouldn't blank
       // every name in the console.
     }
+  },
+
+  async forgetProperties(ids) {
+    if (ids.length === 0) return
+    const gone = new Set(ids)
+    set((state) => {
+      const properties = { ...state.properties }
+      for (const id of gone) delete properties[id]
+      return { properties }
+    })
+    // The same purge a bootstrap runs for an erased id: the property, its
+    // visits, notes, photos and queued work, so nothing on this device can
+    // put it back. See erase-local.ts.
+    await purgeErased(ids)
   },
 
   async refreshFromServer() {
