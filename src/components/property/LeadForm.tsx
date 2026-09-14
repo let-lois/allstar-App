@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Field } from '../ui/Input'
 import { AddressAutocomplete, type PickedAddress } from './AddressAutocomplete'
-import { useAppStore } from '../../store/useAppStore'
+import { useAppStore, useMyLists } from '../../store/useAppStore'
+import { canEditList } from '../../lib/leadLists'
 import { reverseGeocode, type ReverseAddress } from '../../lib/reverseGeocode'
 import { addressFieldMode } from '../../lib/address'
 import { getPosition } from '../../lib/geo'
@@ -9,7 +10,7 @@ import { uid } from '../../lib/id'
 import * as db from '../../lib/db'
 import { enqueue } from '../../lib/sync'
 import { haptic } from '../../lib/haptics'
-import type { Property } from '../../types'
+import type { LeadList, Property } from '../../types'
 
 /**
  * Adding one lead, wherever the rep started from — the state and the save.
@@ -78,6 +79,18 @@ export function useLeadDraft({
   const [locating, setLocating] = useState(!at)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /*
+    Which lists the new lead should land on, chosen before it exists.
+
+    Until now a lead went on a list in two steps: save it, then find the Lists
+    section on its page and tick. A rep working a re-knock list from a street
+    does not want the second step, so the choice is taken here and applied the
+    moment the lead has an id — through the same two store actions the lead
+    page uses, so there is one rule for who may put a house on which list.
+    `newListName` is the "start one" path, exactly as on the lead page.
+  */
+  const [listIds, setListIds] = useState<string[]>([])
+  const [newListName, setNewListName] = useState('')
   /*
     What the map said was here, and whether the rep has since disagreed.
 
@@ -231,6 +244,31 @@ export function useLeadDraft({
     }
 
     /*
+      Onto its lists, now that it has an id.
+
+      After the lead is stored and before anything is cleared, so the page the
+      caller opens next already shows the list names. A failure here is not a
+      failed save: the lead exists on the phone and in the store, and its own
+      page carries the same control for a second try — so the error is kept
+      out of the way of the navigation rather than shown over a saved lead.
+    */
+    const store = useAppStore.getState()
+    for (const listId of listIds) {
+      try {
+        await store.updateListMembers(listId, { add: [property.id] })
+      } catch {
+        // The lead page offers the same tick again.
+      }
+    }
+    if (newListName.trim()) {
+      try {
+        await store.createList({ name: newListName, propertyIds: [property.id] })
+      } catch {
+        // As above: the lead is saved; the list can be started from its page.
+      }
+    }
+
+    /*
       Emptied for the next one, because this hook outlives the sheet.
 
       `useLeadDraft` is called by `MapScreen`, not by the sheet it fills, so a
@@ -262,6 +300,10 @@ export function useLeadDraft({
     setFound(null)
     setFilled(false)
     setError(null)
+    // The list choice too: the next house tapped is not on tonight's list
+    // just because the last one was.
+    setListIds([])
+    setNewListName('')
     touched.current = false
 
     onSaved(property)
@@ -288,6 +330,11 @@ export function useLeadDraft({
     locating,
     saving,
     error,
+    listIds,
+    toggleList: (id: string) =>
+      setListIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id])),
+    newListName,
+    setNewListName,
     canSave: !!address.trim() && !!pin && !saving,
     save,
   }
@@ -404,6 +451,8 @@ export function LeadFields({
         enterKeyHint="done"
       />
 
+      <LeadListChoice draft={draft} />
+
       {error && (
         <p role="alert" className="rounded-field bg-bad-bg px-3 py-2 text-[12.5px] text-bad">
           {error}
@@ -453,6 +502,92 @@ export function LeadFields({
 
     </div>
   )
+}
+
+/**
+ * "Add to list", on the form rather than after it.
+ *
+ * The same shape as the control on a lead's page — a line saying where the
+ * lead is going and one button that opens the picker — so a rep learns it once.
+ * The difference is when it applies: nothing is written until Save, because
+ * there is no lead yet to write about. Only lists this person may edit are
+ * offered, for the reason given on `ListMembership`: a list the office handed
+ * them is theirs to work, not to change, and the server would refuse the add.
+ */
+function LeadListChoice({ draft }: { draft: LeadDraft }) {
+  const user = useAppStore((s) => s.user)
+  const mine = useMyLists()
+  const editable = mine.filter((l) => canEditList(user, l))
+  const { listIds, toggleList, newListName, setNewListName, saving } = draft
+  const [open, setOpen] = useState(false)
+
+  if (!user) return null
+
+  const chosen = editable.filter((l) => listIds.includes(l.id))
+  const summary = describeListChoice(chosen, newListName)
+
+  return (
+    <div data-testid="lead-list-choice">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="min-w-0 flex-1 truncate text-[13px] text-ink-soft" data-testid="lead-list-summary">
+          {summary}
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="focusable ml-auto min-h-[44px] rounded-lg px-2 text-[13px] font-semibold text-accent"
+        >
+          {open ? 'Done' : 'Add to list'}
+        </button>
+      </div>
+
+      {open && (
+        <div className="mt-2 space-y-2 rounded-field bg-surface-sunk px-3 py-2.5" data-testid="lead-list-picker">
+          {editable.length === 0 ? (
+            <p className="text-[12.5px] text-ink-mute">
+              You have no lists of your own yet. Start one below and this lead goes on it when you save.
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              {editable.map((l) => (
+                <li key={l.id}>
+                  <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 text-[14px]">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-brand-500"
+                      checked={listIds.includes(l.id)}
+                      disabled={saving}
+                      onChange={() => toggleList(l.id)}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{l.name}</span>
+                    <span className="nums text-[12px] text-ink-mute">{l.leadIds.length}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Field
+            label="New list"
+            hint="Optional. Made when you save, with this lead on it."
+            value={newListName}
+            disabled={saving}
+            onChange={(e) => setNewListName(e.target.value)}
+            placeholder="e.g. Come back Saturday"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The one line above the picker: where this lead will go when saved. */
+function describeListChoice(chosen: Pick<LeadList, 'name'>[], newListName: string): string {
+  const names = chosen.map((l) => l.name)
+  const fresh = newListName.trim()
+  if (fresh) names.push(`${fresh} (new)`)
+  if (names.length === 0) return 'Not on a list'
+  return `Goes on ${names.join(', ')}`
 }
 
 /**
