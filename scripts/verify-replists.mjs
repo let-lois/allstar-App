@@ -294,6 +294,88 @@ if ((await row3.count()) === 1) {
   ok(false, `and the list opens on ${ADDR3}`)
 }
 
+/* --- a list is framed on the map, and says how far along it is ------------ */
+//
+// Two houses as far apart as the demo has. Opened from the list, the map must
+// show both — not open at street zoom on whichever sorts first and leave the
+// other to be found by panning. Asserted on the pins' own boxes against the
+// map's: every pin drawn inside the map element, and both of them drawn.
+const readProps = () => page.evaluate(async () => {
+  const req = indexedDB.open('allstar-field')
+  const db = await new Promise((res, rej) => {
+    req.onsuccess = () => res(req.result)
+    req.onerror = () => rej(req.error)
+  })
+  const rows = await new Promise((res, rej) => {
+    const r = db.transaction('properties').objectStore('properties').getAll()
+    r.onsuccess = () => res(r.result)
+    r.onerror = () => rej(r.error)
+  })
+  return rows.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)).map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, status: p.status, address1: p.address1 }))
+})
+{
+  const props = await readProps()
+  let far = [props[0], props[1], 0]
+  for (const a of props) for (const b of props) {
+    const d = Math.hypot(a.lat - b.lat, a.lng - b.lng)
+    if (d > far[2]) far = [a, b, d]
+  }
+  const [a, b] = far
+  ok(far[2] > 0.01, `the demo has two houses far enough apart to matter (${far[2].toFixed(4)} deg)`)
+  const FAR = 'Gate Far Apart'
+  await page.goto(`${BASE}/property/${a.id}`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1000)
+  if ((await page.getByTestId('list-membership').count()) === 0) {
+    await page.getByRole('button', { name: /^Lists/ }).click()
+    await page.waitForTimeout(400)
+  }
+  await page.getByRole('button', { name: /Add to list/ }).click()
+  await page.waitForTimeout(400)
+  await page.getByTestId('list-picker').getByLabel('New list').fill(FAR)
+  await page.getByTestId('list-picker').getByRole('button', { name: /^Create$/ }).click()
+  await page.waitForTimeout(900)
+  await page.goto(`${BASE}/property/${b.id}`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1000)
+  if ((await page.getByTestId('list-membership').count()) === 0) {
+    await page.getByRole('button', { name: /^Lists/ }).click()
+    await page.waitForTimeout(400)
+  }
+  await page.getByRole('button', { name: /Add to list/ }).click()
+  await page.waitForTimeout(400)
+  await page.getByTestId('list-picker').getByLabel(FAR).click()
+  await page.waitForTimeout(700)
+
+  await page.goto(`${BASE}/lists`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1200)
+  await page.getByTestId('list-row').filter({ hasText: FAR }).click()
+  await page.waitForTimeout(800)
+  ok((await page.getByTestId('list-lead').count()) === 2, 'the list holds both houses')
+  const progress = page.getByTestId('list-progress')
+  ok((await progress.count()) === 1, 'and shows its progress by status')
+  const want = {}
+  for (const st of [a.status, b.status]) want[st] = (want[st] ?? 0) + 1
+  const txt = (await progress.count()) ? await progress.innerText() : ''
+  ok(/^2 total/.test(txt), `starting with the total (${txt})`)
+  ok(
+    Object.entries(want).every(([, n]) => new RegExp(`· ${n} `).test(txt)) &&
+      txt.split('·').length === 1 + Object.keys(want).length,
+    'with one count per status the two houses actually have',
+    `${txt} vs ${JSON.stringify(want)}`,
+  )
+
+  await page.getByTestId('open-on-map').click()
+  await page.waitForTimeout(2200)
+  const mapBox = await page.getByRole('application').boundingBox()
+  const pinBoxes = await page.locator('[data-marker="pin"], [data-marker="cluster"]').evaluateAll((els) =>
+    els.map((el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height } }),
+  )
+  ok(pinBoxes.length === 2 || (pinBoxes.length === 1 && far[2] < 0.002), `both houses are drawn (${pinBoxes.length} marker${pinBoxes.length === 1 ? '' : 's'})`)
+  const inside = mapBox
+    ? pinBoxes.every((p) => p.x >= mapBox.x && p.y >= mapBox.y && p.x + p.w <= mapBox.x + mapBox.width && p.y + p.h <= mapBox.y + mapBox.height)
+    : false
+  ok(inside && pinBoxes.length > 0, 'and every pin lies inside the map — the view was framed on the list, not on whichever house sorts first')
+}
+
 ok(errors.length === 0, `no page errors${errors.length ? ': ' + errors[0] : ''}`)
 
 await browser.close()

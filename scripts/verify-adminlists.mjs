@@ -131,6 +131,18 @@ ok(new RegExp(`\\b${offered}\\b`).test(rowText), `the row shows ${offered} leads
 ok(/Dana Whitfield, Marcus Reyna/.test(rowText), 'the row names both reps')
 ok(new RegExp(`${offered} leads?\\s*$`, 'm').test(await page.locator('h2', { hasText: NAME }).locator('..').innerText()),
   'the map header shows the same count')
+// Progress by status, and it must add up: a tally that names statuses the
+// list does not hold, or drops one it does, is worse than the total alone.
+const progress = page.getByTestId('list-progress')
+ok((await progress.count()) === 1, 'the console shows the list’s progress by status')
+{
+  const txt = (await progress.count()) ? await progress.innerText() : ''
+  const parts = txt.split('·').map((x) => x.trim())
+  const total = Number(/^(\d+) total/.exec(parts[0] ?? '')?.[1])
+  const sum = parts.slice(1).reduce((a, x) => a + Number(/^(\d+) /.exec(x)?.[1] ?? 0), 0)
+  ok(total === offered, `which starts with the total (${txt})`)
+  ok(parts.length > 1 && sum === total, 'and whose status counts add up to it', `${sum} of ${total}`)
+}
 
 /* --- no lead changed hands ------------------------------------------------ */
 const ownersAfter = await page.evaluate(async () => {

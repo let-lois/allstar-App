@@ -7,7 +7,8 @@ import { Field, TextArea } from '../components/ui/Input'
 import { useAppStore } from '../store/useAppStore'
 import { ApiError, NetworkError } from '../lib/http'
 import { pointInPolygon, polygonAreaSqMiles } from '../lib/geo'
-import { canManageLists } from '../lib/leadLists'
+import { canManageLists, tallyStatuses } from '../lib/leadLists'
+import { STATUS_LABEL } from '../data/outcomes'
 import type { LeadList } from '../types'
 
 /**
@@ -473,6 +474,12 @@ export function AdminLists() {
                 : `${shown.length} lead${shown.length === 1 ? '' : 's'}`}
             </span>
           </div>
+          {/* The same progress line the rep sees on their phone, for the same list. */}
+          {!draft && current && shown.length > 0 && (
+            <p className="nums border-b border-line-soft px-4 py-2 text-[12.5px] text-ink-soft" data-testid="list-progress">
+              {[`${shown.length} total`, ...tallyStatuses(shown).map((t) => `${t.count} ${STATUS_LABEL[t.status].toLowerCase()}`)].join(' · ')}
+            </p>
+          )}
 
           {draft && (
             <div className="border-b border-line-soft px-4 py-3">

@@ -1,4 +1,4 @@
-import { canSee, leadIdsViaLists, listsContaining, listsFor, withMembers } from '../src/lib/leadLists.ts'
+import { canSee, leadIdsViaLists, listsContaining, listsFor, tallyStatuses, withMembers } from '../src/lib/leadLists.ts'
 
 /**
  * Who can see what, on the phone — the same answer the server gives.
@@ -85,6 +85,27 @@ const nobodys = { id: 'p_nobody', assignedRepId: undefined }
   ok(grown.leadIds.join(',') === 'p_2,p_3', 'add and remove in one call, with no duplicate for a house already on it', grown.leadIds.join(','))
   ok(l.leadIds.join(',') === 'p_1,p_2', 'and the original is untouched — the outbox and the screen must agree on what was sent')
   ok(grown.updatedAt >= l.updatedAt, 'and the list knows it changed')
+}
+
+/* --- progress, in the pipeline's order ------------------------------------ */
+{
+  const houses = [
+    { status: 'won' },
+    { status: 'new' },
+    { status: 'follow_up' },
+    { status: 'new' },
+    { status: 'contacted' },
+    { status: 'new' },
+  ]
+  const tally = tallyStatuses(houses)
+  ok(
+    tally.map((t) => `${t.count} ${t.status}`).join(', ') === '3 new, 1 contacted, 1 follow_up, 1 won',
+    'a list tallies by status in the pipeline order, not by count or alphabet',
+    tally.map((t) => `${t.count} ${t.status}`).join(', '),
+  )
+  ok(tally.reduce((a, t) => a + t.count, 0) === houses.length, 'and the counts add up to the houses')
+  ok(!tally.some((t) => t.count === 0), 'statuses with nothing in them are left out')
+  ok(tallyStatuses([]).length === 0, 'an empty list has nothing to say')
 }
 
 console.log('')

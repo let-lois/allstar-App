@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Property, Route } from '../../types'
-import { project, unproject, type Position } from '../../lib/geo'
+import { project, unproject, type Position, centerOf } from '../../lib/geo'
 import { LocationPinSvg } from './LocationPin'
 import { STATUS_COLOR } from '../../data/outcomes'
 import {
@@ -79,6 +79,15 @@ const PIN_MARGIN = 44
 
 export interface MapHandle {
   flyTo: (lat: number, lng: number, zoom?: number) => void
+  /**
+   * Show all of these points at once.
+   *
+   * For a list opened from its page: the rep asked to see *these* houses, and
+   * a map that opens on whichever lead sorts first, at street zoom, shows one
+   * of them and leaves the rest to be found by panning. One point is a flight
+   * to it; more is the tightest view that holds them all.
+   */
+  fit: (points: { lat: number; lng: number }[]) => void
   /**
    * Pan just enough to lift a point clear of the bottom `covered` fraction of
    * the map, and not one pixel more.
@@ -300,6 +309,38 @@ export function FieldMap({
     setView((v) => ({ lat, lng, zoom: zoom ?? Math.max(v.zoom, 17) }))
   }, [])
 
+  /*
+    Held until the box has been measured. A fit asked for on the first render
+    has no width to fit into — the ResizeObserver above has not fired yet — and
+    guessing a size would frame the list for a phone that is not this one.
+  */
+  const pendingFit = useRef<{ lat: number; lng: number }[] | null>(null)
+  const applyFit = useCallback((points: { lat: number; lng: number }[], w: number, h: number) => {
+    setFollowMe(false)
+    if (points.length === 1) {
+      setView({ lat: points[0].lat, lng: points[0].lng, zoom: 18 })
+      return
+    }
+    setView({ ...centerOf(points), zoom: fitZoom(points, w, h) })
+  }, [])
+  const fit = useCallback(
+    (points: { lat: number; lng: number }[]) => {
+      if (points.length === 0) return
+      if (size.w === 0 || size.h === 0) {
+        pendingFit.current = points
+        return
+      }
+      applyFit(points, size.w, size.h)
+    },
+    [size.w, size.h, applyFit],
+  )
+  useEffect(() => {
+    if (size.w === 0 || size.h === 0 || !pendingFit.current) return
+    const points = pendingFit.current
+    pendingFit.current = null
+    applyFit(points, size.w, size.h)
+  }, [size.w, size.h, applyFit])
+
   /* --- gestures ---------------------------------------------------------- */
 
   const pointers = useRef(new Map<number, { x: number; y: number }>())
@@ -353,8 +394,8 @@ export function FieldMap({
   )
 
   useEffect(() => {
-    if (handleRef) handleRef.current = { flyTo, reveal }
-  }, [handleRef, flyTo, reveal])
+    if (handleRef) handleRef.current = { flyTo, reveal, fit }
+  }, [handleRef, flyTo, reveal, fit])
 
   const onPointerDown = (e: React.PointerEvent) => {
     const hit = (e.target as Element).closest?.('[data-marker]') as HTMLElement | null

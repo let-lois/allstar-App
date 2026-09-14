@@ -20,6 +20,15 @@ export function distanceMiles(
  * Distance phrased the way a rep reads it while walking: feet up close, then
  * tenths of a mile. Never "0.03 mi".
  */
+/** The plain centroid of some points — where a map should look to see all of them. */
+export function centerOf(points: { lat: number; lng: number }[]): { lat: number; lng: number } {
+  const n = points.length || 1
+  return {
+    lat: points.reduce((a, p) => a + p.lat, 0) / n,
+    lng: points.reduce((a, p) => a + p.lng, 0) / n,
+  }
+}
+
 export function formatDistance(miles: number): string {
   if (!Number.isFinite(miles)) return '—'
   const feet = miles * 5280

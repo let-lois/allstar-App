@@ -6,7 +6,8 @@ import { Button } from '../components/ui/Button'
 import { Field } from '../components/ui/Input'
 import { StatusPill } from '../components/ui/StatusPill'
 import { useAppStore, useScopedProperties } from '../store/useAppStore'
-import { canEditList } from '../lib/leadLists'
+import { canEditList, tallyStatuses } from '../lib/leadLists'
+import { STATUS_LABEL } from '../data/outcomes'
 import { distanceMiles, formatDistance } from '../lib/geo'
 import { cityLine } from '../lib/format'
 
@@ -78,6 +79,8 @@ export function ListDetail() {
   // on a list handed to this rep. Counted rather than hidden, so a short list
   // does not read as a short list.
   const unseen = list.leadIds.length - rows.length
+  // How far along the list is, over the houses this phone can see.
+  const tally = tallyStatuses(rows)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -107,6 +110,17 @@ export function ListDetail() {
         <div className="content-col page anim-rise">
           {list.description && (
             <p className="px-1 text-[13.5px] leading-relaxed text-ink-soft">{list.description}</p>
+          )}
+
+          {/*
+            Progress, in the pipeline's order. A rep opening tonight's list
+            wants "how much is left" before "which house is nearest", and the
+            office wants the same number without opening every lead.
+          */}
+          {rows.length > 0 && (
+            <p className="nums px-1 text-[13px] text-ink-soft" data-testid="list-progress">
+              {[`${rows.length} total`, ...tally.map((t) => `${t.count} ${STATUS_LABEL[t.status].toLowerCase()}`)].join(' · ')}
+            </p>
           )}
 
           {renaming && editable && (

@@ -728,9 +728,46 @@ export function GoogleFieldMap({
     if (y > limit) map.panBy(0, y - limit + PIN_MARGIN)
   }, [])
 
+  /*
+    Fit, with the same holding pattern as the self-rendered map, for the same
+    reason in a different shape: here the map itself arrives asynchronously,
+    after the loader and the library import, and a list opened straight onto
+    this screen asks before there is a map to ask.
+  */
+  const pendingFit = useRef<{ lat: number; lng: number }[] | null>(null)
+  const applyFit = useCallback((map: google.maps.Map, points: { lat: number; lng: number }[]) => {
+    if (points.length === 1) {
+      map.panTo(points[0])
+      map.setZoom(18)
+      return
+    }
+    const bounds = new google.maps.LatLngBounds()
+    for (const p of points) bounds.extend(p)
+    map.fitBounds(bounds, 56)
+  }, [])
+  const fit = useCallback(
+    (points: { lat: number; lng: number }[]) => {
+      if (points.length === 0) return
+      const map = mapRef.current
+      if (!map || !ready) {
+        pendingFit.current = points
+        return
+      }
+      applyFit(map, points)
+    },
+    [ready, applyFit],
+  )
   useEffect(() => {
-    if (handleRef) handleRef.current = { flyTo, reveal }
-  }, [handleRef, flyTo, reveal])
+    const map = mapRef.current
+    if (!ready || !map || !pendingFit.current) return
+    const points = pendingFit.current
+    pendingFit.current = null
+    applyFit(map, points)
+  }, [ready, applyFit])
+
+  useEffect(() => {
+    if (handleRef) handleRef.current = { flyTo, reveal, fit }
+  }, [handleRef, flyTo, reveal, fit])
 
   const zoomBy = (d: number) => {
     const map = mapRef.current
