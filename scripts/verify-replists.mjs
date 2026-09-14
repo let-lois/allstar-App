@@ -172,7 +172,7 @@ ok(new RegExp(`${NAME2}\\s*\\n\\s*1 lead`).test(body), 'and the second still hol
 
 // The outbox has nothing in the demo — but the lists are in the store the sync
 // reads from, which is what "offline-first" means here.
-const stored = await page.evaluate(async () => {
+const readLists = (page) => page.evaluate(async () => {
   const req = indexedDB.open('allstar-field')
   const db = await new Promise((res, rej) => {
     req.onsuccess = () => res(req.result)
@@ -185,6 +185,7 @@ const stored = await page.evaluate(async () => {
   })
   return rows.map((l) => ({ name: l.name, leads: l.leadIds.length, reps: l.repIds.length, createdBy: l.createdBy }))
 })
+const stored = await readLists(page)
 ok(stored.length === 2 && stored.every((l) => l.createdBy === 'u_rep'), 'both lists are stored on the phone as the rep’s own')
 ok(stored.every((l) => l.reps === 0), 'and a rep’s own list is handed to nobody — the server would refuse otherwise')
 
@@ -208,6 +209,90 @@ if ((await page.getByTestId('list-membership').count()) === 0) {
   await page.waitForTimeout(400)
 }
 ok((await page.getByTestId('on-list').count()) === 0, 'an archived list is not shown on the lead')
+
+/* --- and a new door goes straight onto a list, from the Add-lead form ----- */
+//
+// The two-step this removes: save the lead, open its page, find Lists, tick.
+// The form offers the same picker before the lead exists and applies the
+// choice at save. Only the rep's live lists are offered — the archived one is
+// not — and a list can be started from here too.
+// A position, granted only now: a typed address needs a pin from somewhere and
+// Places is aborted above. Granted earlier it would have recentred the map
+// sections on the rep instead of on the list.
+await ctx.grantPermissions(['geolocation'])
+await ctx.setGeolocation({ latitude: 32.7767, longitude: -96.797 })
+await page.goto(`${BASE}/lead/new`, { waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(1800)
+const choice = page.getByTestId('lead-list-choice')
+ok((await choice.count()) === 1, 'the Add-lead form carries an Add to list control')
+const summary = page.getByTestId('lead-list-summary')
+ok(
+  (await summary.count()) === 1 && /Not on a list/.test(await summary.innerText()),
+  'which starts out on no list',
+)
+ok((await page.getByTestId('lead-list-picker').count()) === 0, 'and its picker is closed until asked')
+await choice.getByRole('button', { name: /Add to list/ }).click()
+await page.waitForTimeout(400)
+const formPicker = page.getByTestId('lead-list-picker')
+ok((await formPicker.count()) === 1, 'Add to list opens the picker on the form')
+ok(
+  (await formPicker.locator('input[type=checkbox]').count()) === 1,
+  'offering exactly the rep’s one live list — the archived one is not offered',
+)
+ok((await formPicker.getByLabel(RENAMED).count()) === 1, `and that list is ${RENAMED}`)
+await formPicker.getByLabel(RENAMED).click()
+await page.waitForTimeout(300)
+ok(
+  new RegExp(`Goes on ${RENAMED}`).test(await summary.innerText()),
+  'ticking it says where the lead will go',
+)
+const NAME3 = 'Gate From The Form'
+await formPicker.getByLabel('New list').fill(NAME3)
+await page.waitForTimeout(300)
+ok(new RegExp(`${NAME3} \\(new\\)`).test(await summary.innerText()), 'and a new list name is named as new')
+// Nothing is written before Save: the choice is a choice, not a list yet.
+const before = await readLists(page)
+ok(
+  !before.some((l) => l.name === NAME3) && before.find((l) => l.name === RENAMED)?.leads === 0,
+  'nothing is written before Save',
+)
+const ADDR3 = '4512 Cedar Springs Rd'
+await page.getByLabel(/Address/i).fill(ADDR3)
+await page.waitForTimeout(600)
+const saveLead = page.getByRole('button', { name: /Save lead/i })
+await saveLead.waitFor({ timeout: 15_000 })
+ok(await saveLead.isEnabled(), 'the lead can be saved')
+await saveLead.click()
+await page.waitForTimeout(2200)
+ok(/\/property\//.test(page.url()), 'saving opens the new lead')
+if ((await page.getByTestId('list-membership').count()) === 0) {
+  await page.getByRole('button', { name: /^Lists/ }).click()
+  await page.waitForTimeout(400)
+}
+const onNow = page.getByTestId('on-list')
+const onNames = await onNow.allInnerTexts()
+ok(onNow && onNames.length === 2, `the new lead is on two lists (${onNames.join(', ')})`)
+ok(onNames.includes(RENAMED), `the ticked one, ${RENAMED}`)
+ok(onNames.includes(NAME3), `and the one started from the form, ${NAME3}`)
+
+await page.goto(`${BASE}/lists`, { waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(1200)
+const listsBody = await text(page)
+ok((await page.getByTestId('list-row').count()) === 2, 'the started list is among the rep’s lists')
+ok(new RegExp(`${RENAMED}\\s*\\n\\s*1 lead`).test(listsBody), `${RENAMED} holds the new door`)
+ok(new RegExp(`${NAME3}\\s*\\n\\s*1 lead`).test(listsBody), `${NAME3} holds it too`)
+const row3 = page.getByTestId('list-row').filter({ hasText: NAME3 })
+if ((await row3.count()) === 1) {
+  await row3.click()
+  await page.waitForTimeout(800)
+  const lead3 = page.getByTestId('list-lead')
+  ok(
+    (await lead3.count()) === 1 && (await lead3.innerText()).includes(ADDR3),
+    `and the list opens on ${ADDR3}`,
+  )
+} else {
+  ok(false, `and the list opens on ${ADDR3}`)
+}
 
 ok(errors.length === 0, `no page errors${errors.length ? ': ' + errors[0] : ''}`)
 
