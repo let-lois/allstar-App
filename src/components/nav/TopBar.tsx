@@ -30,9 +30,21 @@ interface Props {
  */
 export function TopBar({ title, subtitle, back, right, below, identity }: Props) {
   const nav = useNavigate()
+  /*
+    Two sizes of title, decided by where the screen sits.
+
+    A root screen — Today, Leads, Lists, More — is a place the rep arrives at
+    from the dock, and its name is the largest thing on it: 28px, the way a
+    native app announces a tab. A screen with a Back control is somewhere they
+    went, and its title is a label beside the arrow at 17px, so the content it
+    describes keeps the room. One component, one rule, so no screen sizes its
+    own heading. Identity headers (the console's company lockup) keep their
+    own layout.
+  */
+  const large = !back && !identity
   return (
-    <header className="topbar-lit pad-top z-20 shrink-0">
-      <div className="flex min-h-[54px] items-center gap-1 px-2">
+    <header className="topbar-lit pad-top z-20 shrink-0" data-title-size={large ? 'large' : 'compact'}>
+      <div className={`flex items-center gap-1 px-2 ${large ? 'min-h-[68px]' : 'min-h-[54px]'}`}>
         {back && (
           <button
             onClick={() => (typeof back === 'string' ? nav(back) : nav(-1))}
@@ -42,7 +54,7 @@ export function TopBar({ title, subtitle, back, right, below, identity }: Props)
             <IconBack />
           </button>
         )}
-        <div className={`min-w-0 flex-1 ${back ? 'pl-0.5' : 'pl-3'}`}>
+        <div className={`min-w-0 flex-1 ${back ? 'pl-0.5' : large ? 'py-3 pl-3' : 'pl-3'}`}>
           {identity ? (
             <>
               <h1 className="sr-only">{title}</h1>
@@ -52,11 +64,19 @@ export function TopBar({ title, subtitle, back, right, below, identity }: Props)
             <>
               {/* -0.01em: at 17px semibold the default tracking reads loose against
                   the tighter display sizes used for numbers on the same screens. */}
-              <h1 className="truncate text-[17px] font-semibold leading-tight tracking-[-0.01em]">
+              <h1
+                className={
+                  large
+                    ? 'truncate text-[28px] font-semibold leading-none tracking-[-0.02em]'
+                    : 'truncate text-[17px] font-semibold leading-tight tracking-[-0.01em]'
+                }
+              >
                 {title}
               </h1>
               {subtitle && (
-                <p className="truncate text-[12.5px] leading-tight text-ink-mute">{subtitle}</p>
+                <p className={`truncate leading-tight text-ink-mute ${large ? 'mt-1 text-[13.5px]' : 'text-[12.5px]'}`}>
+                  {subtitle}
+                </p>
               )}
             </>
           )}

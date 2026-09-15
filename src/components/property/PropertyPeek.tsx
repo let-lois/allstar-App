@@ -11,6 +11,7 @@ import { distanceMiles, formatDistance, walkMinutes, type Position } from '../..
 import { moneyFull, relativeLower, cityLine } from '../../lib/format'
 import { ListMembership } from './ListMembership'
 import { PropertyImage } from './StreetView'
+import { LeadSections } from './LeadSections'
 
 /**
  * The map's property sheet — map → tap pin → this → action, in two taps.
@@ -210,6 +211,17 @@ export function PropertyPeek({
       <ListMembership propertyId={property.id} compact />
 
       <CommActions property={property} contact={contact} />
+
+      {/*
+        The rest of the record, for a rep who drags the sheet up. The same
+        sections the profile shows, minus Lists, which the compact control
+        above already covers. "Add note" goes to the profile's composer.
+      */}
+      <LeadSections
+        propertyId={property.id}
+        hide={['lists']}
+        onAddNote={() => nav(`/property/${property.id}?note=1`)}
+      />
 
       {/*
         Rendered here only when the caller has nowhere better to put them.

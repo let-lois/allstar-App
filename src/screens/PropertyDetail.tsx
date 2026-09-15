@@ -1,25 +1,20 @@
-import { Glyph } from '../components/ui/Glyph'
 import { IconRefresh } from '../components/nav/icons'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useAppStore, useListsContaining } from '../store/useAppStore'
-import { ListMembership } from '../components/property/ListMembership'
+import { useAppStore } from '../store/useAppStore'
+import { LeadSections } from '../components/property/LeadSections'
 import { TopBar } from '../components/nav/TopBar'
-import { Collapsible } from '../components/ui/Collapsible'
 import { Button } from '../components/ui/Button'
 import { Field } from '../components/ui/Input'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { NoteComposer } from '../components/visit/NoteComposer'
-import { PhotoStrip } from '../components/visit/PhotoStrip'
 import { syncPropertyPhotos } from '../lib/photos'
 import { CommActions } from '../components/property/CommActions'
 import { StreetView } from '../components/property/StreetView'
 import { OutcomePill, ScoreBar, StatusPill } from '../components/ui/StatusPill'
-import { outcomeByCode } from '../data/outcomes'
 import { distanceMiles, formatDistance, walkMinutes } from '../lib/geo'
-import { cityLine, moneyFull, relative, relativeLower, time } from '../lib/format'
+import { cityLine, moneyFull, relativeLower } from '../lib/format'
 import type { NoteTag } from '../types'
-import { dayKeyIn, dayLabel } from '../lib/day'
 
 /**
  * Lead / property profile.
@@ -36,11 +31,6 @@ export function PropertyDetail() {
 
   const property = useAppStore((s) => (propertyId ? s.properties[propertyId] : undefined))
   const position = useAppStore((s) => s.position)
-  const allNotes = useAppStore((s) => s.notes)
-  const allPhotos = useAppStore((s) => s.photos)
-  const allVisits = useAppStore((s) => s.visits)
-  const activity = useAppStore((s) => s.activity)
-  const tz = useAppStore((s) => s.timezone)
   const startVisit = useAppStore((s) => s.startVisit)
   const addNote = useAppStore((s) => s.addNote)
   const updateLeadDetails = useAppStore((s) => s.updateLeadDetails)
@@ -61,21 +51,6 @@ export function PropertyDetail() {
   const [noteTags, setNoteTags] = useState<NoteTag[]>([])
   const starting = useRef(false)
 
-  const notes = useMemo(
-    () =>
-      Object.values(allNotes)
-        .filter((n) => n.propertyId === propertyId)
-        .sort((a, b) => b.createdAt - a.createdAt),
-    [allNotes, propertyId],
-  )
-  const onLists = useListsContaining(propertyId)
-  const photos = useMemo(
-    () =>
-      Object.values(allPhotos)
-        .filter((p) => p.propertyId === propertyId)
-        .sort((a, b) => b.createdAt - a.createdAt),
-    [allPhotos, propertyId],
-  )
 
   /*
     Ask the server what photos it holds for this property.
@@ -93,17 +68,6 @@ export function PropertyDetail() {
     if (!propertyId) return
     void syncPropertyPhotos(propertyId)
   }, [propertyId])
-  const visits = useMemo(
-    () =>
-      Object.values(allVisits)
-        .filter((v) => v.propertyId === propertyId && v.endedAt)
-        .sort((a, b) => b.startedAt - a.startedAt),
-    [allVisits, propertyId],
-  )
-  const timeline = useMemo(
-    () => activity.filter((a) => a.propertyId === propertyId).slice(0, 20),
-    [activity, propertyId],
-  )
 
   // `?start=1` deep-links straight into Visit Mode — the map sheet, the Today
   // card and the swipe action all route through here so there's one code path.
@@ -285,144 +249,11 @@ export function PropertyDetail() {
 
         {/*
           --- collapsible detail ----------------------------------------
-          One grouped list rather than five separate cards. See the note on
-          `Collapsible`'s `flat` prop: this is the whole lower half of the lead
-          screen, and as a stack of rectangles it was the most widget-like thing
-          in the product.
+          One grouped list rather than five separate cards, and the same list
+          the map's sheet shows when dragged up — see LeadSections.
         */}
-        <div className="panel my-4 sm:mx-4">
-          <Collapsible flat title="Notes" count={notes.length} defaultOpen={notes.length > 0}>
-            {notes.length === 0 ? (
-              <p className="text-[14px] text-ink-mute">No notes yet.</p>
-            ) : (
-              <ul className="space-y-3.5">
-                {notes.map((n) => (
-                  <li key={n.id} className="border-b border-line-soft pb-3 last:border-0 last:pb-0">
-                    <p className="text-[14.5px] leading-relaxed">{n.body || '(tags only)'}</p>
-                    {n.tags.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {n.tags.map((t) => (
-                          <span
-                            key={t}
-                            className="rounded-full bg-surface-field px-2 py-0.5 text-[11px] font-semibold text-ink-soft"
-                          >
-                            {t.replace(/_/g, ' ')}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <p className="mt-1.5 text-[11.5px] text-ink-mute">
-                      {relative(n.createdAt)}
-                      {n.pending && ' · waiting to upload'}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <Button
-              variant="secondary"
-              full
-              className="mt-4"
-              onClick={() => setNoteOpen(true)}
-            >
-              Add note
-            </Button>
-          </Collapsible>
-
-          <Collapsible flat title="Lists" count={onLists.length} defaultOpen={onLists.length > 0}>
-            <ListMembership propertyId={property.id} />
-          </Collapsible>
-
-          <Collapsible flat title="Photos" count={photos.length} defaultOpen={photos.length > 0}>
-            <PhotoStrip propertyId={property.id} photos={photos} />
-          </Collapsible>
-
-          <Collapsible flat title="Visit history" count={visits.length}>
-            {visits.length === 0 ? (
-              <p className="text-[14px] text-ink-mute">No completed visits recorded.</p>
-            ) : (
-              <ul className="space-y-3.5">
-                {visits.map((v) => {
-                  const def = outcomeByCode(v.outcome)
-                  return (
-                    <li key={v.id} className="flex items-center gap-3">
-                      <span
-                        className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[13px]"
-                        aria-hidden
-                      >
-                        {def ? <Glyph name={def.icon} className="icon-xs" /> : '·'}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[14.5px] font-medium">
-                          {def?.label ?? 'Visit'}
-                        </span>
-                        <span className="block text-[12.5px] text-ink-mute">
-                          {dayLabel(dayKeyIn(v.startedAt, tz), {
-                            month: 'short',
-                            day: 'numeric',
-                          })}{' '}
-                          at {time(v.startedAt)}
-                          {v.startLocation && ' · location confirmed'}
-                        </span>
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </Collapsible>
-
-          <Collapsible flat title="Timeline" count={timeline.length}>
-            {timeline.length === 0 ? (
-              <p className="text-[14px] text-ink-mute">Nothing recorded yet.</p>
-            ) : (
-              <ul className="space-y-3.5">
-                {timeline.map((ev) => (
-                  <li key={ev.id} className="flex items-start gap-3">
-                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-ink/15" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[14.5px] text-ink-soft">{ev.summary}</span>
-                      <span className="mt-0.5 block text-[12.5px] text-ink-mute">
-                        {relative(ev.at)}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Collapsible>
-
-          <Collapsible flat title="Property details">
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[14px]">
-              <Detail label="Owner occupied" value={property.ownerOccupied ? 'Yes' : 'No'} />
-              <Detail
-                label="Square feet"
-                value={property.squareFeet ? property.squareFeet.toLocaleString() : '—'}
-              />
-              <Detail
-                label="Roof age"
-                value={property.roofAgeYears ? `${property.roofAgeYears} yrs` : '—'}
-              />
-              <Detail label="Lead score" value={String(property.score)} />
-              <Detail label="Territory" value={property.territoryId ?? '—'} />
-              <Detail label="Last visit" value={relative(property.lastVisitAt)} />
-            </dl>
-            {property.contacts.length > 1 && (
-              <div className="mt-4">
-                <p className="eyebrow mb-2">Other contacts</p>
-                <ul className="space-y-2">
-                  {property.contacts.slice(1).map((c) => (
-                    <li key={c.id} className="text-[14px]">
-                      {c.name}{' '}
-                      <span className="text-ink-mute">
-                        · {c.relationship} {c.phone}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </Collapsible>
+        <div className="my-4 sm:mx-4">
+          <LeadSections propertyId={property.id} onAddNote={() => setNoteOpen(true)} />
         </div>
         </div>
       </div>
@@ -521,15 +352,6 @@ export function PropertyDetail() {
           </Button>
         </div>
       </BottomSheet>
-    </div>
-  )
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-[13px] text-ink-mute">{label}</dt>
-      <dd className="font-medium">{value}</dd>
     </div>
   )
 }

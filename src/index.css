@@ -256,7 +256,10 @@
     --surface-tint: 224 246 249;
 
     /* --- edges ------------------------------------------------------------ */
-    --hairline: rgb(0 0 0 / 0.1);
+    /* Softer on the light ground: the shadow does the separating there, and a
+       darker line round every card read as a grid. Still stated, so the
+       contrast gate's edge contract holds in both themes. */
+    --hairline: rgb(0 0 0 / 0.07);
     --shadow-card: 0 1px 2px rgb(0 0 0 / 0.06), 0 6px 18px rgb(0 0 0 / 0.06);
     --line: 203 213 225;
     --line-soft: 226 232 240;
@@ -521,7 +524,8 @@
    * and 14px between cards is the difference between cramped and composed.
    */
   .page {
-    @apply flex flex-col gap-4 px-4 py-4;
+    /* A step more air between sections than between the rows inside one. */
+    @apply flex flex-col gap-5 px-4 py-5;
   }
 
   /**
