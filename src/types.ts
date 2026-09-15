@@ -416,6 +416,8 @@ export type MutationKind =
   | 'note.create'
   | 'photo.create'
   | 'property.status'
+  /** Address and contact details corrected at the door. Never status. */
+  | 'property.update'
   | 'task.create'
   | 'task.complete'
   | 'appointment.create'

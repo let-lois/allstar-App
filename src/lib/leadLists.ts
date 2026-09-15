@@ -73,6 +73,36 @@ export function listsContaining(propertyId: string, lists: LeadList[]): LeadList
 }
 
 /** Immutable membership edits, so optimistic local state and the outbox agree. */
+/**
+ * How far along a list is, by status.
+ *
+ * The order is the pipeline's, not alphabetical and not by count: a manager
+ * reading "8 new · 10 contacted · 5 follow-up · 2 won" is reading left to right
+ * as the doors move, and a rep is reading how much of tonight is left. Statuses
+ * with nothing in them are left out — a row of zeros says nothing a total does
+ * not. Counted over the houses handed in, which for a rep is the houses their
+ * phone can see, so the figure never claims more than the screen shows.
+ */
+export const TALLY_ORDER: Property['status'][] = [
+  'new',
+  'contacted',
+  'follow_up',
+  'working',
+  'appointment',
+  'quoted',
+  'won',
+  'lost',
+  'dnc',
+]
+
+export function tallyStatuses(
+  properties: Pick<Property, 'status'>[],
+): { status: Property['status']; count: number }[] {
+  const counts = new Map<Property['status'], number>()
+  for (const p of properties) counts.set(p.status, (counts.get(p.status) ?? 0) + 1)
+  return TALLY_ORDER.filter((s) => counts.has(s)).map((s) => ({ status: s, count: counts.get(s)! }))
+}
+
 export function withMembers(list: LeadList, add: string[] = [], remove: string[] = []): LeadList {
   const gone = new Set(remove)
   const kept = list.leadIds.filter((id) => !gone.has(id))

@@ -5,9 +5,11 @@ import { FieldMap, fitZoom } from '../components/map/FieldMap'
 import { Button } from '../components/ui/Button'
 import { Field, TextArea } from '../components/ui/Input'
 import { useAppStore } from '../store/useAppStore'
-import { ApiError, NetworkError } from '../lib/http'
+import { ApiError, NetworkError, apiExportLeadsCsv } from '../lib/http'
+import { liveToken } from '../lib/session'
 import { pointInPolygon, polygonAreaSqMiles } from '../lib/geo'
-import { canManageLists } from '../lib/leadLists'
+import { canManageLists, tallyStatuses } from '../lib/leadLists'
+import { STATUS_LABEL } from '../data/outcomes'
 import type { LeadList } from '../types'
 
 /**
@@ -195,6 +197,29 @@ export function AdminLists() {
   const [busy, setBusy] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  async function exportCsv() {
+    const token = liveToken()
+    if (!current || !token) return
+    setExporting(true)
+    setNotice(null)
+    try {
+      const { blob, filename } = await apiExportLeadsCsv(token, { list: current.id, listName: current.name })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setNotice(`Exported ${current.name}.`)
+    } catch (err) {
+      setNotice(explain(err, 'The export could not be produced.'))
+    } finally {
+      setExporting(false)
+    }
+  }
 
   // Re-seed the form whenever a different list is picked or it changes under us.
   useEffect(() => {
@@ -438,6 +463,16 @@ export function AdminLists() {
                   <Button size="sm" disabled={!dirty || busy} onClick={() => void saveEdits()}>
                     {busy ? 'Saving…' : 'Save changes'}
                   </Button>
+                  {/* This list's houses as a file, written by the server from the database. */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy || exporting || mode !== 'live' || current.leadIds.length === 0}
+                    onClick={() => void exportCsv()}
+                    data-testid="export-list-csv"
+                  >
+                    {exporting ? 'Exporting…' : 'Export CSV'}
+                  </Button>
                   <Button size="sm" variant="secondary" disabled={busy} onClick={() => void toggleArchived()}>
                     {current.archived ? 'Restore' : 'Archive'}
                   </Button>
@@ -473,6 +508,12 @@ export function AdminLists() {
                 : `${shown.length} lead${shown.length === 1 ? '' : 's'}`}
             </span>
           </div>
+          {/* The same progress line the rep sees on their phone, for the same list. */}
+          {!draft && current && shown.length > 0 && (
+            <p className="nums border-b border-line-soft px-4 py-2 text-[12.5px] text-ink-soft" data-testid="list-progress">
+              {[`${shown.length} total`, ...tallyStatuses(shown).map((t) => `${t.count} ${STATUS_LABEL[t.status].toLowerCase()}`)].join(' · ')}
+            </p>
+          )}
 
           {draft && (
             <div className="border-b border-line-soft px-4 py-3">

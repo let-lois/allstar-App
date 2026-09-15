@@ -52,6 +52,7 @@ export async function bootstrap(env: Env, user: SessionUser) {
     territories,
     roster,
     erased,
+    notes,
   ] = await Promise.all([
       env.DB.prepare(
         `SELECT * FROM properties WHERE properties.client_id = ?1 ${scope} ORDER BY address1`,
@@ -178,6 +179,27 @@ export async function bootstrap(env: Env, user: SessionUser) {
       )
         .bind(user.clientId)
         .all<{ entity_id: string }>(),
+
+      /*
+        Notes, so the office can read what a rep learned at the door.
+
+        Bootstrap never sent these: a note was work a phone did and kept. That
+        held until a manager asked, reasonably, to see what their rep wrote
+        about a house — and found the only place the text existed off the phone
+        was the CSV export. Scoped like properties, so a rep receives notes on
+        houses they can see (including a teammate's on a shared list) and
+        nothing else. Newest first and capped: this is what the office reads
+        today, not an archive, and an unbounded scan is the query that slows
+        first as a tenant grows.
+      */
+      env.DB.prepare(
+        `SELECT n.* FROM notes n
+           JOIN properties p ON p.id = n.property_id
+          WHERE p.client_id = ?1 ${isRep(user) ? `AND ${repScopeSql('p', '?2')}` : ''}
+          ORDER BY n.created_at DESC LIMIT 3000`,
+      )
+        .bind(...bind([user.clientId]))
+        .all(),
     ])
 
   const contactsByProperty = new Map<string, unknown[]>()
@@ -332,6 +354,15 @@ export async function bootstrap(env: Env, user: SessionUser) {
         is the honest one, and this line is the seam between them.
       */
       closedValue: s.pipeline_value,
+    })),
+    notes: (notes.results as Record<string, unknown>[]).map((n) => ({
+      id: n.id,
+      propertyId: n.property_id,
+      visitId: n.visit_id ?? undefined,
+      body: n.body ?? '',
+      tags: n.tags ? JSON.parse(String(n.tags)) : [],
+      authorId: n.author_id,
+      createdAt: n.created_at,
     })),
     serverTime: Date.now(),
     /*

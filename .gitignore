@@ -56,3 +56,4 @@ Allstar-week*.pdf
 # changes on every install would be dirty in every working tree, and the value
 # has to come from the machine doing the build.
 api/src/version.ts
+dist-*/

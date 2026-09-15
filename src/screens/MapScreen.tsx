@@ -1,6 +1,6 @@
 import { IconFilter } from '../components/nav/icons'
 import { IconBack } from '../components/nav/icons'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { FieldMap, type MapHandle } from '../components/map/FieldMap'
 import { RouteList } from '../components/map/RouteList'
@@ -127,6 +127,7 @@ export function MapScreen() {
   const [mapError, setMapError] = useState<GmapsError | null>(null)
   const googleMap = gmapsConfigured()
   const mapHandle = useRef<MapHandle | null>(null)
+
   const isWide = useIsWide()
 
   const routeIds = useMemo(
@@ -148,6 +149,33 @@ export function MapScreen() {
       ),
     [scoped, filter, routeIds, listIds, timezone],
   )
+
+  /*
+    A list opened from its page is framed, once.
+
+    From its page — `/map?list=` — and not from the filter sheet. A rep who
+    picks a list in the sheet is standing where they are standing and narrowing
+    what they see; snapping the view across town would lose their place, and
+    Clear would then leave them zoomed on one house with the others off screen.
+    "Open on map" is the case where the list is the destination.
+
+    Once, rather than on every change to what is shown: the rep will pan and
+    zoom, a house will be added, a status will change — none of those is a
+    reason to snap the view back. Nothing at all happens when the list has no
+    houses with coordinates yet; the empty strip says so in words.
+  */
+  const arrivedWith = useRef(params.get('list'))
+  const fittedList = useRef<string | null>(null)
+  useEffect(() => {
+    if (!openList || openList.id !== arrivedWith.current) return
+    if (fittedList.current === openList.id) return
+    const points = shown
+      .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+      .map((p) => ({ lat: p.lat, lng: p.lng }))
+    if (points.length === 0) return
+    fittedList.current = openList.id
+    mapHandle.current?.fit(points)
+  }, [openList, shown])
 
   const selected = selectedId ? properties[selectedId] : undefined
 

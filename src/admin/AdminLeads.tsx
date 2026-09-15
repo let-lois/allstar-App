@@ -4,7 +4,7 @@ import { AdminPage, FilterBar } from './AdminLayout'
 import { Chip } from '../components/ui/Chip'
 import { Button } from '../components/ui/Button'
 import { useAppStore } from '../store/useAppStore'
-import { ApiError, NetworkError, apiAssignProperties, apiEraseLeads, apiSetLeadStatus } from '../lib/http'
+import { ApiError, NetworkError, apiAssignProperties, apiEraseLeads, apiExportLeadsCsv, apiSetLeadStatus } from '../lib/http'
 import { Field } from '../components/ui/Input'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { liveToken } from '../lib/session'
@@ -216,6 +216,38 @@ export default function AdminLeads() {
     }
   }
 
+  /*
+    Leads out as a file, filtered the way the screen is.
+
+    The rep and status filters travel to the server, which writes the file from
+    the database rather than from what this browser holds — the notes a rep
+    typed this afternoon are on the server and not in this table. The search box
+    and the visited window do not travel: they are ways of finding a row on
+    screen, and a file "of the leads matching 'cedar'" is not a thing anyone
+    asked for. Demo mode has no server and so nothing to export.
+  */
+  const [exporting, setExporting] = useState(false)
+  async function exportCsv() {
+    const token = liveToken()
+    if (!token) {
+      setError('Exporting needs a live account. The demo has no server to export from.')
+      return
+    }
+    setExporting(true)
+    setError(null)
+    try {
+      const { blob, filename } = await apiExportLeadsCsv(token, {
+        rep: repFilter === 'all' ? null : repFilter,
+        status: status === 'all' ? null : status,
+      })
+      saveFile(blob, filename)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'The export could not be produced. Try again.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   async function addToList() {
     const ids = [...selected]
     const n = ids.length
@@ -359,6 +391,17 @@ export default function AdminLeads() {
       tour="console-leads"
       title="Leads"
       description={`${Object.keys(properties).length.toLocaleString()} in total · ${rows.length.toLocaleString()} matching`}
+      actions={
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={exporting || mode !== 'live'}
+          onClick={() => void exportCsv()}
+          data-testid="export-csv"
+        >
+          {exporting ? 'Exporting…' : 'Export CSV'}
+        </Button>
+      }
     >
       <FilterBar>
         {/*
@@ -919,3 +962,22 @@ export default function AdminLeads() {
 }
 
 const UNASSIGNED_LABEL = 'Unassigned'
+
+/**
+ * Hand a blob to the browser as a download.
+ *
+ * The object URL is revoked on the next tick rather than immediately: Safari
+ * starts the download after `click()` returns, and revoking synchronously
+ * gives it a URL that no longer exists.
+ */
+function saveFile(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
