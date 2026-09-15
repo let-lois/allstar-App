@@ -51,6 +51,7 @@ export interface MeDTO extends SessionUser {
     timezone: string
     logoUrl?: string
     website?: string
+    badgeQrUrl?: string
   }
 }
 
@@ -65,7 +66,7 @@ export async function readMe(env: Env, userId: string): Promise<MeDTO | null> {
             u.onboarding_step, u.onboarding_version, u.onboarding_completed_at,
             u.walkthrough_completed_at, u.setup_completed_at, u.location_status,
             u.badge_id, u.badge_issued_at, u.badge_expires_at, u.badge_confirmed_at,
-            c.name AS client_name, c.timezone AS client_tz, c.logo_url, c.website
+            c.name AS client_name, c.timezone AS client_tz, c.logo_url, c.website, c.badge_qr_url
        FROM users u
        JOIN clients c ON c.id = u.client_id
        LEFT JOIN teams t ON t.id = u.team_id
@@ -128,6 +129,7 @@ export async function readMe(env: Env, userId: string): Promise<MeDTO | null> {
       timezone: String(row.client_tz ?? 'UTC'),
       logoUrl: str(row.logo_url),
       website: str(row.website),
+      badgeQrUrl: str(row.badge_qr_url),
     },
   }
 }

@@ -191,8 +191,20 @@ const repId = rep.user.id
   r = await j(await api('/api/company', { method: 'POST', body: JSON.stringify({}) }, A))
   ok(r.status === 400, 'an empty change is refused rather than silently succeeding')
 
+  ok((await api('/api/company', { method: 'POST', body: JSON.stringify({ badgeQrUrl: 'https://example.com/qr' }) }, R)).status === 403, 'a rep cannot change the badge QR link')
+  r = await j(await api('/api/company', { method: 'POST', body: JSON.stringify({ badgeQrUrl: 'link.summitexteriors.com/qr/8f2k1' }) }, A))
+  ok(r.status === 200 && r.body.company?.badgeQrUrl === 'https://link.summitexteriors.com/qr/8f2k1', 'an admin sets the badge QR link, and https:// is assumed when omitted', r.body.company?.badgeQrUrl)
+  ok(r.body.company?.website === 'https://summitexteriors.com/about' && r.body.company?.logoUrl === png, 'and setting it left the website and logo alone')
+  r = await j(await api('/api/company', { method: 'POST', body: JSON.stringify({ badgeQrUrl: 'javascript:alert(1)' }) }, A))
+  ok(r.status === 400, 'a non-web scheme is refused — this is the code on every badge', `${r.status} ${r.body.error ?? ''}`)
+  r = await j(await api('/api/company', { method: 'POST', body: JSON.stringify({ badgeQrUrl: 'https://user:pw@example.com/qr' }) }, A))
+  ok(r.status === 400, 'a login in the link is refused')
+
   const mine = await (await api('/api/me', {}, R)).json()
   ok(mine.user.company.website === 'https://summitexteriors.com/about' && mine.user.company.logoUrl === png, 'a rep sees the company’s website and logo on /api/me — the badge needs both offline')
+  ok(mine.user.company.badgeQrUrl === 'https://link.summitexteriors.com/qr/8f2k1', 'and the badge QR link, which the badge draws offline too', mine.user.company.badgeQrUrl)
+  r = await j(await api('/api/company', { method: 'POST', body: JSON.stringify({ badgeQrUrl: null }) }, A))
+  ok(r.status === 200 && r.body.company?.badgeQrUrl === undefined, 'null clears the link, and badges go back to their own verification page')
 
   r = await j(await api('/api/company', { method: 'POST', body: JSON.stringify({ logo: null }) }, A))
   ok(r.status === 200 && r.body.company?.logoUrl === undefined, 'null clears the logo')

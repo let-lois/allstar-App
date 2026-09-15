@@ -15,7 +15,7 @@ import { webcrypto } from 'node:crypto'
  *
  * Three things are pinned that nothing else can pin:
  *
- *   **The ALTERs run.** Fifteen columns on `users`, two on `invites`, four on
+ *   **The ALTERs run.** Fifteen columns on `users`, two on `invites`, five on
  *   `clients`, a new table — and afterwards a login and a roster read work.
  *
  *   **A half-applied migration finishes rather than wedging.** One of the
@@ -177,7 +177,7 @@ try {
   ok(u.onboarding?.completedAt === MADE_AT, 'dated to when the account was made, not to the deploy', `${u.onboarding?.completedAt}`)
   ok(u.name === 'Old Hand', 'the stored name survives with no first/last split', u.name)
   ok(u.badge === null, 'with no badge — that is offered, not assumed')
-  ok(u.company?.name === 'Legacy Roofing' && u.company?.logoUrl === undefined && u.company?.website === undefined, 'the company appears with the new, empty badge fields')
+  ok(u.company?.name === 'Legacy Roofing' && u.company?.logoUrl === undefined && u.company?.website === undefined && u.company?.badgeQrUrl === undefined, 'the company appears with the new, empty badge fields')
 
   /* --- the roster sees the invitee who never opened their link --------------- */
   const roster = await (await api_('/api/users', {}, session.token)).json()
@@ -201,7 +201,7 @@ try {
 
   /* --- what the database says afterwards ------------------------------------ */
   const ledger = d1json(config, 'SELECT id FROM schema_migrations ORDER BY id').map((r) => r.id)
-  for (const id of ['015-teams', '016-users-onboarding', '017-invites-kind', '018-clients-company', '019-onboarding-backfill']) {
+  for (const id of ['015-teams', '016-users-onboarding', '017-invites-kind', '018-clients-company', '019-onboarding-backfill', '020-clients-badge-qr']) {
     ok(ledger.includes(id), `${id} is recorded as applied`)
   }
   const cols = d1json(config, "SELECT name FROM pragma_table_info('users')").map((r) => r.name)

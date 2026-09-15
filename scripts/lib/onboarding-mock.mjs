@@ -19,7 +19,7 @@ function makeState(over = {}) {
     firstName: 'Marcus', lastName: null, phone: null, jobTitle: 'Sales Representative', teamName: 'Austin',
     hasPhoto: false, location: null, setupAt: null, walkAt: null, badge: null,
     step: 'profile', started: false, completedAt: null, version: 0,
-    website: null, logoUrl: null,
+    website: null, logoUrl: null, badgeQrUrl: null,
     posts: [], mints: 0, renews: 0, mutations: 0, joinPosted: null, profilePatches: [],
     ...over,
   }
@@ -62,7 +62,7 @@ function userOf(s) {
     id: s.id, clientId: 'c_live', clientName: s.clientName, email: s.email, name: nameOf(s), role: s.role,
     firstName: s.firstName ?? undefined, lastName: s.lastName ?? undefined, jobTitle: s.jobTitle ?? undefined, teamName: s.teamName ?? undefined,
     onboarding: { status: v.status, step: v.step, version: s.version, completedAt: s.completedAt ?? undefined },
-    badge: v.badge, company: { name: s.clientName, timezone: 'America/Chicago', website: s.website ?? undefined, logoUrl: s.logoUrl ?? undefined },
+    badge: v.badge, company: { name: s.clientName, timezone: 'America/Chicago', website: s.website ?? undefined, logoUrl: s.logoUrl ?? undefined, badgeQrUrl: s.badgeQrUrl ?? undefined },
   }
 }
 const json = (status, obj) => ({ status, contentType: 'application/json', body: JSON.stringify(obj) })

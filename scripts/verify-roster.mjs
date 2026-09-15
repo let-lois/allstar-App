@@ -129,6 +129,7 @@ async function mockApi(page, w, asId = 'u_admin') {
     const body = JSON.parse(r.request().postData())
     if ('website' in body) w.company.website = body.website ? `https://${String(body.website).replace(/^https?:\/\//, '')}` : undefined
     if ('logo' in body) w.company.logoUrl = body.logo ?? undefined
+    if ('badgeQrUrl' in body) w.company.badgeQrUrl = body.badgeQrUrl ?? undefined
     return r.fulfill(json(200, { company: { ...w.company } }))
   })
   await page.route(/maps\.googleapis\.com/, (r) => r.abort())
@@ -290,6 +291,25 @@ const called = (w, method, path) => w.calls.filter((c) => c.method === method &&
   const site = called(w, 'POST', '/api/company').find((c) => 'website' in c.body)
   ok(site && site.body.website === 'ridgelineroofing.com', 'Save posts the website as typed — the server normalises', JSON.stringify(site?.body))
   ok(w.company.website === 'https://ridgelineroofing.com' && (await panel.getByTestId('company-website').inputValue()) === 'https://ridgelineroofing.com', 'and the field reads back the saved, normalised URL', await panel.getByTestId('company-website').inputValue())
+
+  /* --- the company's QR code link, and the sample follows it ------------------ */
+  const COMPANY_QR = 'https://link.ridgeline.test/qr/8f2k1'
+  ok((await panel.getByTestId('badge-qr').getAttribute('data-target-kind')) === 'verify', 'before a link is set the sample’s code is to its own check')
+  const qrField = panel.getByTestId('company-badge-qr').locator('xpath=ancestor::label[1]')
+  ok(/Sites/.test(await text(qrField)) && /QR Codes/.test(await text(qrField)), 'the field says where in the company’s sub-account the code lives — Sites → QR Codes')
+  await panel.getByTestId('company-badge-qr').fill(COMPANY_QR)
+  await page.waitForTimeout(200)
+  ok((await panel.getByTestId('badge-qr').getAttribute('data-target')) === COMPANY_QR && (await panel.getByTestId('badge-qr').getAttribute('data-target-kind')) === 'company', 'the sample badge draws the company’s code as it is typed, before saving', await panel.getByTestId('badge-qr').getAttribute('data-target'))
+  await panel.getByTestId('company-badge-qr-save').click()
+  await page.waitForTimeout(800)
+  const qrPost = called(w, 'POST', '/api/company').find((c) => 'badgeQrUrl' in c.body)
+  ok(qrPost && qrPost.body.badgeQrUrl === COMPANY_QR && !('website' in qrPost.body) && !('logo' in qrPost.body), 'Save posts the link alone — website and logo are left untouched', JSON.stringify(qrPost?.body))
+  ok(w.company.badgeQrUrl === COMPANY_QR && (await panel.getByTestId('company-badge-qr').inputValue()) === COMPANY_QR, 'and the field reads back what was saved')
+  await panel.getByTestId('company-badge-qr').fill('')
+  await panel.getByTestId('company-badge-qr-save').click({ timeout: 3000 }).catch(() => {})
+  await page.waitForTimeout(800)
+  const qrClear = called(w, 'POST', '/api/company').find((c) => 'badgeQrUrl' in c.body && c.body.badgeQrUrl === null)
+  ok(!!qrClear && (await panel.getByTestId('badge-qr').getAttribute('data-target-kind')) === 'verify', 'clearing posts null and the sample falls back to its own check')
 
   /* --- logo ------------------------------------------------------------------- */
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')

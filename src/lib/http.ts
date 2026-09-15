@@ -37,7 +37,7 @@ export interface SessionUserDTO {
   avatarUrl?: string
   onboarding?: { status: OnboardingStatus; step?: OnboardingStep; version: number; completedAt?: number }
   badge?: BadgeInfo | null
-  company?: { name: string; timezone: string; logoUrl?: string; website?: string }
+  company?: { name: string; timezone: string; logoUrl?: string; website?: string; badgeQrUrl?: string }
 }
 
 export function apiMe(token: string) {
@@ -123,7 +123,7 @@ export interface VerifyDTO {
   status: VerifyStatus
   badge: { id: string; issuedAt?: number; expiresAt?: number }
   person: { name: string; title?: string; photoUrl?: string }
-  company: { name: string; logoUrl?: string; website?: string }
+  company: { name: string; logoUrl?: string; website?: string; badgeQrUrl?: string }
 }
 
 /** Public: no session. 404 for an unknown number, 429 after too many misses. */
@@ -586,10 +586,12 @@ export interface CompanyDTO {
   timezone: string
   logoUrl?: string
   website?: string
+  /** What every badge's QR code encodes; absent means each badge's own verification page. */
+  badgeQrUrl?: string
 }
 
 /** `null` clears a field; a key left out is left alone. */
-export function apiUpdateCompany(token: string, input: { website?: string | null; logo?: string | null }) {
+export function apiUpdateCompany(token: string, input: { website?: string | null; logo?: string | null; badgeQrUrl?: string | null }) {
   return request<{ company: CompanyDTO }>('/api/company', { method: 'POST', body: input, token })
 }
 

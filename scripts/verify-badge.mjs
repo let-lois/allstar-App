@@ -103,7 +103,8 @@ const readyForBadge = (over = {}) =>
   ok((await badge.getAttribute('data-status')) === 'awaiting_confirmation' && /awaiting confirmation/i.test(await page.getByTestId('badge-status').innerText()), 'unconfirmed reads as awaiting confirmation', await badge.getAttribute('data-status'))
   const qrEl = page.getByTestId('badge-qr')
   const VERIFY = `${BASE}/verify/32143567`
-  ok((await qrEl.count()) === 1 && (await qrEl.getAttribute('data-target')) === VERIFY && (await qrEl.getAttribute('href')) === VERIFY, 'the QR code targets this badge’s own verification page', await qrEl.getAttribute('data-target'))
+  ok((await qrEl.count()) === 1 && (await qrEl.getAttribute('data-target')) === VERIFY && (await qrEl.getAttribute('href')) === VERIFY, 'with no company QR link set, the QR code targets this badge’s own verification page', await qrEl.getAttribute('data-target'))
+  ok((await qrEl.getAttribute('data-target-kind')) === 'verify', 'and says so', await qrEl.getAttribute('data-target-kind'))
   const want = expectedQr(VERIFY)
   const got = await drawnQr(page)
   ok(got && got.n === want.n && got.dark === want.dark && got.dark > 0, 'and what is drawn is the encoder’s grid for that URL — same size, same dark cells', `${got?.n}x${got?.n}, ${got?.dark} dark vs ${want.n}x${want.n}, ${want.dark}`)
@@ -131,6 +132,29 @@ const readyForBadge = (over = {}) =>
   ok((await page.getByTestId('badge-qr-missing').count()) === 0, 'and no placeholder')
   ok((await page.getByTestId('badge-logo').count()) === 0 && (await page.getByTestId('badge-lockup').textContent()) === 'Ridgeline Roofing', 'the company name, in the official lockup, stands in for a logo', await page.getByTestId('badge-lockup').textContent())
   ok(!(await page.getByTestId('badge-confirm').isDisabled()), 'neither gap blocks confirming — the badge is valid without them')
+  await ctx.close()
+}
+
+/* ========================================================================== */
+/* The company's own QR code: once the admin pastes its link, every badge      */
+/* draws that code — the one the company already runs, scans counted there   */
+/* ========================================================================== */
+{
+  const COMPANY_QR = 'https://link.ridgeline.test/qr/8f2k1'
+  const s = readyForBadge({ badgeQrUrl: COMPANY_QR })
+  const ctx = await phone()
+  const page = await ctx.newPage()
+  await mockApi(page, s)
+  await signIn(page, s.email)
+  await page.waitForTimeout(600)
+  const qrEl = page.getByTestId('badge-qr')
+  ok((await qrEl.count()) === 1 && (await qrEl.getAttribute('data-target')) === COMPANY_QR && (await qrEl.getAttribute('href')) === COMPANY_QR, 'the QR code targets the company’s link, not the verification page', await qrEl.getAttribute('data-target'))
+  ok((await qrEl.getAttribute('data-target-kind')) === 'company', 'and says whose it is', await qrEl.getAttribute('data-target-kind'))
+  const want = expectedQr(COMPANY_QR)
+  const got = await drawnQr(page)
+  ok(got && got.n === want.n && got.dark === want.dark && got.dark > 0, 'and what is drawn is the encoder’s grid for that link', `${got?.n}x${got?.n}, ${got?.dark} dark vs ${want.n}x${want.n}, ${want.dark}`)
+  ok(/Ridgeline Roofing/.test((await qrEl.getAttribute('aria-label')) ?? ''), 'the code is labelled as the company’s for screen readers', await qrEl.getAttribute('aria-label'))
+  ok(/#32143567/.test(await page.getByTestId('badge-id').innerText()), 'the id is still printed, so the badge can still be looked up by number')
   await ctx.close()
 }
 

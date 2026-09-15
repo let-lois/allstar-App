@@ -36,6 +36,12 @@ CREATE TABLE IF NOT EXISTS clients (
   -- badge offline, so the bytes have to travel with the account.
   logo_url    TEXT,
   website     TEXT,
+  -- What every badge's QR code encodes. Companies run their own QR code (in
+  -- GoHighLevel: the sub-account's Sites → QR Codes) with its own destination
+  -- and scan counts; the admin pastes that code's link here and the badge
+  -- draws the same code. NULL means the badge's QR opens its own verification
+  -- page instead, so a badge is scannable before anyone sets this.
+  badge_qr_url TEXT,
   -- The company's join code. A rep who downloads the app before anyone invites
   -- them has no way to say which company they belong to — email is unique per
   -- tenant, not globally, and `users.client_id` is NOT NULL — so an admin

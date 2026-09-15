@@ -45,7 +45,7 @@ export interface User {
   }
   badge?: BadgeInfo | null
   /** The company as it appears on a badge. */
-  company?: { name: string; timezone: string; logoUrl?: string; website?: string }
+  company?: { name: string; timezone: string; logoUrl?: string; website?: string; badgeQrUrl?: string }
 }
 
 export type OnboardingStatus = 'not_started' | 'in_progress' | 'complete' | 'required'
