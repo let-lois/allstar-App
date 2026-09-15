@@ -157,7 +157,7 @@ try {
   ok(/Set your password|Welcome/.test(await page(secondLink)), 'while the new one does')
   row = await rowFor(A, ONE)
   ok(row?.name === 'Sam Ortiz' && row?.firstName === 'Sam', 'the re-invite corrected the name', row?.name)
-  ok(row?.invitation === 'pending', 'and the roster still reads one pending invitation, not two')
+  ok(row?.invitation === 'opened' && typeof row?.openedAt === 'number', 'and the roster reads one invitation — opened, since the new link was just looked at — not two', `${row?.invitation} / ${row?.openedAt}`)
   ok((await roster(A)).filter((u) => u.email === ONE).length === 1, 'one row for the address, however many times Send was pressed')
 
   /* ===== 3. revoke, then resend ============================================== */
@@ -168,7 +168,7 @@ try {
   r = await j(await call(`/api/invites/${row.id}/resend`, { method: 'POST' }, A))
   ok(r.status === 200 && /\/invite\//.test(r.body.url), 'an admin resends')
   const thirdLink = r.body.url
-  ok((await rowFor(A, ONE))?.invitation === 'pending', 'and it is pending again')
+  ok((await rowFor(A, ONE))?.invitation === 'pending', 'and it is pending again — a fresh link nobody has opened')
 
   /* ===== 4. accept, then the earlier links ==================================== */
   const ONE_PW = 'sams-own-password-123'
