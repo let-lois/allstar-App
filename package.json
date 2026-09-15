@@ -19,6 +19,7 @@
     "verify:bulk-erase": "node scripts/verify-bulk-erase.mjs",
     "verify:export": "node scripts/verify-export.mjs",
     "verify:leadedit": "node scripts/verify-leadedit.mjs",
+    "verify:headings": "node scripts/verify-headings.mjs",
     "verify:onboarding": "node scripts/verify-onboarding.mjs",
     "verify:roster": "node scripts/verify-roster.mjs",
     "verify:leadsheet": "node scripts/verify-leadsheet.mjs",

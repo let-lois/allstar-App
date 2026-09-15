@@ -88,7 +88,7 @@ export function SectionHeader({
     <div className={`flex items-baseline justify-between gap-3 ${className}`}>
       <h2
         className={`flex items-baseline gap-2 font-semibold text-ink ${
-          standalone ? 'text-[17px] tracking-[-0.01em]' : 'text-[15px]'
+          standalone ? 'text-[20px] tracking-[-0.02em]' : 'text-[16px] tracking-[-0.01em]'
         }`}
       >
         {title}
