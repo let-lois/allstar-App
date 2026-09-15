@@ -444,6 +444,17 @@ try {
         ok(/Marcus Vance/.test(text), 'which names the contact that was typed in', text.slice(0, 80))
         ok((await peek.getByTestId('property-image').count()) === 1, 'with a frame for the photo of the house')
         ok(/Assigned to Dana Whitfield/.test(text), 'and says whose door it is — the rep who added it', text.match(/Assigned to [^·]*/)?.[0])
+        // The rest of the record rides the sheet too, for a rep who drags it up —
+        // the same sections as the profile, from the same component.
+        const sections = peek.getByTestId('lead-sections')
+        ok((await sections.count()) === 1, 'and carries the lead’s sections for when the sheet is dragged up')
+        const stext = (await sections.count()) ? await sections.innerText() : ''
+        ok(
+          ['Notes', 'Photos', 'Visit history', 'Activity', 'Lead details'].every((t) => stext.includes(t)),
+          'Notes, Photos, Visit history, Activity and Lead details',
+          stext.replace(/\s+/g, ' ').slice(0, 90),
+        )
+        ok(!/^Lists\b/m.test(stext), 'but not a second Lists row under the compact one above')
         ok(
           /\bNew\b/.test(text),
           'and says what state the lead is in',
