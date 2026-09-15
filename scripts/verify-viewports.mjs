@@ -38,24 +38,33 @@ async function phone(width, height) {
   return { ctx, page, errors }
 }
 
-/** How far the page runs past the phone, and the widest thing that does. */
+/**
+ * Where the screen runs past the phone.
+ *
+ * Two places it can. The document itself, which is the obvious one. And any
+ * pane that scrolls vertically: `overflow-y: auto` makes `overflow-x` auto as
+ * well, so a card wider than the phone does not push the document out — it
+ * gives the page pane a sideways scroll, which the first version of this check
+ * skipped as "a rail that is meant to scroll". A rail is short; a pane is tall.
+ * Anything taller than a chip row that can be scrolled sideways is a defect,
+ * and this names the pane and how far it goes.
+ */
 const fit = (page) =>
   page.evaluate(() => {
     const over = document.documentElement.scrollWidth - window.innerWidth
     let widest = null
-    for (const el of document.querySelectorAll('body *')) {
+    for (const el of document.querySelectorAll('body, body *')) {
+      const cs = getComputedStyle(el)
+      const ox = cs.overflowX
+      if (ox !== 'auto' && ox !== 'scroll' && el !== document.body) continue
       const r = el.getBoundingClientRect()
       if (r.width < 1 || r.height < 1) continue
-      // A rail that scrolls sideways is meant to hold more than the screen; what
-      // must not happen is the *document* growing to fit it.
-      let scrolls = false
-      for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
-        const ox = getComputedStyle(a).overflowX
-        if (ox === 'auto' || ox === 'scroll' || ox === 'hidden') { scrolls = true; break }
-      }
-      if (scrolls) continue
-      if (r.right > window.innerWidth + 1 && (!widest || r.right > widest.right)) {
-        widest = { right: Math.round(r.right), tag: el.tagName.toLowerCase(), cls: (el.className?.toString() ?? '').slice(0, 50) }
+      const spill = el.scrollWidth - el.clientWidth
+      if (spill <= 1) continue
+      // A short strip that scrolls sideways is a rail and means to.
+      if (r.height < 120 && el !== document.body) continue
+      if (!widest || spill > widest.spill) {
+        widest = { spill, tag: el.tagName.toLowerCase(), cls: (el.className?.toString() ?? '').slice(0, 50) }
       }
     }
     return { over, widest }
@@ -92,7 +101,7 @@ try {
       await page.waitForTimeout(1600)
       await dismissTour(page)
       const f = await fit(page)
-      ok(f.over <= 0 && !f.widest, `${name} fits`, f.widest ? `${f.widest.tag}.${f.widest.cls} runs to ${f.widest.right}px` : `${f.over}px over`)
+      ok(f.over <= 0 && !f.widest, `${name} fits`, f.widest ? `${f.widest.tag}.${f.widest.cls} scrolls ${f.widest.spill}px sideways` : `${f.over}px over`)
     }
     // A lead's page, and its primary action.
     await page.goto(`${BASE}/leads`, { waitUntil: 'domcontentloaded' })
@@ -101,7 +110,7 @@ try {
     await page.waitForTimeout(1200)
     {
       const f = await fit(page)
-      ok(f.over <= 0 && !f.widest, 'a lead’s page fits', f.widest ? `${f.widest.tag} runs to ${f.widest.right}px` : '')
+      ok(f.over <= 0 && !f.widest, 'a lead’s page fits', f.widest ? `${f.widest.tag}.${f.widest.cls} scrolls ${f.widest.spill}px sideways` : '')
       const start = page.getByRole('button', { name: /^Start visit$/ })
       ok((await tapSize(start)) >= 44, 'Start visit is a full thumb target', `${await tapSize(start)}px`)
       for (const a of ['Call', 'Text', 'Email', 'Navigate']) {
@@ -165,7 +174,7 @@ try {
         ok((await action(page, a).count()) > 0, `and a way to ${a.toLowerCase()}`)
       }
       ok((await page.getByRole('button', { name: /^Start visit$/ }).count()) === 1, 'and Start visit, pinned where a thumb is')
-      ok((await fit(page)).over <= 0, 'and the page still fits the phone')
+      { const f = await fit(page); ok(f.over <= 0 && !f.widest, 'and the page still fits the phone', f.widest ? `${f.widest.tag} scrolls ${f.widest.spill}px sideways` : '') }
     }
     ok(errors.length === 0, `no page errors${errors.length ? ': ' + errors[0] : ''}`)
     await ctx.close()
