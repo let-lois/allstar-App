@@ -151,6 +151,17 @@ ok(
   ok(fixed?.address1 === '1B Smoke Test Ln' && fixed?.zip === '78664', 'the address is corrected on the server', `${fixed?.address1} ${fixed?.zip}`)
   ok(fixed?.contacts?.length === 1 && fixed?.contacts?.[0]?.email === 'pat@example.com' && fixed?.contacts?.[0]?.phone === '512-555-0199', 'and the contact is updated in place, not duplicated', JSON.stringify(fixed?.contacts))
   ok(fixed?.status === 'new', 'while the status, which follows from a visit, is untouched', fixed?.status)
+
+  // What the rep wrote reaches the office: a note rides bootstrap now.
+  const noted = await send([{
+    id: `mut_note_${stamp}`, kind: 'note.create', createdAt: Date.now(),
+    payload: { id: `n_smoke_${stamp}`, propertyId: propId, body: 'Dog in yard, knock on side door', tags: ['homeowner'] },
+  }])
+  ok(noted.results[0].status === 'applied', 'a rep leaves a note')
+  const office = await (await api('/api/bootstrap', {}, admin.token)).json()
+  const seen = (office.notes ?? []).find((n) => n.id === `n_smoke_${stamp}`)
+  ok(!!seen && seen.body === 'Dog in yard, knock on side door' && seen.authorId === user.id && seen.propertyId === propId, 'and the office reads it in its own bootstrap, signed by the rep', JSON.stringify(seen))
+  ok(Array.isArray(seen?.tags) && seen.tags[0] === 'homeowner', 'tags and all')
 }
 
 const completeVisit = {

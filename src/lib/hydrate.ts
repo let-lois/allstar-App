@@ -2,6 +2,7 @@ import type {
   ActivityEvent,
   Appointment,
   DailyStat,
+  Note,
   Property,
   Route,
   Task,
@@ -113,6 +114,18 @@ export async function applyBootstrap(dto: BootstrapDTO, mergeOnly = false): Prom
     */
     replace('leadLists', (dto.leadLists ?? []).map(leadListFromDTO), pending),
   ])
+
+  /*
+    Notes are merged, never replaced — the one server-owned list that is not.
+
+    `notes` is a local-work store: it holds what this phone wrote, some of it
+    not yet sent, and a replace would destroy exactly those rows. So the
+    server's notes are written over the top by id. A note this phone sent
+    already carries the same id and simply loses its `pending`; a teammate's
+    or a rep's (read by the office) is added; nothing is removed here — an
+    erased lead's notes go with the erasure below.
+  */
+  if (dto.notes?.length) await db.putAll('notes', dto.notes as Note[])
 
   /*
     Erasures last, and the order is not arbitrary.

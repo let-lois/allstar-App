@@ -923,6 +923,11 @@ export interface BootstrapDTO {
    */
   leadLists?: LeadListDTO[]
   /**
+   * Notes on the leads this person can see, newest first. Optional for the
+   * same reason as `team`: an older Worker does not send it.
+   */
+  notes?: unknown[]
+  /**
    * Names and initials for everyone on the account — enough to label a rep id.
    *
    * Optional because a Worker deployed before this field existed does not send
