@@ -82,6 +82,7 @@ export type AuditAction =
   */
   | 'lead.erased'
   | 'leads.bulk_erased'
+  | 'leads.exported'
 
 export interface AuditEntry {
   action: AuditAction

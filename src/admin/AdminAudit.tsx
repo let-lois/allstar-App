@@ -34,7 +34,7 @@ const GROUPS = [
     label: 'People',
     actions: ['user.invited', 'user.deactivated', 'user.reactivated', 'user.deleted'],
   },
-  { key: 'leads', label: 'Leads', actions: ['territory.assigned', 'leads.imported'] },
+  { key: 'leads', label: 'Leads', actions: ['territory.assigned', 'leads.imported', 'leads.exported'] },
   {
     key: 'connections',
     label: 'Connections',
@@ -59,6 +59,7 @@ const WEIGHT: Record<string, 'high' | 'medium' | 'low'> = {
   'user.reactivated': 'low',
   'territory.assigned': 'low',
   'leads.imported': 'low',
+  'leads.exported': 'medium',
   // A geocoding key is a customer's own billable credential, and switching
   // provider changes where every future lead's coordinates come from — and
   // whose terms they arrive under. Worth stopping on, short of an access change.
@@ -241,6 +242,15 @@ function describe(e: AuditRowDTO): React.ReactNode {
       return <>{who} removed the geocoding key for {target}</>
     case 'geocoder.changed':
       return <>{who} switched address lookup to {target}</>
+    // A file left the building. Medium, because that is the one shape of the
+    // data that cannot be taken back.
+    case 'leads.exported':
+      return (
+        <>
+          {who} exported {String(d.rows ?? 0)} lead{d.rows === 1 ? '' : 's'} to a spreadsheet
+          {target ? ` from ${target}` : ''}
+        </>
+      )
     case 'leads.imported':
       return (
         <>

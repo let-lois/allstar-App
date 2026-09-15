@@ -322,6 +322,42 @@ export function apiPushMutations(
   })
 }
 
+/**
+ * Leads as a spreadsheet, for the office.
+ *
+ * Not through `request`, which parses JSON: this is a file. The filename is
+ * derived here rather than read from the response, so it works whether or not
+ * the browser is allowed to see the `content-disposition` header — the server
+ * builds the same name from the same parts.
+ */
+export async function apiExportLeadsCsv(
+  token: string,
+  params: { list?: string | null; listName?: string | null; rep?: string | null; status?: string | null },
+): Promise<{ blob: Blob; filename: string }> {
+  const q = new URLSearchParams()
+  if (params.list) q.set('list', params.list)
+  if (params.rep) q.set('rep', params.rep)
+  if (params.status) q.set('status', params.status)
+  const res = await fetch(`${API_URL}/api/leads/export.csv${q.size ? `?${q}` : ''}`, {
+    headers: { authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    let message = 'The export could not be produced.'
+    try {
+      const body = (await res.json()) as { error?: string }
+      if (body.error) message = body.error
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(res.status, message)
+  }
+  const blob = await res.blob()
+  const day = new Date().toISOString().slice(0, 10)
+  const slug =
+    (params.listName ?? 'leads').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'leads'
+  return { blob, filename: `allstar-${slug}-${day}.csv` }
+}
+
 export function apiUploadPhoto(token: string, photoId: string, blob: Blob) {
   return request<{ ok: true; key: string }>(`/api/photos/${photoId}`, {
     method: 'POST',

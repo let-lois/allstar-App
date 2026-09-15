@@ -110,6 +110,8 @@ const ROUTES = {
   */
   "/api/leads/erase|DELETE": { how: 'delegate', fn: 'eraseProperty', file: 'erase.ts' },
   "/api/leads/erase-bulk|POST": { how: 'delegate', fn: 'eraseProperties', file: 'erase.ts' },
+  // Leads out as a spreadsheet. Office roles, decided in export.ts.
+  "/api/leads/export.csv|GET": { how: 'delegate', fn: 'exportLeadsCsv', file: 'export.ts' },
   /*
     Sync collisions. Managers included, unlike erasure — the record exists so
     that whoever runs the board day to day sees it, and admin-only would mean

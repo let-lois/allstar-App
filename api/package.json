@@ -35,6 +35,7 @@
     "smoke:onboarding-flow": "node scripts/smoke-onboarding-flow.mjs",
     "smoke:mail": "node scripts/smoke-mail.mjs",
     "smoke:onboarding-steps": "node scripts/smoke-onboarding-steps.mjs",
+    "smoke:export": "node scripts/smoke-export.mjs",
     "backup": "node scripts/backup.mjs",
     "backup:open": "node scripts/backup-open.mjs",
     "backup:list": "node scripts/backup-open.mjs --list",

@@ -82,6 +82,7 @@ import { drainOutbox } from './crm-push'
 import { BUILT_AT, COMMIT, DIRTY } from './version'
 import { BACKUP_CRON, BackupNotConfigured, canSeeBackups, latestBackup, runBackup } from './backup'
 import { eraseProperties, eraseProperty } from './erase'
+import { exportLeadsCsv } from './export'
 import { setLeadStatus } from './lead-edit'
 import { canReviewConflicts, listConflicts, reviewConflict } from './stale'
 import { applyInbound, clientForSecret, webhookSecret } from './crm-inbound'
@@ -221,7 +222,7 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
     // So the browser can read the id off a failed request and show it to the
     // person looking at the screen. Without this the header exists but is
     // invisible to the app, which defeats the point of returning it.
-    'access-control-expose-headers': 'x-request-id',
+    'access-control-expose-headers': 'x-request-id,content-disposition,x-rows',
     vary: 'origin',
   }
 }
@@ -1155,6 +1156,29 @@ export default {
 
         Narrower than importing on purpose. See `canErase`.
       */
+      /*
+        Leads out as a file. Office roles only — decided inside export.ts, with
+        the quoting rules and the one-row-per-lead shape. A file rather than
+        JSON, because the person asking is about to open it in a spreadsheet.
+      */
+      if (path === '/api/leads/export.csv' && req.method === 'GET') {
+        const result = await exportLeadsCsv(env, user, {
+          listId: url.searchParams.get('list'),
+          repId: url.searchParams.get('rep'),
+          status: url.searchParams.get('status'),
+        })
+        if (!result.ok) return json({ error: result.error }, result.status, cors)
+        return new Response(result.csv, {
+          headers: {
+            ...cors,
+            'content-type': 'text/csv; charset=utf-8',
+            'content-disposition': `attachment; filename="${result.filename}"`,
+            'cache-control': 'no-store',
+            'x-rows': String(result.rows),
+          },
+        })
+      }
+
       // The same act over a selection. Admin only, a reason, an exact count back.
       if (path === '/api/leads/erase-bulk' && req.method === 'POST') {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>

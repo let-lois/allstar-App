@@ -5,7 +5,8 @@ import { FieldMap, fitZoom } from '../components/map/FieldMap'
 import { Button } from '../components/ui/Button'
 import { Field, TextArea } from '../components/ui/Input'
 import { useAppStore } from '../store/useAppStore'
-import { ApiError, NetworkError } from '../lib/http'
+import { ApiError, NetworkError, apiExportLeadsCsv } from '../lib/http'
+import { liveToken } from '../lib/session'
 import { pointInPolygon, polygonAreaSqMiles } from '../lib/geo'
 import { canManageLists, tallyStatuses } from '../lib/leadLists'
 import { STATUS_LABEL } from '../data/outcomes'
@@ -196,6 +197,29 @@ export function AdminLists() {
   const [busy, setBusy] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  async function exportCsv() {
+    const token = liveToken()
+    if (!current || !token) return
+    setExporting(true)
+    setNotice(null)
+    try {
+      const { blob, filename } = await apiExportLeadsCsv(token, { list: current.id, listName: current.name })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setNotice(`Exported ${current.name}.`)
+    } catch (err) {
+      setNotice(explain(err, 'The export could not be produced.'))
+    } finally {
+      setExporting(false)
+    }
+  }
 
   // Re-seed the form whenever a different list is picked or it changes under us.
   useEffect(() => {
@@ -438,6 +462,16 @@ export function AdminLists() {
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button size="sm" disabled={!dirty || busy} onClick={() => void saveEdits()}>
                     {busy ? 'Saving…' : 'Save changes'}
+                  </Button>
+                  {/* This list's houses as a file, written by the server from the database. */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy || exporting || mode !== 'live' || current.leadIds.length === 0}
+                    onClick={() => void exportCsv()}
+                    data-testid="export-list-csv"
+                  >
+                    {exporting ? 'Exporting…' : 'Export CSV'}
                   </Button>
                   <Button size="sm" variant="secondary" disabled={busy} onClick={() => void toggleArchived()}>
                     {current.archived ? 'Restore' : 'Archive'}
