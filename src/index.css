@@ -1197,6 +1197,12 @@
     width: 15px;
     height: 15px;
   }
+  /* The third size after all: a glyph standing alone in an empty frame — a
+     placeholder for a photo, an empty state — where 18px reads as a speck. */
+  .icon-lg > svg {
+    width: 28px;
+    height: 28px;
+  }
 
   .snap-x-row {
     @apply flex gap-2 overflow-x-auto hide-scrollbar;

@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Property } from '../../types'
-import { useAppStore } from '../../store/useAppStore'
+import { useAppStore, useRepName } from '../../store/useAppStore'
 import { NOTE_TAGS } from '../../data/outcomes'
 import type { NoteTag } from '../../types'
 import { OutcomePill, ScoreBar, StatusPill } from '../ui/StatusPill'
@@ -10,6 +10,7 @@ import { Button } from '../ui/Button'
 import { distanceMiles, formatDistance, walkMinutes, type Position } from '../../lib/geo'
 import { moneyFull, relativeLower, cityLine } from '../../lib/format'
 import { ListMembership } from './ListMembership'
+import { PropertyImage } from './StreetView'
 
 /**
  * The map's property sheet — map → tap pin → this → action, in two taps.
@@ -32,6 +33,7 @@ export function PropertyPeek({
   const nav = useNavigate()
   const contact = property.contacts.find((c) => c.isPrimary) ?? property.contacts[0]
   const dist = position ? distanceMiles(position, property) : null
+  const repName = useRepName(property.assignedRepId)
 
   /*
     The last thing anybody wrote about this door.
@@ -92,6 +94,16 @@ export function PropertyPeek({
       </div>
 
       {/*
+        The house itself, before anything about it. A rep who tapped a pin is
+        looking at a roof through a windscreen; the photo is how they know the
+        sheet is about that roof and not the one next door. With the
+        placeholder on, so the address does not jump when a photo arrives.
+      */}
+      {Number.isFinite(property.lat) && Number.isFinite(property.lng) && (
+        <PropertyImage lat={property.lat} lng={property.lng} address={property.address1} className="mt-0" />
+      )}
+
+      {/*
         Always rendered, including when there is nobody on file.
 
         It used to render only `if (contact || property.opportunityValue)`,
@@ -126,6 +138,16 @@ export function PropertyPeek({
           <p className="truncate text-xs text-ink-mute">
             {contact?.phone ??
               (contact ? 'No number on file' : 'Add a name and number during your visit')}
+            {contact?.email ? ` · ${contact.email}` : ''}
+          </p>
+          {/*
+            Whose door this is. A house on a handed-out list may belong to a
+            teammate; a rep about to knock should know that before they do.
+          */}
+          <p className="truncate text-xs text-ink-mute" data-testid="peek-rep">
+            {property.assignedRepId
+              ? `Assigned to ${repName ?? 'someone who has left'}`
+              : 'Not assigned to anyone yet'}
           </p>
         </div>
         {property.opportunityValue != null && (

@@ -114,6 +114,15 @@ const readout = async () => {
  * tries a few and reports where it landed rather than hard-coding a spot that
  * a future fixture change would silently turn into a pin tap.
  */
+/** Step past the "what the map found" stage to the form, when it is showing. */
+async function enterForm(target = page) {
+  const btn = target.getByTestId('detected-add-lead')
+  if ((await btn.count()) > 0) {
+    await btn.click()
+    await target.waitForTimeout(400)
+  }
+}
+
 async function tapOpenGround(candidates) {
   for (const [x, y] of candidates) {
     await page.mouse.click(x, y)
@@ -172,6 +181,28 @@ try {
       'with its point exactly where the finger was',
       tip ? `tip ${tip.x.toFixed(1)},${tip.y.toFixed(1)} vs tap ${at.x},${at.y}` : 'no pin',
     )
+  }
+  /*
+    What the map found comes first, and a form only on request.
+
+    A tap used to open three input boxes. Now it opens the house: the address
+    the geocoder found (or, with no key, the honest absence of one), the photo
+    or its placeholder, "Not a lead yet", and one button. The form is what that
+    button opens, and everything below this point is about the form.
+  */
+  {
+    const detected = page.getByTestId('detected-property')
+    ok((await detected.count()) === 1, 'the sheet opens on the house itself, not on a form')
+    const dtext = (await detected.count()) ? (await detected.innerText()).replace(/\s+/g, ' ') : ''
+    ok(/Not a lead yet/.test(dtext), 'saying plainly that nobody has recorded it', dtext.slice(0, 80))
+    ok(/Address not found/.test(dtext), 'and, with no geocoder, that no address was found rather than inventing one')
+    ok((await page.getByTestId('property-image').count()) === 1, 'with a frame for the photo of the house')
+    ok((await page.locator('input[autocomplete="street-address"]').count()) === 0, 'and no input boxes yet')
+    const addLead = page.getByTestId('detected-add-lead')
+    ok((await addLead.count()) === 1 && /Add lead/.test(await addLead.innerText()), 'one button: Add lead')
+    await addLead.click()
+    await page.waitForTimeout(400)
+    ok((await page.locator('input[autocomplete="street-address"]').count()) === 1, 'which opens the form')
   }
   ok(/tapped/i.test(await readout()), 'and the form says the pin came from the tap', await readout())
 
@@ -339,6 +370,7 @@ try {
       [250, 500],
     ])
     ok(!!spot, 'the form opens again for the save')
+    await enterForm()
     /*
       The coordinates the form is showing, read off the screen before saving.
 
@@ -410,6 +442,8 @@ try {
         ok(opened, 'tapping the lead just recorded opens its own sheet')
         const text = opened ? (await peek.innerText()).replace(/\s+/g, ' ') : ''
         ok(/Marcus Vance/.test(text), 'which names the contact that was typed in', text.slice(0, 80))
+        ok((await peek.getByTestId('property-image').count()) === 1, 'with a frame for the photo of the house')
+        ok(/Assigned to Dana Whitfield/.test(text), 'and says whose door it is — the rep who added it', text.match(/Assigned to [^·]*/)?.[0])
         ok(
           /\bNew\b/.test(text),
           'and says what state the lead is in',
@@ -449,6 +483,7 @@ try {
         [310, 460],
       ])
       ok(!!spot2, 'the form opens for a lead with no contact')
+      await enterForm()
       if (spot2) {
         /*
           The draft is emptied between leads.
@@ -570,6 +605,8 @@ try {
 
       if (opened) {
         const pane = wp.getByTestId('add-lead-pane')
+        ok((await pane.getByTestId('detected-property').count()) === 1, 'the pane, too, opens on the house before the form')
+        await enterForm(wp)
         ok(
           await pane.getByRole('button', { name: /^Save lead$/ }).count() > 0,
           'with a way to save it',

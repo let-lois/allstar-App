@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Glyph } from '../ui/Glyph'
 
 /**
  * A photo of the house, on the lead detail screen.
@@ -47,10 +48,23 @@ export function StreetView({
   lat,
   lng,
   address,
+  placeholder = false,
+  className = '',
 }: {
   lat: number
   lng: number
   address: string
+  /**
+   * Show something when there is no photo, instead of nothing.
+
+   * Off on the profile, where the screen is complete without a picture and an
+   * apology would only take the room. On the map's sheet the picture is what
+   * lets a rep recognise the house they tapped, so its absence is worth a
+   * frame that says so — and a frame is what stops the address from jumping
+   * up the sheet when a photo arrives a second later.
+   */
+  placeholder?: boolean
+  className?: string
 }) {
   const [state, setState] = useState<State>(KEY ? 'checking' : 'none')
 
@@ -86,7 +100,24 @@ export function StreetView({
     }
   }, [lat, lng])
 
-  if (state !== 'ready') return null
+  if (state !== 'ready') {
+    if (!placeholder) return null
+    return (
+      <div
+        data-testid="property-image"
+        data-state={state}
+        className={`grid min-h-[150px] place-items-center overflow-hidden rounded-card bg-surface-sunk px-4 text-center ${className}`}
+        aria-hidden={state === 'checking'}
+      >
+        <div>
+          <Glyph name="house" className="icon-lg mx-auto text-ink-faint" />
+          <p className="mt-2 text-[12.5px] text-ink-mute">
+            {state === 'checking' ? 'Looking for a photo of this house…' : 'No photo of this house yet'}
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const img =
     'https://maps.googleapis.com/maps/api/streetview' +
@@ -102,7 +133,9 @@ export function StreetView({
       href={pano}
       target="_blank"
       rel="noreferrer"
-      className="focusable mt-3.5 block overflow-hidden rounded-card ring-1 ring-line"
+      className={`focusable block overflow-hidden rounded-card ring-1 ring-line ${className || 'mt-3.5'}`}
+      data-testid="property-image"
+      data-state="ready"
       aria-label={`Street view of ${address} — opens in Google Maps`}
     >
       <img
@@ -121,4 +154,14 @@ export function StreetView({
       />
     </a>
   )
+}
+
+/**
+ * The picture of a house on the map's sheet: the photo when there is one, a
+ * frame that says so when there is not. The same component the profile uses,
+ * with the placeholder on — one implementation of "what does this house look
+ * like", not one per screen.
+ */
+export function PropertyImage(props: { lat: number; lng: number; address: string; className?: string }) {
+  return <StreetView {...props} placeholder />
 }

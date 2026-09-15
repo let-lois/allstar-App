@@ -9,6 +9,7 @@ import { MapSearch } from '../components/map/MapSearch'
 import { gmapsConfigured, type GmapsError } from '../lib/gmaps'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { PropertyPeek } from '../components/property/PropertyPeek'
+import { DetectedProperty } from '../components/property/DetectedProperty'
 import { Chip } from '../components/ui/Chip'
 import { SyncBadge } from '../components/sync/SyncBadge'
 import { useAppStore, useScopedProperties } from '../store/useAppStore'
@@ -95,6 +96,14 @@ export function MapScreen() {
   */
   const [draftAt, setDraftAt] = useState<{ lat: number; lng: number } | null>(null)
   const [adding, setAdding] = useState(false)
+  /*
+    Two steps to a lead, from a tap. First what the map found there — address,
+    photo, "not a lead yet" — then, on Add lead, the form with all of it filled
+    in. The stage is kept here beside `adding` because it is the sheet's
+    business, not the draft's: the same draft serves the Add-lead screen, which
+    has no such step.
+  */
+  const [draftStage, setDraftStage] = useState<'detected' | 'form'>('detected')
   const timezone = useAppStore((s) => s.timezone)
   /** Whether the first pull from the server is still running. See the empty strip. */
   const refreshing = useAppStore((s) => s.refreshing)
@@ -180,6 +189,9 @@ export function MapScreen() {
   const selected = selectedId ? properties[selectedId] : undefined
 
   const pickAt = (at: { lat: number; lng: number }) => {
+    // A first tap opens on what was found; a second one, while the form is
+    // already up, only moves the pin and leaves the rep where they were.
+    if (!adding) setDraftStage('detected')
     setDraftAt(at)
     setAdding(true)
     haptic('tap')
@@ -201,6 +213,7 @@ export function MapScreen() {
   const cancelDraft = () => {
     setDraftAt(null)
     setAdding(false)
+    setDraftStage('detected')
   }
 
   /*
@@ -213,6 +226,7 @@ export function MapScreen() {
   const onSaved = (p: Property) => {
     setDraftAt(null)
     setAdding(false)
+    setDraftStage('detected')
     /*
       The real predicate, not a list of filter keys.
 
@@ -743,7 +757,7 @@ export function MapScreen() {
             */
             <div data-testid="add-lead-pane" className="flex min-h-0 flex-1 flex-col">
               <div className="flex items-center justify-between gap-2 border-b border-line-soft px-4 py-3">
-                <p className="eyebrow">Add lead</p>
+                <p className="eyebrow">{draftStage === 'detected' ? 'New property' : 'Add lead'}</p>
                 <button
                   onClick={cancelDraft}
                   className="focusable min-h-tap rounded-lg px-2 text-sm font-semibold text-accent"
@@ -757,17 +771,23 @@ export function MapScreen() {
                   the map is the thing being avoided; here the map is beside the
                   form rather than behind it, so the rep can start typing.
                 */}
-                <LeadFields draft={leadDraft} />
+                {draftStage === 'detected' ? <DetectedProperty draft={leadDraft} /> : <LeadFields draft={leadDraft} />}
               </div>
               <div className="border-t border-line-soft p-4">
-                <Button
-                  size="lg"
-                  full
-                  onClick={() => void leadDraft.save()}
-                  disabled={!leadDraft.canSave}
-                >
-                  {leadDraft.saving ? 'Saving…' : 'Save lead'}
-                </Button>
+                {draftStage === 'detected' ? (
+                  <Button size="lg" full onClick={() => setDraftStage('form')} data-testid="detected-add-lead">
+                    Add lead
+                  </Button>
+                ) : (
+                  <Button
+                    size="lg"
+                    full
+                    onClick={() => void leadDraft.save()}
+                    disabled={!leadDraft.canSave}
+                  >
+                    {leadDraft.saving ? 'Saving…' : 'Save lead'}
+                  </Button>
+                )}
               </div>
             </div>
           ) : selected ? (
@@ -891,39 +911,59 @@ export function MapScreen() {
         onClose={cancelDraft}
         detents={[SHEET_FRACTION, 0.9]}
         scrim={false}
-        title="Add lead"
+        title={draftStage === 'detected' ? 'New property' : 'Add lead'}
         footer={
           <div className="flex gap-2">
             <Button variant="secondary" size="lg" onClick={cancelDraft} className="shrink-0">
               Cancel
             </Button>
-            {/*
-              The one obvious thing to do next, and the widest target on the
-              sheet. Disabled until there is an address *and* a pin, with the
-              readout above saying which of the two is missing — a dead button
-              that does not explain itself is what the old screen offered.
-            */}
-            <Button
-              size="lg"
-              full
-              onClick={() => void leadDraft.save()}
-              disabled={!leadDraft.canSave}
-            >
-              {leadDraft.saving ? 'Saving…' : 'Save lead'}
-            </Button>
+            {draftStage === 'detected' ? (
+              /*
+                The one thing to do with a house that is not a lead. It opens
+                the form with the address, the town and the pin already in it —
+                the rep types only what the map could not know.
+              */
+              <Button size="lg" full buzz onClick={() => setDraftStage('form')} data-testid="detected-add-lead">
+                Add lead
+              </Button>
+            ) : (
+              /*
+                The one obvious thing to do next, and the widest target on the
+                sheet. Disabled until there is an address *and* a pin, with the
+                readout above saying which of the two is missing — a dead button
+                that does not explain itself is what the old screen offered.
+              */
+              <Button
+                size="lg"
+                full
+                onClick={() => void leadDraft.save()}
+                disabled={!leadDraft.canSave}
+              >
+                {leadDraft.saving ? 'Saving…' : 'Save lead'}
+              </Button>
+            )}
           </div>
         }
       >
         <div data-testid="add-lead-sheet" className="pb-2">
-          <LeadFields draft={leadDraft} autoFocus={false} />
+          {draftStage === 'detected' ? (
+            <DetectedProperty draft={leadDraft} />
+          ) : (
+            <LeadFields draft={leadDraft} autoFocus={false} />
+          )}
         </div>
       </BottomSheet>
 
       {/* Scrim off: the rep should still be able to pan the map behind the sheet. */}
+      {/*
+        Taller than it was: the sheet carries the photo of the house now, and
+        the contact has to stay above the fold beneath it. See the gate in
+        verify-mapadd, which measures exactly that.
+      */}
       <BottomSheet
         open={!!selected && !isWide}
         onClose={() => setSelectedId(null)}
-        detents={[0.46, 0.86]}
+        detents={[0.6, 0.9]}
         scrim={false}
         footer={
           selected && (
