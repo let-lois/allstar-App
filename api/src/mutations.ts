@@ -550,6 +550,16 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
             Date.now(),
           )
           .run()
+        /*
+          The homeowner's name and number, typed at the door.
+
+          These used to stay on the phone: the create carried only an id, so
+          the office saw "Untitled property" at 0,0 with nobody in it, and the
+          rep's own copy was replaced by that on the next refresh. The contacts
+          ride the same mutation now, and are written the same way the import
+          writes them.
+        */
+        await upsertContacts(env, id, p.contacts)
         // A lead added at the door is a new contact for the CRM.
         await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
         return
@@ -561,6 +571,35 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
         .run()
       // A status changed from the console reaches the CRM the same way a rep's
       // outcome does — including a manual Do Not Contact.
+      await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
+      return
+    }
+
+    /*
+      The details a rep learns at the door, after the lead exists.
+
+      Address as read off the house, the homeowner's name, a number, an email —
+      any of them may be wrong or missing when the lead is made and right five
+      minutes later. Reps may only edit what they can see: their own leads, or
+      a house on a list handed to them. The office may edit anything in the
+      tenant. Status is deliberately not here — it follows from a visit.
+    */
+    case 'property.update': {
+      const id = str(p.id)
+      if (!id) throw new Error('property.update: missing id')
+      await assertMayEditProperty(env, user, id)
+      await env.DB.prepare(
+        `UPDATE properties
+            SET address1 = COALESCE(?2, address1),
+                city = COALESCE(?3, city),
+                state = COALESCE(?4, state),
+                zip = COALESCE(?5, zip),
+                updated_at = ?6
+          WHERE id = ?1 AND client_id = ?7`,
+      )
+        .bind(id, str(p.address1)?.trim() || null, str(p.city), str(p.state), str(p.zip), Date.now(), user.clientId)
+        .run()
+      await upsertContacts(env, id, p.contacts)
       await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
       return
     }
@@ -630,6 +669,56 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
  * could name a property belonging to another company. The session says who the
  * caller is; this says whether the row is theirs to touch.
  */
+/**
+ * Write the contacts a phone sent, by id, so a retry is not a second person.
+ *
+ * Only the fields a rep types. `relationship` is kept if the office set it.
+ */
+async function upsertContacts(env: Env, propertyId: string, raw: unknown): Promise<void> {
+  if (!Array.isArray(raw)) return
+  for (const c of raw.slice(0, 10)) {
+    const contact = obj(c)
+    const cid = str(contact.id)
+    const name = str(contact.name)?.trim()
+    if (!cid || !name) continue
+    await env.DB.prepare(
+      `INSERT INTO contacts (id, property_id, name, phone, email, is_primary)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         phone = excluded.phone,
+         email = excluded.email,
+         is_primary = excluded.is_primary`,
+    )
+      .bind(cid, propertyId, name, str(contact.phone)?.trim() || null, str(contact.email)?.trim() || null, contact.isPrimary ? 1 : 0)
+      .run()
+  }
+}
+
+/**
+ * The tenant check, and for a rep the scope check on top of it.
+ *
+ * The same line the phone draws (see canSee in src/lib/leadLists.ts): a rep
+ * may touch a lead assigned to them or on a list handed to them, and nothing
+ * else, however they came by its id.
+ */
+async function assertMayEditProperty(env: Env, user: SessionUser, propertyId: string): Promise<void> {
+  await assertPropertyInTenant(env, user, propertyId)
+  if (user.role !== 'field_rep') return
+  const row = await env.DB.prepare(
+    `SELECT 1 AS ok FROM properties p
+      WHERE p.id = ?1 AND p.client_id = ?2
+        AND (p.assigned_rep_id = ?3
+             OR p.id IN (SELECT m.property_id FROM lead_list_members m
+                           JOIN lead_list_reps r ON r.list_id = m.list_id
+                           JOIN lead_lists l ON l.id = m.list_id
+                          WHERE r.user_id = ?3 AND l.archived = 0))`,
+  )
+    .bind(propertyId, user.clientId, user.id)
+    .first<{ ok: number }>()
+  if (!row) throw new Error('not your lead')
+}
+
 async function assertPropertyInTenant(
   env: Env,
   user: SessionUser,

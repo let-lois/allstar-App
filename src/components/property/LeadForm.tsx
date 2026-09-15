@@ -232,7 +232,25 @@ export function useLeadDraft({
     try {
       await db.put('properties', property)
       useAppStore.setState((s) => ({ properties: { ...s.properties, [property.id]: property } }))
-      await enqueue('property.status', { id: property.id, created: true })
+      /*
+        Everything the server needs to make the same lead, not just the id.
+
+        The create used to carry `{ id, created: true }` and nothing else, so
+        the office got "Untitled property" at 0,0 with nobody in it — and, on
+        the rep's next refresh, so did the rep. The address, the pin and the
+        homeowner typed at the door travel with it.
+      */
+      await enqueue('property.status', {
+        id: property.id,
+        created: true,
+        address1: property.address1,
+        city: property.city,
+        state: property.state,
+        zip: property.zip,
+        lat: property.lat,
+        lng: property.lng,
+        contacts: property.contacts,
+      })
     } catch (err) {
       setError(
         String(err).includes('StorageFull')

@@ -241,6 +241,20 @@ try {
   const byStatus = parseCsv(await (await call('/api/leads/export.csv?status=won', {}, owner)).text()).slice(1)
   ok(byStatus.length === 0, 'a status nobody has yields a header and no rows')
 
+  /* --- correcting details stops at the rep's own leads --------------------- */
+  const tryFix = (token, id, name) => call('/api/mutations', {
+    method: 'POST',
+    body: JSON.stringify({ mutations: [{ id: `mut_fix_${id}_${stamp}`, kind: 'property.update', payload: { id, contacts: [{ id: `ct_fix_${id}`, name, isPrimary: true }] }, createdAt: Date.now() }] }),
+  }, token).then((r) => r.json())
+  const notHers = await tryFix(bea.token, C, 'Intruder')
+  ok(notHers.results?.[0]?.status === 'rejected', 'a rep cannot edit a lead that is neither assigned to them nor on their list', notHers.results?.[0]?.status)
+  const hers = await tryFix(bea.token, B, 'Via The List')
+  ok(hers.results?.[0]?.status === 'applied', 'but can edit a house on a list handed to them', hers.results?.[0]?.error)
+  const afterFix = parseCsv(await (await call(`/api/leads/export.csv?list=${encodeURIComponent(listId)}`, {}, owner)).text())
+  const hdr = afterFix[0]
+  const rowBfixed = afterFix.slice(1).find((r) => r[0] === B)
+  ok(rowBfixed?.[hdr.indexOf('name')] === 'Via The List', 'and the office sees the corrected name in the very next export', rowBfixed?.[hdr.indexOf('name')])
+
   /* --- the door ------------------------------------------------------------ */
   const missing = await call('/api/leads/export.csv?list=ll_nope', {}, owner)
   ok(missing.status === 404, `an unknown list is a 404, not an empty file (${missing.status})`)
@@ -250,7 +264,7 @@ try {
   ok(anon.status === 401, `nobody is refused (${anon.status})`)
 
   const audits = await query(`SELECT detail FROM audit_log WHERE client_id='${q(clientId)}' AND action='leads.exported'`)
-  ok(audits.length === 5, 'every export that produced a file is in the audit log, none of the refusals', `${audits.length}`)
+  ok(audits.length === 6, 'every export that produced a file is in the audit log, none of the refusals', `${audits.length}`)
   ok(audits.some((a) => /"rows":3/.test(a.detail)) && audits.some((a) => /"rows":2/.test(a.detail) && a.detail.includes(listId)), 'with the row count and the list it was for')
 } finally {
   await stop().catch(() => {})

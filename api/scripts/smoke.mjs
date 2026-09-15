@@ -123,12 +123,35 @@ ok(
         id: `mut_prop_${stamp}`,
         kind: 'property.status',
         createdAt: Date.now(),
-        payload: { id: propId, created: true, address1: '1 Smoke Test Ln', lat: 30.5, lng: -97.6 },
+        payload: {
+          id: propId, created: true, address1: '1 Smoke Test Ln', lat: 30.5, lng: -97.6,
+          contacts: [{ id: `ct_smoke_${stamp}`, name: 'Pat Homeowner', phone: '512-555-0100', isPrimary: true }],
+        },
       },
     ])
   ).results[0].status === 'applied',
   'a lead added in the field is created',
 )
+{
+  // The homeowner typed at the door must reach the office, not stay on the phone.
+  const made = (await (await api('/api/bootstrap', {}, token)).json()).properties.find((p) => p.id === propId)
+  ok(made?.address1 === '1 Smoke Test Ln' && made?.lat === 30.5, 'with the address and the pin the rep saved', `${made?.address1} @ ${made?.lat}`)
+  ok(made?.contacts?.[0]?.name === 'Pat Homeowner' && made?.contacts?.[0]?.phone === '512-555-0100', 'and the contact they typed', JSON.stringify(made?.contacts))
+
+  // Corrected at the door: the number off the house, and a second phone number.
+  const fix = await send([{
+    id: `mut_fix_${stamp}`, kind: 'property.update', createdAt: Date.now(),
+    payload: {
+      id: propId, address1: '1B Smoke Test Ln', city: 'Round Rock', state: 'TX', zip: '78664',
+      contacts: [{ id: `ct_smoke_${stamp}`, name: 'Pat Homeowner-Reyes', phone: '512-555-0199', email: 'pat@example.com', isPrimary: true }],
+    },
+  }])
+  ok(fix.results[0].status === 'applied', 'a rep can correct the details of their own lead', fix.results[0].error)
+  const fixed = (await (await api('/api/bootstrap', {}, token)).json()).properties.find((p) => p.id === propId)
+  ok(fixed?.address1 === '1B Smoke Test Ln' && fixed?.zip === '78664', 'the address is corrected on the server', `${fixed?.address1} ${fixed?.zip}`)
+  ok(fixed?.contacts?.length === 1 && fixed?.contacts?.[0]?.email === 'pat@example.com' && fixed?.contacts?.[0]?.phone === '512-555-0199', 'and the contact is updated in place, not duplicated', JSON.stringify(fixed?.contacts))
+  ok(fixed?.status === 'new', 'while the status, which follows from a visit, is untouched', fixed?.status)
+}
 
 const completeVisit = {
   id: `mut_visit_${stamp}`,

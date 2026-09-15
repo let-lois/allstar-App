@@ -7,6 +7,7 @@ import { ListMembership } from '../components/property/ListMembership'
 import { TopBar } from '../components/nav/TopBar'
 import { Collapsible } from '../components/ui/Collapsible'
 import { Button } from '../components/ui/Button'
+import { Field } from '../components/ui/Input'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { NoteComposer } from '../components/visit/NoteComposer'
 import { PhotoStrip } from '../components/visit/PhotoStrip'
@@ -42,6 +43,18 @@ export function PropertyDetail() {
   const tz = useAppStore((s) => s.timezone)
   const startVisit = useAppStore((s) => s.startVisit)
   const addNote = useAppStore((s) => s.addNote)
+  const updateLeadDetails = useAppStore((s) => s.updateLeadDetails)
+
+  /*
+    Correcting what the door taught. The address as it is actually painted on
+    the house, the name the homeowner gave, a number, an email — the lead was
+    made in seconds from a map tap and any of these can be wrong or missing.
+    One sheet, the fields a rep types, and Save. Status is not in it.
+  */
+  const [editOpen, setEditOpen] = useState(false)
+  const [edit, setEdit] = useState({ address1: '', city: '', state: '', zip: '', name: '', phone: '', email: '' })
+  const [editBusy, setEditBusy] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   const [noteOpen, setNoteOpen] = useState(params.get('note') === '1')
   const [noteBody, setNoteBody] = useState('')
@@ -115,6 +128,38 @@ export function PropertyDetail() {
 
   const contact = property.contacts.find((c) => c.isPrimary) ?? property.contacts[0]
   const dist = position ? distanceMiles(position, property) : null
+
+  const openEdit = () => {
+    setEdit({
+      address1: property.address1,
+      city: property.city ?? '',
+      state: property.state ?? '',
+      zip: property.zip ?? '',
+      name: contact?.name ?? '',
+      phone: contact?.phone ?? '',
+      email: contact?.email ?? '',
+    })
+    setEditError(null)
+    setEditOpen(true)
+  }
+  const saveEdit = async () => {
+    setEditBusy(true)
+    setEditError(null)
+    try {
+      await updateLeadDetails(property.id, {
+        address1: edit.address1,
+        city: edit.city,
+        state: edit.state,
+        zip: edit.zip,
+        contact: { name: edit.name, phone: edit.phone, email: edit.email },
+      })
+      setEditOpen(false)
+    } catch (err) {
+      setEditError(err instanceof Error && err.message ? err.message : 'Could not save that. Nothing was changed.')
+    } finally {
+      setEditBusy(false)
+    }
+  }
 
   const saveNote = async () => {
     if (noteBody.trim() || noteTags.length) {
@@ -193,15 +238,34 @@ export function PropertyDetail() {
             )}
           </div>
 
-          {contact && (
-            <div className="mt-4 rounded-field bg-surface-tint px-3.5 py-3">
-              <p className="text-[15px] font-semibold">{contact.name}</p>
-              <p className="mt-0.5 text-[13px] text-ink-mute">
-                {contact.relationship ?? 'Contact'}
-                {contact.phone && ` · ${contact.phone}`}
-              </p>
+          <div className="mt-4 rounded-field bg-surface-tint px-3.5 py-3" data-testid="lead-contact">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                {contact ? (
+                  <>
+                    <p className="text-[15px] font-semibold">{contact.name}</p>
+                    <p className="mt-0.5 text-[13px] text-ink-mute">
+                      {[contact.relationship ?? 'Contact', contact.phone, contact.email].filter(Boolean).join(' · ')}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[13.5px] text-ink-mute">No contact yet — add the homeowner when you meet them.</p>
+                )}
+              </div>
+              {/*
+                A word, not a pencil: this is how a rep fixes a wrong house
+                number while standing in front of the right one.
+              */}
+              <button
+                type="button"
+                onClick={openEdit}
+                className="focusable min-h-tap shrink-0 rounded-lg px-2 text-sm font-semibold text-accent"
+                data-testid="lead-edit-open"
+              >
+                Edit details
+              </button>
             </div>
-          )}
+          </div>
 
           {property.nextActionLabel && property.nextActionAt && (
             <div className="mt-3 flex items-center gap-2 rounded-field bg-warn-bg px-3.5 py-3 text-[14px]">
@@ -382,6 +446,62 @@ export function PropertyDetail() {
         </Button>
         </div>
       </div>
+
+      <BottomSheet
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title="Edit details"
+        detents={[0.85, 0.95]}
+      >
+        <div className="space-y-4 pt-1" data-testid="lead-edit">
+          <Field
+            label="Address"
+            value={edit.address1}
+            onChange={(e) => setEdit((d) => ({ ...d, address1: e.target.value }))}
+            autoComplete="street-address"
+            disabled={editBusy}
+          />
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="City" value={edit.city} onChange={(e) => setEdit((d) => ({ ...d, city: e.target.value }))} disabled={editBusy} />
+            <Field label="State" value={edit.state} onChange={(e) => setEdit((d) => ({ ...d, state: e.target.value }))} disabled={editBusy} />
+            <Field label="ZIP" value={edit.zip} onChange={(e) => setEdit((d) => ({ ...d, zip: e.target.value }))} inputMode="numeric" disabled={editBusy} />
+          </div>
+          <Field
+            label="Contact name"
+            hint="Clearing the name removes the contact."
+            value={edit.name}
+            onChange={(e) => setEdit((d) => ({ ...d, name: e.target.value }))}
+            autoComplete="name"
+            disabled={editBusy}
+          />
+          <Field
+            label="Phone"
+            value={edit.phone}
+            onChange={(e) => setEdit((d) => ({ ...d, phone: e.target.value }))}
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            disabled={editBusy}
+          />
+          <Field
+            label="Email"
+            value={edit.email}
+            onChange={(e) => setEdit((d) => ({ ...d, email: e.target.value }))}
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            disabled={editBusy}
+          />
+          {editError && (
+            <p role="alert" className="rounded-field bg-bad-bg px-3 py-2 text-[12.5px] text-bad">
+              {editError}
+            </p>
+          )}
+          <Button size="lg" full disabled={editBusy || !edit.address1.trim()} onClick={() => void saveEdit()} data-testid="lead-edit-save">
+            {editBusy ? 'Saving…' : 'Save details'}
+          </Button>
+        </div>
+      </BottomSheet>
 
       <BottomSheet
         open={noteOpen}

@@ -17,6 +17,7 @@ import type {
   User,
   Visit,
   LeadList,
+  Contact,
 } from '../types'
 import * as db from '../lib/db'
 import { purgeErased } from '../lib/erase-local'
@@ -214,6 +215,23 @@ interface AppState {
 
   startVisit: (propertyId: string) => Promise<string>
   recordOutcome: (visitId: string, outcome: OutcomeCode) => Promise<void>
+  /**
+   * Correct a lead's address or its primary contact, at the door.
+   *
+   * Local first, queued second, like every other write. Status is not here:
+   * it follows from a visit, and a control that set it by hand would make a
+   * rep's outcomes indistinguishable from the office's bookkeeping.
+   */
+  updateLeadDetails: (
+    propertyId: string,
+    patch: {
+      address1?: string
+      city?: string
+      state?: string
+      zip?: string
+      contact?: { name: string; phone?: string; email?: string }
+    },
+  ) => Promise<void>
   addNote: (
     propertyId: string,
     body: string,
@@ -986,6 +1004,57 @@ export const useAppStore = create<AppState>((set, get) => ({
         ? { ...s.properties, [updatedProp.id]: updatedProp }
         : s.properties,
     }))
+  },
+
+  async updateLeadDetails(propertyId, patch) {
+    const current = get().properties[propertyId]
+    if (!current) throw new Error('That lead is no longer on this phone.')
+    const address1 = patch.address1?.trim()
+    if (patch.address1 !== undefined && !address1) throw new Error('A lead needs an address.')
+
+    let contacts = current.contacts
+    if (patch.contact) {
+      const name = patch.contact.name.trim()
+      const phone = patch.contact.phone?.trim() || undefined
+      const email = patch.contact.email?.trim() || undefined
+      const primary = current.contacts.find((c) => c.isPrimary) ?? current.contacts[0]
+      if (name) {
+        const next: Contact = primary
+          ? { ...primary, name, phone, email, isPrimary: true }
+          : { id: uid('ct'), name, phone, email, isPrimary: true }
+        contacts = primary
+          ? current.contacts.map((c) => (c.id === primary.id ? next : c))
+          : [next, ...current.contacts]
+      } else if (primary) {
+        // A name cleared is a contact removed, not a nameless one kept.
+        contacts = current.contacts.filter((c) => c.id !== primary.id)
+      }
+    }
+
+    const next: Property = {
+      ...current,
+      ...(address1 !== undefined ? { address1 } : {}),
+      ...(patch.city !== undefined ? { city: patch.city.trim() } : {}),
+      ...(patch.state !== undefined ? { state: patch.state.trim() } : {}),
+      ...(patch.zip !== undefined ? { zip: patch.zip.trim() } : {}),
+      contacts,
+    }
+    await db.put('properties', next)
+    set((s) => ({ properties: { ...s.properties, [propertyId]: next } }))
+    await enqueue('property.update', {
+      id: propertyId,
+      address1: next.address1,
+      city: next.city,
+      state: next.state,
+      zip: next.zip,
+      contacts: next.contacts.map((c) => ({
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        email: c.email,
+        isPrimary: !!c.isPrimary,
+      })),
+    })
   },
 
   async addNote(propertyId, body, tags, visitId) {

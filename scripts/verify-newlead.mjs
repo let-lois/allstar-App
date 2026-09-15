@@ -109,6 +109,10 @@ async function signIn(page) {
   await save.waitFor({ timeout: 15_000 })
   ok(await save.isEnabled(), 'saving is allowed on a typed address with a GPS pin')
 
+  // Saved offline — the case this screen exists for — which also keeps the
+  // queued write where it can be read before the demo's pretend network
+  // drains it.
+  await ctx.setOffline(true)
   await save.click()
   await page.waitForTimeout(2000)
 
@@ -124,6 +128,34 @@ async function signIn(page) {
     Math.abs((row?.lat ?? 0) - 32.7767) < 0.01,
     `the pin is the rep's real position, not a hardcoded one (${row?.lat})`,
   )
+
+  /*
+    What was queued for the server, not only what was stored on the phone.
+
+    The create used to carry `{ id, created: true }` and nothing else, so the
+    office received "Untitled property" at 0,0 — and the phone, on its next
+    refresh, received it back. The outbox row is read directly: it is the
+    exact body the server will get.
+  */
+  const queued = await page.evaluate(
+    (id) =>
+      new Promise((resolve) => {
+        const req = indexedDB.open('allstar-field')
+        req.onsuccess = () => {
+          const all = req.result.transaction('outbox', 'readonly').objectStore('outbox').getAll()
+          all.onsuccess = () =>
+            resolve(all.result.find((m) => m.kind === 'property.status' && m.payload?.id === id)?.payload ?? null)
+          all.onerror = () => resolve(null)
+        }
+        req.onerror = () => resolve(null)
+      }),
+    row?.id,
+  )
+  ok(!!queued, 'the create is queued for the server')
+  ok(queued?.address1 === '4512 Cedar Springs Rd', 'carrying the address the rep typed', queued?.address1)
+  ok(Math.abs((queued?.lat ?? 0) - 32.7767) < 0.01 && typeof queued?.lng === 'number', 'and the pin', `${queued?.lat}, ${queued?.lng}`)
+  ok(Array.isArray(queued?.contacts), 'and the contacts, so the office sees who lives there')
+  await ctx.setOffline(false)
 
   /*
     Storing blank is right, but three screens interpolated
