@@ -216,7 +216,19 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
   }
   return {
     'access-control-allow-origin': origin,
-    'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS',
+    /*
+      Every method the app actually sends, and the browser checks this list
+      before it sends anything.
+
+      It read `GET,POST,DELETE,OPTIONS` for a long time, which is not the set
+      the client uses: assigning a list to a rep is a PUT, and renaming or
+      archiving one is a PATCH. Chrome refuses those at the preflight, the
+      request never leaves the page, and the app — which cannot tell a refused
+      preflight from a dead network — told the manager to check their
+      connection. Derived from src/lib/http.ts by smoke:cors now, so a new
+      method on the client fails that test until it is named here.
+    */
+    'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     'access-control-allow-headers': 'authorization,content-type',
     'access-control-max-age': '86400',
     // So the browser can read the id off a failed request and show it to the

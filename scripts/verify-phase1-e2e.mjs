@@ -440,6 +440,47 @@ try {
   ok(listRows.length === 4 && listRows.every((r) => list.leadIds.includes(r[0])), 'exporting the list gives exactly its four houses', `${listRows.length}`)
   ok(/^allstar-oak-street-area-/.test(dl2.suggestedFilename()), 'named after the list', dl2.suggestedFilename())
 
+  /* ===== 6. the browser's own rules, with nothing intercepting them ======= */
+  //
+  // Every other page in this file — and in every other browser gate — installs
+  // a Playwright route to keep Google Maps off the network. Request
+  // interception makes Chromium skip CORS enforcement, which is how a preflight
+  // that advertised only GET, POST and DELETE reached production: assigning a
+  // list to a rep is a PUT and renaming one is a PATCH, the browser refused to
+  // send either, and every gate that should have caught it was running with the
+  // rule switched off. A manager saw "That needs a connection" and a green
+  // suite. This page routes nothing, so the rule is real here.
+  {
+    const bare = await browser.newContext()
+    const page = await bare.newPage()
+    await page.goto(APP, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(1200)
+    const tried = await page.evaluate(async (api) => {
+      const out = {}
+      for (const [method, path] of [['PUT', '/api/lists/nope/reps'], ['PATCH', '/api/lists/nope'], ['DELETE', '/api/lists/nope'], ['POST', '/api/lists']]) {
+        try {
+          const res = await fetch(api + path, {
+            method,
+            headers: { authorization: 'Bearer nope', 'content-type': 'application/json' },
+            body: method === 'DELETE' ? undefined : '{}',
+          })
+          out[method] = `reached ${res.status}`
+        } catch (e) {
+          out[method] = `blocked: ${e.message}`
+        }
+      }
+      return out
+    }, API)
+    for (const method of ['PUT', 'PATCH', 'DELETE', 'POST']) {
+      ok(
+        /^reached/.test(tried[method] ?? ''),
+        `a real browser may send ${method} to the API — no interception, no exemption`,
+        tried[method],
+      )
+    }
+    await bare.close()
+  }
+
   ok(errors.length === 0, `no page errors${errors.length ? ': ' + errors[0] : ''}`)
   await repCtx2.close(); await mgrCtx.close()
 } catch (err) {

@@ -16,7 +16,26 @@
  * assertion here with teeth.
  */
 
+import { readFileSync } from 'node:fs'
+
 const BASE = process.env.API_URL || 'http://127.0.0.1:8787'
+
+/**
+ * Every HTTP method the field app and the console actually send.
+ *
+ * Read out of the client rather than listed here, because a hand-written list
+ * is exactly what failed: this file asserted POST and DELETE, the app grew a
+ * PUT (assign a list to a rep) and a PATCH (rename or archive one), and the
+ * preflight went on advertising the old pair. The browser refused both, and
+ * the app could only report them as a lost connection. Derived, the test
+ * tightens by itself the next time somebody adds a method.
+ */
+const CLIENT_METHODS = (() => {
+  const src = readFileSync(new URL('../../src/lib/http.ts', import.meta.url), 'utf8')
+  const found = new Set(['GET'])
+  for (const m of src.matchAll(/method:\s*'([A-Z]+)'/g)) found.add(m[1])
+  return [...found].sort()
+})()
 
 // From wrangler.toml's ALLOWED_ORIGINS. The dev server's own address, which is
 // why sign-in works locally at all.
@@ -99,7 +118,13 @@ for (const near of [
   ok(allow === ALLOWED, 'with the origin echoed')
   const methods = res.headers.get('access-control-allow-methods') ?? ''
   const headers = (res.headers.get('access-control-allow-headers') ?? '').toLowerCase()
-  ok(/POST/.test(methods) && /DELETE/.test(methods), 'listing the methods the app uses', methods)
+  const advertised = methods.split(',').map((m) => m.trim().toUpperCase())
+  const missing = CLIENT_METHODS.filter((m) => !advertised.includes(m))
+  ok(
+    missing.length === 0,
+    `listing every method the client sends (${CLIENT_METHODS.join(', ')})`,
+    missing.length ? `missing ${missing.join(', ')} — the browser will refuse those` : methods,
+  )
   // Every signed-in call carries both. Omitting either fails the preflight and
   // breaks the whole app while leaving sign-out and health working.
   ok(
