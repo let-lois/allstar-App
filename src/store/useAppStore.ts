@@ -669,6 +669,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         invitation: u.invitation,
         invitedAt: u.invitedAt,
         resentAt: u.resentAt,
+        openedAt: u.openedAt,
         onboarding: u.onboarding,
         onboardingStep: u.onboardingStep,
         badge: u.badge,

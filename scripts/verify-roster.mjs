@@ -39,6 +39,7 @@ function makeWorld() {
     { id: 'u_admin', name: 'Nadia Petrov', firstName: 'Nadia', lastName: 'Petrov', email: 'nadia@ridgeline.test', role: 'super_admin', active: true, pending: false, invitation: 'not_sent', onboarding: 'complete', badge: 'active', badgeExpiresAt: NOW + 300 * DAY, createdAt: NOW - 100 * DAY, lastSeenAt: NOW - 60_000 },
     { id: 'u_marcus', name: 'Marcus Vance', firstName: 'Marcus', lastName: 'Vance', email: 'marcus@ridgeline.test', role: 'field_rep', jobTitle: 'Sales Representative', teamId: 't_austin', teamName: 'Austin', active: true, pending: false, invitation: 'accepted', invitedAt: NOW - 30 * DAY, onboarding: 'complete', badge: 'active', badgeExpiresAt: NOW + 335 * DAY, createdAt: NOW - 30 * DAY, lastSeenAt: NOW - 2 * 3_600_000 },
     { id: 'u_dana', name: 'Dana Whitfield', firstName: 'Dana', lastName: 'Whitfield', email: 'dana@ridgeline.test', role: 'field_rep', active: false, pending: true, invitation: 'pending', invitedAt: NOW - 8 * DAY, resentAt: NOW - DAY, onboarding: 'not_started', badge: 'none', createdAt: NOW - 8 * DAY },
+    { id: 'u_kim', name: 'Kim Alvarez', firstName: 'Kim', lastName: 'Alvarez', email: 'kim@ridgeline.test', role: 'field_rep', active: false, pending: true, invitation: 'opened', invitedAt: NOW - 5 * DAY, openedAt: NOW - 4 * DAY, onboarding: 'not_started', badge: 'none', createdAt: NOW - 5 * DAY },
     { id: 'u_lee', name: 'Lee Tran', firstName: 'Lee', lastName: 'Tran', email: 'lee@ridgeline.test', role: 'field_rep', active: false, pending: true, invitation: 'expired', invitedAt: NOW - 20 * DAY, onboarding: 'not_started', badge: 'none', createdAt: NOW - 20 * DAY },
     { id: 'u_priya', name: 'Priya Natarajan', firstName: 'Priya', lastName: 'Natarajan', email: 'priya@ridgeline.test', role: 'manager', active: true, pending: false, invitation: 'accepted', invitedAt: NOW - 3 * DAY, onboarding: 'in_progress', onboardingStep: 'walkthrough', badge: 'awaiting_confirmation', badgeExpiresAt: NOW + 362 * DAY, createdAt: NOW - 3 * DAY, lastSeenAt: NOW - 20 * 60_000 },
     { id: 'u_sam', name: 'Sam Okafor', firstName: 'Sam', lastName: 'Okafor', email: 'sam@ridgeline.test', role: 'field_rep', active: false, pending: false, invitation: 'accepted', invitedAt: NOW - 400 * DAY, onboarding: 'complete', badge: 'expired', badgeExpiresAt: NOW - 30 * DAY, createdAt: NOW - 400 * DAY, lastSeenAt: NOW - 60 * DAY },
@@ -129,6 +130,7 @@ async function mockApi(page, w, asId = 'u_admin') {
     const body = JSON.parse(r.request().postData())
     if ('website' in body) w.company.website = body.website ? `https://${String(body.website).replace(/^https?:\/\//, '')}` : undefined
     if ('logo' in body) w.company.logoUrl = body.logo ?? undefined
+    if ('badgeQrUrl' in body) w.company.badgeQrUrl = body.badgeQrUrl ?? undefined
     return r.fulfill(json(200, { company: { ...w.company } }))
   })
   await page.route(/maps\.googleapis\.com/, (r) => r.abort())
@@ -170,6 +172,8 @@ const called = (w, method, path) => w.calls.filter((c) => c.method === method &&
   ok((await dana.getByTestId('col-onboarding').getAttribute('data-value')) === 'Not started' && (await dana.getByTestId('col-badge').getAttribute('data-value')) === 'Not created', 'with onboarding not started and no badge')
   const lee = row(page, 'Lee Tran')
   ok((await lee.getByTestId('col-invitation').getAttribute('data-value')) === 'Expired', 'a stale link reads Expired', await lee.getByTestId('col-invitation').getAttribute('data-value'))
+  const kim = row(page, 'Kim Alvarez')
+  ok((await kim.getByTestId('col-invitation').getAttribute('data-value')) === 'Opened' && (await kim.getByTestId('col-account').getAttribute('data-value')) === 'Invite pending', 'a link that was opened but not used reads Opened / Invite pending', await kim.getByTestId('col-invitation').getAttribute('data-value'))
   const priya = row(page, 'Priya Natarajan')
   ok((await priya.getByTestId('col-onboarding').getAttribute('data-value')) === 'In progress' && (await priya.getByTestId('col-badge').getAttribute('data-value')) === 'Awaiting confirmation', 'someone mid-flow reads In progress / Awaiting confirmation')
   const sam = row(page, 'Sam Okafor')
@@ -183,7 +187,7 @@ const called = (w, method, path) => w.calls.filter((c) => c.method === method &&
   ok((await page.locator('tbody tr').count()) === 1 && (await priya.count()) === 1, 'Still setting up keeps only the person mid-flow', `${await page.locator('tbody tr').count()} rows`)
   await page.getByRole('button', { name: /^Invite open/ }).click()
   await page.waitForTimeout(300)
-  ok((await page.locator('tbody tr').count()) === 2 && (await dana.count()) === 1 && (await lee.count()) === 1, 'Invite open keeps the pending and the expired invitation', `${await page.locator('tbody tr').count()} rows`)
+  ok((await page.locator('tbody tr').count()) === 3 && (await dana.count()) === 1 && (await kim.count()) === 1 && (await lee.count()) === 1, 'Invite open keeps the pending, the opened and the expired invitation', `${await page.locator('tbody tr').count()} rows`)
   await page.getByRole('button', { name: /^Badge not active/ }).click()
   await page.waitForTimeout(300)
   ok((await page.locator('tbody tr').count()) === 1 && (await priya.count()) === 1, 'Badge not active is about working accounts — a deactivated rep’s expired badge is not a to-do', `${await page.locator('tbody tr').count()} rows`)
@@ -224,6 +228,18 @@ const called = (w, method, path) => w.calls.filter((c) => c.method === method &&
   ok(called(w, 'POST', '/api/invites/u_dana/revoke').length === 1, 'Revoke calls the revoke endpoint')
   ok((await detail.getByRole('button', { name: /^Revoke invite$/ }).count()) === 0 && (await detail.getByRole('button', { name: /^Send invite$/ }).count()) === 1, 'after which the sheet reads the refreshed roster: no link to revoke, an invite to send')
   await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
+
+  /* --- someone who opened the link and stopped ------------------------------- */
+  await row(page, 'Kim Alvarez').click()
+  await page.waitForTimeout(700)
+  ok((await detail.count()) === 1 && /Opened/.test(await text(detail.getByTestId('member-statuses'))), 'the sheet states Opened for someone who saw their link')
+  ok(/opened their link but have not set a password/i.test(await text(detail.getByTestId('manage-invitation'))), 'and says what that means')
+  const kimDates = await text(detail.getByTestId('manage-invite-dates'))
+  ok(/^Invited \w{3} \d{1,2}, \d{4}/.test(kimDates) && /Opened \w{3} \d{1,2}, \d{4}$/.test(kimDates), 'with the date they opened it', kimDates)
+  ok((await detail.getByRole('button', { name: /^Re-send invite$/ }).count()) === 1 && (await detail.getByRole('button', { name: /^Revoke invite$/ }).count()) === 1, 'an opened link can still be re-sent or revoked — it is live')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
   await page.waitForTimeout(500)
   ok((await dana.getByTestId('col-invitation').getAttribute('data-value')) === 'Revoked', 'the roster row reads Revoked', await dana.getByTestId('col-invitation').getAttribute('data-value'))
 
@@ -290,6 +306,25 @@ const called = (w, method, path) => w.calls.filter((c) => c.method === method &&
   const site = called(w, 'POST', '/api/company').find((c) => 'website' in c.body)
   ok(site && site.body.website === 'ridgelineroofing.com', 'Save posts the website as typed — the server normalises', JSON.stringify(site?.body))
   ok(w.company.website === 'https://ridgelineroofing.com' && (await panel.getByTestId('company-website').inputValue()) === 'https://ridgelineroofing.com', 'and the field reads back the saved, normalised URL', await panel.getByTestId('company-website').inputValue())
+
+  /* --- the company's QR code link, and the sample follows it ------------------ */
+  const COMPANY_QR = 'https://link.ridgeline.test/qr/8f2k1'
+  ok((await panel.getByTestId('badge-qr').getAttribute('data-target-kind')) === 'verify', 'before a link is set the sample’s code is to its own check')
+  const qrField = panel.getByTestId('company-badge-qr').locator('xpath=ancestor::label[1]')
+  ok(/Sites/.test(await text(qrField)) && /QR Codes/.test(await text(qrField)), 'the field says where in the company’s sub-account the code lives — Sites → QR Codes')
+  await panel.getByTestId('company-badge-qr').fill(COMPANY_QR)
+  await page.waitForTimeout(200)
+  ok((await panel.getByTestId('badge-qr').getAttribute('data-target')) === COMPANY_QR && (await panel.getByTestId('badge-qr').getAttribute('data-target-kind')) === 'company', 'the sample badge draws the company’s code as it is typed, before saving', await panel.getByTestId('badge-qr').getAttribute('data-target'))
+  await panel.getByTestId('company-badge-qr-save').click()
+  await page.waitForTimeout(800)
+  const qrPost = called(w, 'POST', '/api/company').find((c) => 'badgeQrUrl' in c.body)
+  ok(qrPost && qrPost.body.badgeQrUrl === COMPANY_QR && !('website' in qrPost.body) && !('logo' in qrPost.body), 'Save posts the link alone — website and logo are left untouched', JSON.stringify(qrPost?.body))
+  ok(w.company.badgeQrUrl === COMPANY_QR && (await panel.getByTestId('company-badge-qr').inputValue()) === COMPANY_QR, 'and the field reads back what was saved')
+  await panel.getByTestId('company-badge-qr').fill('')
+  await panel.getByTestId('company-badge-qr-save').click({ timeout: 3000 }).catch(() => {})
+  await page.waitForTimeout(800)
+  const qrClear = called(w, 'POST', '/api/company').find((c) => 'badgeQrUrl' in c.body && c.body.badgeQrUrl === null)
+  ok(!!qrClear && (await panel.getByTestId('badge-qr').getAttribute('data-target-kind')) === 'verify', 'clearing posts null and the sample falls back to its own check')
 
   /* --- logo ------------------------------------------------------------------- */
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')

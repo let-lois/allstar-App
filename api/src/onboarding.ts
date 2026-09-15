@@ -44,7 +44,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
  */
 export type OnboardingStatus = 'not_started' | 'in_progress' | 'complete' | 'required'
 export type BadgeStatus = 'none' | 'awaiting_confirmation' | 'active' | 'expired'
-export type InvitationStatus = 'not_sent' | 'pending' | 'accepted' | 'expired' | 'revoked'
+export type InvitationStatus = 'not_sent' | 'pending' | 'opened' | 'accepted' | 'expired' | 'revoked'
 
 /** The columns the derivations read. Nullable exactly as the database has them. */
 export interface OnboardingRow {
@@ -63,6 +63,8 @@ export interface InviteRow {
   accepted_at: number | null
   revoked_at: number | null
   expires_at: number
+  /** First served in a browser; absent on rows from before it was recorded. */
+  opened_at?: number | null
 }
 
 /**
@@ -111,13 +113,16 @@ export function badgeStatus(row: OnboardingRow, now: number): BadgeStatus {
 /**
  * The newest invite token decides. Accepted beats everything — an invitation
  * that was used is used, whatever happened to the token afterwards. Revoked
- * beats expired, because it records a decision rather than a calendar.
+ * beats expired, because it records a decision rather than a calendar. A
+ * live link that has been opened reads as opened — they saw it and stopped —
+ * which is a different thing to chase than one that never arrived.
  */
 export function invitationStatus(invite: InviteRow | null, now: number): InvitationStatus {
   if (!invite) return 'not_sent'
   if (invite.accepted_at != null) return 'accepted'
   if (invite.revoked_at != null) return 'revoked'
   if (invite.expires_at <= now) return 'expired'
+  if (invite.opened_at != null) return 'opened'
   return 'pending'
 }
 
@@ -147,6 +152,7 @@ export interface ChecklistItem {
     | 'photo_added'
     | 'role_assigned'
     | 'location_enabled'
+    | 'notifications_enabled'
     | 'walkthrough_completed'
     | 'badge_created'
     | 'badge_confirmed'
@@ -160,6 +166,7 @@ export interface ChecklistItem {
 export interface ChecklistRow extends OnboardingRow {
   avatar_url: string | null
   location_status: string | null
+  notification_status: string | null
   walkthrough_completed_at: number | null
   role: string
   team_name?: string | null
@@ -201,6 +208,16 @@ export function checklistFor(row: ChecklistRow, now: number): ChecklistItem[] {
         row.location_status === 'granted'
           ? undefined
           : 'Recommended. Without it the map cannot find the nearest door for you.',
+    },
+    {
+      key: 'notifications_enabled',
+      label: 'Notifications enabled',
+      done: row.notification_status === 'granted',
+      required: false,
+      detail:
+        row.notification_status === 'granted'
+          ? 'Follow-up reminders will reach this phone when they launch.'
+          : 'Recommended. Follow-up reminders and appointment alerts will arrive here once they launch.',
     },
     {
       key: 'walkthrough_completed',

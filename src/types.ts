@@ -45,7 +45,7 @@ export interface User {
   }
   badge?: BadgeInfo | null
   /** The company as it appears on a badge. */
-  company?: { name: string; timezone: string; logoUrl?: string; website?: string }
+  company?: { name: string; timezone: string; logoUrl?: string; website?: string; badgeQrUrl?: string }
 }
 
 export type OnboardingStatus = 'not_started' | 'in_progress' | 'complete' | 'required'
@@ -294,10 +294,12 @@ export interface TeamMember {
   jobTitle?: string
   teamId?: string
   teamName?: string
-  invitation?: 'not_sent' | 'pending' | 'accepted' | 'expired' | 'revoked'
+  invitation?: 'not_sent' | 'pending' | 'opened' | 'accepted' | 'expired' | 'revoked'
   invitedAt?: number
   /** When the current link was sent, when that was not the first. */
   resentAt?: number
+  /** When the current link was first opened in a browser. */
+  openedAt?: number
   onboarding?: OnboardingStatus
   onboardingStep?: OnboardingStep
   badge?: BadgeStatus

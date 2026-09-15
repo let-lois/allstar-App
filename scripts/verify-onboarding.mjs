@@ -41,7 +41,7 @@ const signIn = (page, email) => signInAt(page, BASE, email)
 /* ========================================================================== */
 {
   const s = makeState()
-  const ctx = await phone({ permissions: ['geolocation'], geolocation: { latitude: 30.5115, longitude: -97.6755 } })
+  const ctx = await phone({ permissions: ['geolocation', 'notifications'], geolocation: { latitude: 30.5115, longitude: -97.6755 } })
   const page = await ctx.newPage()
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
@@ -82,12 +82,16 @@ const signIn = (page, email) => signInAt(page, BASE, email)
   await page.waitForTimeout(400)
   ok((await locCard.getAttribute('data-state')) === 'granted', 'a location permission already granted reads as on without prompting', await locCard.getAttribute('data-state'))
   ok((await locCard.getByRole('button').count()) === 0, 'and offers no button — asking for a permission you hold teaches the browser to distrust you')
+  const notifCard = page.getByTestId('setup-notifications')
+  ok((await notifCard.getAttribute('data-state')) === 'granted' && (await notifCard.getByRole('button').count()) === 0, 'notifications already allowed read as on, with no button', await notifCard.getAttribute('data-state'))
+  ok(/nothing is sent until then/i.test(await notifCard.innerText()), 'and the card is honest that no push exists yet')
   ok(/Camera and photos/.test(await body(page)) && /asks the first time you take a photo/i.test(await body(page)), 'camera says it is asked on use, and has no switch to flip')
   ok((await page.getByTestId('setup-camera').getByRole('button').count()) === 0, 'because there is nothing to grant ahead of time')
   ok((await targets(page)).length === 0, 'every target on the setup step is at least 44px')
   await page.getByTestId('setup-continue').click()
   await page.waitForTimeout(700)
   ok(s.posts[1]?.step === 'setup' && s.posts[1].data.locationStatus === 'granted', 'setup posts the granted status', JSON.stringify(s.posts[1]?.data))
+  ok(s.posts[1]?.data.notificationStatus === 'granted', 'and the notification answer alongside it', JSON.stringify(s.posts[1]?.data))
   ok((await shell.getAttribute('data-step')) === 'walkthrough', 'and moves to the walkthrough')
 
   /* --- walkthrough: five cards in the brief's order ------------------------ */
@@ -145,7 +149,8 @@ const signIn = (page, email) => signInAt(page, BASE, email)
 
   /* --- checklist: the server's lines, all in place ------------------------- */
   const items = page.getByTestId('checklist-item')
-  ok((await items.count()) === 8, 'seven server lines plus this phone’s own install line', `${await items.count()}`)
+  ok((await items.count()) === 9, 'eight server lines plus this phone’s own install line', `${await items.count()}`)
+  ok((await page.locator('[data-testid="checklist-item"][data-key="notifications_enabled"]').getAttribute('data-required')) === 'false' && (await page.locator('[data-testid="checklist-item"][data-key="notifications_enabled"]').getAttribute('data-done')) === 'true', 'notifications is a recommended line, and reads done — it was allowed')
   ok((await page.locator('[data-testid="checklist-item"][data-key="photo_added"]').getAttribute('data-done')) === 'true', 'the photo line is done — the badge would not confirm without it')
   ok((await page.locator('[data-testid="checklist-item"][data-key="badge_confirmed"]').getAttribute('data-done')) === 'true', 'and so is the badge line')
   const locLine = await page.locator('[data-testid="checklist-item"][data-key="location_enabled"]').innerText()
@@ -262,6 +267,18 @@ const signIn = (page, email) => signInAt(page, BASE, email)
     })
     window.__geoQueries = () => queried
   })
+  // Headless Chromium reports notifications as denied unless granted, which
+  // skips the state this scenario is about: not yet asked, then refused.
+  await page.addInitScript(() => {
+    let permission = 'default'
+    const stub = function () {}
+    Object.defineProperty(stub, 'permission', { get: () => permission })
+    stub.requestPermission = () => {
+      permission = 'denied'
+      return Promise.resolve(permission)
+    }
+    Object.defineProperty(window, 'Notification', { value: stub, configurable: true })
+  })
   await mockApi(page, s)
   await signIn(page, s.email)
   const card = page.getByTestId('setup-location')
@@ -274,9 +291,18 @@ const signIn = (page, email) => signInAt(page, BASE, email)
   ok((await card.getAttribute('data-state')) === 'denied', 'a refusal reads as off', await card.getAttribute('data-state'))
   ok(/cannot find the nearest door/i.test(await card.innerText()) && /settings/i.test(await card.innerText()), 'and says what is lost and where to turn it on')
   ok(/Continue anyway/.test(await page.getByTestId('setup-continue').innerText()), 'the button is honest that they are continuing without it')
+  const notifCard = page.getByTestId('setup-notifications')
+  ok((await notifCard.getAttribute('data-state')) === 'prompt' && (await page.getByTestId('setup-notifications-ask').count()) === 1, 'notifications not yet asked shows the one button that asks', await notifCard.getAttribute('data-state'))
+  ok(/nothing is sent until then/i.test(await notifCard.innerText()), 'and says that no push exists yet')
+  await page.getByTestId('setup-notifications-ask').click({ timeout: 3000 }).catch(() => {})
+  await page.waitForTimeout(600)
+  const notifAfter = await notifCard.getAttribute('data-state')
+  ok(notifAfter === 'denied' && (await notifCard.getByRole('button').count()) === 0, 'a refusal reads as off, with no button left to press and a note on where to undo it', notifAfter)
+  ok(/settings/i.test(await notifCard.innerText()), 'the card says where to turn it on later')
   await page.getByTestId('setup-continue').click()
   await page.waitForTimeout(700)
   ok(s.posts.at(-1)?.data.locationStatus === 'denied', 'setup posts denied', JSON.stringify(s.posts.at(-1)?.data))
+  ok(s.posts.at(-1)?.data.notificationStatus === notifAfter, 'and the notification answer the card settled on', JSON.stringify(s.posts.at(-1)?.data))
   ok((await page.getByTestId('onboarding').getAttribute('data-step')) === 'walkthrough', 'and the flow moves on — a denied location never blocks')
   await ctx.close()
 }

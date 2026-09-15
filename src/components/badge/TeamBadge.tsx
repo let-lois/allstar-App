@@ -32,7 +32,7 @@ export interface TeamBadgeProps {
   badge: BadgeInfo | null
   name: string
   title: string
-  company: { name: string; timezone?: string; logoUrl?: string; website?: string }
+  company: { name: string; timezone?: string; logoUrl?: string; website?: string; badgeQrUrl?: string }
   avatarUrl?: string
   avatarInitials: string
   /** Shown while the server is minting — the id slot reads as pending. */
@@ -50,7 +50,15 @@ export const BADGE_STATUS_LABEL: Record<BadgeInfo['status'], string> = {
 }
 
 export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitials, minting = false, showQr = true, className = '' }: TeamBadgeProps) {
-  const target = badge ? verifyUrl(badge.id) : undefined
+  /*
+    What the code encodes. The company's own QR link when the admin set one —
+    the code the company already runs, with its own destination and its own
+    scan counts — and the badge's verification page otherwise, so a badge is
+    scannable before anyone has set anything.
+  */
+  const companyQr = company.badgeQrUrl?.trim() || undefined
+  const target = badge ? companyQr ?? verifyUrl(badge.id) : undefined
+  const targetKind: 'company' | 'verify' | undefined = target ? (companyQr ? 'company' : 'verify') : undefined
   const qr = useMemo(() => (target && showQr ? qrModules(target) : null), [target, showQr])
   const status = badge?.status ?? 'none'
   const tz = company.timezone
@@ -165,9 +173,10 @@ export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitia
             target="_blank"
             rel="noopener noreferrer"
             className="focusable shrink-0 rounded-md bg-white p-1"
-            aria-label="Verify this badge"
+            aria-label={targetKind === 'company' ? `Open ${company.name}’s link` : 'Verify this badge'}
             data-testid="badge-qr"
             data-target={target}
+            data-target-kind={targetKind}
           >
             <svg viewBox={`0 0 ${qr.length} ${qr.length}`} width="104" height="104" shapeRendering="crispEdges" aria-hidden="true">
               <path d={qrPath(qr)} fill="#0B1220" />

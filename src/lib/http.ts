@@ -37,7 +37,7 @@ export interface SessionUserDTO {
   avatarUrl?: string
   onboarding?: { status: OnboardingStatus; step?: OnboardingStep; version: number; completedAt?: number }
   badge?: BadgeInfo | null
-  company?: { name: string; timezone: string; logoUrl?: string; website?: string }
+  company?: { name: string; timezone: string; logoUrl?: string; website?: string; badgeQrUrl?: string }
 }
 
 export function apiMe(token: string) {
@@ -90,7 +90,7 @@ export interface OnboardingViewDTO {
     locked: ('email' | 'role' | 'team')[]
   }
   missing: ('firstName' | 'lastName' | 'photo')[]
-  setup: { completedAt?: number; locationStatus?: string }
+  setup: { completedAt?: number; locationStatus?: string; notificationStatus?: string }
   walkthrough: { completedAt?: number }
   badge: BadgeInfo | null
   checklist: ChecklistItemDTO[]
@@ -123,7 +123,7 @@ export interface VerifyDTO {
   status: VerifyStatus
   badge: { id: string; issuedAt?: number; expiresAt?: number }
   person: { name: string; title?: string; photoUrl?: string }
-  company: { name: string; logoUrl?: string; website?: string }
+  company: { name: string; logoUrl?: string; website?: string; badgeQrUrl?: string }
 }
 
 /** Public: no session. 404 for an unknown number, 429 after too many misses. */
@@ -424,7 +424,7 @@ export async function apiFetchPhoto(token: string, photoId: string): Promise<Blo
   return await res.blob()
 }
 
-export type InvitationStatus = 'not_sent' | 'pending' | 'accepted' | 'expired' | 'revoked'
+export type InvitationStatus = 'not_sent' | 'pending' | 'opened' | 'accepted' | 'expired' | 'revoked'
 
 export interface TeamUserDTO {
   id: string
@@ -445,6 +445,8 @@ export interface TeamUserDTO {
   invitedAt?: number
   /** When the current link was sent, when that was not the first. */
   resentAt?: number
+  /** When the current link was first opened in a browser. */
+  openedAt?: number
   onboarding: OnboardingStatus
   onboardingStep?: OnboardingStep
   badge: BadgeStatus
@@ -586,10 +588,12 @@ export interface CompanyDTO {
   timezone: string
   logoUrl?: string
   website?: string
+  /** What every badge's QR code encodes; absent means each badge's own verification page. */
+  badgeQrUrl?: string
 }
 
 /** `null` clears a field; a key left out is left alone. */
-export function apiUpdateCompany(token: string, input: { website?: string | null; logo?: string | null }) {
+export function apiUpdateCompany(token: string, input: { website?: string | null; logo?: string | null; badgeQrUrl?: string | null }) {
   return request<{ company: CompanyDTO }>('/api/company', { method: 'POST', body: input, token })
 }
 

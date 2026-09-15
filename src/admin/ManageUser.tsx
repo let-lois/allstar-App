@@ -56,6 +56,7 @@ export interface ManagedUser {
   invitation?: TeamMember['invitation']
   invitedAt?: number
   resentAt?: number
+  openedAt?: number
   onboarding?: TeamMember['onboarding']
   onboardingStep?: TeamMember['onboardingStep']
   badge?: TeamMember['badge']
@@ -177,6 +178,7 @@ export function ManageUser({
           <p className="mt-1 text-xs leading-relaxed text-ink-mute">
             {INVITATION_LABEL[user.invitation ?? 'not_sent']}
             {user.invitation === 'pending' && ' — they have a link that still works.'}
+            {user.invitation === 'opened' && ' — they opened their link but have not set a password yet.'}
             {user.invitation === 'expired' && ' — their link has run out; send a fresh one.'}
             {user.invitation === 'revoked' && ' — their link was cancelled; send a fresh one if they should still join.'}
             {(!user.invitation || user.invitation === 'not_sent') && ' — no link has been made for them yet.'}
@@ -192,6 +194,7 @@ export function ManageUser({
             <p className="mt-1 text-xs text-ink-mute" data-testid="manage-invite-dates">
               Invited {inviteDate(user.invitedAt)}
               {user.resentAt ? ` · Resent ${inviteDate(user.resentAt)}` : ''}
+              {user.openedAt ? ` · Opened ${inviteDate(user.openedAt)}` : ''}
             </p>
           )}
           <div className="mt-2 flex flex-wrap gap-2">
@@ -206,9 +209,9 @@ export function ManageUser({
                 }, true)
               }
             >
-              {busy === 'resend' ? 'Sending…' : user.invitation === 'pending' ? 'Re-send invite' : 'Send invite'}
+              {busy === 'resend' ? 'Sending…' : user.invitation === 'pending' || user.invitation === 'opened' ? 'Re-send invite' : 'Send invite'}
             </Button>
-            {user.invitation === 'pending' && (
+            {(user.invitation === 'pending' || user.invitation === 'opened') && (
               <Button
                 size="sm"
                 variant="secondary"

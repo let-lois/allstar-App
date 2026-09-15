@@ -74,6 +74,7 @@ interface FlowRow {
   walkthrough_completed_at: number | null
   setup_completed_at: number | null
   location_status: string | null
+  notification_status: string | null
   badge_id: string | null
   badge_issued_at: number | null
   badge_expires_at: number | null
@@ -85,7 +86,7 @@ async function rowFor(env: Env, userId: string): Promise<FlowRow | null> {
     `SELECT u.id, u.client_id, u.email, u.name, u.first_name, u.last_name, u.phone, u.job_title, u.role,
             t.name AS team_name, u.avatar_url,
             u.onboarding_step, u.onboarding_version, u.onboarding_completed_at,
-            u.walkthrough_completed_at, u.setup_completed_at, u.location_status,
+            u.walkthrough_completed_at, u.setup_completed_at, u.location_status, u.notification_status,
             u.badge_id, u.badge_issued_at, u.badge_expires_at, u.badge_confirmed_at
        FROM users u LEFT JOIN teams t ON t.id = u.team_id
       WHERE u.id = ?1`,
@@ -117,7 +118,7 @@ export interface OnboardingView {
   }
   /** Required profile fields still empty, so a form asks only for those. */
   missing: ('firstName' | 'lastName' | 'photo')[]
-  setup: { completedAt?: number; locationStatus?: string }
+  setup: { completedAt?: number; locationStatus?: string; notificationStatus?: string }
   walkthrough: { completedAt?: number }
   badge: MeDTO['badge']
   checklist: ChecklistItem[]
@@ -153,7 +154,11 @@ function view(row: FlowRow, now: number): OnboardingView {
       locked: LOCKED,
     },
     missing,
-    setup: { completedAt: row.setup_completed_at ?? undefined, locationStatus: row.location_status ?? undefined },
+    setup: {
+      completedAt: row.setup_completed_at ?? undefined,
+      locationStatus: row.location_status ?? undefined,
+      notificationStatus: row.notification_status ?? undefined,
+    },
     walkthrough: { completedAt: row.walkthrough_completed_at ?? undefined },
     badge: row.badge_id
       ? {
@@ -271,12 +276,21 @@ export async function completeStep(env: Env, user: SessionUser, input: StepInput
       break
     }
     case 'setup': {
+      const PERMISSION = ['granted', 'denied', 'skipped', 'unsupported']
       const status = clean(data.locationStatus, 20) ?? 'skipped'
-      if (!['granted', 'denied', 'skipped', 'unsupported'].includes(status)) {
+      if (!PERMISSION.includes(status)) {
         return fail('locationStatus must be granted, denied, skipped or unsupported.', 400)
       }
-      await env.DB.prepare('UPDATE users SET setup_completed_at = ?2, location_status = ?3 WHERE id = ?1')
-        .bind(user.id, now, status)
+      // The same four answers for notifications. A phone from before the card
+      // existed sends none, which reads as skipped — not as a refusal.
+      const notifications = clean(data.notificationStatus, 20) ?? 'skipped'
+      if (!PERMISSION.includes(notifications)) {
+        return fail('notificationStatus must be granted, denied, skipped or unsupported.', 400)
+      }
+      await env.DB.prepare(
+        'UPDATE users SET setup_completed_at = ?2, location_status = ?3, notification_status = ?4 WHERE id = ?1',
+      )
+        .bind(user.id, now, status, notifications)
         .run()
       break
     }

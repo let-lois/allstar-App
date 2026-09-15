@@ -521,6 +521,33 @@ const MIGRATIONS: Migration[] = [
         WHERE password_hash IS NOT NULL AND onboarding_completed_at IS NULL`,
     ],
   },
+  {
+    id: '020-clients-badge-qr',
+    statements: [
+      {
+        sql: 'ALTER TABLE clients ADD COLUMN badge_qr_url TEXT',
+        skipIfColumn: { table: 'clients', column: 'badge_qr_url' },
+      },
+    ],
+  },
+  {
+    id: '021-users-notification-status',
+    statements: [
+      {
+        sql: 'ALTER TABLE users ADD COLUMN notification_status TEXT',
+        skipIfColumn: { table: 'users', column: 'notification_status' },
+      },
+    ],
+  },
+  {
+    id: '022-invites-opened',
+    statements: [
+      {
+        sql: 'ALTER TABLE invites ADD COLUMN opened_at INTEGER',
+        skipIfColumn: { table: 'invites', column: 'opened_at' },
+      },
+    ],
+  },
 ]
 
 async function hasColumn(

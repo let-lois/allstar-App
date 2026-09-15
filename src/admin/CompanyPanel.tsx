@@ -73,8 +73,9 @@ export function CompanyPanel() {
   const refreshMe = useAppStore((s) => s.refreshMe)
   const loadTeam = useAppStore((s) => s.loadTeam)
 
-  const company: { name: string; timezone?: string; logoUrl?: string; website?: string } = user?.company ?? { name: user?.clientName ?? '' }
+  const company: { name: string; timezone?: string; logoUrl?: string; website?: string; badgeQrUrl?: string } = user?.company ?? { name: user?.clientName ?? '' }
   const [website, setWebsite] = useState(company.website ?? '')
+  const [badgeQr, setBadgeQr] = useState(company.badgeQrUrl ?? '')
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -91,6 +92,10 @@ export function CompanyPanel() {
     setWebsite(company.website ?? '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [company.website])
+  useEffect(() => {
+    setBadgeQr(company.badgeQrUrl ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company.badgeQrUrl])
 
   useEffect(() => {
     const token = liveToken()
@@ -135,8 +140,9 @@ export function CompanyPanel() {
         <section className="card p-4" data-testid="company-badge-details">
           <h3 className="text-sm font-bold">On every badge</h3>
           <p className="mt-1 text-xs leading-relaxed text-ink-mute">
-            The logo heads each team member’s badge. Scanning a badge opens its verification page, which shows the person, the
-            company and whether the badge is still good; the website is linked from that page when you set one.
+            The logo heads each team member’s badge. The QR code on every badge draws your company’s own QR link when you set one
+            below; until then it opens the badge’s verification page, which shows the person, the company and whether the badge is
+            still good. The website is linked from that page.
           </p>
 
           <div className="mt-4 flex items-center gap-4">
@@ -216,6 +222,35 @@ export function CompanyPanel() {
               }
             >
               {busy === 'website' ? 'Saving…' : 'Save'}
+            </Button>
+          </div>
+
+          <div className="mt-4 flex items-end gap-2">
+            <div className="flex-1">
+              <Field
+                label="Badge QR code link"
+                value={badgeQr}
+                onChange={(e) => setBadgeQr(e.target.value)}
+                inputMode="url"
+                autoCapitalize="none"
+                placeholder="https://link.yourcompany.com/qr/…"
+                hint="In the company’s GoHighLevel sub-account, open Sites → QR Codes, take the latest code and paste the link it points to. Every badge then draws that same code, and its scans count there. Leave empty to keep the badge’s verification page."
+                data-testid="company-badge-qr"
+              />
+            </div>
+            <Button
+              disabled={busy !== null || badgeQr.trim() === (company.badgeQrUrl ?? '')}
+              data-testid="company-badge-qr-save"
+              onClick={() =>
+                void run('badge-qr', async (token) => {
+                  const next = badgeQr.trim()
+                  await apiUpdateCompany(token, { badgeQrUrl: next || null })
+                  await refreshMe()
+                  setNotice(next ? 'Badge QR link saved. Every badge now draws your company’s code.' : 'Badge QR link cleared. Badges draw a code to their own verification page.')
+                })
+              }
+            >
+              {busy === 'badge-qr' ? 'Saving…' : 'Save'}
             </Button>
           </div>
         </section>
@@ -421,11 +456,13 @@ export function CompanyPanel() {
           badge={{ id: '12345678', status: 'active', issuedAt: Date.now(), expiresAt: Date.now() + 365 * 86_400_000, confirmedAt: Date.now() }}
           name={user?.name ?? 'Team member'}
           title="Sales Representative"
-          company={{ ...company, website: website.trim() || undefined }}
+          company={{ ...company, website: website.trim() || undefined, badgeQrUrl: badgeQr.trim() || undefined }}
           avatarInitials={user?.avatarInitials ?? 'TM'}
           avatarUrl={user?.avatarUrl}
         />
-        <p className="mt-2 text-xs leading-relaxed text-ink-mute">A sample — your own name, a sample id. Scanning a real badge opens its verification page.</p>
+        <p className="mt-2 text-xs leading-relaxed text-ink-mute">
+          A sample — your own name, a sample id. {badgeQr.trim() ? 'Its QR code is your company’s link, as typed above.' : 'Scanning a real badge opens its verification page.'}
+        </p>
       </aside>
     </div>
   )

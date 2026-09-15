@@ -17,6 +17,8 @@ export interface CompanyDTO {
   timezone: string
   logoUrl?: string
   website?: string
+  /** What every badge's QR code encodes; absent means the badge's own verification page. */
+  badgeQrUrl?: string
 }
 
 type Failure = { error: string; status: number }
@@ -69,7 +71,7 @@ export function cleanLogo(input: unknown): string | null | Failure {
 export async function updateCompany(
   env: Env,
   actor: SessionUser,
-  input: { website?: unknown; logo?: unknown },
+  input: { website?: unknown; logo?: unknown; badgeQrUrl?: unknown },
 ): Promise<CompanyDTO | Failure> {
   if (!canInvite(actor)) return fail('Not permitted.', 403)
 
@@ -83,6 +85,15 @@ export async function updateCompany(
     sets.push(`website = ?${binds.length + 2}`)
     binds.push(website)
     changed.website = website
+  }
+  if ('badgeQrUrl' in input) {
+    // The same rules as the website: this is a link people scan, so it has to
+    // be one a phone will open.
+    const link = cleanWebsite(input.badgeQrUrl)
+    if (link !== null && typeof link !== 'string') return link
+    sets.push(`badge_qr_url = ?${binds.length + 2}`)
+    binds.push(link)
+    changed.badgeQrUrl = link
   }
   if ('logo' in input) {
     const logo = cleanLogo(input.logo)
@@ -106,14 +117,15 @@ export async function updateCompany(
   })
 
   const row = await env.DB.prepare(
-    'SELECT name, timezone, logo_url, website FROM clients WHERE id = ?1',
+    'SELECT name, timezone, logo_url, website, badge_qr_url FROM clients WHERE id = ?1',
   )
     .bind(actor.clientId)
-    .first<{ name: string; timezone: string; logo_url: string | null; website: string | null }>()
+    .first<{ name: string; timezone: string; logo_url: string | null; website: string | null; badge_qr_url: string | null }>()
   return {
     name: row?.name ?? actor.clientName,
     timezone: row?.timezone ?? actor.timezone,
     logoUrl: row?.logo_url ?? undefined,
     website: row?.website ?? undefined,
+    badgeQrUrl: row?.badge_qr_url ?? undefined,
   }
 }

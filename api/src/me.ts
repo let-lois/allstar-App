@@ -38,6 +38,7 @@ export interface MeDTO extends SessionUser {
     walkthroughCompletedAt?: number
     setupCompletedAt?: number
     locationStatus?: string
+    notificationStatus?: string
   }
   badge: {
     id: string
@@ -51,6 +52,7 @@ export interface MeDTO extends SessionUser {
     timezone: string
     logoUrl?: string
     website?: string
+    badgeQrUrl?: string
   }
 }
 
@@ -63,9 +65,9 @@ export async function readMe(env: Env, userId: string): Promise<MeDTO | null> {
     `SELECT u.id, u.client_id, u.email, u.name, u.first_name, u.last_name, u.role, u.phone,
             u.job_title, u.team_id, t.name AS team_name, u.avatar_url, u.created_at, u.last_seen_at,
             u.onboarding_step, u.onboarding_version, u.onboarding_completed_at,
-            u.walkthrough_completed_at, u.setup_completed_at, u.location_status,
+            u.walkthrough_completed_at, u.setup_completed_at, u.location_status, u.notification_status,
             u.badge_id, u.badge_issued_at, u.badge_expires_at, u.badge_confirmed_at,
-            c.name AS client_name, c.timezone AS client_tz, c.logo_url, c.website
+            c.name AS client_name, c.timezone AS client_tz, c.logo_url, c.website, c.badge_qr_url
        FROM users u
        JOIN clients c ON c.id = u.client_id
        LEFT JOIN teams t ON t.id = u.team_id
@@ -113,6 +115,7 @@ export async function readMe(env: Env, userId: string): Promise<MeDTO | null> {
       walkthroughCompletedAt: num(row.walkthrough_completed_at),
       setupCompletedAt: num(row.setup_completed_at),
       locationStatus: str(row.location_status),
+      notificationStatus: str(row.notification_status),
     },
     badge: facts.badge_id
       ? {
@@ -128,6 +131,7 @@ export async function readMe(env: Env, userId: string): Promise<MeDTO | null> {
       timezone: String(row.client_tz ?? 'UTC'),
       logoUrl: str(row.logo_url),
       website: str(row.website),
+      badgeQrUrl: str(row.badge_qr_url),
     },
   }
 }

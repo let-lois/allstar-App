@@ -15,7 +15,7 @@ guarded per statement, so a partial earlier run cannot wedge them.
 | Onboarding | None | Five-step flow, server-held state, resumable, one shared flow for both ways in |
 | Badge | None | Permanent 8-digit id minted once, 1-year expiry, confirmation timestamp, QR to the badge's public verification page, admin renew / regenerate |
 | Console roster | Name, status dot, role, performance numbers | People view with Invitation / Account / Onboarding / Badge / Last active / Date added, filters, and a Performance view with the old numbers |
-| Company settings | Outcomes, notes, photos, reporting, integrations, geocoding | + Company tab: logo, website, join link, teams |
+| Company settings | Outcomes, notes, photos, reporting, integrations, geocoding | + Company tab: logo, website, badge QR code link, join link, teams |
 
 Existing features reused rather than duplicated: the invite/accept pages,
 `guard()` for every admin action, the roster held in the store and cached in
@@ -32,6 +32,9 @@ Migrations, all idempotent and guarded per statement:
 - `017-invites-kind` — `invites` + `kind ('invite' | 'reset')`, `revoked_at`.
 - `018-clients-company` — `clients` + `logo_url, website, join_code, join_code_created_at`; unique `join_code`.
 - `019-onboarding-backfill` — everyone who already had a password is marked onboarded at version 1 as of their `created_at`, so no working rep is thrown into the flow.
+- `022-invites-opened` — `invites` + `opened_at`: set once, when the invite page is first served for a live token. **Opened** sits between Pending and Accepted; the member sheet shows the date. A mail scanner that prefetches links can set it, so it is a delivery hint, not proof a person read it.
+- `021-users-notification-status` — `users` + `notification_status`: the phone's last answer about notifications, recorded like `location_status`.
+- `020-clients-badge-qr` — `clients` + `badge_qr_url`: the link every badge's QR code encodes; NULL means the badge's own verification page.
 
 Statuses are **derived, never stored**: `api/src/onboarding.ts` computes
 invitation, onboarding and badge status from the facts above, on every read.
@@ -61,9 +64,9 @@ inactive; login for an email that exists in two companies.
 - **Sign in / Create account** on the Login screen; `/join/CODE` links prefill the code.
 - **Onboarding shell** replaces the app for any live user whose server-side onboarding is not complete; opens at the step the server holds (second device, reload, interrupted).
 - **1 Profile** — only what is missing is asked loudly; admin-entered values prefilled and editable; email, role and team locked; photo through the outbox.
-- **2 App setup** — location asked once via a button, never on arrival, never re-asked once granted; Add to Home Screen via the install prompt or iOS instructions; camera explained as ask-on-use. Notifications deferred until push exists.
+- **2 App setup** — location asked once via a button, never on arrival, never re-asked once granted; notifications the same way (granted / denied / skipped / unsupported recorded in `users.notification_status`), with the card saying plainly that nothing is pushed yet and, on iPhone, that the permission arrives once the app is on the home screen; Add to Home Screen via the install prompt or iOS instructions; camera explained as ask-on-use. A recommended checklist line, **Notifications enabled**, mirrors location.
 - **3 Learn the basics** — five cards (Map & Territory, Knock a Door, Log the Result, Manage Leads, Track Performance), ~60 s, with the full tour offered at the end.
-- **4 Badge** — minted once on first open; the id never changes on view; **Confirm badge information** records a timestamp. The QR code opens the badge's public verification page, so it works whether or not the company has a website; the website, when set, is a link on that page. Confirmation is disabled until the person has a profile photo — the card shows where the face goes and offers **Add your photo**, which returns to the profile and back.
+- **4 Badge** — minted once on first open; the id never changes on view; **Confirm badge information** records a timestamp. The QR code draws the company's own QR link when the admin has set one in Company settings (in GoHighLevel: the sub-account's Sites → QR Codes; paste the link the latest code points to), so scans land and count where the company already tracks them; with no link set it opens the badge's public verification page, so a badge is scannable from day one. The website, when set, is a link on the verification page. Confirmation is disabled until the person has a profile photo — the card shows where the face goes and offers **Add your photo**, which returns to the profile and back.
 - **Badge design** — one component, `TeamBadge`, everywhere a badge is drawn (onboarding, My badge, the admin's sample, the public verification page): white portrait card with rounded corners, blue header with a lanyard slot and **TEAM MEMBER**, the company logo (or the company name in bold caps when there is no logo), a large softly-rounded photo (placeholder until one exists), name and title in bold caps, and a bottom row with **ID / ISSUED / EXPIRES** on the left and the QR code on the right. Expiry is one year from issue.
 - **5 Ready-to-sell checklist** — every line is the server's; required vs recommended is the server's; Complete is disabled until the server says it can.
 - **6 You're ready** — Start knocking → map (reps) or Today (office).
@@ -72,7 +75,7 @@ inactive; login for an email that exists in two companies.
 
 ## Admin console
 
-- **Team → People**: Name, Role · title, Team / office, Invitation (Not sent / Pending / Accepted / Expired / Revoked), Account (Active / Invite pending / Deactivated), Onboarding (Not started / In progress / Complete / Update required), Badge (Not created / Awaiting confirmation / Active / Expired), Last active, Date added. Filters: Invite open, Still setting up, Badge not active, Removed from team; search by name, email or team.
+- **Team → People**: Name, Role · title, Team / office, Invitation (Not sent / Pending / Opened / Accepted / Expired / Revoked), Account (Active / Invite pending / Deactivated), Onboarding (Not started / In progress / Complete / Update required), Badge (Not created / Awaiting confirmation / Active / Expired), Last active, Date added. Filters: Invite open, Still setting up, Badge not active, Removed from team; search by name, email or team.
 - **Team → Performance**: the previous table (today, doors, contact rate, won, range).
 - **Manage a person**: re-send / revoke invite, team, title, reset onboarding, renew / regenerate badge, role, access, password / reset link, delete. Actions appear only where the server would allow them; managers see statuses but hold none of the admin levers.
 - **Settings → Company**: logo, website (with a live sample badge), self sign-up code and link (change / turn off / turn on), teams (add / rename / delete).

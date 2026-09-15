@@ -26,7 +26,7 @@ export interface VerifyDTO {
   status: VerifyStatus
   badge: { id: string; issuedAt?: number; expiresAt?: number }
   person: { name: string; title?: string; photoUrl?: string }
-  company: { name: string; logoUrl?: string; website?: string }
+  company: { name: string; logoUrl?: string; website?: string; badgeQrUrl?: string }
 }
 
 type Failure = { error: string; status: number; retryAfter?: number }
@@ -51,7 +51,7 @@ export async function verifyBadge(env: Env, badgeId: unknown, ip: string | null)
     `SELECT u.name, u.first_name, u.last_name, u.job_title, u.role, u.active, u.avatar_url,
             u.onboarding_step, u.onboarding_version, u.onboarding_completed_at,
             u.badge_id, u.badge_issued_at, u.badge_expires_at, u.badge_confirmed_at,
-            c.name AS company_name, c.logo_url, c.website
+            c.name AS company_name, c.logo_url, c.website, c.badge_qr_url
        FROM users u JOIN clients c ON c.id = u.client_id
       WHERE u.badge_id = ?1`,
   )
@@ -78,6 +78,7 @@ export async function verifyBadge(env: Env, badgeId: unknown, ip: string | null)
     name: String(row.company_name),
     logoUrl: row.logo_url == null ? undefined : String(row.logo_url),
     website: row.website == null ? undefined : String(row.website),
+    badgeQrUrl: row.badge_qr_url == null ? undefined : String(row.badge_qr_url),
   }
   const badge = {
     id,

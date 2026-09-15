@@ -111,7 +111,7 @@ try {
   ok(v.missing.join(',') === 'lastName,photo', 'and asks only for what is missing', v.missing.join(','))
   ok(v.profile.editable.join(',') === 'firstName,lastName,phone,jobTitle', 'the rep may change name, phone and title')
   ok(v.profile.locked.join(',') === 'email,role,team', 'and not email, role or team — those are the admin’s')
-  ok(Array.isArray(v.checklist) && v.checklist.length === 7 && v.canComplete === false, 'the checklist is there from the start and is not yet completable')
+  ok(Array.isArray(v.checklist) && v.checklist.length === 8 && v.canComplete === false, 'the checklist is there from the start and is not yet completable')
 
   /* ===== 3. order is enforced ================================================= */
   r = await j(await call('/api/me/onboarding/step', { method: 'POST', body: JSON.stringify({ step: 'setup', data: { locationStatus: 'granted' } }) }, R))
@@ -146,10 +146,15 @@ try {
   /* ===== 6. setup: denied location is recorded and does not block ============= */
   r = await j(await call('/api/me/onboarding/step', { method: 'POST', body: JSON.stringify({ step: 'setup', data: { locationStatus: 'bogus' } }) }, R))
   ok(r.status === 400, 'an unknown location status is refused')
-  r = await j(await call('/api/me/onboarding/step', { method: 'POST', body: JSON.stringify({ step: 'setup', data: { locationStatus: 'denied' } }) }, R))
+  r = await j(await call('/api/me/onboarding/step', { method: 'POST', body: JSON.stringify({ step: 'setup', data: { locationStatus: 'denied', notificationStatus: 'maybe' } }) }, R))
+  ok(r.status === 400, 'an unknown notification status is refused too')
+  r = await j(await call('/api/me/onboarding/step', { method: 'POST', body: JSON.stringify({ step: 'setup', data: { locationStatus: 'denied', notificationStatus: 'granted' } }) }, R))
   ok(r.status === 200 && r.body.step === 'walkthrough' && r.body.setup.locationStatus === 'denied', 'setup records a denied location and moves on', `→ ${r.body.step}`)
+  ok(r.body.setup.notificationStatus === 'granted', 'and the notification answer', r.body.setup.notificationStatus)
   const loc = r.body.checklist.find((i) => i.key === 'location_enabled')
   ok(loc.done === false && loc.required === false, 'the checklist shows location not done and not required')
+  const notif = r.body.checklist.find((i) => i.key === 'notifications_enabled')
+  ok(notif && notif.done === true && notif.required === false, 'and notifications done and recommended, not required', JSON.stringify(notif))
 
   /* ===== 7. the walkthrough ================================================ */
   r = await j(await call('/api/me/onboarding/step', { method: 'POST', body: JSON.stringify({ step: 'walkthrough' }) }, R))

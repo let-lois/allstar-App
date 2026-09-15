@@ -36,6 +36,12 @@ CREATE TABLE IF NOT EXISTS clients (
   -- badge offline, so the bytes have to travel with the account.
   logo_url    TEXT,
   website     TEXT,
+  -- What every badge's QR code encodes. Companies run their own QR code (in
+  -- GoHighLevel: the sub-account's Sites → QR Codes) with its own destination
+  -- and scan counts; the admin pastes that code's link here and the badge
+  -- draws the same code. NULL means the badge's QR opens its own verification
+  -- page instead, so a badge is scannable before anyone sets this.
+  badge_qr_url TEXT,
   -- The company's join code. A rep who downloads the app before anyone invites
   -- them has no way to say which company they belong to — email is unique per
   -- tenant, not globally, and `users.client_id` is NOT NULL — so an admin
@@ -98,6 +104,10 @@ CREATE TABLE IF NOT EXISTS users (
   -- The last answer the phone gave about location: granted, denied or skipped.
   -- A snapshot for the console; the phone reads the live permission itself.
   location_status         TEXT,
+  -- The same for notifications: granted, denied, skipped or unsupported. No
+  -- push is sent yet; the answer is recorded so the checklist and the console
+  -- can say whether reminders will reach this phone when they launch.
+  notification_status     TEXT,
   -- The team member badge. Minted once, never regenerated on view. Expiry is
   -- stored per badge rather than computed from a constant, so changing the
   -- default validity later never moves a badge already issued.
@@ -328,6 +338,11 @@ CREATE TABLE IF NOT EXISTS invites (
   created_at  INTEGER NOT NULL,
   expires_at  INTEGER NOT NULL,
   accepted_at INTEGER,
+  -- The first time this link was opened in a browser, set when the invite
+  -- page is served for it. Tells an admin "they saw it" from "it never
+  -- reached them". A mail scanner that prefetches links can set it too, so
+  -- it is a hint about delivery, not proof a person read it.
+  opened_at   INTEGER,
   -- Set when an admin resends or cancels. Re-sending revokes every earlier
   -- unaccepted token, so "sent twice" leaves exactly one working link.
   revoked_at  INTEGER,
