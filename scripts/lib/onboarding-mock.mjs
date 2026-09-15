@@ -17,7 +17,7 @@ function makeState(over = {}) {
   return {
     id: 'u_rep', clientName: 'Ridgeline Roofing', email: 'marcus@ridgeline.test', role: 'field_rep',
     firstName: 'Marcus', lastName: null, phone: null, jobTitle: 'Sales Representative', teamName: 'Austin',
-    hasPhoto: false, location: null, setupAt: null, walkAt: null, badge: null,
+    hasPhoto: false, location: null, notifications: null, setupAt: null, walkAt: null, badge: null,
     step: 'profile', started: false, completedAt: null, version: 0,
     website: null, logoUrl: null, badgeQrUrl: null,
     posts: [], mints: 0, renews: 0, mutations: 0, joinPosted: null, profilePatches: [],
@@ -32,6 +32,7 @@ function checklist(s) {
     { key: 'photo_added', label: 'Profile photo added', done: s.hasPhoto, required: true, detail: s.hasPhoto ? undefined : 'Your badge shows your face, not your initials.' },
     { key: 'role_assigned', label: 'Team / role assigned', done: true, required: true, detail: s.teamName ?? undefined },
     { key: 'location_enabled', label: 'Location enabled', done: s.location === 'granted', required: false, detail: s.location === 'granted' ? undefined : 'Recommended. Without it the map cannot find the nearest door for you.' },
+    { key: 'notifications_enabled', label: 'Notifications enabled', done: s.notifications === 'granted', required: false, detail: s.notifications === 'granted' ? 'Follow-up reminders will reach this phone when they launch.' : 'Recommended. Follow-up reminders and appointment alerts will arrive here once they launch.' },
     { key: 'walkthrough_completed', label: 'App walkthrough completed', done: !!s.walkAt, required: true },
     { key: 'badge_created', label: 'Team member badge created', done: !!s.badge, required: true },
     { key: 'badge_confirmed', label: 'Badge information confirmed', done: badgeStatus(s) === 'active', required: true },
@@ -50,7 +51,7 @@ function view(s) {
     steps: STEPS, version: s.version, requiredVersion: 1, completedAt: s.completedAt ?? undefined,
     profile: { firstName: s.firstName ?? undefined, lastName: s.lastName ?? undefined, email: s.email, phone: s.phone ?? undefined, jobTitle: s.jobTitle ?? undefined, teamName: s.teamName ?? undefined, hasPhoto: s.hasPhoto, editable: ['firstName', 'lastName', 'phone', 'jobTitle'], locked: ['email', 'role', 'team'] },
     missing,
-    setup: { completedAt: s.setupAt ?? undefined, locationStatus: s.location ?? undefined },
+    setup: { completedAt: s.setupAt ?? undefined, locationStatus: s.location ?? undefined, notificationStatus: s.notifications ?? undefined },
     walkthrough: { completedAt: s.walkAt ?? undefined },
     badge: s.badge ? { ...s.badge, status: badgeStatus(s) } : null,
     checklist: items, canComplete: canComplete(items),
@@ -103,7 +104,7 @@ async function mockApi(page, s) {
       if ('jobTitle' in data) s.jobTitle = data.jobTitle || null
       if (!s.firstName || !s.lastName) return r.fulfill(json(400, { error: 'First and last name are needed to continue.', missing: ['lastName'] }))
     }
-    if (step === 'setup') { s.location = data.locationStatus ?? 'skipped'; s.setupAt = Date.now() }
+    if (step === 'setup') { s.location = data.locationStatus ?? 'skipped'; s.notifications = data.notificationStatus ?? 'skipped'; s.setupAt = Date.now() }
     if (step === 'walkthrough') s.walkAt = s.walkAt ?? Date.now()
     if (step === 'badge' && badgeStatus(s) !== 'active') return r.fulfill(json(409, { error: s.badge ? 'Confirm your badge first.' : 'Create your badge first.' }))
     if (step === 'checklist') {

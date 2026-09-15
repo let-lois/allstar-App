@@ -455,6 +455,8 @@ export interface InviteView {
 }
 
 export async function readInvite(env: Env, token: string): Promise<InviteView | null> {
+  const hash = await sha256(token)
+  const now = Date.now()
   const row = await env.DB.prepare(
     `SELECT u.email, u.name, u.password_hash, i.kind, c.name AS client_name
        FROM invites i
@@ -462,10 +464,16 @@ export async function readInvite(env: Env, token: string): Promise<InviteView | 
        JOIN clients c ON c.id = u.client_id
       WHERE i.token_hash = ?1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > ?2`,
   )
-    .bind(await sha256(token), Date.now())
+    .bind(hash, now)
     .first<{ email: string; name: string; password_hash: string | null; kind: string; client_name: string }>()
 
   if (!row) return null
+  // Serving the page is the opening. The first time only — a second look is
+  // not news — and never for a dead token, which the query above already
+  // excluded, so a revoked link opened later does not read as opened.
+  await env.DB.prepare('UPDATE invites SET opened_at = COALESCE(opened_at, ?2) WHERE token_hash = ?1')
+    .bind(hash, now)
+    .run()
   return {
     email: row.email,
     name: row.name,

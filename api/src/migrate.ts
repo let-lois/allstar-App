@@ -530,6 +530,24 @@ const MIGRATIONS: Migration[] = [
       },
     ],
   },
+  {
+    id: '021-users-notification-status',
+    statements: [
+      {
+        sql: 'ALTER TABLE users ADD COLUMN notification_status TEXT',
+        skipIfColumn: { table: 'users', column: 'notification_status' },
+      },
+    ],
+  },
+  {
+    id: '022-invites-opened',
+    statements: [
+      {
+        sql: 'ALTER TABLE invites ADD COLUMN opened_at INTEGER',
+        skipIfColumn: { table: 'invites', column: 'opened_at' },
+      },
+    ],
+  },
 ]
 
 async function hasColumn(

@@ -90,7 +90,7 @@ export interface OnboardingViewDTO {
     locked: ('email' | 'role' | 'team')[]
   }
   missing: ('firstName' | 'lastName' | 'photo')[]
-  setup: { completedAt?: number; locationStatus?: string }
+  setup: { completedAt?: number; locationStatus?: string; notificationStatus?: string }
   walkthrough: { completedAt?: number }
   badge: BadgeInfo | null
   checklist: ChecklistItemDTO[]
@@ -424,7 +424,7 @@ export async function apiFetchPhoto(token: string, photoId: string): Promise<Blo
   return await res.blob()
 }
 
-export type InvitationStatus = 'not_sent' | 'pending' | 'accepted' | 'expired' | 'revoked'
+export type InvitationStatus = 'not_sent' | 'pending' | 'opened' | 'accepted' | 'expired' | 'revoked'
 
 export interface TeamUserDTO {
   id: string
@@ -445,6 +445,8 @@ export interface TeamUserDTO {
   invitedAt?: number
   /** When the current link was sent, when that was not the first. */
   resentAt?: number
+  /** When the current link was first opened in a browser. */
+  openedAt?: number
   onboarding: OnboardingStatus
   onboardingStep?: OnboardingStep
   badge: BadgeStatus

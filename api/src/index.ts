@@ -919,7 +919,7 @@ export default {
                   u.badge_id, u.badge_expires_at, u.badge_confirmed_at,
                   CASE WHEN u.password_hash IS NULL THEN 1 ELSE 0 END AS pending,
                   i.accepted_at AS inv_accepted_at, i.revoked_at AS inv_revoked_at,
-                  i.expires_at AS inv_expires_at, i.created_at AS inv_created_at,
+                  i.expires_at AS inv_expires_at, i.created_at AS inv_created_at, i.opened_at AS inv_opened_at,
                   -- When they were FIRST asked, and how many times. The joined
                   -- row above is the newest link; on its own it cannot tell
                   -- "invited on Monday" from "invited Monday, chased Thursday",
@@ -963,6 +963,7 @@ export default {
                       accepted_at: u.inv_accepted_at == null ? null : Number(u.inv_accepted_at),
                       revoked_at: u.inv_revoked_at == null ? null : Number(u.inv_revoked_at),
                       expires_at: Number(u.inv_expires_at),
+                      opened_at: u.inv_opened_at == null ? null : Number(u.inv_opened_at),
                     }
               return {
                 id: u.id,
@@ -984,6 +985,7 @@ export default {
                 // Only when there was a chase — otherwise it is the same act
                 // twice on screen, and a date that means nothing new.
                 resentAt: Number(u.inv_sends ?? 0) > 1 ? Number(u.inv_created_at) : undefined,
+                openedAt: u.inv_opened_at == null ? undefined : Number(u.inv_opened_at),
                 onboarding: onboardingStatus(facts, now),
                 onboardingStep: facts.onboarding_step ?? undefined,
                 badge: badgeStatus(facts, now),

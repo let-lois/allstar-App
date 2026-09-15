@@ -294,10 +294,12 @@ export interface TeamMember {
   jobTitle?: string
   teamId?: string
   teamName?: string
-  invitation?: 'not_sent' | 'pending' | 'accepted' | 'expired' | 'revoked'
+  invitation?: 'not_sent' | 'pending' | 'opened' | 'accepted' | 'expired' | 'revoked'
   invitedAt?: number
   /** When the current link was sent, when that was not the first. */
   resentAt?: number
+  /** When the current link was first opened in a browser. */
+  openedAt?: number
   onboarding?: OnboardingStatus
   onboardingStep?: OnboardingStep
   badge?: BadgeStatus

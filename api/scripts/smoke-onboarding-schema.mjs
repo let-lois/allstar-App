@@ -15,7 +15,7 @@ import { webcrypto } from 'node:crypto'
  *
  * Three things are pinned that nothing else can pin:
  *
- *   **The ALTERs run.** Fifteen columns on `users`, two on `invites`, five on
+ *   **The ALTERs run.** Sixteen columns on `users`, three on `invites`, five on
  *   `clients`, a new table — and afterwards a login and a roster read work.
  *
  *   **A half-applied migration finishes rather than wedging.** One of the
@@ -201,11 +201,11 @@ try {
 
   /* --- what the database says afterwards ------------------------------------ */
   const ledger = d1json(config, 'SELECT id FROM schema_migrations ORDER BY id').map((r) => r.id)
-  for (const id of ['015-teams', '016-users-onboarding', '017-invites-kind', '018-clients-company', '019-onboarding-backfill', '020-clients-badge-qr']) {
+  for (const id of ['015-teams', '016-users-onboarding', '017-invites-kind', '018-clients-company', '019-onboarding-backfill', '020-clients-badge-qr', '021-users-notification-status', '022-invites-opened']) {
     ok(ledger.includes(id), `${id} is recorded as applied`)
   }
   const cols = d1json(config, "SELECT name FROM pragma_table_info('users')").map((r) => r.name)
-  const expected = ['first_name', 'last_name', 'job_title', 'team_id', 'onboarding_step', 'onboarding_version', 'onboarding_completed_at', 'walkthrough_completed_at', 'setup_completed_at', 'location_status', 'badge_id', 'badge_issued_at', 'badge_expires_at', 'badge_confirmed_at', 'last_seen_at']
+  const expected = ['first_name', 'last_name', 'job_title', 'team_id', 'onboarding_step', 'onboarding_version', 'onboarding_completed_at', 'walkthrough_completed_at', 'setup_completed_at', 'location_status', 'badge_id', 'badge_issued_at', 'badge_expires_at', 'badge_confirmed_at', 'last_seen_at', 'notification_status']
   const missing = expected.filter((c) => !cols.includes(c))
   ok(missing.length === 0, `every users column arrived, including the ones after the pre-added one${missing.length ? ` — missing ${missing.join(', ')}` : ''}`)
   ok(cols.filter((c) => c === 'job_title').length === 1, 'and the pre-added column exists exactly once')

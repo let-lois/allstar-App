@@ -143,7 +143,7 @@ export function AdminTeam() {
       phone: 'meta' as const,
       cell: (m: TeamMember) => {
         const v = m.invitation ?? (m.pending ? 'pending' : 'not_sent')
-        return status(v === 'accepted' ? 'good' : v === 'pending' ? 'warn' : v === 'not_sent' ? 'mute' : 'bad', INVITATION_LABEL[v], 'col-invitation')
+        return status(v === 'accepted' ? 'good' : v === 'pending' || v === 'opened' ? 'warn' : v === 'not_sent' ? 'mute' : 'bad', INVITATION_LABEL[v], 'col-invitation')
       },
     },
     {

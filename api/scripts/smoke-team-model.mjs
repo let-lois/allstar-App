@@ -158,11 +158,24 @@ const repId = rep.user.id
 
   // A pending invitee, for the status the console most needs.
   const PENDING = `model-pending-${stamp}@example.com`
-  await api('/api/invites', { method: 'POST', body: JSON.stringify({ email: PENDING, name: 'Never Opened', role: 'field_rep' }) }, A)
+  const pendingInvite = await (await api('/api/invites', { method: 'POST', body: JSON.stringify({ email: PENDING, name: 'Never Opened', role: 'field_rep' }) }, A)).json()
   const again = await (await api('/api/users', {}, A)).json()
   const p = again.users.find((u) => u.email === PENDING)
   ok(p?.pending === true && p?.invitation === 'pending', 'someone who has not opened their link is pending on both counts', `${p?.pending} / ${p?.invitation}`)
   ok(p?.onboarding === 'not_started', 'and has not started onboarding')
+  ok(p?.openedAt === undefined, 'and carries no opened date yet')
+
+  // Opening the link — the invite page served for a live token — is recorded once.
+  const page = await fetch(pendingInvite.url)
+  ok(page.status === 200, 'the invite page opens for the live link', `${page.status} ${pendingInvite.url}`)
+  const opened = (await (await api('/api/users', {}, A)).json()).users.find((u) => u.email === PENDING)
+  ok(opened?.invitation === 'opened' && typeof opened?.openedAt === 'number', 'and the roster now reads Opened, with the date', `${opened?.invitation} / ${opened?.openedAt}`)
+  await fetch(pendingInvite.url)
+  const twice = (await (await api('/api/users', {}, A)).json()).users.find((u) => u.email === PENDING)
+  ok(twice?.openedAt === opened?.openedAt, 'a second look keeps the first opened date')
+  ok(twice?.pending === true, 'and they are still pending on the account — opened is not accepted')
+  const dead = await fetch(pendingInvite.url.replace(/[^/]+$/, 'not-a-real-token'))
+  ok(dead.status === 200 || dead.status === 404 || dead.status === 410, 'an unknown token gets a page, not an error', `${dead.status}`)
 }
 
 /* ===== 6. the company on the badge ========================================= */

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button } from '../components/ui/Button'
-import { IconCamera, IconCheck, IconDevice, IconLocate } from '../components/nav/icons'
+import { IconBell, IconCamera, IconCheck, IconDevice, IconLocate } from '../components/nav/icons'
 import { getPosition, locationPermission } from '../lib/geo'
 import { installState, onInstallChange, promptInstall, type InstallState } from '../lib/install'
 import type { StepProps } from './steps'
@@ -18,6 +18,12 @@ import type { StepProps } from './steps'
  *   the phone's settings; there is no button, because there is no prompt to
  *   raise. Not-yet-asked gets the one button that raises it.
  *
+ *   **Notifications** is a real permission too, read the same way and asked
+ *   once. Nothing is pushed yet; the card says so, and records the answer so
+ *   the checklist and the console know whether reminders will reach this
+ *   phone when they launch. Safari on iPhone offers the permission only to
+ *   an installed app, so there the card points at the install step.
+ *
  *   **Install** is what "download the app" means for a PWA. Chromium offers a
  *   prompt; iOS offers only the share sheet, so iOS gets the instructions.
  *
@@ -30,12 +36,21 @@ import type { StepProps } from './steps'
  */
 
 type LocState = 'checking' | 'granted' | 'denied' | 'prompt' | 'unsupported'
+type NotifState = 'granted' | 'denied' | 'prompt' | 'unsupported'
+
+function readNotifications(): NotifState {
+  if (typeof Notification === 'undefined' || typeof Notification.requestPermission !== 'function') return 'unsupported'
+  const p = Notification.permission
+  return p === 'granted' ? 'granted' : p === 'denied' ? 'denied' : 'prompt'
+}
 
 export function SetupStep({ view, busy, error, post }: StepProps) {
   const [loc, setLoc] = useState<LocState>('checking')
   const [asking, setAsking] = useState(false)
   const [install, setInstall] = useState<InstallState>(installState())
   const [installOutcome, setInstallOutcome] = useState<string | null>(null)
+  const [notif, setNotif] = useState<NotifState>(() => readNotifications())
+  const [askingNotif, setAskingNotif] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -62,6 +77,18 @@ export function SetupStep({ view, busy, error, post }: StepProps) {
     setAsking(false)
   }
 
+  async function askNotifications() {
+    setAskingNotif(true)
+    try {
+      const answer = await Notification.requestPermission()
+      setNotif(answer === 'granted' ? 'granted' : answer === 'denied' ? 'denied' : 'prompt')
+    } catch {
+      setNotif(readNotifications())
+    } finally {
+      setAskingNotif(false)
+    }
+  }
+
   async function askInstall() {
     const outcome = await promptInstall()
     setInstallOutcome(outcome === 'accepted' ? 'Installed. Open Allstar from your home screen next time.' : outcome === 'dismissed' ? 'No problem — you can install it later from More.' : null)
@@ -69,11 +96,12 @@ export function SetupStep({ view, busy, error, post }: StepProps) {
   }
 
   const locationStatus = loc === 'granted' ? 'granted' : loc === 'denied' ? 'denied' : loc === 'unsupported' ? 'unsupported' : 'skipped'
+  const notificationStatus = notif === 'prompt' ? 'skipped' : notif
 
   return (
     <div className="anim-rise">
       <p className="text-[15px] leading-relaxed text-ink-mute">
-        Two things make the app work like an app, and one that is asked for later. None of them stop you continuing.
+        Three things make the app work like an app, and one that is asked for later. None of them stop you continuing.
       </p>
 
       {/* --- location ---------------------------------------------------- */}
@@ -107,6 +135,45 @@ export function SetupStep({ view, busy, error, post }: StepProps) {
             )}
             {loc === 'unsupported' && (
               <p className="mt-0.5 text-[13.5px] leading-snug text-ink-mute">This device does not offer location to the app.</p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* --- notifications -------------------------------------------------- */}
+      <section className="card mt-3 p-4" data-testid="setup-notifications" data-state={notif}>
+        <div className="flex items-start gap-3">
+          <span className={`mt-0.5 shrink-0 ${notif === 'granted' ? 'text-good' : 'text-accent'}`} aria-hidden>
+            {notif === 'granted' ? <IconCheck /> : <IconBell />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[15px] font-semibold">Notifications</p>
+            {notif === 'granted' && (
+              <p className="mt-0.5 text-[13.5px] leading-snug text-ink-mute">
+                On. Follow-up reminders and appointment alerts will arrive here once they launch; nothing is sent until then.
+              </p>
+            )}
+            {notif === 'prompt' && (
+              <>
+                <p className="mt-0.5 text-[13.5px] leading-snug text-ink-mute">
+                  For follow-up reminders and appointment alerts when they launch. Nothing is sent until then. Your phone will ask once.
+                </p>
+                <Button size="sm" className="mt-3" onClick={() => void askNotifications()} disabled={askingNotif} data-testid="setup-notifications-ask">
+                  {askingNotif ? 'Asking…' : 'Turn on notifications'}
+                </Button>
+              </>
+            )}
+            {notif === 'denied' && (
+              <p className="mt-0.5 text-[13.5px] leading-snug text-ink-mute">
+                Off. Reminders will not reach this phone. To turn them on later, allow notifications for this app in your phone’s settings.
+              </p>
+            )}
+            {notif === 'unsupported' && (
+              <p className="mt-0.5 text-[13.5px] leading-snug text-ink-mute">
+                {install === 'ios'
+                  ? 'On iPhone, notifications become available once Allstar is on your home screen — add it below first, then open it from there.'
+                  : 'This browser does not offer notifications to the app.'}
+              </p>
             )}
           </div>
         </div>
@@ -179,7 +246,7 @@ export function SetupStep({ view, busy, error, post }: StepProps) {
         full
         className="mt-6"
         disabled={busy || loc === 'checking'}
-        onClick={() => void post('setup', { locationStatus })}
+        onClick={() => void post('setup', { locationStatus, notificationStatus })}
         data-testid="setup-continue"
       >
         {busy ? 'Saving…' : loc === 'denied' || loc === 'prompt' ? 'Continue anyway' : 'Continue'}

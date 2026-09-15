@@ -117,6 +117,10 @@ ok(invitationStatus({ accepted_at: NOW - DAY, revoked_at: null, expires_at: NOW 
 ok(invitationStatus({ accepted_at: NOW - DAY, revoked_at: NOW, expires_at: NOW + DAY }, NOW) === 'accepted', 'accepted beats revoked — a used invitation was used')
 ok(invitationStatus({ accepted_at: null, revoked_at: NOW - DAY, expires_at: NOW - 1 }, NOW) === 'revoked', 'revoked beats expired — it records a decision, not a calendar')
 ok(invitationStatus({ accepted_at: null, revoked_at: null, expires_at: NOW }, NOW) === 'expired', 'the expiry instant is expired')
+ok(invitationStatus({ accepted_at: null, revoked_at: null, expires_at: NOW + DAY, opened_at: NOW - 60_000 }, NOW) === 'opened', 'a live link that was opened reads opened')
+ok(invitationStatus({ accepted_at: null, revoked_at: NOW, expires_at: NOW + DAY, opened_at: NOW - 60_000 }, NOW) === 'revoked', 'revoked beats opened — the admin cancelled it after they saw it')
+ok(invitationStatus({ accepted_at: null, revoked_at: null, expires_at: NOW - 1, opened_at: NOW - DAY }, NOW) === 'expired', 'expired beats opened — they saw it and let it lapse')
+ok(invitationStatus({ accepted_at: NOW, revoked_at: null, expires_at: NOW + DAY, opened_at: NOW - 60_000 }, NOW) === 'accepted', 'accepted beats opened')
 
 /* --- the badge id ----------------------------------------------------------- */
 {
@@ -131,12 +135,19 @@ ok(invitationStatus({ accepted_at: null, revoked_at: null, expires_at: NOW }, NO
 {
   const full = {
     ...row({ first_name: 'Jordan', last_name: 'Vale', badge_id: '32143567', badge_expires_at: NOW + 300 * DAY, badge_confirmed_at: NOW - DAY }),
-    avatar_url: 'data:image/jpeg;base64,x', location_status: 'granted', walkthrough_completed_at: NOW - DAY, role: 'field_rep', team_name: 'Austin',
+    avatar_url: 'data:image/jpeg;base64,x', location_status: 'granted', notification_status: 'granted', walkthrough_completed_at: NOW - DAY, role: 'field_rep', team_name: 'Austin',
   }
   const items = checklistFor(full, NOW)
-  ok(items.length === 7, 'the checklist has the brief’s seven lines (notifications replaced by nothing — there is no push)', `${items.length}`)
+  ok(items.length === 8, 'the checklist has the brief’s eight lines, notifications included', `${items.length}`)
   ok(items.every((i) => i.done), 'everything done reads as done')
   ok(canComplete(items), 'and can complete')
+
+  const noNotif = checklistFor({ ...full, notification_status: 'denied' }, NOW)
+  ok(!noNotif.find((i) => i.key === 'notifications_enabled').done, 'refused notifications are not done')
+  ok(canComplete(noNotif) && !noNotif.find((i) => i.key === 'notifications_enabled').required, 'but do NOT block completion — recommended, like location')
+  ok(/launch/i.test(noNotif.find((i) => i.key === 'notifications_enabled').detail ?? ''), 'and the line is honest that reminders have not launched yet')
+  const neverAsked = checklistFor({ ...full, notification_status: null }, NOW)
+  ok(!neverAsked.find((i) => i.key === 'notifications_enabled').done && canComplete(neverAsked), 'a phone from before the card existed reads not done, and still completes')
 
   const denied = checklistFor({ ...full, location_status: 'denied' }, NOW)
   ok(!denied.find((i) => i.key === 'location_enabled').done, 'a denied location is not done')

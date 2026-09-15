@@ -8,6 +8,7 @@ import type { TeamMember } from '../types'
 export const INVITATION_LABEL: Record<NonNullable<TeamMember['invitation']>, string> = {
   not_sent: 'Not sent',
   pending: 'Pending',
+  opened: 'Opened',
   accepted: 'Accepted',
   expired: 'Expired',
   revoked: 'Revoked',

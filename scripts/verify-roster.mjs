@@ -39,6 +39,7 @@ function makeWorld() {
     { id: 'u_admin', name: 'Nadia Petrov', firstName: 'Nadia', lastName: 'Petrov', email: 'nadia@ridgeline.test', role: 'super_admin', active: true, pending: false, invitation: 'not_sent', onboarding: 'complete', badge: 'active', badgeExpiresAt: NOW + 300 * DAY, createdAt: NOW - 100 * DAY, lastSeenAt: NOW - 60_000 },
     { id: 'u_marcus', name: 'Marcus Vance', firstName: 'Marcus', lastName: 'Vance', email: 'marcus@ridgeline.test', role: 'field_rep', jobTitle: 'Sales Representative', teamId: 't_austin', teamName: 'Austin', active: true, pending: false, invitation: 'accepted', invitedAt: NOW - 30 * DAY, onboarding: 'complete', badge: 'active', badgeExpiresAt: NOW + 335 * DAY, createdAt: NOW - 30 * DAY, lastSeenAt: NOW - 2 * 3_600_000 },
     { id: 'u_dana', name: 'Dana Whitfield', firstName: 'Dana', lastName: 'Whitfield', email: 'dana@ridgeline.test', role: 'field_rep', active: false, pending: true, invitation: 'pending', invitedAt: NOW - 8 * DAY, resentAt: NOW - DAY, onboarding: 'not_started', badge: 'none', createdAt: NOW - 8 * DAY },
+    { id: 'u_kim', name: 'Kim Alvarez', firstName: 'Kim', lastName: 'Alvarez', email: 'kim@ridgeline.test', role: 'field_rep', active: false, pending: true, invitation: 'opened', invitedAt: NOW - 5 * DAY, openedAt: NOW - 4 * DAY, onboarding: 'not_started', badge: 'none', createdAt: NOW - 5 * DAY },
     { id: 'u_lee', name: 'Lee Tran', firstName: 'Lee', lastName: 'Tran', email: 'lee@ridgeline.test', role: 'field_rep', active: false, pending: true, invitation: 'expired', invitedAt: NOW - 20 * DAY, onboarding: 'not_started', badge: 'none', createdAt: NOW - 20 * DAY },
     { id: 'u_priya', name: 'Priya Natarajan', firstName: 'Priya', lastName: 'Natarajan', email: 'priya@ridgeline.test', role: 'manager', active: true, pending: false, invitation: 'accepted', invitedAt: NOW - 3 * DAY, onboarding: 'in_progress', onboardingStep: 'walkthrough', badge: 'awaiting_confirmation', badgeExpiresAt: NOW + 362 * DAY, createdAt: NOW - 3 * DAY, lastSeenAt: NOW - 20 * 60_000 },
     { id: 'u_sam', name: 'Sam Okafor', firstName: 'Sam', lastName: 'Okafor', email: 'sam@ridgeline.test', role: 'field_rep', active: false, pending: false, invitation: 'accepted', invitedAt: NOW - 400 * DAY, onboarding: 'complete', badge: 'expired', badgeExpiresAt: NOW - 30 * DAY, createdAt: NOW - 400 * DAY, lastSeenAt: NOW - 60 * DAY },
@@ -171,6 +172,8 @@ const called = (w, method, path) => w.calls.filter((c) => c.method === method &&
   ok((await dana.getByTestId('col-onboarding').getAttribute('data-value')) === 'Not started' && (await dana.getByTestId('col-badge').getAttribute('data-value')) === 'Not created', 'with onboarding not started and no badge')
   const lee = row(page, 'Lee Tran')
   ok((await lee.getByTestId('col-invitation').getAttribute('data-value')) === 'Expired', 'a stale link reads Expired', await lee.getByTestId('col-invitation').getAttribute('data-value'))
+  const kim = row(page, 'Kim Alvarez')
+  ok((await kim.getByTestId('col-invitation').getAttribute('data-value')) === 'Opened' && (await kim.getByTestId('col-account').getAttribute('data-value')) === 'Invite pending', 'a link that was opened but not used reads Opened / Invite pending', await kim.getByTestId('col-invitation').getAttribute('data-value'))
   const priya = row(page, 'Priya Natarajan')
   ok((await priya.getByTestId('col-onboarding').getAttribute('data-value')) === 'In progress' && (await priya.getByTestId('col-badge').getAttribute('data-value')) === 'Awaiting confirmation', 'someone mid-flow reads In progress / Awaiting confirmation')
   const sam = row(page, 'Sam Okafor')
@@ -184,7 +187,7 @@ const called = (w, method, path) => w.calls.filter((c) => c.method === method &&
   ok((await page.locator('tbody tr').count()) === 1 && (await priya.count()) === 1, 'Still setting up keeps only the person mid-flow', `${await page.locator('tbody tr').count()} rows`)
   await page.getByRole('button', { name: /^Invite open/ }).click()
   await page.waitForTimeout(300)
-  ok((await page.locator('tbody tr').count()) === 2 && (await dana.count()) === 1 && (await lee.count()) === 1, 'Invite open keeps the pending and the expired invitation', `${await page.locator('tbody tr').count()} rows`)
+  ok((await page.locator('tbody tr').count()) === 3 && (await dana.count()) === 1 && (await kim.count()) === 1 && (await lee.count()) === 1, 'Invite open keeps the pending, the opened and the expired invitation', `${await page.locator('tbody tr').count()} rows`)
   await page.getByRole('button', { name: /^Badge not active/ }).click()
   await page.waitForTimeout(300)
   ok((await page.locator('tbody tr').count()) === 1 && (await priya.count()) === 1, 'Badge not active is about working accounts — a deactivated rep’s expired badge is not a to-do', `${await page.locator('tbody tr').count()} rows`)
@@ -225,6 +228,18 @@ const called = (w, method, path) => w.calls.filter((c) => c.method === method &&
   ok(called(w, 'POST', '/api/invites/u_dana/revoke').length === 1, 'Revoke calls the revoke endpoint')
   ok((await detail.getByRole('button', { name: /^Revoke invite$/ }).count()) === 0 && (await detail.getByRole('button', { name: /^Send invite$/ }).count()) === 1, 'after which the sheet reads the refreshed roster: no link to revoke, an invite to send')
   await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
+
+  /* --- someone who opened the link and stopped ------------------------------- */
+  await row(page, 'Kim Alvarez').click()
+  await page.waitForTimeout(700)
+  ok((await detail.count()) === 1 && /Opened/.test(await text(detail.getByTestId('member-statuses'))), 'the sheet states Opened for someone who saw their link')
+  ok(/opened their link but have not set a password/i.test(await text(detail.getByTestId('manage-invitation'))), 'and says what that means')
+  const kimDates = await text(detail.getByTestId('manage-invite-dates'))
+  ok(/^Invited \w{3} \d{1,2}, \d{4}/.test(kimDates) && /Opened \w{3} \d{1,2}, \d{4}$/.test(kimDates), 'with the date they opened it', kimDates)
+  ok((await detail.getByRole('button', { name: /^Re-send invite$/ }).count()) === 1 && (await detail.getByRole('button', { name: /^Revoke invite$/ }).count()) === 1, 'an opened link can still be re-sent or revoked — it is live')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
   await page.waitForTimeout(500)
   ok((await dana.getByTestId('col-invitation').getAttribute('data-value')) === 'Revoked', 'the roster row reads Revoked', await dana.getByTestId('col-invitation').getAttribute('data-value'))
 
