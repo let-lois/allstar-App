@@ -9,6 +9,8 @@
  */
 const STEPS = ['profile', 'setup', 'walkthrough', 'badge', 'checklist']
 const DAY = 86_400_000
+/** A one-pixel PNG: the smallest thing that is still a photo. */
+const PHOTO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
 
 /** A person, and the server's rules about them. */
 function makeState(over = {}) {
@@ -82,6 +84,8 @@ async function mockApi(page, s) {
       user: userOf(s),
       properties: [{ id: 'p1', address1: '1420 Cedar Bend Dr', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.5115, lng: -97.6755, status: 'new', score: 60, assignedRepId: s.id, contacts: [] }],
       routes: [], appointments: [], tasks: [], activity: [], dailyStats: [], territories: [], serverTime: Date.now(),
+      // The roster is how a face reaches a phone: the same road the Worker uses.
+      team: [{ id: s.id, name: nameOf(s), role: s.role, active: true, avatarUrl: s.hasPhoto ? PHOTO : undefined }],
     })),
   )
   await page.route('**/api/me', (r) => r.fulfill(json(200, { user: userOf(s) })))
@@ -171,4 +175,4 @@ async function targets(page) {
 
 const body = (page) => page.locator('body').innerText().then((t) => t.replace(/\s+/g, ' '))
 
-export { STEPS, DAY, makeState, nameOf, badgeStatus, checklist, canComplete, view, userOf, json, mockApi, phone, signIn, targets, body }
+export { STEPS, DAY, PHOTO, makeState, nameOf, badgeStatus, checklist, canComplete, view, userOf, json, mockApi, phone, signIn, targets, body }

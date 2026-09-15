@@ -82,8 +82,23 @@ const readyForBadge = (over = {}) =>
   await page.waitForTimeout(600)
   ok((await page.getByTestId('onboarding').getAttribute('data-step')) === 'badge' && (await badge.count()) === 1, 'the badge step shows the team badge')
   ok((await page.getByTestId('badge-logo').count()) === 1 && (await page.getByTestId('badge-lockup').count()) === 0, 'headed by the company logo when the admin set one')
-  ok((await page.getByTestId('badge-company').innerText()) === 'Ridgeline Roofing', 'and the company name')
-  ok((await page.getByTestId('badge-name').innerText()) === 'Marcus Vance', 'the name from both halves')
+  ok((await page.getByTestId('badge-company').textContent()) === 'Ridgeline Roofing', 'and the company name')
+  const kind = (await page.getByTestId('badge-kind').count()) ? (await page.getByTestId('badge-kind').innerText()).trim() : '(none)'
+  ok(/^team member$/i.test(kind), 'headed TEAM MEMBER on the blue band', kind)
+  ok((await page.getByTestId('badge-photo').getAttribute('data-state')) === 'present', 'the face on the card is the profile photo', await page.getByTestId('badge-photo').getAttribute('data-state'))
+  ok(/^sales representative$/i.test((await page.getByTestId('badge-title').innerText()).trim()), 'title under the name')
+  {
+    const issued = await page.getByTestId('badge-issued').innerText()
+    const expires = await page.getByTestId('badge-expires').innerText()
+    const yearOf = (t) => Number(t.split('/')[2])
+    ok(/^\d{2}\/\d{2}\/\d{4}$/.test(issued) && /^\d{2}\/\d{2}\/\d{4}$/.test(expires) && yearOf(expires) - yearOf(issued) === 1, 'ISSUED and EXPIRES are dated, a year apart', `${issued} → ${expires}`)
+  }
+  {
+    const card = await badge.boundingBox()
+    const bg = await badge.evaluate((el) => getComputedStyle(el).backgroundColor)
+    ok(card && card.height > card.width * 1.35 && bg === 'rgb(255, 255, 255)', 'the card is a white portrait', `${Math.round(card?.width ?? 0)}x${Math.round(card?.height ?? 0)} ${bg}`)
+  }
+  ok((await page.getByTestId('badge-name').textContent()) === 'Marcus Vance', 'the name from both halves')
   ok(/#32143567/.test(await page.getByTestId('badge-id').innerText()), 'the id', await page.getByTestId('badge-id').innerText())
   ok((await badge.getAttribute('data-status')) === 'awaiting_confirmation' && /awaiting confirmation/i.test(await page.getByTestId('badge-status').innerText()), 'unconfirmed reads as awaiting confirmation', await badge.getAttribute('data-status'))
   const qrEl = page.getByTestId('badge-qr')
@@ -114,8 +129,32 @@ const readyForBadge = (over = {}) =>
   await page.waitForTimeout(600)
   ok((await page.getByTestId('badge-qr').count()) === 1 && (await page.getByTestId('badge-qr').getAttribute('data-target')) === `${BASE}/verify/32143567`, 'the QR code is there with no website — it points at the badge’s check, not at a site')
   ok((await page.getByTestId('badge-qr-missing').count()) === 0, 'and no placeholder')
-  ok((await page.getByTestId('badge-logo').count()) === 0 && (await page.getByTestId('badge-lockup').innerText()) === 'R', 'a lettered lockup stands in for a logo', await page.getByTestId('badge-lockup').innerText())
+  ok((await page.getByTestId('badge-logo').count()) === 0 && (await page.getByTestId('badge-lockup').textContent()) === 'Ridgeline Roofing', 'the company name, in the official lockup, stands in for a logo', await page.getByTestId('badge-lockup').textContent())
   ok(!(await page.getByTestId('badge-confirm').isDisabled()), 'neither gap blocks confirming — the badge is valid without them')
+  await ctx.close()
+}
+
+/* ========================================================================== */
+/* No photo: the card shows where the face goes, and will not be confirmed    */
+/* ========================================================================== */
+{
+  const s = readyForBadge({ hasPhoto: false })
+  const ctx = await phone()
+  const page = await ctx.newPage()
+  await mockApi(page, s)
+  await signIn(page, s.email)
+  await page.waitForTimeout(600)
+  ok((await page.getByTestId('badge-photo').getAttribute('data-state')) === 'missing', 'with no photo the card shows a placeholder where the face goes', await page.getByTestId('badge-photo').getAttribute('data-state'))
+  ok((await page.getByTestId('badge-needs-photo').count()) === 1, 'and says a photo is needed before confirming')
+  ok(await page.getByTestId('badge-confirm').isDisabled(), 'Confirm badge information is disabled')
+  await page.getByTestId('badge-confirm').click({ force: true }).catch(() => {})
+  await page.waitForTimeout(300)
+  ok(s.badge?.confirmedAt == null, 'and forcing a tap on it confirms nothing')
+  const addPhoto = page.getByTestId('badge-add-photo')
+  ok((await addPhoto.count()) === 1, 'and offers Add your photo')
+  await ((await addPhoto.count()) ? addPhoto : page.getByRole('button', { name: /Fix your name or title/ })).click({ timeout: 3000 }).catch(() => {})
+  await page.waitForTimeout(400)
+  ok((await page.getByTestId('onboarding').getAttribute('data-step')) === 'profile', 'Add your photo goes to the profile, where the picker is')
   await ctx.close()
 }
 
@@ -150,7 +189,7 @@ const readyForBadge = (over = {}) =>
   let v = await open('32143567')
   ok((await v.count()) === 1 && (await page.getByTestId('onboarding').count()) === 0 && (await page.locator('input[type="email"]').count()) === 0, 'the page renders with no sign-in and no app around it')
   ok(lookups === 1 && (await v.getAttribute('data-state')) === 'active' && /valid/i.test(await page.getByTestId('verify-verdict').innerText()), 'an active badge is called valid', await v.getAttribute('data-state'))
-  ok((await page.getByTestId('badge-name').innerText()) === 'Marcus Vance' && /Ridgeline Roofing/.test(await body(page)) && /#32143567/.test(await page.getByTestId('badge-id').innerText()), 'with the name, the company and the number to compare against the badge in hand')
+  ok((await page.getByTestId('badge-name').textContent()) === 'Marcus Vance' && /Ridgeline Roofing/.test(await body(page)) && /#32143567/.test(await page.getByTestId('badge-id').innerText()), 'with the name, the company and the number to compare against the badge in hand')
   ok((await page.getByTestId('badge-qr').count()) === 0, 'and no QR code — a code to the page you are on is noise')
   ok((await page.getByTestId('verify-website').count()) === 1 && (await page.getByTestId('verify-website').getAttribute('href')) === SITE, 'the company website is a link when the company set one')
   const small = await targets(page)
@@ -160,7 +199,7 @@ const readyForBadge = (over = {}) =>
   v = await open('51234567')
   ok((await v.getAttribute('data-state')) === 'pending' && /not active yet/i.test(await page.getByTestId('verify-verdict').innerText()), 'an unconfirmed badge reads as not active yet')
   v = await open('61234567')
-  ok((await v.getAttribute('data-state')) === 'inactive' && /no longer/i.test(await page.getByTestId('verify-verdict').innerText()) && (await page.getByTestId('badge-name').innerText()) === 'Lee Tran', 'a removed team member’s badge reads as no longer valid, with the name')
+  ok((await v.getAttribute('data-state')) === 'inactive' && /no longer/i.test(await page.getByTestId('verify-verdict').innerText()) && (await page.getByTestId('badge-name').textContent()) === 'Lee Tran', 'a removed team member’s badge reads as no longer valid, with the name')
   v = await open('71234567')
   ok((await v.getAttribute('data-state')) === 'unknown' && /no badge with this number/i.test(await page.getByTestId('verify-verdict').innerText()) && (await page.getByTestId('team-badge').count()) === 0, 'a number nobody holds says so and draws no badge')
   v = await open('99999999')

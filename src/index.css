@@ -437,6 +437,41 @@
    * the step in value and the hairline; the shadow only keeps the corners
    * from looking cut out.
    */
+  /*
+   * The team member badge's own colours.
+   *
+   * A badge is a company-issued card, not a piece of the app's chrome: it is
+   * white with a corporate blue header in the dark theme and in the light one,
+   * on the phone and on the verification page a homeowner opens. The values
+   * are literal for that reason — a token that followed the theme would print
+   * two different badges for the same person.
+   */
+  .badge-blue {
+    background: #1f6bd1;
+    color: #ffffff;
+  }
+  .badge-blue-ink {
+    color: #1f6bd1;
+  }
+  .badge-paper {
+    background: #ffffff;
+    color: #0b1220;
+  }
+  /*
+   * Restated, unchanged, for the light theme: the theme gate asks that every
+   * surface painting itself a fixed colour say what it does under light text,
+   * and the badge's answer is "the same card". Saying so here keeps that a
+   * decision the gate can read rather than an omission it has to forgive.
+   */
+  :root[data-theme='light'] .badge-blue {
+    background: #1f6bd1;
+    color: #ffffff;
+  }
+  :root[data-theme='light'] .badge-paper {
+    background: #ffffff;
+    color: #0b1220;
+  }
+
   .card {
     @apply rounded-card;
     background: rgb(var(--surface));

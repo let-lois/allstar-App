@@ -243,13 +243,13 @@ try {
   let rep = await signIn(repCtx, REP)
   await rep.goto(`${APP}/badge`, { waitUntil: 'domcontentloaded' })
   await settle(rep, 1800)
-  ok((await rep.getByTestId('badge-name').innerText()) === 'Bea Whitfield', 'the badge carries the rep’s name')
+  ok((await rep.getByTestId('badge-name').textContent()) === 'Bea Whitfield', 'the badge carries the rep’s name')
   ok((await rep.getByTestId('badge-id').innerText()).includes(badgeId), 'and the number the server issued', await rep.getByTestId('badge-id').innerText())
-  ok(/Summit Exteriors/.test(await text(rep)), 'and the company')
+  ok(/Summit Exteriors/i.test(await text(rep)), 'and the company')
   await rep.goto(`${APP}/verify/${badgeId}`, { waitUntil: 'domcontentloaded' })
   await settle(rep, 1800)
   ok((await rep.getByTestId('verify-page').getAttribute('data-state')) === 'active', 'a homeowner scanning the badge is told it is valid', await rep.getByTestId('verify-page').getAttribute('data-state'))
-  ok((await rep.getByTestId('badge-name').innerText()) === 'Bea Whitfield', 'with the same name')
+  ok((await rep.getByTestId('badge-name').textContent()) === 'Bea Whitfield', 'with the same name')
 
   /* ---- the manager's team view ------------------------------------------- */
   const mgrCtx = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true })
