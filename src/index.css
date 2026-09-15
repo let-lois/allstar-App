@@ -457,6 +457,20 @@
     background: #ffffff;
     color: #0b1220;
   }
+  /*
+   * Restated, unchanged, for the light theme: the theme gate asks that every
+   * surface painting itself a fixed colour say what it does under light text,
+   * and the badge's answer is "the same card". Saying so here keeps that a
+   * decision the gate can read rather than an omission it has to forgive.
+   */
+  :root[data-theme='light'] .badge-blue {
+    background: #1f6bd1;
+    color: #ffffff;
+  }
+  :root[data-theme='light'] .badge-paper {
+    background: #ffffff;
+    color: #0b1220;
+  }
 
   .card {
     @apply rounded-card;
