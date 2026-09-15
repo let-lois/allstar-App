@@ -1192,6 +1192,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (prop) {
       updatedProp = {
         ...prop,
+        // A door nobody owned belongs to whoever knocked it — the server applies
+        // the same rule, so the phone shows it now rather than after a refresh.
+        assignedRepId: prop.assignedRepId ?? visit.repId,
         lastVisitAt: endedAt,
         lastOutcome: visit.outcome ?? prop.lastOutcome,
         nextActionAt: visit.nextActionAt,

@@ -743,7 +743,7 @@ export function GoogleFieldMap({
     }
     const bounds = new google.maps.LatLngBounds()
     for (const p of points) bounds.extend(p)
-    map.fitBounds(bounds, 56)
+    map.fitBounds(bounds, 64)
   }, [])
   const fit = useCallback(
     (points: { lat: number; lng: number }[]) => {

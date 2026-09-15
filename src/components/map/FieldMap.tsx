@@ -76,6 +76,8 @@ const CLUSTER_UNTIL_ZOOM = 17
 const CLUSTER_CELL_PX = 58
 /** How far above a covering sheet a revealed pin should sit. One pin's height. */
 const PIN_MARGIN = 44
+/** Room left round a fitted set of points, so the tallest pin glyph is inside. */
+const FIT_PAD = 64
 
 export interface MapHandle {
   flyTo: (lat: number, lng: number, zoom?: number) => void
@@ -321,11 +323,24 @@ export function FieldMap({
       setView({ lat: points[0].lat, lng: points[0].lng, zoom: 18 })
       return
     }
-    setView({ ...centerOf(points), zoom: fitZoom(points, w, h) })
+    /*
+      Padded in pixels, not as a fraction of the span. Four houses on one block
+      span a hundred metres; fifteen per cent of that is a few pixels, and a pin
+      is drawn forty-four pixels tall above its point — so the northernmost
+      house's pin was clipped by the top edge while its coordinate was
+      technically in view. FIT_PAD leaves room for the glyph on every side.
+    */
+    setView({
+      ...centerOf(points),
+      zoom: fitZoom(points, Math.max(1, w - 2 * FIT_PAD), Math.max(1, h - 2 * FIT_PAD), 0),
+    })
   }, [])
   const fit = useCallback(
     (points: { lat: number; lng: number }[]) => {
       if (points.length === 0) return
+      // Stop following the rep's position now, not when the box is measured:
+      // a fix that arrives in between would drag the view off the list.
+      setFollowMe(false)
       if (size.w === 0 || size.h === 0) {
         pendingFit.current = points
         return

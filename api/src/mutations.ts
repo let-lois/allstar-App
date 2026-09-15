@@ -212,6 +212,16 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
 
       // The outcome is what moves the lead — status is derived, never sent.
       const nextStatus = outcome ? OUTCOME_TO_STATUS[outcome] : undefined
+      /*
+        A door nobody owned belongs to whoever knocked it.
+
+        Houses on a list handed to a rep carry no assigned_rep_id: the list
+        confers visibility, and handing it out was deliberately not a
+        reassignment. But once a rep has stood at the door and recorded what
+        happened, "Assigned: nobody" in the console is simply wrong, and the
+        export would say the same. COALESCE keeps every explicit assignment —
+        a house the office gave to someone else stays theirs.
+      */
       await env.DB.prepare(
         `UPDATE properties
             SET last_outcome = COALESCE(?2, last_outcome),
@@ -219,6 +229,7 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
                 status = COALESCE(?4, status),
                 next_action_at = ?5,
                 next_action_label = ?6,
+                assigned_rep_id = COALESCE(assigned_rep_id, ?8),
                 updated_at = ?3
           WHERE id = ?1 AND client_id = ?7`,
       )
@@ -230,6 +241,7 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
           num(p.nextActionAt),
           str(p.nextActionLabel),
           user.clientId,
+          user.id,
         )
         .run()
 
