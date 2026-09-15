@@ -391,6 +391,12 @@ try {
     await page.mouse.click(200, 430)
     await page.waitForTimeout(800)
     if (await page.locator('[data-testid="add-lead-sheet"]').isVisible().catch(() => false)) {
+      // The sheet opens on the house; the form is behind Add lead. See verify:mapadd.
+      const addLead = page.getByTestId('detected-add-lead')
+      if ((await addLead.count()) > 0) {
+        await addLead.click()
+        await page.waitForTimeout(400)
+      }
       await page.locator('input[autocomplete="street-address"]').fill('1 Unsaveable Way')
       await page.getByRole('button', { name: /Save lead/ }).click()
       await page.waitForTimeout(1200)

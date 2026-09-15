@@ -217,6 +217,11 @@ try {
     const mb = await map.boundingBox()
     await page.mouse.click(mb.x + mb.width * 0.5, mb.y + mb.height * 0.25)
     await page.waitForTimeout(1500)
+    // The sheet opens on what the map found — here, with the geocoder refusing,
+    // on "Address not found" — and the form is one tap further. See verify:mapadd.
+    ok((await page.getByTestId('detected-property').count()) === 1, 'the tap opens on the house, not on a form')
+    await page.getByTestId('detected-add-lead').click()
+    await page.waitForTimeout(500)
     const tapped = (await readout(page)).match(/Pinned where you tapped — ([\d.-]+), ([\d.-]+)/)
     ok(!!tapped, 'tapping the map drops a pin and says where', tapped ? `${tapped[1]}, ${tapped[2]}` : await readout(page))
 

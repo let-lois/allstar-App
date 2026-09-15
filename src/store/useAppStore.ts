@@ -124,6 +124,15 @@ interface AppState {
    * demo mode — so every screen that names a rep reads from one place.
    */
   team: TeamMember[]
+  /**
+   * Names for everyone on the account, for a rep's phone.
+   *
+   * `team` is the office's roster and stays empty for a field rep, who is not
+   * allowed `/api/users`. This is the names-only list bootstrap sends everybody
+   * so a rep id can be shown as a person — on the standings, and on a house's
+   * sheet under "Assigned to".
+   */
+  roster: { id: string; name: string; role: string; active: boolean; avatarUrl?: string }[]
 
   /** The visit currently open in Visit Mode, if any. */
   activeVisitId: string | null
@@ -363,6 +372,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   territories: {},
   leadLists: {},
   team: [],
+  roster: [],
   settings: {},
   timezone: '',
   activeVisitId: null,
@@ -548,6 +558,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       ready: true,
       user: me,
       mode,
+      roster,
       routes,
       properties: indexById(properties),
       route: routeFor(routes, me?.id, timezone),
@@ -1480,6 +1491,22 @@ export function useScopedProperties(): Property[] {
     const via = leadIdsViaLists(user!, Object.values(leadLists))
     return all.filter((p) => canSee(p, user, via))
   }, [properties, leadLists, user])
+}
+
+/**
+ * A rep id as a person, from whichever list this phone has.
+ *
+ * The office's roster first, then the names-only one bootstrap sends a rep,
+ * then the signed-in user themselves — a rep looking at their own house should
+ * read their own name, not their id. `undefined` when nobody by that id is
+ * known, so the caller can say "somebody who has left" rather than print a hash.
+ */
+export function useRepName(id: string | undefined): string | undefined {
+  const team = useAppStore((s) => s.team)
+  const roster = useAppStore((s) => s.roster)
+  const user = useAppStore((s) => s.user)
+  if (!id) return undefined
+  return team.find((m) => m.id === id)?.name ?? roster.find((m) => m.id === id)?.name ?? (user?.id === id ? user.name : undefined)
 }
 
 /** The lists this person works — handed to them or made by them. Live only. */
