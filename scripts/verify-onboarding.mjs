@@ -108,36 +108,23 @@ const signIn = (page, email) => signInAt(page, BASE, email)
   await page.waitForTimeout(700)
   ok(s.posts[2]?.step === 'walkthrough' && (await shell.getAttribute('data-step')) === 'badge', 'finishing the last card posts the walkthrough and opens the badge')
 
-  /* --- badge: minted once, read, confirmed -------------------------------- */
+  /* --- badge: minted once, read — but not confirmable without a face ------ */
   await page.waitForTimeout(500)
   ok(s.mints === 1, 'opening the badge step minted exactly once', `${s.mints}`)
   ok(/#32143567/.test(await page.getByTestId('badge-id').innerText()), 'the badge shows its id', await page.getByTestId('badge-id').innerText())
-  ok((await page.getByTestId('badge-name').innerText()) === 'Marcus Vance', 'the name from both halves')
+  ok((await page.getByTestId('badge-name').textContent()) === 'Marcus Vance', 'the name from both halves')
   ok(/sales representative/i.test(await page.getByTestId('badge-title').innerText()), 'and the title')
-  ok(/Ridgeline Roofing/.test(await page.getByTestId('badge-preview').innerText()), 'and the company')
-  await page.getByTestId('badge-confirm').click()
-  await page.waitForTimeout(800)
-  ok(s.badge?.confirmedAt != null, 'confirming records the confirmation')
-  ok(s.posts[3]?.step === 'badge' && (await shell.getAttribute('data-step')) === 'checklist', 'and completes the step')
-  ok(s.mints === 1, 'still one mint after confirming and moving on', `${s.mints}`)
+  ok(/Ridgeline Roofing/i.test(await page.getByTestId('badge-preview').innerText()), 'and the company')
+  ok((await page.getByTestId('badge-photo').getAttribute('data-state')) === 'missing', 'with no photo yet, the card shows a placeholder where the face goes', await page.getByTestId('badge-photo').getAttribute('data-state'))
+  ok((await page.getByTestId('badge-needs-photo').count()) === 1 && (await page.getByTestId('badge-confirm').isDisabled()), 'and confirming is disabled until there is one — the card says why')
+  ok((await targets(page)).length === 0, 'every target on the badge step is at least 44px')
 
-  /* --- checklist: the server's lines, and a required one blocks ---------- */
-  const items = page.getByTestId('checklist-item')
-  ok((await items.count()) === 8, 'seven server lines plus this phone’s own install line', `${await items.count()}`)
-  const photo = items.filter({ has: page.locator('[data-key="photo_added"]') }).first()
-  const photoLine = page.locator('[data-testid="checklist-item"][data-key="photo_added"]')
-  ok((await photoLine.getAttribute('data-done')) === 'false', 'the photo line is not done')
-  ok(await page.getByTestId('checklist-complete').isDisabled(), 'and Complete setup is disabled because a required line is not done')
-  ok(/5 of 6 required/.test(await body(page)), 'the summary counts the required lines', (await body(page)).match(/\d of \d required[^.]*/)?.[0])
-  const locLine = await page.locator('[data-testid="checklist-item"][data-key="location_enabled"]').innerText()
-  ok(/recommended/i.test(locLine) && (await page.locator('[data-testid="checklist-item"][data-key="location_enabled"]').getAttribute('data-required')) === 'false', 'location is marked recommended, not required', locLine.replace(/\s+/g, ' '))
-  ok(/recommended/i.test(await page.locator('[data-testid="checklist-item"][data-key="installed"]').innerText()), 'and so is installing')
-  void photo
-
-  // Fix the photo: back to the profile, through the real picker and the real outbox.
-  await photoLine.getByRole('button', { name: /^Fix$/ }).click()
+  // Add the photo from the badge itself: to the profile, through the real picker and the real outbox.
+  const addPhoto = page.getByTestId('badge-add-photo')
+  ok((await addPhoto.count()) === 1, 'the card offers Add your photo')
+  await ((await addPhoto.count()) ? addPhoto : page.getByRole('button', { name: /Fix your name or title/ })).click({ timeout: 3000 }).catch(() => {})
   await page.waitForTimeout(400)
-  ok((await shell.getAttribute('data-step')) === 'profile', 'Fix on the photo line goes back to the profile')
+  ok((await shell.getAttribute('data-step')) === 'profile', 'Add your photo goes back to the profile')
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
   const mutation = page.waitForRequest((r) => r.url().includes('/api/mutations'), { timeout: 8000 }).catch(() => null)
   await page.locator('input[type="file"]').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: png })
@@ -146,9 +133,25 @@ const signIn = (page, email) => signInAt(page, BASE, email)
   ok(s.hasPhoto === true && s.mutations === 1, 'and the server records the photo')
   await page.getByRole('button', { name: /^Continue$/ }).click()
   await page.waitForTimeout(700)
-  ok((await shell.getAttribute('data-step')) === 'checklist', 'continuing from a redone profile returns to where the server holds the place — the checklist')
-  ok((await page.locator('[data-testid="checklist-item"][data-key="photo_added"]').getAttribute('data-done')) === 'true', 'the photo line is done now')
-  ok(!(await page.getByTestId('checklist-complete').isDisabled()), 'and Complete setup is enabled')
+  ok((await shell.getAttribute('data-step')) === 'badge', 'continuing from a redone profile returns to where the server holds the place — the badge')
+  ok(s.mints === 1, 'coming back did not mint again', `${s.mints}`)
+  ok((await page.getByTestId('badge-photo').getAttribute('data-state')) === 'present', 'the card now carries the face', await page.getByTestId('badge-photo').getAttribute('data-state'))
+  ok((await page.getByTestId('badge-needs-photo').count()) === 0 && !(await page.getByTestId('badge-confirm').isDisabled()), 'and confirming is open')
+  await page.getByTestId('badge-confirm').click()
+  await page.waitForTimeout(800)
+  ok(s.badge?.confirmedAt != null, 'confirming records the confirmation')
+  ok(s.posts.at(-1)?.step === 'badge' && (await shell.getAttribute('data-step')) === 'checklist', 'and completes the step')
+  ok(s.mints === 1, 'still one mint after confirming and moving on', `${s.mints}`)
+
+  /* --- checklist: the server's lines, all in place ------------------------- */
+  const items = page.getByTestId('checklist-item')
+  ok((await items.count()) === 8, 'seven server lines plus this phone’s own install line', `${await items.count()}`)
+  ok((await page.locator('[data-testid="checklist-item"][data-key="photo_added"]').getAttribute('data-done')) === 'true', 'the photo line is done — the badge would not confirm without it')
+  ok((await page.locator('[data-testid="checklist-item"][data-key="badge_confirmed"]').getAttribute('data-done')) === 'true', 'and so is the badge line')
+  const locLine = await page.locator('[data-testid="checklist-item"][data-key="location_enabled"]').innerText()
+  ok(/recommended/i.test(locLine) && (await page.locator('[data-testid="checklist-item"][data-key="location_enabled"]').getAttribute('data-required')) === 'false', 'location is marked recommended, not required', locLine.replace(/\s+/g, ' '))
+  ok(/recommended/i.test(await page.locator('[data-testid="checklist-item"][data-key="installed"]').innerText()), 'and so is installing')
+  ok(!(await page.getByTestId('checklist-complete').isDisabled()), 'Complete setup is enabled')
   ok(/Everything needed is in place/.test(await body(page)), 'the summary agrees')
   ok((await page.locator('[data-testid="checklist-item"][data-key="location_enabled"]').getAttribute('data-done')) === 'true', 'location reads done — it was granted')
 
@@ -165,6 +168,41 @@ const signIn = (page, email) => signInAt(page, BASE, email)
   ok((await page.locator('nav').count()) > 0, 'the app’s navigation is back')
   ok((await page.locator('[data-tour-card]').count()) === 0, 'the 22-step tour does not pile onto somebody who just finished the walkthrough')
   ok(errors.length === 0, `no page errors${errors.length ? ': ' + errors[0] : ''}`)
+  await ctx.close()
+}
+
+/* ========================================================================== */
+/* A required line undone at the checklist blocks Complete, and Fix mends it  */
+/* ========================================================================== */
+{
+  // Confirmed the badge before the photo rule existed; the server's checklist still holds the line.
+  const s = makeState({
+    firstName: 'Marcus', lastName: 'Vance', step: 'checklist', started: true, location: 'granted', setupAt: Date.now() - DAY, walkAt: Date.now() - DAY,
+    badge: { id: '32143567', issuedAt: Date.now() - DAY, expiresAt: Date.now() + 364 * DAY, confirmedAt: Date.now() - DAY },
+  })
+  const ctx = await phone({ permissions: ['geolocation'], geolocation: { latitude: 30.5115, longitude: -97.6755 } })
+  const page = await ctx.newPage()
+  await mockApi(page, s)
+  await signIn(page, s.email)
+  const shell = page.getByTestId('onboarding')
+  ok((await shell.getAttribute('data-step')) === 'checklist', 'opens at the checklist the server holds', await shell.getAttribute('data-step'))
+  const photoLine = page.locator('[data-testid="checklist-item"][data-key="photo_added"]')
+  ok((await photoLine.getAttribute('data-done')) === 'false', 'the photo line is not done')
+  ok(await page.getByTestId('checklist-complete').isDisabled(), 'and Complete setup is disabled because a required line is not done')
+  ok(/5 of 6 required/.test(await body(page)), 'the summary counts the required lines', (await body(page)).match(/\d of \d required[^.]*/)?.[0])
+  await photoLine.getByRole('button', { name: /^Fix$/ }).click()
+  await page.waitForTimeout(400)
+  ok((await shell.getAttribute('data-step')) === 'profile', 'Fix on the photo line goes back to the profile')
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+  const mutation = page.waitForRequest((r) => r.url().includes('/api/mutations'), { timeout: 8000 }).catch(() => null)
+  await page.locator('input[type="file"]').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: png })
+  ok((await mutation) !== null, 'the photo goes through the outbox')
+  await page.waitForTimeout(300)
+  ok(s.hasPhoto === true, 'and the server records it')
+  await page.getByRole('button', { name: /^Continue$/ }).click()
+  await page.waitForTimeout(700)
+  ok((await shell.getAttribute('data-step')) === 'checklist', 'continuing from a redone profile returns to the checklist')
+  ok((await photoLine.getAttribute('data-done')) === 'true' && !(await page.getByTestId('checklist-complete').isDisabled()), 'the photo line is done now and Complete setup is enabled')
   await ctx.close()
 }
 

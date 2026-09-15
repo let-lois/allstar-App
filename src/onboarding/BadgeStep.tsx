@@ -66,6 +66,9 @@ export function BadgeStep({ view, busy, error, post, goto }: StepProps) {
     }
   }
 
+  // The card is blank without a face on it, so it cannot be confirmed without
+  // one — the same rule the checklist applies, met here, where the card is.
+  const hasPhoto = view.profile.hasPhoto || !!user?.avatarUrl
   const name = [view.profile.firstName, view.profile.lastName].filter(Boolean).join(' ') || user?.name || ''
   const title = view.profile.jobTitle || (user ? ROLE_LABEL[user.role] : '')
   const company = user?.company ?? { name: user?.clientName ?? '', timezone: undefined }
@@ -99,6 +102,15 @@ export function BadgeStep({ view, busy, error, post, goto }: StepProps) {
         </div>
       )}
 
+      {!hasPhoto && (
+        <div className="mt-4 rounded-field bg-warn-bg px-3 py-2.5 text-[14px] text-warn" data-testid="badge-needs-photo">
+          <p className="font-medium">Your badge needs your photo before it can be confirmed.</p>
+          <Button size="sm" variant="secondary" className="mt-2" onClick={() => goto('profile')} data-testid="badge-add-photo">
+            Add your photo
+          </Button>
+        </div>
+      )}
+
       <p className="mt-4 text-[13px] leading-relaxed text-ink-mute">
         Something wrong?{' '}
         <button type="button" className="focusable inline-flex min-h-tap items-center font-semibold text-accent underline-offset-2 hover:underline" onClick={() => goto('profile')}>
@@ -111,7 +123,7 @@ export function BadgeStep({ view, busy, error, post, goto }: StepProps) {
         size="lg"
         full
         className="mt-6"
-        disabled={!badge || busy || confirming || badge.status === 'expired'}
+        disabled={!badge || !hasPhoto || busy || confirming || badge.status === 'expired'}
         onClick={() => void confirm()}
         data-testid="badge-confirm"
       >
