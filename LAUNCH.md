@@ -11,11 +11,12 @@ also in the README is recorded here for the first time.
 **Owner** is who can actually move it — several of these cannot be closed by
 writing code, which is the main thing this document is for.
 
-The code itself is in good shape: **47 browser gates and 18 API tests**, each
+The code itself is in good shape: **76 browser gates and 29 API tests**, each
 with a runner — `npm run verify:all` and `cd api && npm run smoke:all` — and all
-passing. Almost
-nothing below is a coding problem — and the two blockers added most recently
-(items 8 and 9) were found by writing a document, not by writing code.
+passing. One of the 29 is the restore drill against a real production dump,
+which stays manual by design and reports itself as skipped rather than passing.
+Almost nothing below is a coding problem — and the two blockers added most
+recently (items 8 and 9) were found by writing a document, not by writing code.
 
 ---
 

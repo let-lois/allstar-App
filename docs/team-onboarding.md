@@ -116,7 +116,7 @@ Dependency added: `qrcode-generator` (MIT, no dependencies, runs on the phone).
 
 ## Verification
 
-- 71 browser/static gates (`npm run verify:all`), including new `verify:onboarding`, `verify:badge`, `verify:roster`; each new gate was sabotage-proved (a deliberate break fails the assertion it guards).
+- 76 browser/static gates (`npm run verify:all`), including new `verify:onboarding`, `verify:badge`, `verify:roster`; each new gate was sabotage-proved (a deliberate break fails the assertion it guards).
 - 29 API smokes against real D1 (`cd api && npm run smoke:all`), including the migration-from-baseline smoke, the two-tenant login case, rate limiting on `/api/join`, and the full step machine.
 
 ## Known gaps and next improvements
