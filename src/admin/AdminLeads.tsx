@@ -31,6 +31,63 @@ import { VISITED_WINDOWS, matchesVisited, type VisitedWindow } from '../lib/lead
 
 const PAGE = 100
 
+/**
+ * How many leads go up in one delete request.
+ *
+ * The server erases one lead at a time — seven database round trips each, no
+ * transaction across the batch — and the browser abandons any request after
+ * twenty seconds. Locally that is seven milliseconds a lead and the ceiling
+ * never comes near; against a real database in one region, with a console open
+ * in another, the same work is a network round trip per statement and a large
+ * selection can outrun the browser.
+ *
+ * Twenty-five keeps a batch comfortably inside the limit at any plausible
+ * latency, and means a failure costs one batch rather than the whole selection.
+ * The server's own ceiling of 500 stays where it is, as a backstop for a caller
+ * that is not this one.
+ */
+const ERASE_BATCH = 25
+
+/**
+ * What to tell an administrator when a batch does not come back.
+ *
+ * The distinction in the middle is the one that matters and the one this screen
+ * used to throw away: `NetworkError` already knows whether the server answered
+ * and the browser refused its reply, or whether nothing was reached at all. The
+ * first is a deployment misconfiguration and retrying will never fix it; the
+ * second is worth trying again. The sign-in screen has told these apart since
+ * the day the flag was added. This one said "Could not reach the server" to
+ * both.
+ */
+function describeEraseFailure(err: unknown): { text: string; definite: boolean } {
+  /*
+    `definite` is whether we know what happened to the leads in the batch that
+    broke. A server that answers has decided: a refusal means it did nothing.
+    A request that never came back has decided nothing we can see — the leads in
+    it may all be gone, none, or some, because the server destroys them one at a
+    time and commits each before the next.
+  */
+  if (err instanceof ApiError) {
+    if (err.status === 403) return { text: 'You do not have permission to delete leads.', definite: true }
+    return { text: err.message, definite: true }
+  }
+  if (err instanceof NetworkError && err.blocked) {
+    return {
+      text: 'Reached the server, but the browser refused its reply. This address is probably missing from the API’s ALLOWED_ORIGINS — retrying will not fix it.',
+      definite: false,
+    }
+  }
+  if (err instanceof NetworkError) {
+    return {
+      text: navigator.onLine
+        ? 'Lost the connection to the server part way through.'
+        : 'This device is offline. Deleting leads needs a connection.',
+      definite: false,
+    }
+  }
+  return { text: 'Something went wrong part way through.', definite: false }
+}
+
 type SortKey = 'address' | 'status' | 'value' | 'recent'
 
 export default function AdminLeads() {
@@ -79,6 +136,9 @@ export default function AdminLeads() {
   const [eraseReason, setEraseReason] = useState('')
   const [erasing, setErasing] = useState(false)
   const [eraseError, setEraseError] = useState<string | null>(null)
+  // How far through the batches we are, so a long delete says so rather than
+  // looking hung. Null when nothing is running.
+  const [eraseProgress, setEraseProgress] = useState<{ done: number; total: number } | null>(null)
   /*
     A selection into a list.
 
@@ -356,30 +416,79 @@ export default function AdminLeads() {
     setEraseError(null)
     setError(null)
     setNotice(null)
+    setEraseProgress({ done: 0, total: ids.length })
+
+    let deleted = 0
+    let alreadyGone = 0
+    let notFound = 0
+    let failed = 0
+    let settled = 0
+    const gone: string[] = []
+    let broke: { text: string; definite: boolean; inFlight: number } | null = null
+
     try {
-      const res = await apiEraseLeads(token, { propertyIds: ids, reason: eraseReason.trim() })
-      const gone = ids.filter((id) => !res.failed.includes(id) && !res.notFound.includes(id))
-      await forgetProperties(gone)
+      for (let i = 0; i < ids.length; i += ERASE_BATCH) {
+        const batch = ids.slice(i, i + ERASE_BATCH)
+        try {
+          const res = await apiEraseLeads(token, { propertyIds: batch, reason: eraseReason.trim() })
+          deleted += res.deleted
+          alreadyGone += res.alreadyGone
+          notFound += res.notFound.length
+          failed += res.failed.length
+          gone.push(...batch.filter((id) => !res.failed.includes(id) && !res.notFound.includes(id)))
+          settled += batch.length
+          setEraseProgress({ done: settled, total: ids.length })
+        } catch (err) {
+          broke = { ...describeEraseFailure(err), inFlight: batch.length }
+          break
+        }
+      }
+
+      /*
+        Everything confirmed gone leaves this device, even when a later batch
+        broke. Those rows are destroyed on the server; keeping them on screen
+        would be the same lie in the other direction.
+      */
+      if (gone.length) await forgetProperties(gone)
+      void refreshFromServer()
+
+      if (broke) {
+        /*
+          What this replaces said "Nothing was deleted", which the client is in
+          no position to know. The server destroys one lead at a time and
+          commits each before starting the next, so a request that never came
+          back may have done all of its work, some of it, or none. What *is*
+          knowable is how many batches were confirmed before the break and how
+          many leads were in the one that was not — so that is what it says.
+        */
+        // Each clause is its own sentence, so the reason keeps its full stop
+        // only once and what follows reads as prose rather than a list.
+        const said = [broke.text.replace(/\.\s*$/, '')]
+        if (deleted) said.push(`${deleted.toLocaleString()} lead${deleted === 1 ? '' : 's'} had already been deleted before that`)
+        if (broke.inFlight) {
+          said.push(
+            broke.definite
+              ? `The remaining ${(ids.length - settled).toLocaleString()} were not deleted`
+              : `${broke.inFlight.toLocaleString()} more may or may not have been — refresh to see what is left`,
+          )
+        }
+        setEraseError(`${said.join('. ')}.`)
+        setSelected(new Set(ids.filter((id) => !gone.includes(id))))
+        return
+      }
+
       setConfirmErase(false)
       setEraseReason('')
       setSelected(new Set())
-      const parts = [`${res.deleted} lead${res.deleted === 1 ? '' : 's'} deleted`]
-      if (res.alreadyGone) parts.push(`${res.alreadyGone} ${res.alreadyGone === 1 ? 'was' : 'were'} already gone`)
-      if (res.notFound.length) parts.push(`${res.notFound.length} no longer exist${res.notFound.length === 1 ? 's' : ''} on this team`)
-      if (res.failed.length) parts.push(`${res.failed.length} could not be deleted — refresh and try again`)
-      if (res.failed.length) setError(`${parts.join('. ')}.`)
+      const parts = [`${deleted.toLocaleString()} lead${deleted === 1 ? '' : 's'} deleted`]
+      if (alreadyGone) parts.push(`${alreadyGone} ${alreadyGone === 1 ? 'was' : 'were'} already gone`)
+      if (notFound) parts.push(`${notFound} no longer exist${notFound === 1 ? 's' : ''} on this team`)
+      if (failed) parts.push(`${failed} could not be deleted — refresh and try again`)
+      if (failed) setError(`${parts.join('. ')}.`)
       else setNotice(`${parts.join('. ')}.`)
-      void refreshFromServer()
-    } catch (err) {
-      setEraseError(
-        err instanceof ApiError
-          ? err.status === 403
-            ? 'You do not have permission to delete leads.'
-            : err.message
-          : 'Could not reach the server. Nothing was deleted — check your connection and try again.',
-      )
     } finally {
       setErasing(false)
+      setEraseProgress(null)
     }
   }
 
@@ -921,7 +1030,11 @@ export default function AdminLeads() {
         <ConfirmDialog
           title={`Delete ${eraseNoun}?`}
           confirmLabel={`Delete ${eraseNoun}`}
-          busyLabel="Deleting leads…"
+          busyLabel={
+            eraseProgress && eraseProgress.total > ERASE_BATCH
+              ? `Deleting… ${eraseProgress.done.toLocaleString()} of ${eraseProgress.total.toLocaleString()}`
+              : 'Deleting leads…'
+          }
           busy={erasing}
           destructive
           confirmDisabled={eraseReason.trim().length < 3}
