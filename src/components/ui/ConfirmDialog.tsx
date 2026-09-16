@@ -52,7 +52,16 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+      /*
+        The *visible* viewport, not the layout one. iOS does not shrink the
+        layout viewport for the software keyboard, so `inset-0` centres a
+        dialog against a box that still believes it is full height — putting
+        the buttons of any dialog with an input in it behind the keyboard.
+        `--app-h` is already pinned to `visualViewport.height` for the app
+        shell; this borrows the same measurement.
+      */
+      className="fixed inset-x-0 top-0 z-50 grid place-items-center bg-black/40 p-4"
+      style={{ height: 'var(--app-h, 100dvh)' }}
       role={destructive ? 'alertdialog' : 'dialog'}
       aria-modal="true"
       aria-labelledby={`${testId}-title`}
@@ -62,12 +71,38 @@ export function ConfirmDialog({
         if (e.target === e.currentTarget && !busy) onCancel()
       }}
     >
-      <div ref={boxRef} className="w-full max-w-md rounded-card bg-surface p-6 shadow-float">
-        <h2 id={`${testId}-title`} className="text-[19px] font-semibold leading-tight">
-          {title}
-        </h2>
-        {children && <div className="mt-3 text-[15px] leading-relaxed text-ink-mute">{children}</div>}
-        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+      {/*
+        Capped at the viewport, with the question scrolling and the two buttons
+        held out of it — the same shape `BottomSheet` uses, and for the same
+        reason.
+
+        Centred content that outgrows its container overflows in both
+        directions, and a `fixed` parent has no scroll of its own to reach
+        either end with. The bulk-delete question is a paragraph, a required
+        input, a line of help and sometimes an error: on a phone that is taller
+        than the screen before the keyboard opens, and every pixel of it was
+        spent pushing Cancel and Confirm off the bottom, unreachable. A dialog
+        whose confirm button cannot be reached is not a dialog.
+      */}
+      {/*
+        The cap is written in the same units as the box around it rather than
+        as `max-h-full`. A percentage max-height on a centred grid item does
+        not reliably resolve against the padded area it sits in, and the panel
+        was ending eleven pixels past the bottom of it — which a measurement
+        caught and the eye would not have.
+      */}
+      <div
+        ref={boxRef}
+        className="flex w-full max-w-md flex-col rounded-card bg-surface shadow-float"
+        style={{ maxHeight: 'calc(var(--app-h, 100dvh) - 2rem)' }}
+      >
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6">
+          <h2 id={`${testId}-title`} className="text-[19px] font-semibold leading-tight">
+            {title}
+          </h2>
+          {children && <div className="mt-3 text-[15px] leading-relaxed text-ink-mute">{children}</div>}
+        </div>
+        <div className="flex shrink-0 flex-col-reverse gap-2 px-6 pb-6 pt-4 sm:flex-row sm:justify-end">
           <Button variant="secondary" disabled={busy} onClick={onCancel} data-testid={`${testId}-cancel`}>
             Cancel
           </Button>

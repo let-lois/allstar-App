@@ -164,6 +164,34 @@ try {
       await page.locator('input[autocomplete="name"]').fill('Sam Okonkwo')
       const save = page.getByRole('button', { name: /^Save lead$/ })
       ok((await tapSize(save)) >= 44, 'Save lead is a full thumb target')
+
+      /*
+        The keyboard, which Playwright cannot raise.
+
+        Typing into a field on a real phone brings up a software keyboard, and
+        on iOS that shrinks the *visible* viewport while leaving the layout one
+        at full height. The sheet is positioned against whichever of the two it
+        is told to use, so this simulates the keyboard the only way a headless
+        browser can: by moving `--app-h`, which is the property the app already
+        pins to `visualViewport.height`.
+
+        Without this, the sheet kept sizing itself against a height that no
+        longer existed and put its fields and this button behind the keyboard —
+        on the first screen a rep uses at a door, with no way to reach the
+        control that finishes the job.
+      */
+      const KEYBOARD = 336
+      const visible = (page.viewportSize()?.height ?? 844) - KEYBOARD
+      await page.evaluate((h) => document.documentElement.style.setProperty('--app-h', `${h}px`), visible)
+      await page.waitForTimeout(400)
+      const withKeyboard = await save.boundingBox()
+      ok(
+        !!withKeyboard && withKeyboard.y + withKeyboard.height <= visible + 1,
+        `Save lead stays above a ${KEYBOARD}px keyboard rather than behind it`,
+        withKeyboard ? `button ends at ${Math.round(withKeyboard.y + withKeyboard.height)}px, keyboard starts at ${visible}px` : 'no box',
+      )
+      await page.evaluate(() => document.documentElement.style.removeProperty('--app-h'))
+      await page.waitForTimeout(300)
       await save.click()
       await page.waitForTimeout(2000)
       const peek = page.getByTestId('property-peek')

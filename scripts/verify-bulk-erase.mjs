@@ -99,6 +99,7 @@ async function signIn(page, email) {
   await dismissTour(page)
 }
 const desktop = () => browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' })
+const handset = () => browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' })
 // DataList renders phone cards and the desktop table both, and hides one by
 // breakpoint — so the row checkboxes exist twice, and only the table's are
 // laid out here. Scoped to the table, or the first match is a 0x0 box.
@@ -394,6 +395,71 @@ const rows = (page) => page.locator('tbody tr')
   const said = (await errBox.count()) ? await text(errBox) : '(nothing reported)'
   ok(/permission/i.test(said), 'a refusal is worded as a refusal', said)
   ok(/were not deleted/.test(said) && !/may or may not/.test(said), 'and because the server answered, the rest is stated rather than guessed', said)
+  await ctx.close()
+}
+
+/* ========================================================================== */
+/* The dialog on a phone, with the keyboard up: both buttons still reachable   */
+/* ========================================================================== */
+{
+  /*
+    This question is a paragraph, a required input, a line of help and
+    sometimes an error — taller than a phone before anything is typed, and the
+    input means the keyboard is up while it is read. Centred content that
+    outgrows a `fixed` box overflows past both ends of it with no scroll to
+    reach either, so what went off the bottom was Cancel and Delete.
+
+    The keyboard is simulated by moving `--app-h`, the property the app pins to
+    `visualViewport.height`; a headless browser has no other way to raise one.
+  */
+  const w = makeWorld('client_admin', 5)
+  const ctx = await handset()
+  const page = await ctx.newPage()
+  await mockApi(page, w)
+  await signIn(page, 'nadia@ridgeline.test')
+  await page.goto(`${BASE}/admin/leads`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1600)
+  /*
+    Cards, not a table: the console drops its table below `lg`, so the row
+    checkboxes live inside the cards here rather than in a `tbody`.
+  */
+  const boxes = page.locator('ul li input[type="checkbox"]')
+  ok((await boxes.count()) >= 3, 'the leads list offers selection on a phone too', `${await boxes.count()} checkboxes`)
+  for (const i of [0, 1, 2]) await boxes.nth(i).check()
+  await page.waitForTimeout(300)
+  await page.getByTestId('bulk-delete').click()
+  await page.waitForTimeout(400)
+  const dlg = page.getByTestId('bulk-delete-dialog')
+  ok((await dlg.count()) === 1, 'the dialog opens on a phone')
+
+  const KEYBOARD = 336
+  const visible = 844 - KEYBOARD
+  await page.evaluate((h) => document.documentElement.style.setProperty('--app-h', `${h}px`), visible)
+  await page.waitForTimeout(400)
+
+  for (const [name, testId] of [['Cancel', 'bulk-delete-dialog-cancel'], ['Delete', 'bulk-delete-dialog-confirm']]) {
+    const box = await dlg.getByTestId(testId).boundingBox()
+    ok(
+      !!box && box.y >= 0 && box.y + box.height <= visible + 1,
+      `${name} stays on screen with the keyboard up`,
+      box ? `ends at ${Math.round(box.y + box.height)}px, keyboard starts at ${visible}px` : 'no box',
+    )
+  }
+  /*
+    The whole panel inside the visible strip, not merely short enough to fit
+    one. Height alone does not discriminate: a panel that comfortably fits is
+    still unusable when it has been centred against a box that thinks the
+    keyboard is not there, which is precisely what was happening.
+  */
+  const panel = await dlg.locator('> div').first().boundingBox()
+  ok(
+    !!panel && panel.y >= -1 && panel.y + panel.height <= visible + 1,
+    'and the panel sits wholly inside the part of the screen the keyboard leaves',
+    panel ? `${Math.round(panel.y)}px to ${Math.round(panel.y + panel.height)}px, keyboard starts at ${visible}px` : 'no box',
+  )
+  const reason = dlg.getByTestId('bulk-delete-reason')
+  ok(await reason.isVisible(), 'the reason field is still reachable too')
+  await page.evaluate(() => document.documentElement.style.removeProperty('--app-h'))
   await ctx.close()
 }
 
