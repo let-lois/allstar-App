@@ -70,12 +70,27 @@ export function sessionKnown(): boolean {
 }
 
 /**
- * True only when we know we're in demo mode. Before the session is read this is
- * false, so callers fall through to the "can't act yet" path rather than
- * defaulting into the simulator.
+ * True only when we know we're in demo mode — that is, when a demo session is
+ * actually on disk. Before the session is read this is false, so callers fall
+ * through to the "can't act yet" path rather than defaulting into the
+ * simulator.
+ *
+ * `=== 'demo'` and not `!== 'live'`, which is the same bug as the one above in
+ * its second half and cost the same thing. `loaded` fixed "we haven't looked
+ * yet"; this fixes "we looked and nobody is signed in". Signed out, the old
+ * condition was true, so the start-up drain handed every queued mutation to the
+ * demo simulator, which reports each one applied, and the queue deleted work
+ * that had never left the phone. A rep who signed out with a morning of knocks
+ * behind them lost them on next launch — while the sign-out dialog had promised
+ * those knocks would go up next time they signed in.
+ *
+ * With this, a signed-out drain falls through to `liveToken()`, finds none, and
+ * raises `AuthExpiredError`, which `sync.ts` already treats as "stop, keep the
+ * rows, don't burn an attempt". The right behaviour was already written; the
+ * demo branch simply sat in front of it.
  */
 export function isDemo(): boolean {
-  return loaded && current?.mode !== 'live'
+  return loaded && current?.mode === 'demo'
 }
 
 export function liveToken(): string | null {

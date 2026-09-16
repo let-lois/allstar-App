@@ -151,6 +151,83 @@ ok(drained, 'queue drains automatically once the connection returns')
 await page.waitForTimeout(800)
 ok((await syncText()).includes('Synced'), 'sync chip returns to Synced after draining')
 
+// ---- signing out must not destroy queued work -----------------------------
+/*
+  The promise this guards is written on the sign-out dialog: queued knocks "will
+  go up next time you sign in". `wipeCachedData` keeps it by deliberately
+  sparing the outbox. What broke it was the *next* launch, not the sign-out:
+  with nobody signed in, `isDemo()` answered yes, so the start-up drain handed
+  every queued row to the demo simulator, which reports each one applied, and
+  the queue deleted work that had never left the phone. Nothing threw. The rep
+  simply found their morning gone.
+
+  Online on purpose, and that is the whole reason this case is here. The drain
+  checks the connection before it checks the mode, so an offline relaunch keeps
+  the rows whatever the mode says. The loss only ever reached a phone that had
+  signal and nobody signed in — which is every rep who signs out at the end of
+  a day and opens the app the next morning.
+
+  The rows are written straight to the store rather than earned through the UI:
+  that the app can queue work is proved above, and what is under test here is
+  only what a signed-out boot does to rows that already exist.
+*/
+await ctx.setOffline(true)
+await page.goto(`${BASE}/today`, { waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(600)
+
+const queued = await page.evaluate(async () => {
+  const req = indexedDB.open('allstar-field')
+  const db = await new Promise((res) => {
+    req.onsuccess = () => res(req.result)
+  })
+  const tx = db.transaction('outbox', 'readwrite')
+  const store = tx.objectStore('outbox')
+  for (let i = 0; i < 3; i++) {
+    store.put({
+      id: `mut_signout_${i}`,
+      kind: 'property.status',
+      payload: { propertyId: 'p1', status: 'contacted' },
+      createdAt: Date.now(),
+      attempts: 0,
+      status: 'queued',
+    })
+  }
+  await new Promise((res) => {
+    tx.oncomplete = () => res()
+  })
+  const check = db.transaction('outbox', 'readonly').objectStore('outbox').getAll()
+  return await new Promise((res) => {
+    check.onsuccess = () => res(check.result.length)
+  })
+})
+ok(queued >= 3, `three mutations are waiting when the rep signs out (${queued})`)
+
+await page.locator('header').first().getByRole('button', { name: 'Sign out', exact: true }).click()
+await page.waitForTimeout(400)
+await page.getByRole('button', { name: /^Sign out$/ }).last().click()
+await page.waitForTimeout(900)
+ok((await page.locator('text=/Try the demo/').count()) > 0, 'signing out returns to the sign-in screen')
+
+// Signal comes back before the app is opened again — the shape of the morning after.
+await ctx.setOffline(false)
+await page.reload({ waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(2500)
+
+const afterSignOut = await page.evaluate(async () => {
+  const req = indexedDB.open('allstar-field')
+  const db = await new Promise((res) => {
+    req.onsuccess = () => res(req.result)
+  })
+  const r = db.transaction('outbox', 'readonly').objectStore('outbox').getAll()
+  return await new Promise((res) => {
+    r.onsuccess = () => res(r.result.length)
+  })
+})
+ok(
+  afterSignOut >= 3,
+  `queued work survives a signed-out relaunch with signal — it is nobody's to discard (${afterSignOut} of 3 still queued)`,
+)
+
 await browser.close()
 console.log(fails.length ? `\n${fails.length} FAILURES` : '\nall offline checks passed')
 process.exit(fails.length ? 1 : 0)
