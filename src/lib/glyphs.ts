@@ -1,30 +1,11 @@
 /**
- * Named glyphs, for data that has to say *which* icon without importing one.
+ * Moved to `@allstar/core`.
  *
- * `data/outcomes.ts` and `data/leaderboard.ts` are plain data modules — no
- * JSX, and imported directly by the no-browser gates through Node's type
- * stripping, which cannot load a `.tsx`. So they name an icon and the
- * rendering component looks it up. The union is here rather than beside the
- * map for the same reason: a type-only import would be erased, but the union
- * is also worth having somewhere a data file can reach without ceremony.
- *
- * Only for glyphs a data row picks. Chrome that always shows the same icon
- * imports it directly.
+ * This file stays as a re-export so the 2 files that import
+ * `../lib/glyphs` do not all have to change in the same commit as the
+ * extraction. The logic is identical — it simply lives somewhere the React
+ * Native app can reach it, in a package that compiles with no DOM library at
+ * all. Call sites migrate to `@allstar/core/glyphs` as their screens are
+ * touched; when the last one does, this file goes.
  */
-export type GlyphName =
-  | 'trophy'
-  | 'flame'
-  | 'money'
-  | 'calendar'
-  | 'house'
-  | 'roof'
-  | 'warn'
-  | 'sofa'
-  | 'doc'
-  /* The outcome family. See the note above `IconDoor`. */
-  | 'door'
-  | 'star'
-  | 'refresh'
-  | 'close'
-  | 'check'
-  | 'ban'
+export * from '@allstar/core/glyphs'

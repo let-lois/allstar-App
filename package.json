@@ -2,8 +2,11 @@
   "name": "allstar-app",
   "private": true,
   "version": "0.1.0",
+  "workspaces": [
+    "packages/*"
+  ],
   "type": "module",
-  "description": "Allstar — mobile-first field sales (D2D) application",
+  "description": "Allstar \u2014 mobile-first field sales (D2D) application",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -38,6 +41,7 @@
     "verify:mapchrome": "node scripts/verify-mapchrome.mjs",
     "verify:console": "node scripts/verify-console-access.mjs",
     "verify:login": "node scripts/verify-login.mjs",
+    "verify:core": "tsc -p packages/core",
     "verify:all": "node scripts/verify-all.mjs",
     "verify:api-access": "node scripts/verify-api-access.mjs",
     "verify:backups": "node api/scripts/verify-backup-crypto.mjs",
@@ -91,6 +95,7 @@
     "verify:overview": "node scripts/verify-overview.mjs"
   },
   "dependencies": {
+    "@allstar/core": "*",
     "@googlemaps/markerclusterer": "^2.6.2",
     "idb": "^8.0.0",
     "qrcode-generator": "^2.0.4",

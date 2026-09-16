@@ -1,11 +1,11 @@
 /**
- * Client-generated IDs. Records are created offline and must be addressable
- * immediately, so the client owns the identity and the server adopts it.
+ * Moved to `@allstar/core`.
+ *
+ * This file stays as a re-export so the 2 files that import
+ * `../lib/id` do not all have to change in the same commit as the
+ * extraction. The logic is identical — it simply lives somewhere the React
+ * Native app can reach it, in a package that compiles with no DOM library at
+ * all. Call sites migrate to `@allstar/core/id` as their screens are
+ * touched; when the last one does, this file goes.
  */
-export function uid(prefix = 'id'): string {
-  const rand =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID().replace(/-/g, '').slice(0, 12)
-      : Math.random().toString(36).slice(2, 14)
-  return `${prefix}_${Date.now().toString(36)}${rand}`
-}
+export * from '@allstar/core/id'

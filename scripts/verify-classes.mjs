@@ -21,7 +21,13 @@ import { join } from 'node:path'
  */
 
 const CSS_DIR = 'dist/assets'
-const SRC = 'src'
+/*
+  Two roots since the extraction: the app, and `packages/core`, which is where
+  the platform-free half of the domain now lives. Scanning only `src` would
+  have quietly stopped covering the moved files — and a gate that stops looking
+  is worse than one that fails, because it still prints PASS.
+*/
+const SRC = ['src', 'packages/core/src']
 
 /* --- what the stylesheet actually contains -------------------------------- */
 const cssFiles = readdirSync(CSS_DIR).filter((f) => f.endsWith('.css'))
@@ -68,7 +74,7 @@ const MARKERS = new Set(['group', 'peer'])
 const missing = new Map()
 let checked = 0
 
-for (const file of walk(SRC)) {
+for (const file of SRC.flatMap(walk)) {
   const src = readFileSync(file, 'utf8')
   for (const m of src.matchAll(CLASS_ATTR)) {
     const raw = m[1] ?? m[2] ?? m[3] ?? m[4] ?? ''

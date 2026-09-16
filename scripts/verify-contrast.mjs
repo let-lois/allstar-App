@@ -265,7 +265,7 @@ FUNNEL_RAMP.forEach((c, i) => at(c, resolveColour(INK.surface), AA_GRAPHIC, `fun
 /* -------------------------------------------------------------------------
  * 5. Outcome and status pills.
  * ---------------------------------------------------------------------- */
-const outcomes = fs.readFileSync(new URL('../src/data/outcomes.ts', import.meta.url), 'utf8')
+const outcomes = fs.readFileSync(new URL('../packages/core/src/outcomes.ts', import.meta.url), 'utf8')
 const toneBlock = outcomes.slice(outcomes.indexOf('STATUS_TONE'))
 const tonePairs = [...toneBlock.matchAll(/(\w+): \{ fg: '(#[0-9A-Fa-f]{6})', bg: '(#[0-9A-Fa-f]{6})' \}/g)]
 console.log('\n--- lead status pills ---')

@@ -30,7 +30,13 @@ import { globSync } from 'node:fs'
  * that happens to be on a list.
  */
 
-const SRC = globSync('src/**/*.{ts,tsx}')
+/*
+  Two roots since the extraction: the app, and `packages/core`, which is where
+  the platform-free half of the domain now lives. Scanning only `src` would
+  have quietly stopped covering the moved files — and a gate that stops looking
+  is worse than one that fails, because it still prints PASS.
+*/
+const SRC = [...globSync('src/**/*.{ts,tsx}'), ...globSync('packages/core/src/**/*.ts')]
 
 const fails = []
 const ok = (cond, msg, measured) => {
@@ -65,7 +71,7 @@ const TEXT_MARKS = new Map([
   ['src/screens/RouteScreen.tsx', '–'], // an en dash for a skipped stop
   ['src/screens/StreetScreen.tsx', '✓'], // knocked, in a strip of doors
   ['src/admin/AdminImport.tsx', '↳✓→'], // "matched to", a finished step, and a menu path
-  ['src/lib/csv.ts', '→'], // File → Save As, in a sentence
+  ['packages/core/src/csv.ts', '→'], // File → Save As, in a sentence
   ['src/admin/IntegrationsPanel.tsx', '→'], // Settings → Private Integrations, in a sentence
 ])
 
