@@ -13,6 +13,8 @@
       "supportsTablet": false,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "All-Star uses your location to order your route from where you are standing and to place a lead on the house in front of you.",
+        "NSCameraUsageDescription": "All-Star uses the camera so you can photograph a property from the door and attach it to the lead you are recording.",
+        "NSPhotoLibraryUsageDescription": "All-Star lets you attach a photo you already took to a lead or to your team member profile.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
