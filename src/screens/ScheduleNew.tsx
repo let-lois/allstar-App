@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { toLocalInput } from '../lib/day'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
@@ -224,7 +225,3 @@ function daysUntilSaturday(): number {
   return (6 - today + 7) % 7 || 7
 }
 
-function toLocalInput(ts: number): string {
-  const d = new Date(ts - new Date().getTimezoneOffset() * 60000)
-  return d.toISOString().slice(0, 16)
-}

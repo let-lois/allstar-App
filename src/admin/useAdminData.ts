@@ -3,7 +3,7 @@ import * as db from '../lib/db'
 import { rangeStart } from '../lib/day'
 import { isOpenStatus } from '../data/outcomes'
 import { useAppStore } from '../store/useAppStore'
-import type { DailyStat, LeadStatus, OutcomeCode, Property } from '../types'
+import type { DailyStat, LeadStatus, Property } from '../types'
 
 /**
  * Reporting data for the office console.
@@ -234,21 +234,6 @@ export function useFunnel(properties: Property[]) {
     return { counts, won }
   }, [properties])
 }
-
-export function useOutcomeMix(): { code: OutcomeCode; n: number }[] {
-  const activity = useAppStore((s) => s.activity)
-  return useMemo(() => {
-    const counts = new Map<OutcomeCode, number>()
-    for (const ev of activity) {
-      if (ev.type !== 'visit' || !ev.outcome) continue
-      counts.set(ev.outcome, (counts.get(ev.outcome) ?? 0) + 1)
-    }
-    return [...counts.entries()]
-      .map(([code, n]) => ({ code, n }))
-      .sort((a, b) => b.n - a.n)
-  }, [activity])
-}
-
 /** Territory roll-up, derived from property assignments. */
 export interface TerritoryRow {
   id: string

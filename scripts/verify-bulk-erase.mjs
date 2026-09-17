@@ -27,9 +27,10 @@ const json = (status, obj) => ({ status, contentType: 'application/json', body: 
 const text = (loc) => loc.innerText().then((t) => t.replace(/\s+/g, ' ').trim())
 
 /* ---- the company's leads, and what the server would answer ------------------- */
-function makeWorld(role = 'client_admin') {
-  const props = ['10 Cedar Bend Dr', '12 Cedar Bend Dr', '14 Cedar Bend Dr', '16 Cedar Bend Dr', '18 Cedar Bend Dr'].map((address1, i) => ({
-    id: `p${i + 1}`, address1, city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.5115 + i * 0.0006, lng: -97.6755 + i * 0.0006,
+function makeWorld(role = 'client_admin', count = 5) {
+  const props = Array.from({ length: count }, (_, i) => ({
+    id: `p${i + 1}`, address1: `${10 + i * 2} Cedar Bend Dr`, city: 'Round Rock', state: 'TX', zip: '78664',
+    lat: 30.5115 + i * 0.0006, lng: -97.6755 + i * 0.0006,
     status: 'new', score: 60, assignedRepId: 'u_rep', contacts: [],
   }))
   return {
@@ -64,6 +65,16 @@ async function mockApi(page, w) {
     const body = JSON.parse(r.request().postData() || '{}')
     w.calls.push(body)
     if (w.delayMs) await new Promise((res) => setTimeout(res, w.delayMs))
+    /*
+      A selection larger than one request goes up as several, so the
+      interesting failures are the ones that land on a *later* batch: by then
+      leads really are gone, and what the screen says about them has to stay
+      true. `breakOn` is the 1-based request to fail, `breakAs` how.
+    */
+    if (w.breakOn && w.calls.length === w.breakOn) {
+      if (w.breakAs === 'forbidden') return r.fulfill(json(403, { error: 'Not permitted.' }))
+      return r.abort('failed')
+    }
     if (w.mode === 'forbidden') return r.fulfill(json(403, { error: 'Not permitted.' }))
     const ids = [...new Set(body.propertyIds ?? [])]
     if (w.mode === 'partial') {
@@ -88,6 +99,7 @@ async function signIn(page, email) {
   await dismissTour(page)
 }
 const desktop = () => browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' })
+const handset = () => browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' })
 // DataList renders phone cards and the desktop table both, and hides one by
 // breakpoint — so the row checkboxes exist twice, and only the table's are
 // laid out here. Scoped to the table, or the first match is a 0x0 box.
@@ -278,6 +290,176 @@ const rows = (page) => page.locator('tbody tr')
   await page.waitForTimeout(200)
   ok((await text(page.getByTestId('bulk-count'))) === '2 selected' && (await page.getByLabel('Reassign to').count()) === 1, 'a manager still gets the bar, with reassignment')
   ok((await page.getByTestId('bulk-delete').count()) === 0, 'and no Delete selected — the server would refuse it, so the screen does not offer it')
+  await ctx.close()
+}
+
+/* ========================================================================== */
+/* More leads than fit in one request: batched, counted, reported once          */
+/* ========================================================================== */
+{
+  const w = makeWorld('client_admin', 60)
+  const ctx = await desktop()
+  const page = await ctx.newPage()
+  const errors = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await mockApi(page, w)
+  await signIn(page, 'nadia@ridgeline.test')
+  await page.goto(`${BASE}/admin/leads`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1600)
+  ok((await rows(page).count()) === 60, 'sixty leads are listed', `${await rows(page).count()}`)
+  await headerBox(page).check()
+  await page.waitForTimeout(400)
+  ok((await text(page.getByTestId('bulk-count'))) === '60 selected', 'all sixty are selected', await text(page.getByTestId('bulk-count')))
+  await page.getByTestId('bulk-delete').click()
+  await page.waitForTimeout(400)
+  const dlg = page.getByTestId('bulk-delete-dialog')
+  await dlg.getByTestId('bulk-delete-reason').fill('Pilot data, finished with')
+  await dlg.getByTestId('bulk-delete-dialog-confirm').click()
+  await page.waitForTimeout(3000)
+
+  ok(w.calls.length === 3, 'sixty leads go up as three requests, not one', `${w.calls.length} requests`)
+  ok(w.calls.every((c) => c.propertyIds.length <= 25), 'and no request carries more than twenty-five', w.calls.map((c) => c.propertyIds.length).join(' + '))
+  const sent = w.calls.flatMap((c) => c.propertyIds)
+  ok(sent.length === 60 && new Set(sent).size === 60, 'every lead is sent exactly once across the batches', `${sent.length} sent, ${new Set(sent).size} distinct`)
+  ok(w.calls.every((c) => c.reason === 'Pilot data, finished with'), 'each batch carries the same reason')
+  ok(/60 leads deleted/.test(await text(page.locator('body'))), 'the screen reports one total, not three', (await text(page.locator('body'))).match(/\d+ leads deleted[^.]*/)?.[0])
+  ok((await dlg.count()) === 0, 'and the dialog closes')
+  ok(errors.length === 0, 'no page errors', errors.join(' | '))
+  await ctx.close()
+}
+
+/* ========================================================================== */
+/* A batch that never comes back: what is known is said, and nothing more      */
+/* ========================================================================== */
+{
+  /*
+    The sentence this replaces was "Nothing was deleted", said on any failure
+    the client could not read. It was not the screen's to say: the server
+    destroys one lead at a time and commits each before the next, so a request
+    that never answers may have done all of its work, some, or none — and by
+    the second batch, twenty-five leads are provably gone already.
+  */
+  const w = makeWorld('client_admin', 60)
+  w.breakOn = 2
+  w.breakAs = 'dead'
+  const ctx = await desktop()
+  const page = await ctx.newPage()
+  await mockApi(page, w)
+  await signIn(page, 'nadia@ridgeline.test')
+  await page.goto(`${BASE}/admin/leads`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1600)
+  await headerBox(page).check()
+  await page.waitForTimeout(400)
+  await page.getByTestId('bulk-delete').click()
+  await page.waitForTimeout(400)
+  const dlg = page.getByTestId('bulk-delete-dialog')
+  await dlg.getByTestId('bulk-delete-reason').fill('Pilot data, finished with')
+  await dlg.getByTestId('bulk-delete-dialog-confirm').click()
+  await page.waitForTimeout(3000)
+
+  const errBox = dlg.getByTestId('bulk-delete-error')
+  ok((await errBox.count()) === 1, 'the break is reported in the dialog rather than swallowed')
+  const said = (await errBox.count()) ? await text(errBox) : '(nothing reported)'
+  ok(!/Nothing was deleted/i.test(said), 'the screen does not claim nothing was deleted — twenty-five already had been', said)
+  ok(/25 leads had already been deleted/.test(said), 'it says how many are confirmed gone', said)
+  ok(/may or may not/.test(said) && /refresh/i.test(said), 'and that the batch in flight is unknown, with what to do about it', said)
+  ok((await dlg.count()) === 1, 'the dialog stays open, holding the reason that was typed')
+  ok(w.calls.length === 2, 'and it stopped rather than carrying on into the rest', `${w.calls.length} requests`)
+  await ctx.close()
+}
+
+/* ========================================================================== */
+/* A batch the server refuses: definite, so it is worded definitely            */
+/* ========================================================================== */
+{
+  const w = makeWorld('client_admin', 60)
+  w.breakOn = 2
+  w.breakAs = 'forbidden'
+  const ctx = await desktop()
+  const page = await ctx.newPage()
+  await mockApi(page, w)
+  await signIn(page, 'nadia@ridgeline.test')
+  await page.goto(`${BASE}/admin/leads`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1600)
+  await headerBox(page).check()
+  await page.waitForTimeout(400)
+  await page.getByTestId('bulk-delete').click()
+  await page.waitForTimeout(400)
+  const dlg = page.getByTestId('bulk-delete-dialog')
+  await dlg.getByTestId('bulk-delete-reason').fill('Pilot data, finished with')
+  await dlg.getByTestId('bulk-delete-dialog-confirm').click()
+  await page.waitForTimeout(3000)
+
+  const errBox = dlg.getByTestId('bulk-delete-error')
+  ok((await errBox.count()) === 1, 'the refusal is reported in the dialog')
+  const said = (await errBox.count()) ? await text(errBox) : '(nothing reported)'
+  ok(/permission/i.test(said), 'a refusal is worded as a refusal', said)
+  ok(/were not deleted/.test(said) && !/may or may not/.test(said), 'and because the server answered, the rest is stated rather than guessed', said)
+  await ctx.close()
+}
+
+/* ========================================================================== */
+/* The dialog on a phone, with the keyboard up: both buttons still reachable   */
+/* ========================================================================== */
+{
+  /*
+    This question is a paragraph, a required input, a line of help and
+    sometimes an error — taller than a phone before anything is typed, and the
+    input means the keyboard is up while it is read. Centred content that
+    outgrows a `fixed` box overflows past both ends of it with no scroll to
+    reach either, so what went off the bottom was Cancel and Delete.
+
+    The keyboard is simulated by moving `--app-h`, the property the app pins to
+    `visualViewport.height`; a headless browser has no other way to raise one.
+  */
+  const w = makeWorld('client_admin', 5)
+  const ctx = await handset()
+  const page = await ctx.newPage()
+  await mockApi(page, w)
+  await signIn(page, 'nadia@ridgeline.test')
+  await page.goto(`${BASE}/admin/leads`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1600)
+  /*
+    Cards, not a table: the console drops its table below `lg`, so the row
+    checkboxes live inside the cards here rather than in a `tbody`.
+  */
+  const boxes = page.locator('ul li input[type="checkbox"]')
+  ok((await boxes.count()) >= 3, 'the leads list offers selection on a phone too', `${await boxes.count()} checkboxes`)
+  for (const i of [0, 1, 2]) await boxes.nth(i).check()
+  await page.waitForTimeout(300)
+  await page.getByTestId('bulk-delete').click()
+  await page.waitForTimeout(400)
+  const dlg = page.getByTestId('bulk-delete-dialog')
+  ok((await dlg.count()) === 1, 'the dialog opens on a phone')
+
+  const KEYBOARD = 336
+  const visible = 844 - KEYBOARD
+  await page.evaluate((h) => document.documentElement.style.setProperty('--app-h', `${h}px`), visible)
+  await page.waitForTimeout(400)
+
+  for (const [name, testId] of [['Cancel', 'bulk-delete-dialog-cancel'], ['Delete', 'bulk-delete-dialog-confirm']]) {
+    const box = await dlg.getByTestId(testId).boundingBox()
+    ok(
+      !!box && box.y >= 0 && box.y + box.height <= visible + 1,
+      `${name} stays on screen with the keyboard up`,
+      box ? `ends at ${Math.round(box.y + box.height)}px, keyboard starts at ${visible}px` : 'no box',
+    )
+  }
+  /*
+    The whole panel inside the visible strip, not merely short enough to fit
+    one. Height alone does not discriminate: a panel that comfortably fits is
+    still unusable when it has been centred against a box that thinks the
+    keyboard is not there, which is precisely what was happening.
+  */
+  const panel = await dlg.locator('> div').first().boundingBox()
+  ok(
+    !!panel && panel.y >= -1 && panel.y + panel.height <= visible + 1,
+    'and the panel sits wholly inside the part of the screen the keyboard leaves',
+    panel ? `${Math.round(panel.y)}px to ${Math.round(panel.y + panel.height)}px, keyboard starts at ${visible}px` : 'no box',
+  )
+  const reason = dlg.getByTestId('bulk-delete-reason')
+  ok(await reason.isVisible(), 'the reason field is still reachable too')
+  await page.evaluate(() => document.documentElement.style.removeProperty('--app-h'))
   await ctx.close()
 }
 

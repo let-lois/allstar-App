@@ -190,11 +190,6 @@ export function polygonAreaSqMiles(polygon: { lat: number; lng: number }[]): num
   return Math.abs(sum / 2) * milesPerDegLat * milesPerDegLng
 }
 
-export function compassLabel(deg: number): string {
-  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
-  return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8]
-}
-
 /* --- Web Mercator, used by the in-app map renderer ----------------------- */
 
 export function project(lat: number, lng: number) {

@@ -1,4 +1,5 @@
 import { Glyph } from '../components/ui/Glyph'
+import { toLocalInput } from '../lib/day'
 import { IconCheck } from '../components/nav/icons'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -151,7 +152,7 @@ export function VisitMode() {
             <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-good/15 text-good [&>svg]:h-9 [&>svg]:w-9">
               <IconCheck />
             </div>
-            <h1 className="mt-5 text-[22px] font-semibold tracking-[-0.02em]">Visit recorded</h1>
+            <h1 className="mt-5 text-[23px] font-semibold tracking-[-0.02em]">Visit recorded</h1>
             <p className="mt-1 text-ink-soft">
               {property.address1} · {outcomeDef?.label}
             </p>
@@ -294,7 +295,7 @@ export function VisitMode() {
                 </div>
               </Card>
             )}
-            <h2 className="mb-3.5 text-[21px] font-semibold">What happened?</h2>
+            <h2 className="mb-3.5 text-[20px] font-semibold">What happened?</h2>
             <OutcomeGrid value={visit.outcome} onChange={(c) => void chooseOutcome(c)} />
           </>
         )}
@@ -346,7 +347,7 @@ export function VisitMode() {
         {step === 'next' && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-[21px] font-semibold">What's next here?</h2>
+              <h2 className="text-[20px] font-semibold">What's next here?</h2>
               <p className="mt-1 text-[14px] text-ink-mute">
                 This becomes a follow-up on your Today screen.
               </p>
@@ -497,7 +498,3 @@ function quickWhen(): { label: string; at: number }[] {
   ]
 }
 
-function toLocalInput(ts: number): string {
-  const d = new Date(ts - new Date().getTimezoneOffset() * 60000)
-  return d.toISOString().slice(0, 16)
-}

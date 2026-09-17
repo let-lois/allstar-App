@@ -1,4 +1,5 @@
 import type { Photo } from '../types'
+import { MAX_ATTEMPTS, backoffMs } from './retry'
 import {
   AuthExpiredError,
   OfflineError,
@@ -46,9 +47,6 @@ export interface PhotoSyncSnapshot {
   uploading: boolean
 }
 
-/** Same budget as the mutation outbox: eight tries, then a person decides. */
-const MAX_ATTEMPTS = 8
-const backoffMs = (attempts: number) => Math.min(60_000, 1000 * 2 ** Math.min(attempts, 6))
 
 let listeners: Listener[] = []
 let updated: ((photo: Photo) => void) | null = null

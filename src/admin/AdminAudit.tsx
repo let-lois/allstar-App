@@ -272,6 +272,19 @@ function describe(e: AuditRowDTO): React.ReactNode {
           {d.reason ? ` — “${String(d.reason)}”` : ''}
         </>
       )
+    /*
+      Lifting a block. Deliberately worded so it cannot be mistaken for an
+      undelete: nothing comes back, the address is merely allowed to exist
+      again. An auditor reading this needs to see the reason, because the one
+      erasure that must never be lifted is the one a homeowner asked for.
+    */
+    case 'leads.unblocked':
+      return (
+        <>
+          {who} <span className="font-semibold">allowed {String(d.unblocked ?? 0)} erased address{d.unblocked === 1 ? '' : 'es'} to be imported again</span>
+          {d.reason ? ` — “${String(d.reason)}”` : ''}
+        </>
+      )
     // The one line for the batch, beside the one per lead above. It reads as a
     // count rather than a name because there is no single thing it refers to.
     case 'leads.bulk_erased':

@@ -85,11 +85,6 @@ async function permissionState(): Promise<PermissionState | undefined> {
   }
 }
 
-/** The freshest fix this device has, or null. Never triggers a request. */
-export function knownPosition(): Position | null {
-  return lastFix
-}
-
 /**
  * A fix, reusing a recent one rather than asking again.
  *

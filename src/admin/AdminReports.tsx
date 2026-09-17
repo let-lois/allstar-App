@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { saveFile } from '../lib/download'
 import { AdminPage, FilterBar } from './AdminLayout'
 import { DataList } from './DataList'
 import { TrendChart } from './charts/TrendChart'
@@ -93,13 +94,7 @@ export function AdminReports() {
   }, [stats, scopedRep])
 
   const download = () => {
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `allstar-report-${range}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    saveFile(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `allstar-report-${range}.csv`)
   }
 
   return (

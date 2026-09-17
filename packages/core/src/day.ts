@@ -211,3 +211,17 @@ export function todayLabel(tz?: string | null, now: number = Date.now()): string
 export function rangeStart(days: number, tz?: string | null, now: number = Date.now()): string {
   return addDays(dayKeyIn(now, tz), -(days - 1))
 }
+
+/**
+ * A timestamp as a `datetime-local` input wants it: `YYYY-MM-DDTHH:mm`.
+ *
+ * Lived in two screens, character for character — the visit outcome's
+ * follow-up picker and the appointment form — along with the same latent bug:
+ * the offset is read from *now* and applied to `ts`, so a field pointed across
+ * a daylight-saving boundary was an hour out. One copy, fixed once: the offset
+ * is taken from the date being formatted.
+ */
+export function toLocalInput(ts: number): string {
+  const d = new Date(ts)
+  return new Date(ts - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}

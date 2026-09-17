@@ -16,6 +16,7 @@ import {
   apiGeocode,
   apiImport,
   apiUsers,
+  apiUnblockLeads,
   apiGeocoders,
   type GeocodeProviderDTO,
   type GeocodeUsageDTO,
@@ -72,6 +73,19 @@ export default function AdminImport() {
   const [raw, setRaw] = useState('')
   const [headers, setHeaders] = useState<string[]>([])
   const [rows, setRows] = useState<Row[]>([])
+  /*
+    Addresses this import refused because they were erased once.
+
+    Kept because the block is only ever discovered here: nothing else in the
+    product tells an operator that an address cannot come back, and until now
+    nothing anywhere could lift it. The rows are held rather than the refs so
+    the lift can send the same addresses the import sent.
+  */
+  const [blocked, setBlocked] = useState<{ ref: string; address1: string; city?: string; state?: string; zip?: string }[]>([])
+  const [unblockReason, setUnblockReason] = useState('')
+  const [unblocking, setUnblocking] = useState(false)
+  const [unblockNote, setUnblockNote] = useState<string | null>(null)
+  const [unblockError, setUnblockError] = useState<string | null>(null)
   const [ragged, setRagged] = useState(0)
   const [mapping, setMapping] = useState<Partial<Record<ImportField, string>>>({})
   const [prepared, setPrepared] = useState<PreparedRow[]>([])
@@ -367,6 +381,7 @@ export default function AdminImport() {
     // operator sees one number rather than one per chunk.
     const CHUNK = 500
     const totals: ImportResultDTO = { created: 0, updated: 0, rejected: [] }
+    const blockedFound: { ref: string; address1: string; city?: string; state?: string; zip?: string }[] = []
     setProgress({ done: 0, total: importable.length })
 
     try {
@@ -402,6 +417,24 @@ export default function AdminImport() {
         totals.created += res.created
         totals.updated += res.updated
         totals.rejected.push(...res.rejected)
+        /*
+          "was erased" is the server's wording for a tombstoned address. Matched
+          on rather than given a code because the reason is already a sentence
+          an operator reads; a parallel machine-readable field would be a second
+          thing to keep in step for no gain at this size.
+        */
+        for (const r of res.rejected.filter((x) => /was erased/i.test(x.reason))) {
+          const row = chunk.find((c) => c.ref === r.ref)
+          if (row) {
+            blockedFound.push({
+              ref: r.ref,
+              address1: row.values.address1 ?? '',
+              city: row.values.city,
+              state: row.values.state,
+              zip: row.values.zip,
+            })
+          }
+        }
         totals.territoryId ??= res.territoryId
         /*
           Summed across chunks, and left undefined when the server never sent it.
@@ -423,6 +456,7 @@ export default function AdminImport() {
         setProgress({ done: Math.min(i + CHUNK, importable.length), total: importable.length })
       }
       setResult(totals)
+      setBlocked(blockedFound)
       setStage('done')
       // Pull the new leads into the console's own view of the world.
       await refreshFromServer()
@@ -443,6 +477,43 @@ export default function AdminImport() {
     setResult(null)
     setError(null)
     setRagged(0)
+    setBlocked([])
+    setUnblockReason('')
+    setUnblockNote(null)
+    setUnblockError(null)
+  }
+
+  /*
+    Lift the block on the addresses this import refused.
+
+    Nothing comes back: the leads, their notes, visits and photos were
+    destroyed and stay destroyed. All this does is allow the addresses to exist
+    again, so the next import can create them fresh. It is admin-only, it takes
+    a reason, and it writes an audit line naming the count — because the one
+    erasure that must never be lifted is the one a homeowner asked for, and an
+    auditor has to be able to see who decided otherwise.
+  */
+  async function liftBlocks() {
+    const token = liveToken()
+    if (!token || unblocking) return
+    setUnblocking(true)
+    setUnblockError(null)
+    setUnblockNote(null)
+    try {
+      const res = await apiUnblockLeads(token, {
+        rows: blocked.map((b) => ({ address1: b.address1, city: b.city, state: b.state, zip: b.zip })),
+        reason: unblockReason.trim(),
+      })
+      setUnblockNote(
+        `${res.unblocked} address${res.unblocked === 1 ? '' : 'es'} can be imported again. Upload the file once more to create them.`,
+      )
+      setBlocked([])
+      setUnblockReason('')
+    } catch (err) {
+      setUnblockError(err instanceof ApiError ? err.message : 'That did not go through. Nothing was changed.')
+    } finally {
+      setUnblocking(false)
+    }
   }
 
   /* --- render ---------------------------------------------------------- */
@@ -928,6 +999,66 @@ export default function AdminImport() {
                 ))}
               </ul>
             </details>
+          )}
+
+          {/*
+            The only place in the product where an erasure block is discovered,
+            and now the only place it can be lifted.
+
+            It sits under the rejected rows because that is where the operator
+            has just read "This address was erased". Before this, that sentence
+            was the end of the road: nothing in the API removed a tombstone, so
+            an address erased while clearing out test data could never be
+            imported again for that company, by anyone, ever.
+          */}
+          {blocked.length > 0 && (
+            <section className="mt-4 rounded-field bg-warn-bg px-4 py-3" data-testid="import-blocked">
+              <h3 className="text-sm font-bold text-warn">
+                {blocked.length} address{blocked.length === 1 ? '' : 'es'} {blocked.length === 1 ? 'was' : 'were'} erased before and {blocked.length === 1 ? 'is' : 'are'} blocked
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed text-warn">
+                Importing a lead that was deliberately destroyed would undo that, so it is refused. You can allow these
+                addresses back — nothing is restored, they are simply permitted to exist again, and the next import creates
+                them fresh. <strong>Do not lift a block on someone who asked to be removed.</strong>
+              </p>
+              <ul className="mt-2 max-h-32 overflow-y-auto text-xs text-warn">
+                {blocked.map((b) => (
+                  <li key={b.ref} className="py-0.5">
+                    <span className="font-mono">{b.ref}</span> — {b.address1}
+                  </li>
+                ))}
+              </ul>
+              <label className="mt-3 block">
+                <span className="text-xs font-semibold text-warn">Why are these allowed back?</span>
+                <input
+                  value={unblockReason}
+                  onChange={(e) => setUnblockReason(e.target.value)}
+                  placeholder="e.g. Deleted while clearing test data, these are real houses"
+                  disabled={unblocking}
+                  data-testid="unblock-reason"
+                  className="focusable mt-1 h-11 w-full rounded-lg border border-ink/15 bg-surface px-3 text-[15px]"
+                />
+              </label>
+              <Button
+                variant="secondary"
+                className="mt-3"
+                disabled={unblocking || unblockReason.trim().length < 3}
+                onClick={() => void liftBlocks()}
+                data-testid="unblock-apply"
+              >
+                {unblocking ? 'Allowing…' : `Allow ${blocked.length === 1 ? 'this address' : 'these addresses'} again`}
+              </Button>
+              {unblockError && (
+                <p role="alert" className="mt-2 text-xs font-medium text-bad" data-testid="unblock-error">
+                  {unblockError}
+                </p>
+              )}
+            </section>
+          )}
+          {unblockNote && (
+            <p role="status" className="mt-4 rounded-field bg-good-bg px-4 py-3 text-xs font-medium text-good" data-testid="unblock-note">
+              {unblockNote}
+            </p>
           )}
 
           <div className="mt-5 flex gap-2">

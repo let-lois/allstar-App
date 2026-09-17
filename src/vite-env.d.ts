@@ -28,6 +28,7 @@ declare const process: {
   env: {
     NODE_ENV?: 'development' | 'production'
     EXPO_PUBLIC_API_URL?: string
+    EXPO_PUBLIC_ORIGIN?: string
     EXPO_PUBLIC_MAPTILER_KEY?: string
     EXPO_PUBLIC_GOOGLE_MAPS_KEY?: string
     EXPO_PUBLIC_GOOGLE_MAP_ID?: string

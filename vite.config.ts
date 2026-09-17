@@ -35,6 +35,13 @@ export default defineConfig(({ mode }) => {
   plugins: [react()],
   define: {
     'process.env.EXPO_PUBLIC_API_URL': pass('API_URL'),
+    /*
+      The one name that is not a straight `EXPO_PUBLIC_<X>` / `VITE_<X>` pair:
+      the variable people set is `VITE_PUBLIC_ORIGIN` (see .env.example), and
+      `EXPO_PUBLIC_PUBLIC_ORIGIN` would be a silly thing to type. Spelled out
+      rather than bent through `pass()`.
+    */
+    'process.env.EXPO_PUBLIC_ORIGIN': pass('PUBLIC_ORIGIN'),
     'process.env.EXPO_PUBLIC_MAPTILER_KEY': pass('MAPTILER_KEY'),
     'process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY': pass('GOOGLE_MAPS_KEY'),
     'process.env.EXPO_PUBLIC_GOOGLE_MAP_ID': pass('GOOGLE_MAP_ID'),

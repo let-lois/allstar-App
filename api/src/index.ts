@@ -24,7 +24,7 @@ import {
 } from './geocode'
 import { useGoogleBase } from './geocode-google'
 import { findProvider } from './geocode-providers'
-import { MAX_IMPORT_ROWS, canImport, importProperties, type ImportInput } from './import'
+import { MAX_IMPORT_ROWS, canImport, importProperties, propertyIdFor, type ImportInput, type ImportRow } from './import'
 import { assignProperties, assignTerritory } from './assign'
 import { createTerritory } from './territories'
 import { createList, deleteList, listsFor, setReps, updateList, updateMembers } from './lists'
@@ -81,7 +81,7 @@ import { readSettings, writeSettings, writeTimezone } from './settings'
 import { drainOutbox } from './crm-push'
 import { BUILT_AT, COMMIT, DIRTY } from './version'
 import { BACKUP_CRON, BackupNotConfigured, canSeeBackups, latestBackup, runBackup } from './backup'
-import { eraseProperties, eraseProperty } from './erase'
+import { eraseProperties, eraseProperty, unblockProperties } from './erase'
 import { exportLeadsCsv } from './export'
 import { setLeadStatus } from './lead-edit'
 import { canReviewConflicts, listConflicts, reviewConflict } from './stale'
@@ -1194,6 +1194,28 @@ export default {
       }
 
       // The same act over a selection. Admin only, a reason, an exact count back.
+      /*
+        Allow erased addresses to be imported again. The counterpart to
+        erase-bulk, and deliberately the same shape: admin only, a reason, and
+        an audit line. See `unblockProperties` for why the block needed a door.
+      */
+      if (path === '/api/leads/unblock' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        /*
+          Addresses in, ids derived here — the same derivation the import does,
+          from the same function, because the id *is* the address: a hash of
+          the company and the normalised street line. Asking the console to
+          reproduce that hash would be two implementations of one rule, and the
+          day they disagreed an operator would be told an address was allowed
+          back while the block stayed exactly where it was.
+        */
+        const rows = Array.isArray(body.rows) ? (body.rows as ImportRow[]) : []
+        const ids = await Promise.all(rows.map((r) => propertyIdFor(user.clientId, r)))
+        const result = await unblockProperties(env, user, ids, body.reason)
+        if (!result.ok) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
+      }
+
       if (path === '/api/leads/erase-bulk' && req.method === 'POST') {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
         const result = await eraseProperties(env, user, body.propertyIds, body.reason)

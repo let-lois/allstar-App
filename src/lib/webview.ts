@@ -46,9 +46,32 @@ export function platformOf(ua = navigator.userAgent): Platform {
   return 'other'
 }
 
+/**
+ * Is this our own app, wrapped?
+ *
+ * Capacitor and Cordova both announce themselves on `window` before any of our
+ * code runs. Nothing else does, which matters because the user-agent cannot
+ * answer this: a Capacitor app on Android carries the `; wv)` marker of an
+ * embedded webview, and on iOS it is a WebKit UA with no Safari token — the two
+ * exact signatures used below to decide somebody is stuck inside Messenger.
+ *
+ * So a packaged Allstar would have shown its own users a red alert reading
+ * "You're in an in-app browser. Camera, microphone and location won't work
+ * here", above a button that throws them out into Chrome. Both statements
+ * false, and the button actively harmful.
+ */
+export function isNativeShell(): boolean {
+  const w = window as Window & { Capacitor?: unknown; cordova?: unknown }
+  return !!w.Capacitor || !!w.cordova
+}
+
 export function detectInAppBrowser(): InAppBrowser {
   const ua = navigator.userAgent
   const platform = platformOf(ua)
+
+  // Our own shell is not somebody else's browser. Checked before the
+  // signatures, because it matches two of them by construction.
+  if (isNativeShell()) return { isInApp: false, platform }
 
   for (const { test, app } of SIGNATURES) {
     if (test.test(ua)) return { isInApp: true, app, platform }

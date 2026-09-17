@@ -957,7 +957,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     const visit: Visit = {
       id,
       propertyId,
-      repId: user?.id ?? 'u_rep',
+      /*
+        Blank, never a borrowed identity. This used to fall back to 'u_rep',
+        the demo's first rep, so a record written with nobody signed in would
+        have carried a fictional author into a real database. The screen
+        cannot be reached signed out, which is why it never fired — but the
+        server stamps the session's user on arrival anyway, so the client's
+        copy is a local label and an empty one reads as "no rep", which is
+        true, where a demo id reads as a person who does not work here.
+      */
+      repId: user?.id ?? '',
       startedAt: Date.now(),
       photoIds: [],
       pending: true,
@@ -1077,7 +1086,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       visitId,
       body,
       tags,
-      authorId: get().user?.id ?? 'u_rep',
+      authorId: get().user?.id ?? '',
       createdAt: Date.now(),
       pending: true,
     }
@@ -1293,7 +1302,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async createAppointment(input) {
     const id = uid('a')
-    const appt: Appointment = { ...input, id, repId: get().user?.id ?? 'u_rep', pending: true }
+    const appt: Appointment = { ...input, id, repId: get().user?.id ?? '', pending: true }
     await db.put('appointments', appt)
     set((s) => ({ appointments: { ...s.appointments, [id]: appt } }))
     await enqueue('appointment.create', appt)
@@ -1311,7 +1320,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async createTask(input) {
     const id = uid('t')
-    const task: Task = { ...input, id, repId: get().user?.id ?? 'u_rep', done: false, pending: true }
+    const task: Task = { ...input, id, repId: get().user?.id ?? '', done: false, pending: true }
     await db.put('tasks', task)
     set((s) => ({ tasks: { ...s.tasks, [id]: task } }))
     await enqueue('task.create', task)
@@ -1323,7 +1332,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const event: ActivityEvent = {
       id: uid('ev'),
       propertyId,
-      repId: get().user?.id ?? 'u_rep',
+      repId: get().user?.id ?? '',
       type: kind === 'email' ? 'sms' : kind,
       summary:
         kind === 'call'
@@ -1406,12 +1415,15 @@ function routeFor(routes: Route[], userId?: string, tz?: string | null): Route |
   const today = dayKey(Date.now(), tz)
   const todays = routes.filter((r) => r.date === today)
   const pool = todays.length ? todays : routes
-  return (
-    pool.find((r) => r.repId === userId) ??
-    pool.find((r) => r.repId === FIELD_REPS[0].id) ??
-    pool[0] ??
-    null
-  )
+  /*
+    The second line used to look for the demo's first rep by id, which reached
+    into `data/seed` from a path that runs against real accounts. It never
+    changed the outcome — a live route pool contains no demo id, so it always
+    fell through to `pool[0]` — but a live read of a demo identifier is the
+    kind of thing that stops being harmless the moment somebody reuses the
+    constant. `pool[0]` was always what it meant.
+  */
+  return pool.find((r) => r.repId === userId) ?? pool[0] ?? null
 }
 
 /** Keeps exactly one stop `active` — the one the "Next" card points at. */
@@ -1427,11 +1439,6 @@ function promoteNextStop(route: Route): Route {
 }
 
 /* --- Derived selectors ---------------------------------------------------- */
-
-export function useProperty(id?: string): Property | undefined {
-  return useAppStore((s) => (id ? s.properties[id] : undefined))
-}
-
 export function useRouteProgress() {
   return useAppStore((s) => {
     const route = s.route

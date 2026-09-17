@@ -34,8 +34,14 @@ export function QuickActions() {
     one on top of it. At 320px the button was landing squarely on "Start visit" —
     a second orange circle covering the one control the whole screen exists to
     offer. A quick-action shortcut is never worth obscuring the action itself.
+
+    `navigate` and `street` were missing from that list and had the same bug.
+    Navigate pins `Google Maps` and `Start visit` side by side, and the circle
+    landed on the right-hand end of Start visit — the same collision, on the
+    screen a rep reaches by driving to a door. Street pins nothing, but its
+    list runs under the button, so the last door on the street was covered.
   */
-  if (/^\/(property|lead|schedule|visit|capture)/.test(pathname)) return null
+  if (/^\/(property|lead|schedule|visit|capture|navigate|street)/.test(pathname)) return null
 
   /*
     The list is chosen by job.

@@ -102,8 +102,15 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <InAppBrowserNotice />
-      <OfflineBanner />
+      {/*
+        Both of these render null most of the time, so the rail is usually an
+        empty div — which is exactly what the CSS keys on to decide whether the
+        notch belongs to it or to the title bar below.
+      */}
+      <div className="banner-rail shrink-0">
+        <InAppBrowserNotice />
+        <OfflineBanner />
+      </div>
       <div className="flex min-h-0 flex-1">
         {!inConsole && <SideRail role={user.role} />}
         {/*

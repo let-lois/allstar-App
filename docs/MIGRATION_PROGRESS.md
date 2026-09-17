@@ -203,6 +203,16 @@ phone, and there is no simulator in the environment this was built in. Run
   needs `ascAppId`, which only exists once the App Store Connect record does.
 - The GitHub link, which is gated on one successful `eas build` from a machine.
 
+### Before any build a rep will use
+
+`EXPO_PUBLIC_ORIGIN` must be set in `apps/mobile/.env.local` to the web app's
+public address. Every team member badge carries a QR code built from
+`window.location.origin`, and inside the DOM shell that is the webview's local
+origin — so the code would be one no homeowner's camera can open, and nothing
+on screen would look wrong. `src/lib/badge.ts` was written for exactly this
+case on `main` before the shell existed; no gate covers it, so it is a value
+somebody has to supply rather than something that fails loudly.
+
 ### The one thing to get right at setup
 
 The mobile app will live at `apps/mobile`, not the repo root, so the Expo

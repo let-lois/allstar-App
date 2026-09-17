@@ -44,7 +44,7 @@ export function WalkthroughStep({ busy, error, post }: StepProps) {
         <span className="grid h-20 w-20 place-items-center rounded-full bg-surface-tint text-accent [&>svg]:h-10 [&>svg]:w-10" aria-hidden>
           <Icon />
         </span>
-        <h2 className="mt-6 text-[21px] font-semibold leading-tight tracking-[-0.01em]">{card.title}</h2>
+        <h2 className="mt-6 text-[23px] font-semibold leading-tight tracking-[-0.01em]">{card.title}</h2>
         <p className="mt-3 max-w-[30ch] text-[15.5px] leading-relaxed text-ink-mute">{card.body}</p>
       </div>
 

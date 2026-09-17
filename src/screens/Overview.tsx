@@ -195,52 +195,41 @@ export function Overview({ role }: { role: Role }) {
             </div>
           </section>
 
+          {/*
+            The accounts this deployment actually holds — which is one, the
+            company the person is signed in to.
+
+            Three invented companies used to sit here, inline, with rep counts
+            and health labels: Summit Exteriors, Bright Path Solar, Redline
+            Roofing. They rendered in live mode with nothing marking them as
+            illustrative, on the home screen of the first administrator a
+            deployment ever creates, because setup makes that person a super
+            admin. An operator reading their own product had no way to tell
+            that two thirds of their customer list was fiction.
+
+            There is no endpoint that lists accounts — `/api/clients` does not
+            exist — so the honest version is the one row we can prove and a
+            sentence saying why there is only one. When a multi-tenant API
+            arrives this becomes a map over its response and nothing else
+            changes.
+          */}
           {isSuper && (
             <section className="section">
-              <SectionHeader title="Clients" standalone />
-              <ul className="panel row-group">
-                {[
-                  { name: 'Summit Exteriors', reps: 12, status: 'Healthy' },
-                  { name: 'Bright Path Solar', reps: 28, status: 'Healthy' },
-                  { name: 'Redline Roofing', reps: 7, status: 'Low activity' },
-                ].map((c) => (
-                  <li key={c.name} className="flex min-h-[64px] items-center gap-3 px-4 py-3">
-                    <Avatar
-                      initials={c.name
-                        .split(' ')
-                        .slice(0, 2)
-                        .map((w) => w[0])
-                        .join('')}
-                      name={c.name}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-medium">{c.name}</span>
-                      {/*
-                        The count and the state on one quiet line rather than a
-                        filled pill on the right. A status badge per row turns a
-                        list into a table of labels; a dot and two words is the
-                        same information at a fraction of the volume.
-                      */}
-                      <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-ink-mute">
-                        <span className="nums">{c.reps} reps</span>
-                        <span aria-hidden>·</span>
-                        <span
-                          aria-hidden
-                          className={`h-[6px] w-[6px] shrink-0 rounded-full ${
-                            c.status === 'Healthy' ? 'bg-good' : 'bg-warn'
-                          }`}
-                        />
-                        <span>{c.status}</span>
-                      </span>
+              <SectionHeader title="Account" standalone />
+              <ul className="panel row-group" data-testid="overview-accounts">
+                <li className="flex min-h-[64px] items-center gap-3 px-4 py-3">
+                  <Avatar initials={initials} name={user?.clientName ?? 'This account'} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-medium">{user?.clientName ?? 'This account'}</span>
+                    <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-ink-mute">
+                      <span className="nums">{teamStats.length}</span>
+                      <span>{teamStats.length === 1 ? 'person on the team' : 'people on the team'}</span>
                     </span>
-                    <span className="shrink-0 text-ink-faint">
-                      <IconChevron />
-                    </span>
-                  </li>
-                ))}
+                  </span>
+                </li>
               </ul>
               <p className="text-[13px] leading-snug text-ink-mute">
-                Full administration, analytics and audit logs are on desktop.
+                This deployment serves one account. Full administration, analytics and audit logs are on desktop.
               </p>
             </section>
           )}
@@ -254,6 +243,17 @@ export function Overview({ role }: { role: Role }) {
               onAction={() => nav('/team')}
             />
             <ul className="panel row-group" data-tour="overview-team">
+              {/*
+                A visible empty box with a heading above it and nothing in it
+                was what an account with no other reps got. One line is all it
+                needs, and it belongs inside the panel so the panel still has
+                something to be.
+              */}
+              {teamStats.length === 0 && (
+                <li className="px-4 py-5 text-[13.5px] leading-snug text-ink-mute" data-testid="overview-team-empty">
+                  Nobody else on the team yet. Reps appear here once your office invites them.
+                </li>
+              )}
               {teamStats.map((rep) => (
                 <li key={rep.id}>
                   <button
