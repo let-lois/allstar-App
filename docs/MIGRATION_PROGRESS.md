@@ -1,6 +1,6 @@
 # Web → native: the worklist
 
-**Status: assess complete. Nothing nativized yet.**
+**Status: core extracted, native shell scaffolded. No screen nativized yet.**
 
 This is the durable worklist for turning the All-Star web app into an iOS and
 Android app, kept in the repo so it survives a conversation. It follows Expo's
@@ -102,13 +102,46 @@ importing files are untouched and the built bundle is byte-identical to the
 commit before. Call sites move to `@allstar/core/...` as their screens get
 touched.
 
+## 6. Step 2 — done
+
+`apps/mobile` exists: Expo SDK 57, React Native 0.86, Expo Router, React 19.
+It is a workspace member (`@allstar/mobile`) alongside `packages/core`, and the
+root `package.json` now lists `apps/*` and `packages/*`.
+
+Wired to the real Expo project:
+
+| | |
+| --- | --- |
+| owner | `let-lois` (organization) |
+| slug | `all-star-app` |
+| projectId | `497739ce-76e6-420a-b80e-308126e25f35` |
+| bundle id / package | `com.allstarhomesolutions.allstar` |
+
+No `metro.config.js`. Expo has configured Metro for monorepos automatically
+since SDK 52, and the guide is explicit that `watchFolders`,
+`resolver.nodeModulesPath`, `resolver.extraNodeModules` and
+`resolver.disableHierarchicalLookup` should be *absent* rather than set.
+
+`src/app/index.tsx` is a checkpoint screen, not a design: it reads `OUTCOMES`,
+`OUTCOME_TO_STATUS`, `STATUS_LABEL` and `distanceMiles` from `@allstar/core`
+and renders them. `npx expo export --platform ios` produces a 3.5 MB Hermes
+bundle containing those strings, which is the proof that the shared package
+crosses the boundary at bundle time and not merely at typecheck time.
+
+React 19 (mobile) and React 18 (web) coexist: npm nests 19 under
+`apps/mobile/node_modules` and leaves 18.3.1 hoisted for the web app. The web
+bundle is byte-identical to the commit before either change.
+
 ### What is not started
 
-- The Expo app itself (`apps/mobile`) — not scaffolded.
-- The DOM-component shell — the day-one milestone.
-- Any native screen.
+- The DOM-component shell — the day-one milestone, where the existing web UI
+  runs inside the native container.
+- Any native screen. `index.tsx` is a checkpoint, not Today.
 - `expo-sqlite` behind the `db.ts` boundary.
-- App Store Connect and Play Console records, bundle identifier, `eas.json`.
+- App Store Connect and Play Console records. `eas.json` exists with
+  development, preview and production profiles; `submit.production.ios` still
+  needs `ascAppId`, which only exists once the App Store Connect record does.
+- The GitHub link, which is gated on one successful `eas build` from a machine.
 
 ### The one thing to get right at setup
 
