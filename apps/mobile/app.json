@@ -8,7 +8,6 @@
     "scheme": "allstar",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.allstarhomesolutions.allstar",
       "supportsTablet": false,
       "infoPlist": {
@@ -20,7 +19,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#07B3CA",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -41,9 +40,13 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 96,
+          "backgroundColor": "#f0f2f7",
+          "dark": {
+            "image": "./assets/images/splash-icon.png",
+            "backgroundColor": "#0d1320"
+          }
         }
       ]
     ],

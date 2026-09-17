@@ -31,6 +31,12 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "brand"
 OUT = ROOT / "public"
+MOBILE = ROOT / "apps" / "mobile" / "assets" / "images"
+# The two images the web app *imports* rather than serves. They moved out of
+# public/ when the native shell arrived: a DOM component's page is loaded from
+# `file://`, so an absolute `/logo.png` resolves to the filesystem root and the
+# image 404s. An import is a real dependency to both bundlers.
+WEB_SRC = ROOT / "src" / "assets"
 
 WORDMARK = SRC / "allstar-wordmark.png"
 STAR = SRC / "allstar-star.png"
@@ -129,7 +135,7 @@ def trim(im: Image.Image, pad_ratio: float = 0.0) -> Image.Image:
     return canvas
 
 
-def save(im: Image.Image, name: str, quantize: bool = False) -> None:
+def save(im: Image.Image, name: str, quantize: bool = False, out: Path = None) -> None:
     """Write a PNG, optionally palette-quantised.
 
     The sources are AI-generated and carry compression noise — thousands of
@@ -137,11 +143,12 @@ def save(im: Image.Image, name: str, quantize: bool = False) -> None:
     two-colour artwork warrants. Quantising the flat-colour icons is visually
     lossless here and cuts them by an order of magnitude.
     """
-    path = OUT / name
-    out = im
+    path = (out or OUT) / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img = im
     if quantize:
-        out = im.quantize(colors=64, method=Image.Quantize.FASTOCTREE)
-    out.save(path, "PNG", optimize=True)
+        img = im.quantize(colors=64, method=Image.Quantize.FASTOCTREE)
+    img.save(path, "PNG", optimize=True)
     kb = path.stat().st_size / 1024
     print(f"  {name:28} {im.width:>4}x{im.height:<4}  {kb:6.1f} KB")
 
@@ -153,7 +160,8 @@ def main() -> None:
     # 720px wide covers a 3x display at the ~240px the login renders it.
     ratio = 720 / word.width
     word_std = word.resize((720, max(1, round(word.height * ratio))), Image.LANCZOS)
-    save(word_std, "logo.png", quantize=True)
+    # Imported by `ui/Wordmark.tsx`, not served — see WEB_SRC.
+    save(word_std, "logo.png", quantize=True, out=WEB_SRC)
 
     light = key_background(Image.open(WORDMARK), ink=(255, 255, 255), recolour_ink=True)
     light = trim(light)
@@ -167,6 +175,11 @@ def main() -> None:
     star = trim(star)
     for size in (512, 192):
         save(star.resize((size, size), Image.LANCZOS), f"icon-{size}.png", quantize=True)
+    # The 192 exists twice on purpose, and both are generated so neither can
+    # drift: index.html serves it from public/ as the PWA icon, and
+    # `nav/BottomNav.tsx` imports it, which is the only form that resolves
+    # inside the native shell.
+    save(star.resize((192, 192), Image.LANCZOS), "icon-192.png", quantize=True, out=WEB_SRC)
     save(star.resize((32, 32), Image.LANCZOS), "favicon-32.png", quantize=True)
 
     # Maskable: full-bleed teal, star inside the 80% safe circle so a circular
@@ -182,5 +195,81 @@ def main() -> None:
         save(canvas, name, quantize=True)
 
 
+def mobile() -> None:
+    """The native app's identity.
+
+    This existed as Expo's template branding until now, which is worth saying
+    plainly: the icon source was a file called `expo-symbol 2.svg` with Expo's
+    blue gradient, `splash-icon.png` was byte-identical to `expo-logo.png`, and
+    the three Android adaptive layers were Expo's chevron. So the App Store
+    listing, the home screen and the launch screen all showed somebody else's
+    logo. Only `public/` had ever been generated from `brand/`.
+
+    Generated here rather than exported by hand so the phone cannot drift from
+    the web: one source of artwork, one set of rules about keying and safe
+    areas, and `verify:brand-assets` fails if a file stops matching what this
+    would write.
+
+    ## The sizes, and why each one
+
+    `icon.png` at 1024 because that is what App Store Connect requires, and
+    anything smaller is upscaled into a soft icon. Full-bleed rather than
+    transparent: iOS composites an icon onto black and masks it itself, so a
+    transparent icon becomes a star floating on a black square.
+
+    The Android layers are separate because an adaptive icon is composited by
+    the launcher, which crops the pair to whatever shape the device uses — a
+    circle on many. The star is placed inside the same 60% safe box the web
+    maskable icon uses, which is what stops its points being sliced off.
+
+    The monochrome layer is the star as a flat silhouette. Android tints it
+    itself for themed icons, so any colour here would be discarded — and a
+    layer with colour in it reads as a mistake to whoever next opens the file.
+    """
+    print("mobile")
+    star_tile = trim(key_background(Image.open(STAR)))
+    glyph_src = trim(star_glyph(Image.open(STAR)))
+
+    inner = round(1024 * 0.60)
+    glyph = glyph_src.resize((inner, inner), Image.LANCZOS)
+    offset = (1024 - inner) // 2
+
+    """
+    iOS wants a full-bleed square, not the rounded tile.
+
+    The web's `icon-512.png` keeps the artwork's own rounded corners, which is
+    right for a PWA icon that is drawn as-is. iOS is the opposite: it applies
+    the squircle mask itself and composites whatever is behind the icon onto
+    **black**, so handing it a rounded tile puts a black wedge in each corner.
+    Same 60% safe box as the web maskable icon, which is what keeps the star's
+    points clear of any mask a launcher or a watch face chooses.
+    """
+    ios = Image.new("RGBA", (1024, 1024), (*TEAL, 255))
+    ios.paste(glyph, (offset, offset), glyph)
+    save(ios, "icon.png", quantize=True, out=MOBILE)
+
+    # The launch screen, which sits on its own background colour — so here the
+    # artwork's rounded tile is right, and the same mark a rep tapped.
+    save(star_tile.resize((512, 512), Image.LANCZOS), "splash-icon.png", quantize=True, out=MOBILE)
+
+    fg = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+    fg.paste(glyph, (offset, offset), glyph)
+    save(fg, "android-icon-foreground.png", quantize=True, out=MOBILE)
+
+    save(
+        Image.new("RGBA", (1024, 1024), (*TEAL, 255)),
+        "android-icon-background.png",
+        out=MOBILE,
+    )
+
+    mono = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+    mono.paste(glyph, (offset, offset), glyph)
+    save(mono, "android-icon-monochrome.png", quantize=True, out=MOBILE)
+
+    # The web favicon doubles as Expo's, at the size a browser tab wants.
+    save(star_tile.resize((48, 48), Image.LANCZOS), "favicon.png", quantize=True, out=MOBILE)
+
+
 if __name__ == "__main__":
     main()
+    mobile()
