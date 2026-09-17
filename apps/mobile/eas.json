@@ -15,7 +15,8 @@
       },
       "env": {
         "EXPO_PUBLIC_ORIGIN": "https://allstar.letlois.com"
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
@@ -29,7 +30,8 @@
       },
       "env": {
         "EXPO_PUBLIC_ORIGIN": "https://allstar.letlois.com"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
@@ -41,7 +43,8 @@
       },
       "env": {
         "EXPO_PUBLIC_ORIGIN": "https://allstar.letlois.com"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {

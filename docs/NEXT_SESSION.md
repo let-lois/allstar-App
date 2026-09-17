@@ -4,13 +4,37 @@ Written at the end of the session that built `packages/core`, `apps/mobile` and
 the DOM shell. Everything here is pushed to
 `claude/adoring-ramanujan-nkugv6` and open as PR #146.
 
-## Why a new session is needed
+## Done — the shell is on Expo Go
 
-`EXPO_TOKEN` was added to the environment's secrets while a container was
-already running, and secrets are injected at container start. `eas whoami` in
-that container reported "Not logged in" and there was no `EXPO_TOKEN` among its
-144 environment variables. A fresh session picks it up at boot.
+No new session was needed in the end. `EXPO_TOKEN` arrived when the container
+restarted, secrets being injected at boot.
 
+The tappable link:
+
+```
+exp://u.expo.dev/497739ce-76e6-420a-b80e-308126e25f35?runtime-version=exposdk%3A57.0.0&channel-name=preview
+```
+
+Dashboard: https://expo.dev/accounts/let-lois/projects/all-star-app/updates/55f39791-f0a5-4483-93e1-833b3834ea05
+
+Two things about that which are easy to get wrong:
+
+- **`eas update:configure` chose `runtimeVersion: {"policy":"appVersion"}`, and
+  Expo Go cannot load that.** It needs `sdkVersion`. Changed, and the published
+  update confirms it: `Runtime version exposdk:57.0.0`. Expo's own guidance
+  warns against changing this policy casually, because it decides which
+  installed builds can receive future updates — so it was checked rather than
+  assumed: `build_list` returns `[]`, no builds exist, nothing to orphan. The
+  change is free now and would not have been later.
+- **`eas update --branch preview` publishes to a *branch*, and no channel
+  existed.** `channel:list` was empty, so a `channel=preview` link would have
+  resolved to nothing. `eas channel:create preview` connected the two. Channels
+  and branches are separate objects.
+
+Verified rather than constructed: the manifest at `u.expo.dev` returns 200 for
+`expo-channel-name: preview` with `exposdk:57.0.0` on iOS.
+
+## Why EAS Update rather than a tunnel
 ## Why EAS Update rather than a tunnel
 
 `npx expo start --tunnel` cannot work from a Claude Code cloud container, and
