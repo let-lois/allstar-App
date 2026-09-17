@@ -7,24 +7,49 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "android": { "image": "latest" },
-      "ios": { "image": "latest" }
+      "android": {
+        "image": "latest"
+      },
+      "ios": {
+        "image": "latest"
+      },
+      "env": {
+        "EXPO_PUBLIC_ORIGIN": "https://allstar.letlois.com"
+      }
     },
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk", "image": "latest" },
-      "ios": { "image": "latest", "simulator": true }
+      "android": {
+        "buildType": "apk",
+        "image": "latest"
+      },
+      "ios": {
+        "image": "latest",
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_ORIGIN": "https://allstar.letlois.com"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "android": { "image": "latest" },
-      "ios": { "image": "latest" }
+      "android": {
+        "image": "latest"
+      },
+      "ios": {
+        "image": "latest"
+      },
+      "env": {
+        "EXPO_PUBLIC_ORIGIN": "https://allstar.letlois.com"
+      }
     }
   },
   "submit": {
     "production": {
       "ios": {},
-      "android": { "track": "internal" }
+      "android": {
+        "track": "internal"
+      }
     }
   }
 }

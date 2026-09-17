@@ -203,15 +203,20 @@ phone, and there is no simulator in the environment this was built in. Run
   needs `ascAppId`, which only exists once the App Store Connect record does.
 - The GitHub link, which is gated on one successful `eas build` from a machine.
 
-### Before any build a rep will use
+### The badge QR, which would have been wrong and looked right
 
-`EXPO_PUBLIC_ORIGIN` must be set in `apps/mobile/.env.local` to the web app's
-public address. Every team member badge carries a QR code built from
+`EXPO_PUBLIC_ORIGIN` is set to `https://allstar.letlois.com` in every build
+profile's `env` block in `apps/mobile/eas.json` — committed configuration,
+since the repo deliberately keeps real `.env` values out of the tree. A local
+`expo start` needs it in `.env.local`; `.env.example` says so. Every team member badge carries a QR code built from
 `window.location.origin`, and inside the DOM shell that is the webview's local
-origin — so the code would be one no homeowner's camera can open, and nothing
-on screen would look wrong. `src/lib/badge.ts` was written for exactly this
-case on `main` before the shell existed; no gate covers it, so it is a value
-somebody has to supply rather than something that fails loudly.
+origin — so the code would be one no homeowner's camera can open, with nothing
+on screen looking wrong. No gate covers it.
+
+`src/lib/badge.ts` was written for exactly this case on `main` before the shell
+existed. The value is not a guess: it is the origin the API already
+hard-defaults to for invite join links (`APP_URL`), and a badge and an invite
+email should point at the same place.
 
 ### The one thing to get right at setup
 
