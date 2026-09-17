@@ -105,7 +105,7 @@ function Line({ item, onFix }: { item: ChecklistItemDTO; onFix?: () => void }) {
         {item.detail && !item.done && <p className="mt-0.5 text-[13px] leading-snug text-ink-mute">{item.detail}</p>}
       </div>
       {!item.done && onFix && (
-        <button type="button" onClick={onFix} className="focusable min-h-[36px] shrink-0 rounded-lg px-2 text-[13.5px] font-semibold text-accent">
+        <button type="button" onClick={onFix} className="focusable min-h-tap shrink-0 rounded-lg px-3 text-[13.5px] font-semibold text-accent">
           Fix
         </button>
       )}

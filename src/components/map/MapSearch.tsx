@@ -214,7 +214,21 @@ export function MapSearch({
             onClick={() => setOpen(false)}
             className="fixed inset-0 z-10 cursor-default"
           />
-          <div className="absolute inset-x-0 z-20 mt-1.5 overflow-hidden card shadow-raise">
+          {/*
+            Bounded and scrollable. This panel can carry six lead rows at a full
+            tap target each, a section label and four places — around 500px, and
+            it is only ever open while somebody is typing, which is exactly when
+            the keyboard has taken the bottom of the screen. `overflow-hidden`
+            clipped what did not fit rather than letting it be reached, so the
+            last results were unreachable with no sign they were there.
+
+            The cap is the visible viewport less the chrome above the field;
+            `--app-h` already tracks the keyboard, so this shrinks with it.
+          */}
+          <div
+            className="absolute inset-x-0 z-20 mt-1.5 overflow-y-auto card shadow-raise"
+            style={{ maxHeight: 'calc(var(--app-h, 100dvh) - 9rem)' }}
+          >
             {leads.length > 0 && (
               <ul aria-label="Matching leads">
                 {leads.map((p) => (

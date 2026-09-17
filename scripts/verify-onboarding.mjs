@@ -195,6 +195,14 @@ const signIn = (page, email) => signInAt(page, BASE, email)
   ok((await photoLine.getAttribute('data-done')) === 'false', 'the photo line is not done')
   ok(await page.getByTestId('checklist-complete').isDisabled(), 'and Complete setup is disabled because a required line is not done')
   ok(/5 of 6 required/.test(await body(page)), 'the summary counts the required lines', (await body(page)).match(/\d of \d required[^.]*/)?.[0])
+  /*
+    The checklist is the one step this gate never measured — every other step
+    has had a target sweep since it was written, and `Fix` only exists here,
+    only on a line that is not done. It was 36px: the control that repairs the
+    thing blocking a new rep from finishing setup, smaller than the minimum
+    every neighbouring screen is held to.
+  */
+  ok((await targets(page)).length === 0, `every target on the checklist step is at least 44px${(await targets(page)).length ? ' — ' + (await targets(page)).join(', ') : ''}`)
   await photoLine.getByRole('button', { name: /^Fix$/ }).click()
   await page.waitForTimeout(400)
   ok((await shell.getAttribute('data-step')) === 'profile', 'Fix on the photo line goes back to the profile')

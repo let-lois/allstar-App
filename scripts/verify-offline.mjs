@@ -47,6 +47,45 @@ ok((await syncText()).includes('Offline'), 'sync chip reports Offline when the l
 const banner = await page.locator('text=/Working offline/').count()
 ok(banner > 0, 'offline banner is shown')
 
+/*
+  And it is shown *below* the status bar, not under it.
+
+  On an installed phone the web view owns the notch strip, and this banner
+  rendered straight into the app shell with no inset — so "Working offline"
+  sat under the clock. The other half of the same bug was the title bar
+  underneath it, which claimed a full inset of its own unconditionally, so on
+  the days a banner was showing the app paid for the notch twice.
+
+  `env(safe-area-inset-top)` is zero in every desktop browser and cannot be
+  set, which is why neither half was ever measured. Behind `--safe-top` it can
+  be: the value below is an iPhone's, and the two assertions are the two
+  halves.
+*/
+const NOTCH = 47
+await page.evaluate((px) => document.documentElement.style.setProperty('--safe-top', `${px}px`), NOTCH)
+await page.waitForTimeout(300)
+
+const rail = page.locator('.banner-rail')
+const railBox = await rail.boundingBox()
+const bannerTop = await page.locator('text=/Working offline/').first().boundingBox()
+ok(
+  !!railBox && Math.round(railBox.y) === 0 && !!bannerTop && Math.round(bannerTop.y) >= NOTCH,
+  'the banner clears the status bar rather than sitting under it',
+  bannerTop ? `banner starts at ${Math.round(bannerTop.y)}px, notch is ${NOTCH}px` : 'no banner box',
+)
+const topbarPad = await page
+  .locator('.topbar-lit')
+  .first()
+  .evaluate((el) => getComputedStyle(el).paddingTop)
+  .catch(() => 'none')
+ok(
+  topbarPad === '0px',
+  'and the title bar below it does not claim the notch a second time',
+  `title bar padding-top: ${topbarPad}`,
+)
+await page.evaluate(() => document.documentElement.style.removeProperty('--safe-top'))
+await page.waitForTimeout(200)
+
 // ---- complete a full visit with no connection -----------------------------
 await page.goto(`${BASE}/route`, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(800)

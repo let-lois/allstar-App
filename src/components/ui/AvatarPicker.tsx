@@ -126,7 +126,7 @@ export function AvatarRemove() {
     <button
       type="button"
       onClick={() => void setMyAvatar(null)}
-      className="focusable mt-1 min-h-[32px] rounded-lg text-[12.5px] font-semibold text-accent"
+      className="focusable mt-1 inline-flex min-h-tap items-center rounded-lg px-2 text-[12.5px] font-semibold text-accent"
     >
       Remove photo
     </button>

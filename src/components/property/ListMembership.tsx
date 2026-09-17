@@ -63,7 +63,7 @@ export function ListMembership({ propertyId, compact }: { propertyId: string; co
             <button
               key={l.id}
               onClick={() => nav(`/lists/${l.id}`)}
-              className="focusable rounded-full bg-ink/10 px-2.5 py-1 text-[12px] font-semibold text-accent-strong"
+              className="focusable inline-flex min-h-tap items-center rounded-full bg-ink/10 px-3.5 text-[12px] font-semibold text-accent-strong"
               data-testid="on-list"
             >
               {l.name}
