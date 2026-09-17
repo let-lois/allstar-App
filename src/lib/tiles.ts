@@ -15,7 +15,7 @@ import { project } from './geo'
  * enhancement, never a dependency.
  */
 
-const KEY = (import.meta.env.VITE_MAPTILER_KEY as string | undefined)?.trim() || ''
+const KEY = (process.env.EXPO_PUBLIC_MAPTILER_KEY as string | undefined)?.trim() || ''
 
 /** Every host tiles may be fetched from. Mirrored in the CSP in public/_headers. */
 export const TILE_HOST = 'https://api.maptiler.com'

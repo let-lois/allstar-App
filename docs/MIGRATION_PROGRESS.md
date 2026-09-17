@@ -1,6 +1,6 @@
 # Web → native: the worklist
 
-**Status: core extracted, native shell scaffolded. No screen nativized yet.**
+**Status: the web app runs inside the native app. No screen nativized yet.**
 
 This is the durable worklist for turning the All-Star web app into an iOS and
 Android app, kept in the repo so it survives a conversation. It follows Expo's
@@ -132,10 +132,70 @@ React 19 (mobile) and React 18 (web) coexist: npm nests 19 under
 `apps/mobile/node_modules` and leaves 18.3.1 hoisted for the web app. The web
 bundle is byte-identical to the commit before either change.
 
+## 7. Step 3 — done: the DOM shell
+
+The day-one milestone. `apps/mobile/src/components/allstar-web.tsx` carries
+`'use dom'`, imports the web app's own `App` and `index.css`, and Metro bundles
+the result as web code for a webview. `npx expo export --platform ios`
+produces:
+
+| | |
+| --- | --- |
+| native bundle | 3.4 MB Hermes bytecode |
+| DOM bundle | 1.0 MB JavaScript, 328 modules |
+| DOM stylesheet | 56 KB — Tailwind compiled, 532 utility classes |
+
+Verified by inspecting the output, not inferred: the rep app's strings are
+present (`Today`, `Knock`, `No Answer`, `Do Not Contact`, `Leads`), the offline
+storage layer is present (`indexedDB`, `openDB`, `objectStore`), and every
+admin marker is absent.
+
+**IndexedDB genuinely works**, because a webview has a real one. That is the
+reason this is a DOM component rather than a `WebView` pointed at
+support.letlois.com: an offline-first app whose storage is a remote page is not
+offline-first, and a rep in a basement is the case the app exists for.
+
+Three deliberate differences from the web app's `src/main.tsx`:
+
+1. **`MemoryRouter`, not `BrowserRouter`** — there is no address bar in a
+   webview and no server to ask for a path.
+2. **No service worker** — it caches the app shell for an offline cold start on
+   the web. The native bundle is already on the device.
+3. **No install prompt** — nothing to install inside an app from the App Store.
+
+### What it cost the web app
+
+Three changes, each measured:
+
+- **`import.meta.env` → `process.env.EXPO_PUBLIC_*`** at seven sites. Metro
+  cannot parse `import.meta` at all, so a module using it fails to build rather
+  than misbehave. `vite.config.ts` now substitutes the same `VITE_*` names via
+  `define`. **An unset value becomes `undefined`, not `''`**, so the optional
+  chain short-circuits and the expression still folds at build time — without
+  that, an unconfigured build stopped shedding `GoogleFieldMap`, `supercluster`,
+  `kdbush` and `fast-equals`, 45 KB a rep would download and never run. Routing
+  the values through a shared module lost the same 45 KB, because neither
+  bundler folds across a module boundary. Final result: **byte-identical
+  bundles, with and without a key.**
+- **`src/adminRoutes.tsx` extracted from `App.tsx`.** Metro follows a dynamic
+  `import()` into the bundle instead of leaving it to be fetched, so the eleven
+  lazy console imports would have put all 8,575 lines of desktop console on the
+  phone — and `expo export` failed outright on the shared chunk they produced.
+  `apps/mobile/metro.config.js` swaps the module for a stub that renders
+  nothing. The web build is unchanged: 12 admin chunks, vendor byte-identical.
+- **One copy of `@types/react`, at 19.** Two copies meant the web app's files
+  were checked against React 18's `ReactNode` while their JSX came from 19's.
+  Cost: two `JSX.Element` references became `React.JSX.Element`, which React
+  19's types require. The web app still *runs* React 18.
+
+### What is still unproven
+
+That it bundles is proved. That it *renders correctly* is not — that needs a
+phone, and there is no simulator in the environment this was built in. Run
+`npx expo start` in `apps/mobile` and open it in Expo Go.
+
 ### What is not started
 
-- The DOM-component shell — the day-one milestone, where the existing web UI
-  runs inside the native container.
 - Any native screen. `index.tsx` is a checkpoint, not Today.
 - `expo-sqlite` behind the `db.ts` boundary.
 - App Store Connect and Play Console records. `eas.json` exists with

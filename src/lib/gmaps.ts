@@ -23,8 +23,8 @@
  * tiles but no pins would be worse than no Google map at all.
  */
 
-const KEY = (import.meta.env.VITE_GOOGLE_MAPS_KEY as string | undefined)?.trim() || ''
-const MAP_ID = (import.meta.env.VITE_GOOGLE_MAP_ID as string | undefined)?.trim() || ''
+const KEY = (process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY as string | undefined)?.trim() || ''
+const MAP_ID = (process.env.EXPO_PUBLIC_GOOGLE_MAP_ID as string | undefined)?.trim() || ''
 
 /** Milliseconds before a load that has neither succeeded nor errored is given up
  *  on. A script tag on a stalled connection can hang indefinitely, and a rep
@@ -87,7 +87,7 @@ export function gmapsConfigProblem(): string | null {
   console is the right channel for it — this is a build-time misconfiguration,
   visible to whoever deployed it, and not something to put in front of a rep.
 */
-if (import.meta.env.DEV || gmapsConfigProblem()) {
+if (process.env.NODE_ENV !== 'production' || gmapsConfigProblem()) {
   const problem = gmapsConfigProblem()
   if (problem) console.warn(`[allstar] Google Maps is half-configured: ${problem}`)
 }

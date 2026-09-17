@@ -105,7 +105,7 @@ export function QuickActions() {
     },
   ]
 
-  const actions: { label: string; hint: string; icon: JSX.Element; run: () => void }[] = isRep
+  const actions: { label: string; hint: string; icon: React.JSX.Element; run: () => void }[] = isRep
     ? repActions
     : officeActions
 

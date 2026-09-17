@@ -13,7 +13,7 @@ import type { BadgeInfo, BadgeStatus, LeadStatus, OnboardingStatus, OnboardingSt
  * The default is the deployed Worker, which is what a Pages build should use.
  */
 export const API_URL: string =
-  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ||
+  (process.env.EXPO_PUBLIC_API_URL as string | undefined)?.replace(/\/$/, '') ||
   'https://allstar-api.josh-af6.workers.dev'
 
 export interface SessionUserDTO {

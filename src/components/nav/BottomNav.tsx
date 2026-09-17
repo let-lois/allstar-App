@@ -14,7 +14,7 @@ import { Wordmark } from '../ui/Wordmark'
 interface Item {
   to: string
   label: string
-  Icon: () => JSX.Element
+  Icon: () => React.JSX.Element
 }
 
 /**
