@@ -1,4 +1,5 @@
 import { fromGeocoder, partsToFields, precisionOf, type AddressFields, type AddressPrecision } from './address'
+import { isNativeShell } from './webview'
 
 /**
  * What address is under this point?
@@ -135,9 +136,73 @@ const googleLookup: ReverseLookup = async (at) => {
  * network. That is deliberate: those are the parts whose failure costs money
  * rather than pixels.
  */
+/**
+ * The same question, put to our own server instead of to Google directly.
+ *
+ * The native shell has no way to use the browser geocoder, and it is not a
+ * missing key — it is not fixable with a key. A DOM component's page is loaded
+ * from `file://`, so it sends no `Referer` at all, and an HTTP-referrer
+ * restriction is the only application restriction the Maps JavaScript API
+ * supports. An iOS- or Android-restricted key validates a bundle identifier
+ * sent by the *native* Maps SDK, which a webview running JavaScript is not. The
+ * remaining choices were shipping an unrestricted key inside the app, where
+ * anybody can lift it and spend it, or asking the Worker — which already holds
+ * a server-side geocoding key, already meters it per company, and is where the
+ * forward geocoder for imports runs.
+ *
+ * Throws `Unasked` for every failure, so the caller's cache rule still holds:
+ * "asked and there is nothing here" is remembered, "could not ask" never is.
+ * A rep in a dead zone must not leave a house blank for the rest of the shift.
+ */
+const serverLookup: ReverseLookup = async (at) => {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Unasked('offline')
+  const { liveToken } = await import('./session')
+  const token = liveToken()
+  // The demo has no server, and signed out there is nothing to ask with.
+  if (!token) throw new Unasked('no session')
+
+  const { apiReverseGeocode } = await import('./http')
+  let answer
+  try {
+    answer = await apiReverseGeocode(token, at)
+  } catch (err) {
+    if (!warned) {
+      warned = true
+      console.warn(
+        `[allstar] Reverse geocoding unavailable — addresses will not be filled in from the map. ` +
+          `(${String(err).slice(0, 160)})`,
+      )
+    }
+    throw new Unasked('server refused')
+  }
+  // `parts: null` is a real answer: a tap in a field or a lake.
+  if (!answer.parts) return null
+  /*
+    Cast at the boundary and nowhere else. The Worker returns Google's
+    `address_components` untouched, precisely so the parsing stays in
+    `address.ts` where the browser path already does it and where the judgement
+    about which component is a street number is already gated.
+  */
+  return {
+    parts: answer.parts as { types: string[]; long_name?: string; short_name?: string }[],
+    locationType: answer.locationType,
+  }
+}
+
+/**
+ * Which one this build should use.
+ *
+ * Resolved per call rather than once at module load: `isNativeShell()` reads
+ * `process.env.EXPO_DOM_HOST_OS`, which Expo's runtime assigns while the page
+ * is booting, so a value captured at import time can be wrong.
+ */
+function defaultLookup(): ReverseLookup {
+  return isNativeShell() ? serverLookup : googleLookup
+}
+
 export async function reverseGeocode(
   at: { lat: number; lng: number },
-  lookup: ReverseLookup = googleLookup,
+  lookup: ReverseLookup = defaultLookup(),
 ): Promise<ReverseAddress | null> {
   const key = keyOf(at.lat, at.lng)
   if (cache.has(key)) return cache.get(key) ?? null

@@ -22,7 +22,7 @@ import {
   type GeocodeAttempt,
   type GeocodeRequest,
 } from './geocode'
-import { useGoogleBase } from './geocode-google'
+import { googleReverseGeocode, useGoogleBase } from './geocode-google'
 import { findProvider } from './geocode-providers'
 import { MAX_IMPORT_ROWS, canImport, importProperties, propertyIdFor, type ImportInput, type ImportRow } from './import'
 import { assignProperties, assignTerritory } from './assign'
@@ -1407,6 +1407,97 @@ export default {
       }
 
       /* --- lead import ----------------------------------------------------- */
+      /*
+        The address under a point, for the map's Add-lead step.
+
+        The web app asks Google directly, from the browser, on the
+        referrer-restricted browser key. The native shell cannot: a DOM
+        component's page is loaded from `file://` and therefore sends no
+        `Referer`, and an HTTP-referrer restriction is the only application
+        restriction the Maps JavaScript API supports — an iOS- or
+        Android-restricted key validates a bundle identifier sent by the native
+        Maps SDK, which a webview running JavaScript is not. So either an
+        unrestricted key ships inside the app, where anybody can lift it and
+        spend it, or the lookup happens here. See `googleReverseGeocode`.
+
+        Any signed-in user, with no role check: every rep does this, and it is
+        the one thing on the map that makes the Add-lead form worth opening.
+      */
+      if (path === '/api/geocode/reverse' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as { lat?: unknown; lng?: unknown }
+        const lat = typeof body.lat === 'number' ? body.lat : NaN
+        const lng = typeof body.lng === 'number' ? body.lng : NaN
+        /*
+          Checked rather than forwarded. `NaN` stringifies to `"NaN"` and Google
+          answers it with an INVALID_REQUEST that would be billed and logged as
+          a key problem, which is the wrong console to send somebody to.
+        */
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+          return json({ error: 'Send a lat and lng.', code: 'bad_point' }, 400, cors)
+        }
+
+        /*
+          The company's own key when they have chosen one, exactly as the import
+          path does — so a rep's map taps are billed to and counted against the
+          same key the Geocoders screen says they are paying for. Without this
+          the whole of reverse geocoding would quietly run on the deployment's
+          key, and the screen would be describing something that was not
+          happening.
+        */
+        const { keys, provider } = await geocodeKeysFor(env, user.clientId)
+        if (!keys.google) {
+          /*
+            Census has no reverse geocoder, so a company on Census — or a
+            deployment with no Google key at all — genuinely cannot do this.
+            Named rather than dressed up as "no address here": the client caches
+            a real absence and must not cache this one, and the person who can
+            fix it is whoever holds the Geocoders screen.
+          */
+          return json(
+            {
+              error: 'This company has no geocoder that can look up an address from a point.',
+              code: 'no_reverse_geocoder',
+            },
+            501,
+            cors,
+          )
+        }
+
+        useGoogleBase(env.GOOGLE_GEOCODE_BASE_URL)
+        try {
+          const found = await googleReverseGeocode({ lat, lng }, keys.google)
+          /*
+            Counted whether or not there was an answer: the vendor bills for the
+            question. After the fact, because the money is spent by the time the
+            answer arrives and refusing here would lose the rep's tap without
+            saving the charge.
+          */
+          await recordLookups(env, user.clientId, provider, 1)
+          return json(found ?? { parts: null }, 200, cors)
+        } catch (err) {
+          /*
+            "Could not ask" and "nothing is there" must not look alike. The
+            client caches the second and deliberately does not cache the first,
+            because a rep in a dead zone would otherwise leave that house blank
+            for the rest of the session. The provider's own words go to the
+            console — a revoked key, a disabled API or an exhausted quota all
+            arrive here, and `wrangler tail` is where that gets diagnosed.
+          */
+          console.error(
+            `reverse geocode failed for client ${user.clientId}:`,
+            err instanceof Error ? err.message : String(err),
+          )
+          return json(
+            {
+              error: 'The address lookup service is unavailable.',
+              code: 'geocoder_unavailable',
+            },
+            502,
+            cors,
+          )
+        }
+      }
+
       if (path === '/api/import/geocode' && req.method === 'POST') {
         if (!canImport(user)) return json({ error: 'Not permitted.' }, 403, cors)
         const body = (await req.json().catch(() => ({}))) as { rows?: GeocodeRequest[] }

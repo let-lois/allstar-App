@@ -51,6 +51,7 @@
     "verify:backup-status": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-backup-status.mjs",
     "verify:boot": "node scripts/verify-boot.mjs",
     "verify:geocoders": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-geocoders.mjs",
+    "verify:reverse-geocode": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-reverse-geocode.mjs",
     "verify:csv": "node scripts/verify-csv.mjs",
     "verify:merge": "node scripts/verify-crm-merge.mjs",
     "verify:import": "node scripts/verify-import-ui.mjs",
