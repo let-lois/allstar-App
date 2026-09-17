@@ -121,15 +121,81 @@ for (const status of [204, 205, 304]) {
      'a missing native action throws at install rather than on every request')
 }
 
-/* --- 6. a body that cannot cross says so --------------------------------- */
+/* --- 6. a photo goes UP as well as down ---------------------------------- */
+//
+// This is the one this gate got wrong the first time. It asserted that a Blob
+// body throws, and the comment in the shim claimed nothing sends one — but
+// `apiUploadPhoto` in the web app's `http.ts` passes exactly that as `raw`. So
+// the gate was locking in a bug: every photo upload threw inside `fetch`.
+//
+// Bytes chosen to break a naive encoder: a JPEG magic number, a NUL, and bytes
+// above 0x7f that do not survive being read as text.
+{
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0x00, 0x10, 0x7f, 0x80, 0xfe])
+  const h = harness(text('{"ok":true}'))
+  await h.fetch(`${API}/api/photos/x`, {
+    method: 'POST',
+    body: new Blob([bytes], { type: 'image/jpeg' }),
+  })
+  ok(h.seen.req?.isBase64 === true, 'a Blob body is flagged as base64')
+  const sent = Buffer.from(h.seen.req?.body ?? '', 'base64')
+  ok(
+    sent.length === bytes.length && [...sent].every((b, i) => b === bytes[i]),
+    'and arrives byte-for-byte',
+    `${sent.length} bytes`,
+  )
+}
+
+/* --- 6b. a typed array onto part of a bigger buffer --------------------- */
+//
+// A `Uint8Array` can be a window onto a larger buffer. Base64'ing the whole
+// buffer would upload whatever else is in it alongside the photo — a real
+// disclosure, not just a wrong length.
+{
+  const backing = new Uint8Array([0, 0, 0, 0xca, 0xfe, 0xba, 0xbe, 0, 0])
+  const view = backing.subarray(3, 7)
+  const h = harness(text('{}'))
+  await h.fetch(`${API}/api/photos/y`, { method: 'POST', body: view })
+  const sent = Buffer.from(h.seen.req?.body ?? '', 'base64')
+  ok(
+    sent.length === 4 && [...sent].every((b, i) => b === view[i]),
+    'a typed array is carried as its own window, not its whole backing buffer',
+    `${sent.length} bytes, expected 4`,
+  )
+}
+
+/* --- 6c. text bodies are still text ------------------------------------- */
+//
+// Base64 on every JSON body would be waste on the hot path, and would also
+// hide a mistake: if this came back flagged, everything would still work and
+// every request would be a third larger.
+{
+  const h = harness(text('{}'))
+  await h.fetch(`${API}/api/x`, { method: 'POST', body: '{"a":1}' })
+  ok(h.seen.req?.body === '{"a":1}' && !h.seen.req?.isBase64, 'a string body crosses as text')
+
+  const h2 = harness(text('{}'))
+  await h2.fetch(`${API}/api/x`, { method: 'POST', body: new URLSearchParams({ a: '1' }) })
+  ok(h2.seen.req?.body === 'a=1' && !h2.seen.req?.isBase64, 'and so does URLSearchParams')
+}
+
+/* --- 6d. a body that genuinely cannot cross says so --------------------- */
+//
+// FormData would need a multipart boundary decided on the wrong side of the
+// bridge. Nothing sends one — but a body that silently goes out empty comes
+// back as a puzzling 400, so it has to name itself.
 {
   const h = harness(text('{}'))
   let threw = null
   try {
-    await h.fetch(`${API}/api/x`, { method: 'POST', body: new Blob(['bytes']) })
+    const form = new FormData()
+    form.append('a', '1')
+    await h.fetch(`${API}/api/x`, { method: 'POST', body: form })
   } catch (e) { threw = e }
-  ok(threw instanceof TypeError && /string body/.test(threw.message),
-     'a non-string body throws an explanatory TypeError rather than going out empty')
+  ok(
+    threw instanceof TypeError && /FormData/.test(threw.message),
+    'a FormData body throws an explanatory TypeError rather than going out empty',
+  )
 }
 
 /* --- 7. a Request object, not only a string ------------------------------ */
@@ -138,6 +204,55 @@ for (const status of [204, 205, 304]) {
   await h.fetch(new Request(`${API}/api/health`, { headers: { 'x-trace': '1' } }))
   ok(h.seen.req?.url === `${API}/api/health`, 'a Request object is unwrapped')
   ok(h.seen.req?.headers['x-trace'] === '1', 'and its headers are read')
+}
+
+/* --- 8. the caller's deadline is honoured -------------------------------- */
+//
+// `request()` in the web app gives every call a deadline — 20s normally, 45s
+// for a photo down, 60s for one up — and arms it with `signal`. A signal is a
+// live object and cannot cross a JSON bridge, so the shim used to drop it: none
+// of those deadlines existed on a phone, and a stalled cellular request hung
+// the screen forever instead of failing. It must reject with the same
+// `AbortError` a browser raises, because `answeredButBlocked` in `http.ts`
+// branches on that name to avoid calling a timeout a CORS problem.
+{
+  // A native side that never answers, which is the case worth testing.
+  const target = { fetch: async () => new Response('') }
+  installApiProxy(() => new Promise(() => {}), API, target)
+
+  const ctrl = new AbortController()
+  const call = target.fetch(`${API}/api/slow`, { signal: ctrl.signal })
+  setTimeout(() => ctrl.abort(), 20)
+  let threw = null
+  try { await call } catch (e) { threw = e }
+  ok(
+    threw?.name === 'AbortError',
+    'an aborted request rejects rather than hanging forever',
+    threw ? `${threw.name}: ${threw.message}` : 'it resolved or hung',
+  )
+}
+
+/* --- 8b. a signal already aborted before the call ----------------------- */
+//
+// `AbortSignal` fires `abort` once. Subscribing to a signal that has already
+// fired waits for an event that will never come, so the pre-aborted case has to
+// be checked separately or it hangs — the exact bug being fixed, reintroduced
+// at the other end.
+{
+  const target = { fetch: async () => new Response('') }
+  installApiProxy(() => new Promise(() => {}), API, target)
+  let threw = null
+  try {
+    await target.fetch(`${API}/api/slow`, { signal: AbortSignal.abort() })
+  } catch (e) { threw = e }
+  ok(threw?.name === 'AbortError', 'a signal that was already aborted rejects immediately')
+}
+
+/* --- 8c. and an unaborted signal does not interfere --------------------- */
+{
+  const h = harness(text('{"fine":true}'))
+  const res = await h.fetch(`${API}/api/x`, { signal: new AbortController().signal })
+  ok((await res.json()).fine === true, 'a signal that never fires leaves the response alone')
 }
 
 console.log(

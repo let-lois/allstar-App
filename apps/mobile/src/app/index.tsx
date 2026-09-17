@@ -37,10 +37,24 @@ const BINARY = /^(image|video|audio|application\/(octet-stream|pdf|zip))/i
  * response would be waste on the hot path.
  */
 async function apiFetch(req: ApiRequest): Promise<ApiResponse> {
+  /*
+    A binary request body, decoded back to bytes.
+
+    A photo upload is a `Blob`, which cannot cross a JSON bridge, so the web
+    side base64s it — see `encodeBody` in api-bridge.ts. React Native's `fetch`
+    takes a typed array as a body and sends it as-is, which is what the
+    Worker's `POST /api/photos/:id` expects: raw bytes with the image's own
+    content type, not a multipart form.
+  */
+  const requestBody =
+    req.body != null && req.isBase64
+      ? Uint8Array.from(atob(req.body), (c) => c.charCodeAt(0))
+      : req.body
+
   const res = await fetch(req.url, {
     method: req.method,
     headers: req.headers,
-    body: req.body,
+    body: requestBody,
   })
 
   const headers: Record<string, string> = {}
