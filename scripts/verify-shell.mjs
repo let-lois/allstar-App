@@ -238,6 +238,38 @@ const fit = await page.evaluate(() => ({
 ok(fit.scrollW <= fit.clientW, `no horizontal overflow (${fit.scrollW} > ${fit.clientW})`)
 ok(fit.scrollH <= fit.clientH, `no page-level vertical overflow (${fit.scrollH} > ${fit.clientH})`)
 
+/* 5b. A re-render does not add a second copy of anything.
+      The shell installs the stylesheet and the fetch proxy in the component
+      body rather than an effect — it has to, because React renders a parent
+      before its children and an effect would run after the first request had
+      gone out through the browser. The cost is that this runs again every time
+      the native side emits props, which it does on each of its own renders.
+      Provoked here exactly as the native side does it: a `$$dom_event`
+      carrying `$$props`, which the DOM root turns into `setProps`. */
+const beforeRender = await page.evaluate(
+  () => document.querySelectorAll('#allstar-shell-box').length,
+)
+await page.evaluate(() => {
+  for (let i = 0; i < 5; i++) {
+    window.dispatchEvent(
+      new CustomEvent('$$dom_event', {
+        detail: { type: '$$props', data: { names: ['apiFetch'], props: {} } },
+      }),
+    )
+  }
+})
+await page.waitForTimeout(500)
+const afterRender = await page.evaluate(() => ({
+  styles: document.querySelectorAll('#allstar-shell-box').length,
+  viewports: document.querySelectorAll('meta[name="viewport"]').length,
+}))
+ok(
+  beforeRender === 1 && afterRender.styles === 1,
+  'five re-renders leave exactly one shell stylesheet',
+  `${beforeRender} before, ${afterRender.styles} after`,
+)
+ok(afterRender.viewports === 1, `and one viewport tag (${afterRender.viewports})`)
+
 /* 6. Sign-in, end to end, over the bridge. Wrong credentials first, so a gate
       that only ever saw success cannot pass on an app that accepts anything. */
 await page.getByLabel('Email').fill('rep@example.com')

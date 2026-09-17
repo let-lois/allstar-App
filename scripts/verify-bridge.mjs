@@ -206,6 +206,48 @@ for (const status of [204, 205, 304]) {
   ok(h.seen.req?.headers['x-trace'] === '1', 'and its headers are read')
 }
 
+/* --- 7b. installing twice replaces, and does not stack ------------------- */
+//
+// The shell installs in the component body rather than an effect — it has to,
+// because React renders a parent before its children and an effect would run
+// after the first request had already gone out through the browser. The cost is
+// that the DOM root re-renders whenever the native side emits props, so this
+// runs again.
+//
+// It used to wrap whatever was in `target.fetch` at the time, which on a second
+// call is the *previous proxy*. So each install retained the one before it and
+// every request that is not the API — which means every map tile, the hot path
+// while a rep pans — walked the whole chain first. Measured at two shim frames
+// per install before the fix.
+{
+  let depth = 0
+  const real = async () => {
+    depth = (new Error().stack.match(/api-bridge/g) || []).length
+    return new Response('webview')
+  }
+  const send = async () => text('{}')
+
+  const seen = []
+  for (const n of [1, 2, 10]) {
+    const t = { fetch: real }
+    for (let i = 0; i < n; i++) installApiProxy(send, API, t)
+    await t.fetch('https://tiles.example.test/1.png')
+    seen.push({ n, depth })
+  }
+  ok(
+    seen.every((s) => s.depth === seen[0].depth),
+    'a tile request costs the same however many times the proxy was installed',
+    seen.map((s) => `${s.n}× install → ${s.depth} frame(s)`).join(', '),
+  )
+
+  // And the thing it is proxying still works after a re-install.
+  const t = { fetch: real }
+  installApiProxy(send, API, t)
+  installApiProxy(send, API, t)
+  const res = await t.fetch(`${API}/api/x`)
+  ok(res.status === 200, 'and the API still crosses the bridge after a re-install')
+}
+
 /* --- 8. the caller's deadline is honoured -------------------------------- */
 //
 // `request()` in the web app gives every call a deadline — 20s normally, 45s

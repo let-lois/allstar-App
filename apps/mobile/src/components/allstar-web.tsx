@@ -69,7 +69,14 @@ function ownTheScreen() {
     without editing it. Deliberately only the box: every colour, size and
     spacing decision stays in the app's index.css, which is the single source
     for them.
+
+    Guarded by its own id, which is what the id was for and was not doing. This
+    runs in the component body rather than an effect (see below, and it has to),
+    and the DOM root re-renders whenever the native side emits props — so it
+    appended another identical stylesheet every time. The viewport rewrite above
+    needs no guard: setting an attribute to the value it already has is free.
   */
+  if (document.getElementById('allstar-shell-box')) return
   const style = document.createElement('style')
   style.id = 'allstar-shell-box'
   style.textContent = `

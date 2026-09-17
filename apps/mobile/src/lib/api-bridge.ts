@@ -124,12 +124,38 @@ async function encodeBody(body: BodyInit): Promise<{ body: string; isBase64: boo
  *
  * Returns the previous `fetch`, which the tests use and the app ignores.
  */
+/**
+ * Where a proxy keeps the real `fetch` it replaced.
+ *
+ * Installing twice used to wrap the *previous proxy* rather than the webview's
+ * own `fetch`, because `target.fetch` was whatever was there at the time. Two
+ * consequences, and both are real:
+ *
+ *   - every install retained the closure of the one before it, so the chain
+ *     grew without bound;
+ *   - every request that is *not* the API — which means every map tile — walked
+ *     the whole chain before reaching the real `fetch`. A rep panning the map
+ *     issues hundreds of tile requests, so this is the hot path.
+ *
+ * Measured at two shim frames per install. It matters because the shell calls
+ * this in the component body, not an effect (deliberately — see
+ * `allstar-web.tsx`), and the DOM root re-renders whenever the native side
+ * emits props.
+ *
+ * So a proxy carries the genuine `fetch` with it, and a re-install *replaces*
+ * rather than stacks.
+ */
+const ORIGINAL = Symbol.for('allstar.apiProxy.original')
+
+type Proxied = typeof fetch & { [ORIGINAL]?: typeof fetch }
+
 export function installApiProxy(
   send: (req: ApiRequest) => Promise<ApiResponse>,
   apiUrl: string,
   target: { fetch: typeof fetch } = globalThis,
 ): typeof fetch {
-  const browserFetch = target.fetch.bind(target)
+  const browserFetch =
+    (target.fetch as Proxied)[ORIGINAL] ?? target.fetch.bind(target)
 
   /*
     A missing native action would be indistinguishable from the bug this
@@ -150,7 +176,7 @@ export function installApiProxy(
     )
   }
 
-  target.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const proxy = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     if (!apiUrl || !url.startsWith(apiUrl)) return browserFetch(input as RequestInfo, init)
@@ -238,6 +264,9 @@ export function installApiProxy(
       headers: res.headers,
     })
   }
+
+  ;(proxy as Proxied)[ORIGINAL] = browserFetch
+  target.fetch = proxy as typeof fetch
 
   return browserFetch
 }
