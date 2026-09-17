@@ -18,7 +18,7 @@
  * exactly what it was.
  */
 const PUBLIC_ORIGIN =
-  (import.meta.env.VITE_PUBLIC_ORIGIN as string | undefined)?.replace(/\/$/, '') || undefined
+  (process.env.EXPO_PUBLIC_ORIGIN as string | undefined)?.replace(/\/$/, '') || undefined
 
 export const verifyUrl = (badgeId: string): string =>
   `${PUBLIC_ORIGIN ?? window.location.origin}/verify/${badgeId}`

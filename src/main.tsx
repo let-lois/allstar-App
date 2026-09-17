@@ -40,7 +40,7 @@ createRoot(document.getElementById('root')!).render(
 
 // App-shell caching so a cold start with no signal still boots. Registered after
 // load so it never competes with first paint on a slow connection.
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {
       /* offline shell unavailable — the IndexedDB cache still works */

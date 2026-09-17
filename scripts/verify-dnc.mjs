@@ -100,7 +100,7 @@ const propertyWith = (status) => ({
 
 /* --- 2. the raw builders are unreachable ---------------------------------- */
 
-const src = readFileSync(join(root, 'src/lib/format.ts'), 'utf8')
+const src = readFileSync(join(root, 'packages/core/src/format.ts'), 'utf8')
 ok(!/export function smsHref/.test(src), 'format.ts no longer exports smsHref')
 ok(!/export function mailHref/.test(src), 'format.ts no longer exports mailHref')
 
@@ -111,7 +111,7 @@ ok(!/export function mailHref/.test(src), 'format.ts no longer exports mailHref'
   is the entire point of it being a list.
 */
 const TEL_ALLOWED = new Set([
-  'src/lib/contact.ts',
+  'packages/core/src/contact.ts',
   'src/screens/Team.tsx',
   'src/screens/RepDetail.tsx',
 ])
@@ -119,8 +119,8 @@ const TEL_ALLOWED = new Set([
 /* Hand-rolled links, for the same reason. AddMemberDialog mails a *teammate*
    an invite; that is not a homeowner and has no property attached. */
 const RAW_ALLOWED = new Set([
-  'src/lib/contact.ts',
-  'src/lib/format.ts',
+  'packages/core/src/contact.ts',
+  'packages/core/src/format.ts',
   'src/admin/AddMemberDialog.tsx',
 ])
 
@@ -134,7 +134,13 @@ function walk(dir) {
   return out
 }
 
-const files = walk(join(root, 'src'))
+/*
+  Two roots since the extraction: the app, and `packages/core`, which is where
+  the platform-free half of the domain now lives. Scanning only `src` would
+  have quietly stopped covering the moved files — and a gate that stops looking
+  is worse than one that fails, because it still prints PASS.
+*/
+const files = [...walk(join(root, 'src')), ...walk(join(root, 'packages/core/src'))]
 ok(files.length > 50, 'the source tree was actually walked', `${files.length} files`)
 
 const telImporters = []

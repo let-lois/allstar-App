@@ -61,6 +61,35 @@ export function platformOf(ua = navigator.userAgent): Platform {
  * false, and the button actively harmful.
  */
 export function isNativeShell(): boolean {
+  /*
+    Expo first, because it is the shell this app actually has.
+
+    All-Star's native shell is an Expo DOM component, not Capacitor or Cordova,
+    and it trips *both* generic checks below by construction: on Android the
+    system WebView's UA carries `; wv)`, and on iOS WKWebView is a WebKit UA
+    with no Safari token. Without this line a rep opening the store build meets
+    the red in-app-browser alert — camera, microphone and location declared
+    broken when they are not — above a button that hands them to Chrome and out
+    of the app. Exactly the harm this function was added to prevent, one shell
+    earlier.
+
+    How the value arrives differs per bundler, and only one half is build-time:
+
+    - **Vite** substitutes `undefined` (see its `define` block), so on the web
+      this whole branch folds away — the bundle is byte-identical without it.
+    - **Metro** does *not* inline it. Expo's DOM runtime assigns
+      `process.env.EXPO_DOM_HOST_OS` from `window.$$EXPO_DOM_HOST_OS` as it
+      registers the component, and `registerDOMComponent` throws outright if
+      that global is missing — so inside a DOM component it is always set, but
+      it is a runtime read, not a constant.
+
+    That ordering is safe rather than lucky, though only just: the sole caller
+    is `useState(detectInAppBrowser)` in InAppBrowserNotice, a lazy initialiser
+    that runs on first render and therefore after registration. Calling
+    `detectInAppBrowser()` at module scope in the DOM bundle would read it
+    before Expo has assigned it, and would silently get this wrong.
+  */
+  if (process.env.EXPO_DOM_HOST_OS) return true
   const w = window as Window & { Capacitor?: unknown; cordova?: unknown }
   return !!w.Capacitor || !!w.cordova
 }

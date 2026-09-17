@@ -1,0 +1,16 @@
+{
+  "name": "@allstar/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "All-Star domain logic with no platform underneath it — shared by the web app, the admin console and the React Native app.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "qrcode-generator": "^2.0.4"
+  }
+}

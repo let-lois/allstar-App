@@ -28,7 +28,7 @@ import { Glyph } from '../ui/Glyph'
  * be noise on the screen a rep uses at every door.
  */
 
-const KEY = (import.meta.env.VITE_GOOGLE_MAPS_KEY as string | undefined)?.trim() || ''
+const KEY = (process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY as string | undefined)?.trim() || ''
 
 /**
  * Requested pixel size. Wider than tall because houses are, and small enough

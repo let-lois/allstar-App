@@ -1,30 +1,11 @@
-import type { Role } from '../types'
-
 /**
- * Which roles a person may hand out.
+ * Moved to `@allstar/core`.
  *
- * Mirrors `grantableRoles` on the server, and is deliberately only a mirror: the
- * server refuses regardless, because a list rendered in a browser is a
- * convenience and never a boundary. What this buys is that an admin is not shown
- * an option that will be rejected the moment they use it.
+ * This file stays as a re-export so the 8 files that import
+ * `../lib/roles` do not all have to change in the same commit as the
+ * extraction. The logic is identical — it simply lives somewhere the React
+ * Native app can reach it, in a package that compiles with no DOM library at
+ * all. Call sites migrate to `@allstar/core/roles` as their screens are
+ * touched; when the last one does, this file goes.
  */
-export function grantableRoles(actor: { role: Role } | null | undefined): Role[] {
-  if (actor?.role === 'super_admin')
-    return ['field_rep', 'manager', 'client_admin', 'super_admin']
-  if (actor?.role === 'client_admin') return ['field_rep', 'manager', 'client_admin']
-  return []
-}
-
-export const ROLE_BLURB: Record<Role, string> = {
-  field_rep: 'Route, map and visits on their phone',
-  manager: 'Team activity and reporting, plus the field app',
-  client_admin: 'Everything, including the team and settings',
-  super_admin: 'Everything, plus other super admins and the platform sections',
-}
-
-export const ROLE_LABEL: Record<Role, string> = {
-  field_rep: 'Field Rep',
-  manager: 'Manager',
-  client_admin: 'Client Admin',
-  super_admin: 'Super Admin',
-}
+export * from '@allstar/core/roles'

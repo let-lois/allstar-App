@@ -1,5 +1,6 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { adminRoutes } from './adminRoutes'
 import { useAppStore } from './store/useAppStore'
 import { BottomNav, SideRail } from './components/nav/BottomNav'
 import { QuickActions } from './components/nav/QuickActions'
@@ -33,38 +34,6 @@ import { MyBadge } from './screens/MyBadge'
 import { MyProfile } from './screens/MyProfile'
 import { VerifyBadge } from './screens/VerifyBadge'
 import { badgeIdFromPath } from './lib/badge'
-
-/**
- * The office console is lazy-loaded.
- *
- * It's desktop-only and a field rep never opens it, so shipping its tables,
- * charts and reporting code in the main bundle would put ~10KB gzipped of dead
- * weight on every phone, on cellular, every cold start. This keeps it off the
- * field-rep critical path entirely.
- */
-const AdminLayout = lazy(() =>
-  import('./admin/AdminLayout').then((m) => ({ default: m.AdminLayout })),
-)
-const AdminDashboard = lazy(() =>
-  import('./admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard })),
-)
-const AdminReports = lazy(() =>
-  import('./admin/AdminReports').then((m) => ({ default: m.AdminReports })),
-)
-const AdminTeam = lazy(() => import('./admin/AdminTeam').then((m) => ({ default: m.AdminTeam })))
-const AdminTerritories = lazy(() =>
-  import('./admin/AdminTerritories').then((m) => ({ default: m.AdminTerritories })),
-)
-const AdminLists = lazy(() => import('./admin/AdminLists').then((m) => ({ default: m.AdminLists })))
-const AdminImport = lazy(() => import('./admin/AdminImport'))
-const AdminAudit = lazy(() => import('./admin/AdminAudit'))
-const AdminLeads = lazy(() => import('./admin/AdminLeads'))
-const AdminSettings = lazy(() =>
-  import('./admin/AdminSettings').then((m) => ({ default: m.AdminSettings })),
-)
-const AdminClients = lazy(() =>
-  import('./admin/AdminClients').then((m) => ({ default: m.AdminClients })),
-)
 
 export function App() {
   const { ready, user, mode, boot, setPosition } = useAppStore()
@@ -183,26 +152,7 @@ export function App() {
             <Route path="/more" element={<More />} />
             <Route path="/badge" element={<MyBadge />} />
             <Route path="/profile" element={<MyProfile />} />
-            {/* Office console — desktop-first, role-gated inside the layout. */}
-            <Route
-              path="/admin"
-              element={
-                <Suspense fallback={<ConsoleLoading />}>
-                  <AdminLayout />
-                </Suspense>
-              }
-            >
-              <Route index element={<AdminDashboard />} />
-              <Route path="reports" element={<AdminReports />} />
-              <Route path="team" element={<AdminTeam />} />
-              <Route path="leads" element={<AdminLeads />} />
-              <Route path="territories" element={<AdminTerritories />} />
-              <Route path="lists" element={<AdminLists />} />
-              <Route path="import" element={<AdminImport />} />
-              <Route path="audit" element={<AdminAudit />} />
-              <Route path="settings" element={<AdminSettings />} />
-              <Route path="clients" element={<AdminClients />} />
-            </Route>
+              {adminRoutes()}
             <Route path="*" element={<Navigate to="/today" replace />} />
           </Routes>
         </main>
@@ -272,13 +222,6 @@ function FirstRunTour() {
   )
 }
 
-function ConsoleLoading() {
-  return (
-    <div className="grid flex-1 place-items-center p-10 text-sm text-ink-mute">
-      Loading console…
-    </div>
-  )
-}
 
 function Splash() {
   return (
