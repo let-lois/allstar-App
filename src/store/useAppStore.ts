@@ -1439,11 +1439,6 @@ function promoteNextStop(route: Route): Route {
 }
 
 /* --- Derived selectors ---------------------------------------------------- */
-
-export function useProperty(id?: string): Property | undefined {
-  return useAppStore((s) => (id ? s.properties[id] : undefined))
-}
-
 export function useRouteProgress() {
   return useAppStore((s) => {
     const route = s.route

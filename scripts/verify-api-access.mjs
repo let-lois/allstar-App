@@ -110,6 +110,9 @@ const ROUTES = {
   */
   "/api/leads/erase|DELETE": { how: 'delegate', fn: 'eraseProperty', file: 'erase.ts' },
   "/api/leads/erase-bulk|POST": { how: 'delegate', fn: 'eraseProperties', file: 'erase.ts' },
+  // Letting an erased address be imported again. Same guard as erasing it, on
+  // purpose: whoever may destroy a lead is whoever may lift the block.
+  "/api/leads/unblock|POST": { how: 'delegate', fn: 'unblockProperties', file: 'erase.ts' },
   // Leads out as a spreadsheet. Office roles, decided in export.ts.
   "/api/leads/export.csv|GET": { how: 'delegate', fn: 'exportLeadsCsv', file: 'export.ts' },
   /*

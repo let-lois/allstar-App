@@ -81,15 +81,6 @@ export function duration(ms?: number): string {
   if (m < 60) return `${m}m ${s % 60}s`
   return `${Math.floor(m / 60)}h ${m % 60}m`
 }
-
-export function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? '')
-    .join('')
-}
-
 /** Digits only — `tel:` links choke on formatting in some Android dialers. */
 export function telHref(phone?: string): string | undefined {
   if (!phone) return undefined

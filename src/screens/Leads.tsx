@@ -301,8 +301,18 @@ export function Leads() {
               />
             )}
             empty={
+              /*
+                Two different situations, and they were being told the same
+                thing. An account with no leads at all was shown "No leads match
+                those filters" — which sends somebody to go and change filters
+                that are not the problem. The console's version of this list has
+                always drawn the distinction; this is the same distinction, in
+                the rep's words.
+              */
               <div className="grid place-items-center px-8 py-14 text-center text-[14px] text-ink-mute">
-                No leads match those filters.
+                {scoped.length === 0
+                  ? 'No leads here yet. Your office adds them, or you can add one from the map.'
+                  : 'No leads match those filters.'}
               </div>
             }
           />

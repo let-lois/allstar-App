@@ -243,6 +243,17 @@ export function Overview({ role }: { role: Role }) {
               onAction={() => nav('/team')}
             />
             <ul className="panel row-group" data-tour="overview-team">
+              {/*
+                A visible empty box with a heading above it and nothing in it
+                was what an account with no other reps got. One line is all it
+                needs, and it belongs inside the panel so the panel still has
+                something to be.
+              */}
+              {teamStats.length === 0 && (
+                <li className="px-4 py-5 text-[13.5px] leading-snug text-ink-mute" data-testid="overview-team-empty">
+                  Nobody else on the team yet. Reps appear here once your office invites them.
+                </li>
+              )}
               {teamStats.map((rep) => (
                 <li key={rep.id}>
                   <button

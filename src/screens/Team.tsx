@@ -63,6 +63,22 @@ export function Team() {
             <Stat label="Pipeline" value={money(totals.pipelineToday)} />
           </Card>
 
+          {/*
+            An empty roster used to render the header, a card of zeroes and
+            then nothing at all — no message, no explanation. It is rare,
+            because a live account always has at least the person reading the
+            screen, but "rare" is not "never" and a blank page is not an
+            answer.
+          */}
+          {reps.length === 0 && (
+            <Card className="p-5 text-center" data-testid="team-empty">
+              <p className="text-[15px] font-medium">Nobody on the team yet</p>
+              <p className="mt-1 text-[13.5px] leading-snug text-ink-mute">
+                Once your office invites reps, their doors and conversations show up here.
+              </p>
+            </Card>
+          )}
+
           {reps.map((rep, i) => {
             const tel = telHref(rep.phone)
             const repActivity = activity

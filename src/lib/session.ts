@@ -19,8 +19,6 @@ import type { SessionUserDTO } from './http'
  * demo that quietly writes to production.
  */
 
-export type SessionMode = 'demo' | 'live'
-
 export interface DemoSession {
   mode: 'demo'
   userId: string

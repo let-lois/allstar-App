@@ -365,3 +365,65 @@ export async function isErased(env: Env, clientId: string, propertyId: string): 
     .first<{ yes: number }>()
   return !!row
 }
+
+/**
+ * Let an address be imported again.
+ *
+ * The tombstone exists so that an erasure is never undone *silently* — the next
+ * CSV upload must not quietly recreate a lead somebody deliberately destroyed.
+ * That is a property worth keeping, and this does not weaken it: it is the
+ * loudest possible way to lift one, admin-only, with a reason, and an audit
+ * line naming every address.
+ *
+ * Without it the block was permanent with no affordance anywhere in the
+ * product. Nothing in the API removed a row from `deletions`, so an address
+ * erased while clearing out test data could never be imported again for that
+ * company — not by a CSV, not by a webhook, not by a rep standing in front of
+ * the house. The only remedy was hand-editing the database.
+ *
+ * What it does NOT do is bring anything back. The lead, its notes, its visits
+ * and its photos are gone and stay gone; all this says is that the address is
+ * allowed to exist again. An erasure made because a homeowner asked to be
+ * removed should never be lifted, which is why the reason is mandatory and the
+ * console says so beside the button.
+ */
+export async function unblockProperties(
+  env: Env,
+  actor: SessionUser,
+  propertyIds: unknown,
+  reason: unknown,
+): Promise<{ ok: true; unblocked: number; requested: number } | EraseFailure> {
+  if (!canErase(actor)) return { ok: false, error: 'Not permitted.', status: 403 }
+  if (!Array.isArray(propertyIds)) return { ok: false, error: 'Send the addresses as a list of ids.', status: 400 }
+  const ids = [...new Set(propertyIds.filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim()))]
+  if (ids.length === 0) return { ok: false, error: 'No addresses selected.', status: 400 }
+  if (ids.length > BULK_ERASE_MAX) return { ok: false, error: `Select at most ${BULK_ERASE_MAX} addresses.`, status: 413 }
+  const why = typeof reason === 'string' ? reason.trim() : ''
+  if (why.length < MIN_REASON) {
+    return { ok: false, error: 'Say why this address should be allowed back — lifting a block is recorded.', status: 400 }
+  }
+
+  let unblocked = 0
+  // Chunked for the same reason `erasedAmong` is: an import is not bounded by
+  // anything except what somebody dragged onto the page.
+  for (let i = 0; i < ids.length; i += 200) {
+    const slice = ids.slice(i, i + 200)
+    const marks = slice.map((_, n) => `?${n + 2}`).join(',')
+    const res = await env.DB.prepare(
+      `DELETE FROM deletions
+        WHERE client_id = ?1 AND entity = 'property' AND entity_id IN (${marks})`,
+    )
+      .bind(actor.clientId, ...slice)
+      .run()
+    unblocked += Number(res.meta?.changes ?? 0)
+  }
+
+  await record(env, actor, {
+    action: 'leads.unblocked',
+    targetType: 'lead',
+    targetId: `${ids.length}`,
+    targetLabel: `${unblocked} allowed back`,
+    detail: { reason: why, requested: ids.length, unblocked },
+  })
+  return { ok: true, unblocked, requested: ids.length }
+}

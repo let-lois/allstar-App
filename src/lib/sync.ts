@@ -1,4 +1,5 @@
 import type { Mutation, MutationKind, SyncState } from '../types'
+import { MAX_ATTEMPTS, backoffMs } from './retry'
 import {
   AuthExpiredError,
   BATCH_SIZE,
@@ -30,9 +31,6 @@ export interface SyncSnapshot {
   draining: boolean
 }
 
-const MAX_ATTEMPTS = 8
-/** Exponential backoff, capped — a rep in a basement shouldn't hammer the radio. */
-const backoffMs = (attempts: number) => Math.min(60_000, 1000 * 2 ** Math.min(attempts, 6))
 
 let listeners: Listener[] = []
 let draining = false
@@ -188,6 +186,16 @@ export async function drain(): Promise<void> {
   } finally {
     draining = false
     await recount()
+    /*
+      Write the last-sync time to disk.
+
+      `initSync` reads this value back on every launch, and nothing ever wrote
+      it: the only function that does had no caller, so "Last sync" on More and
+      on the sync chip reset to nothing on every reload. The dead function was
+      not the bug, it was the symptom — deleting it would have left the read on
+      the other side pointing at a key that could never exist.
+    */
+    await persistLastSynced()
   }
 
   /*
