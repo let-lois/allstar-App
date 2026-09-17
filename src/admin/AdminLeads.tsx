@@ -8,6 +8,7 @@ import { ApiError, NetworkError, apiAssignProperties, apiEraseLeads, apiExportLe
 import { Field } from '../components/ui/Input'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { liveToken } from '../lib/session'
+import { saveFile } from '../lib/download'
 import { PIPELINE_STAGES, STATUS_COLOR, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
 import { money, relative } from '../lib/format'
 import type { LeadStatus } from '../types'
@@ -1076,21 +1077,3 @@ export default function AdminLeads() {
 
 const UNASSIGNED_LABEL = 'Unassigned'
 
-/**
- * Hand a blob to the browser as a download.
- *
- * The object URL is revoked on the next tick rather than immediately: Safari
- * starts the download after `click()` returns, and revoking synchronously
- * gives it a URL that no longer exists.
- */
-function saveFile(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
