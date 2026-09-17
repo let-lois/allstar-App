@@ -182,11 +182,29 @@ async function signIn(ctx, who) {
   page.on('pageerror', (e) => errors.push(`${who.email}: ${e.message}`))
   await page.route(/maps\.googleapis\.com/, (r) => r.abort())
   await page.goto(APP, { waitUntil: 'domcontentloaded' })
-  await page.waitForTimeout(1000)
-  await page.locator('input[type="email"]').fill(who.email)
+  const email = page.locator('input[type="email"]')
+  await email.waitFor({ state: 'visible', timeout: 20_000 })
+  await email.fill(who.email)
   await page.locator('input[autocomplete="current-password"]').fill(who.password)
   await page.getByRole('button', { name: /^Sign in$/ }).click()
-  await page.waitForTimeout(2500)
+  /*
+    Waits for the login screen to go, rather than for a number of seconds.
+
+    This was `waitForTimeout(2500)`, and it broke — not because signing in
+    broke, but because a rep's first boot got slower: the session restore, the
+    store hydration and the tour all happen between the click and the first
+    thing worth asserting. The gate then failed on `/Dana/` against a page that
+    was a few hundred milliseconds from saying "Good evening, Dana", and the
+    failure read as a broken sign-in.
+
+    A fixed sleep can only be too short or wasteful, and it fails on the
+    machine rather than on the product. Waiting for the email field to detach
+    is the actual condition — it is gone precisely when the app has left the
+    login screen — so this now fails fast when sign-in is genuinely broken and
+    does not fail when the box is busy. The tour is dismissed after, since it
+    only exists once the app is up.
+  */
+  await email.waitFor({ state: 'detached', timeout: 20_000 })
   await dismissTour(page)
   await page.waitForTimeout(800)
   return page
