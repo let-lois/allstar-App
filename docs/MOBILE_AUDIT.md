@@ -150,13 +150,23 @@ Worker's key, metered per company through `geocodeKeysFor` and `recordLookups`
 like the import path. Google's `address_components` come back untouched so
 `address.ts` keeps doing the parsing for both platforms.
 
-### 2.9 One real dependency problem — *open, not currently harmful*
+### 2.9 One dependency finding, audited and harmless
 
 `expo-doctor`: 18/21, two failures being this sandbox's blocked network. The
 real one is duplicate `react`/`react-dom` — 19.2.3 in `apps/mobile`, 18.3.1 at
-the root. The built DOM bundle carries **one** copy (React 19), so there is no
-invalid-hook crash, but React-18-era web code runs on React 19 in the shell.
-Not yet audited for `defaultProps` on function components or the ref changes.
+the root — so React-18-era web code runs on **React 19** in the shell.
+
+Audited rather than left as a worry, and it is clear. The built DOM bundle
+carries exactly **one** copy of React, so there is no invalid-hook crash. And
+the web app uses none of the APIs React 19 removed: no `defaultProps` or
+`propTypes` on a function component, no string refs, no `findDOMNode`, no
+legacy `contextTypes`, no `ReactDOM.render`, and in fact no `forwardRef`
+anywhere. `verify:shell` also drives routing — sign-in through to a
+signed-in screen, on `react-router-dom` 6.30.6 — under the React 19 bundle and
+reports no runtime errors.
+
+So this is dependency hygiene rather than a defect: two Reacts in one
+`node_modules` tree is worth resolving, and it is not why anything was broken.
 
 ## 3. Feature matrix
 
@@ -291,7 +301,6 @@ Ours:
 
 - Deploy the Worker so `/api/geocode/reverse` exists. Lou or Curtis, through
   the company's Cloudflare process.
-- Audit the web app for React 18 → 19 differences in the shell (§2.9).
 - Run a `preview` build on a real iPhone and a real Android device. Nothing in
   §3's ⬜ column becomes ✅ without it.
 
