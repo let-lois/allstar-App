@@ -29,6 +29,8 @@ declare const process: {
     NODE_ENV?: 'development' | 'production'
     EXPO_PUBLIC_API_URL?: string
     EXPO_PUBLIC_ORIGIN?: string
+    /** 'ios' | 'android' inside an Expo DOM component; undefined on the web. */
+    EXPO_DOM_HOST_OS?: 'ios' | 'android'
     EXPO_PUBLIC_MAPTILER_KEY?: string
     EXPO_PUBLIC_GOOGLE_MAPS_KEY?: string
     EXPO_PUBLIC_GOOGLE_MAP_ID?: string

@@ -34,6 +34,13 @@ export default defineConfig(({ mode }) => {
   return {
   plugins: [react()],
   define: {
+    /*
+      Always `undefined` for a Vite build: this identifies the Expo DOM shell,
+      and a Vite build is by definition not it. Metro substitutes the real
+      value. Declared here rather than left out because an undefined
+      `process.env.X` is a runtime error in a browser, not a falsy read.
+    */
+    'process.env.EXPO_DOM_HOST_OS': 'undefined',
     'process.env.EXPO_PUBLIC_API_URL': pass('API_URL'),
     /*
       The one name that is not a straight `EXPO_PUBLIC_<X>` / `VITE_<X>` pair:
