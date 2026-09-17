@@ -13,9 +13,6 @@
       "ios": {
         "image": "latest"
       },
-      "env": {
-        "EXPO_PUBLIC_ORIGIN": "https://allstar.letlois.com"
-      },
       "channel": "development"
     },
     "preview": {
@@ -28,9 +25,6 @@
         "image": "latest",
         "simulator": true
       },
-      "env": {
-        "EXPO_PUBLIC_ORIGIN": "https://allstar.letlois.com"
-      },
       "channel": "preview"
     },
     "production": {
@@ -40,9 +34,6 @@
       },
       "ios": {
         "image": "latest"
-      },
-      "env": {
-        "EXPO_PUBLIC_ORIGIN": "https://allstar.letlois.com"
       },
       "channel": "production"
     }
