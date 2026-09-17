@@ -152,7 +152,15 @@ function OfflineMapsPanel({
         onProgress: setProgress,
         signal: controller.signal,
       })
-      if (controller.signal.aborted) {
+      if (result.unsupported) {
+        /*
+          A different failure from a bad connection, and it needs different
+          words: no amount of retrying will help, because this platform has
+          nowhere to put the imagery. Saying "try again on a better connection"
+          would send a rep to stand by a window for nothing.
+        */
+        setNote('This app cannot store map imagery on this device.')
+      } else if (controller.signal.aborted) {
         setNote('Stopped. What downloaded is saved.')
       } else if (result.failed > 0) {
         setNote(

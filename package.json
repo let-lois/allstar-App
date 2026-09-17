@@ -78,7 +78,7 @@
     "verify:newlead": "node scripts/verify-newlead.mjs",
     "verify:googlemap": "node scripts/verify-googlemap.mjs",
     "verify:routelist": "node scripts/verify-routelist.mjs",
-    "verify:offlinemaps": "node scripts/verify-offline-maps.mjs",
+    "verify:offlinemaps": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-offline-maps.mjs",
     "verify:firstday": "node scripts/verify-first-day.mjs",
     "leads:sample": "node scripts/make-test-leads.mjs",
     "verify:invite": "node scripts/verify-invite.mjs",
