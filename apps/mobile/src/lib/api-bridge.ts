@@ -68,6 +68,25 @@ export function installApiProxy(
 ): typeof fetch {
   const browserFetch = target.fetch.bind(target)
 
+  /*
+    A missing native action would be indistinguishable from the bug this
+    replaces.
+
+    `send` arrives as a prop across the bridge. If it were ever absent — a
+    renamed prop, a route that forgot to pass it — the shim would call
+    `undefined(...)`, the request would fail, and the web app's own diagnosis
+    would report the server's allowed-origins list, sending whoever read it to
+    the wrong console for the second time. Failing here instead names the real
+    fault once, at install, before a single request has been shaped by it.
+  */
+  if (typeof send !== 'function') {
+    throw new TypeError(
+      'installApiProxy needs the native apiFetch action; got ' +
+        typeof send +
+        '. Without it every API call fails and the app blames the API\'s CORS configuration.',
+    )
+  }
+
   target.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
