@@ -237,7 +237,7 @@ for (const width of [390, 412]) {
   const RESTRICTED = [
     { path: '/admin/audit', allowed: ['client_admin', 'super_admin'], proof: /Activity log|Everything/i },
     { path: '/admin/settings', allowed: ['client_admin', 'super_admin'], proof: /Visit outcomes/i },
-    { path: '/admin/clients', allowed: ['super_admin'], proof: /Seat utilization/i },
+    { path: '/admin/clients', allowed: ['super_admin'], proof: /One account, because/i },
   ]
   const WHO = [
     { role: 'manager', name: /Ray Okafor/ },

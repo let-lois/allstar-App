@@ -1,10 +1,8 @@
-import { DataList } from './DataList'
 import { AdminPage } from './AdminLayout'
 import { StatTile } from './charts/StatTile'
-import { Bars } from './charts/Bars'
-import { STATUS } from './charts/tokens'
-import { moneyFull } from '../lib/format'
 import { BackupStatus } from './BackupStatus'
+import { useAppStore } from '../store/useAppStore'
+import { relative } from '../lib/format'
 
 /**
  * Platform view — Super Admin only.
@@ -28,105 +26,58 @@ import { BackupStatus } from './BackupStatus'
  * screen says so rather than implying the platform already has three customers.
  */
 
-const CLIENTS = [
-  { name: 'Summit Exteriors', seats: 12, activeReps: 5, mrr: 1188, health: 'good' as const },
-  { name: 'Bright Path Solar', seats: 28, activeReps: 24, mrr: 2772, health: 'good' as const },
-  { name: 'Redline Roofing', seats: 7, activeReps: 2, mrr: 693, health: 'warning' as const },
-]
-
-const HEALTH_LABEL = { good: 'Healthy', warning: 'Low activity' } as const
+const WEEK = 7 * 24 * 60 * 60 * 1000
 
 export function AdminClients() {
-  const totalSeats = CLIENTS.reduce((a, c) => a + c.seats, 0)
-  const totalActive = CLIENTS.reduce((a, c) => a + c.activeReps, 0)
-  const mrr = CLIENTS.reduce((a, c) => a + c.mrr, 0)
+  const team = useAppStore((s) => s.team)
+  const user = useAppStore((s) => s.user)
+
+  const onTeam = team.filter((m) => !m.pending)
+  const active = onTeam.filter((m) => m.active)
+  const since = Date.now() - WEEK
+  const recent = active.filter((m) => typeof m.lastSeenAt === 'number' && m.lastSeenAt >= since)
+  const lastSeen = onTeam
+    .map((m) => m.lastSeenAt)
+    .filter((t): t is number => typeof t === 'number')
+    .sort((a, b) => b - a)[0]
 
   return (
-    <AdminPage title="Clients" description="Platform overview across all accounts">
+    <AdminPage title="Account" description="What this deployment holds">
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatTile label="Accounts" value={String(CLIENTS.length)} />
-        <StatTile label="Seats" value={String(totalSeats)} />
+        <StatTile label="Accounts" value="1" />
+        <StatTile label="On the team" value={String(onTeam.length)} />
         <StatTile
-          label="Active reps"
-          value={String(totalActive)}
-          sub={`${Math.round((totalActive / totalSeats) * 100)}% of seats used`}
+          label="Active"
+          value={String(active.length)}
+          sub={onTeam.length ? `of ${onTeam.length} on the team` : undefined}
         />
-        <StatTile label="MRR" value={moneyFull(mrr)} />
+        <StatTile
+          label="Seen this week"
+          value={String(recent.length)}
+          sub={active.length ? `${Math.round((recent.length / active.length) * 100)}% of active` : undefined}
+        />
       </div>
 
-      <section className="mt-4 overflow-hidden card">
-        {/*
-          Cards on a phone, table on a desktop — the same clipping fix as the
-          Dashboard and Reports. This one is worth noting: the viewport audit
-          never caught it, because /admin/clients is super-admin only and the
-          audit signs in as a client admin, so the route is not measured at all.
-          It was found by reading rather than by a gate.
-        */}
-        <DataList
-          rows={CLIENTS}
-          keyOf={(c) => c.name}
-          empty="No clients yet."
-          className="px-5 pb-5 lg:px-0 lg:pb-0"
-          columns={[
-            { header: 'Client', cell: (c) => c.name, phone: 'title', className: 'font-medium' },
-            { header: 'Seats', cell: (c) => c.seats, align: 'right' },
-            { header: 'Active reps', cell: (c) => c.activeReps, align: 'right' },
-            {
-              // The churn signal, so it rides beside the name rather than
-              // waiting in the grid below.
-              header: 'Utilization',
-              cell: (c) => `${Math.round((c.activeReps / c.seats) * 100)}%`,
-              align: 'right',
-              phone: 'trailing',
-            },
-            { header: 'MRR', cell: (c) => moneyFull(c.mrr), align: 'right' },
-            {
-              header: 'Health',
-              // Status ships with a word, never colour alone.
-              cell: (c) => (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium">
-                  <span
-                    aria-hidden
-                    className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: STATUS[c.health] }}
-                  />
-                  {HEALTH_LABEL[c.health]}
-                </span>
-              ),
-            },
-          ]}
-        />
+      <section className="mt-4 card p-5" data-testid="account-row">
+        <h2 className="text-sm font-bold">{user?.clientName ?? 'This account'}</h2>
+        <p className="mt-1 text-xs leading-relaxed text-ink-mute">
+          {onTeam.length === 1 ? '1 person on the team' : `${onTeam.length} people on the team`}
+          {active.length !== onTeam.length ? `, ${active.length} active` : ''}
+          {lastSeen ? ` · last activity ${relative(lastSeen)}` : ' · no activity recorded yet'}
+        </p>
       </section>
 
       {/*
-        The one real thing on this screen. It sits here rather than on a
-        company's settings because the dump is the whole database — every
-        customer's — and only this role has a platform-wide view to put it in.
+        The one thing on this screen that was always real. It sits here rather
+        than in a company's own settings because the dump is the whole
+        database, and this is the only role with a platform-wide view.
       */}
       <BackupStatus />
 
-      <section className="mt-4 card p-5">
-        <h2 className="text-sm font-bold">Seat utilization</h2>
-        <p className="mb-3 text-xs text-ink-mute">
-          Reps active in the last 7 days as a share of seats sold — the earliest churn
-          signal in this business.
-        </p>
-        <Bars
-          data={CLIENTS.map((c) => ({
-            key: c.name,
-            label: c.name,
-            value: Math.round((c.activeReps / c.seats) * 100),
-            meta: `${c.activeReps} of ${c.seats} seats`,
-          })).sort((a, b) => b.value - a.value)}
-          variant="single"
-          format={(v) => `${v}%`}
-        />
-      </section>
-
-      <p className="mt-4 rounded-field bg-warn-bg px-4 py-3 text-xs leading-relaxed text-warn">
-        Only Summit Exteriors has real data on this device. The other accounts are
-        illustrative — this screen shows the shape of the platform view, not three live
-        customers.
+      <p className="mt-4 rounded-field bg-surface-sunk px-4 py-3 text-xs leading-relaxed text-ink-mute">
+        One account, because that is what this deployment holds and there is no endpoint that
+        would list others. Seats, revenue and per-customer health belong to a multi-tenant API
+        that does not exist yet; when it does, the numbers above become a row per account.
       </p>
     </AdminPage>
   )

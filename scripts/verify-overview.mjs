@@ -285,6 +285,37 @@ console.log('\n--- the header ---')
   await ctx.close()
 }
 
+/* ========================================================================== */
+/* The super admin's own home screen names one account: the real one          */
+/* ========================================================================== */
+{
+  /*
+    Three invented companies used to sit here — Summit Exteriors, Bright Path
+    Solar and Redline Roofing — inline in the JSX, behind nothing but the role
+    check, with rep counts and health labels and no disclaimer. Setup makes the
+    first administrator of any deployment a super admin, so this was the first
+    screen a new operator saw, and two thirds of their customer list was
+    fiction.
+
+    The rule it broke is an old one: no hardcoded users, lists or map data. The
+    assertion below is the rule, expressed as a measurement.
+  */
+  const { ctx, page } = await signIn('/', /Curtis|Super/)
+  await page.waitForTimeout(1200)
+
+  const accounts = page.getByTestId('overview-accounts')
+  ok((await accounts.count()) === 1, 'a super admin sees an accounts section')
+  const rowCount = await accounts.locator('li').count()
+  ok(rowCount === 1, 'holding exactly one account — the one this deployment has', `${rowCount} rows`)
+
+  const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+  for (const invented of ['Bright Path Solar', 'Redline Roofing']) {
+    ok(!body.includes(invented), `and no invented customer: ${invented} appears nowhere`)
+  }
+  ok(/people on the team|person on the team/.test(await accounts.innerText()), 'the row counts real people rather than sold seats', (await accounts.innerText()).replace(/\s+/g, ' '))
+  await ctx.close()
+}
+
 await browser.close()
 
 if (fails.length) {
