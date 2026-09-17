@@ -107,7 +107,21 @@ for (const status of [204, 205, 304]) {
      threw ? threw.message : `status ${res.status}`)
 }
 
-/* --- 5. a body that cannot cross says so --------------------------------- */
+/* --- 5. a missing native action names itself ----------------------------- */
+//
+// Without this the shim would call `undefined(...)`, every request would fail,
+// and the web app's own diagnosis would blame the API's allowed-origins list —
+// pointing at the wrong console for exactly the fault the bridge exists to fix.
+{
+  let threw = null
+  try {
+    installApiProxy(undefined, API, { fetch: async () => new Response('') })
+  } catch (e) { threw = e }
+  ok(threw instanceof TypeError && /native apiFetch action/.test(threw.message),
+     'a missing native action throws at install rather than on every request')
+}
+
+/* --- 6. a body that cannot cross says so --------------------------------- */
 {
   const h = harness(text('{}'))
   let threw = null
@@ -118,7 +132,7 @@ for (const status of [204, 205, 304]) {
      'a non-string body throws an explanatory TypeError rather than going out empty')
 }
 
-/* --- 6. a Request object, not only a string ------------------------------ */
+/* --- 7. a Request object, not only a string ------------------------------ */
 {
   const h = harness(text('{}'))
   await h.fetch(new Request(`${API}/api/health`, { headers: { 'x-trace': '1' } }))

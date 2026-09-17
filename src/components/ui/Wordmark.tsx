@@ -1,3 +1,15 @@
+/*
+  Imported rather than written as `/logo.png`.
+
+  An absolute path is correct on the web and broken inside the native
+  shell: a DOM component is loaded from a `file://` URL, so `/logo.png`
+  resolves to the filesystem root and the mark renders as a broken-image
+  placeholder — which is exactly what the first phone build showed. An
+  import is a real dependency, so Vite emits it as a hashed asset and
+  Metro bundles it into the webview's own assets. Expo's guidance says the
+  same: prefer requiring an asset over the public directory.
+*/
+import logoUrl from '../../assets/logo.png'
 /**
  * The wordmark, on its own light tile.
  *
@@ -44,7 +56,7 @@ export function Wordmark({
       style={{ padding: `${Math.round(width * 0.06)}px ${Math.round(width * 0.08)}px` }}
     >
       <img
-        src="/logo.png"
+        src={logoUrl}
         alt="Allstar Home Solutions"
         width={720}
         height={184}

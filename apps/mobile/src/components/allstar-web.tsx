@@ -28,24 +28,34 @@ import '@web/index.css'
 import { installApiProxy, type ApiRequest, type ApiResponse } from '@/lib/api-bridge'
 
 /*
-  Safe-area insets, which the wrapper HTML does not ask for.
+  The page box, which Expo's wrapper HTML leaves half-specified.
 
-  Expo builds the page around a DOM component itself, and its viewport tag is
-  `width=device-width, initial-scale=1, user-scalable=no` — no
-  `viewport-fit=cover`. Without that keyword every `env(safe-area-inset-*)`
-  resolves to 0, so the app's `--safe-top` and `--dock-space` collapse: content
-  runs under the notch and the bottom dock sits beneath the home indicator.
-  The app's own index.html carries the keyword with the comment "so the map can
-  run under the notch/home indicator", which is exactly the screen where its
-  absence showed first.
+  Expo builds the page around a DOM component itself, and two things it does
+  are wrong for an app that expects to own the whole screen:
 
-  Rewritten rather than appended: a second viewport tag is ignored, and WKWebView
-  applies a change to the existing one immediately.
+  1. Its viewport tag is `width=device-width, initial-scale=1,
+     user-scalable=no` — **no `viewport-fit=cover`**. Without that keyword
+     every `env(safe-area-inset-*)` resolves to 0, so the app's `--safe-top`
+     and `--dock-space` collapse: content runs under the notch and the bottom
+     dock sits beneath the home indicator. The app's own index.html carries the
+     keyword with the comment "so the map can run under the notch/home
+     indicator", which is the screen where its absence showed first.
+
+  2. Its style block sets `-webkit-overflow-scrolling` on `html, body` and
+     `display: flex; flex: 1` on `#root`, but no height and no margin reset.
+     The app's own CSS does set `html, body, #root { height: 100% }`, so that
+     part is covered — but a stray body margin and a `flex` root that the app
+     does not expect are not, and a 100%-height chain inside a flex parent with
+     no explicit basis is exactly how a full-screen map ends up the wrong size.
+
+  Both are corrected here rather than worked around per screen. The viewport
+  tag is rewritten in place because a second one is ignored, and WKWebView
+  applies a change to the existing tag immediately.
 */
-function widenViewport() {
-  const tag = document.querySelector('meta[name="viewport"]')
+function ownTheScreen() {
   const content =
     'width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5'
+  const tag = document.querySelector('meta[name="viewport"]')
   if (tag) tag.setAttribute('content', content)
   else {
     const meta = document.createElement('meta')
@@ -53,6 +63,21 @@ function widenViewport() {
     meta.content = content
     document.head.appendChild(meta)
   }
+
+  /*
+    Appended last so it wins over Expo's own `#expo-dom-component-style`
+    without editing it. Deliberately only the box: every colour, size and
+    spacing decision stays in the app's index.css, which is the single source
+    for them.
+  */
+  const style = document.createElement('style')
+  style.id = 'allstar-shell-box'
+  style.textContent = `
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+    /* The app's own shell scrolls its regions; the page itself must not. */
+    #root { display: block; flex: none; height: 100%; width: 100%; }
+  `
+  document.head.appendChild(style)
 }
 
 /*
@@ -80,7 +105,7 @@ export default function AllStarWeb({
     anything can issue a request — an effect would run after, and the first
     fetch of the session would go out through the browser and fail.
   */
-  widenViewport()
+  ownTheScreen()
   installApiProxy(apiFetch, API_URL)
 
   return (

@@ -10,6 +10,8 @@ import {
   IconToday,
 } from './icons'
 import { Wordmark } from '../ui/Wordmark'
+// Imported, not `/icon-192.png`: see the note in ui/Wordmark.tsx.
+import appIconUrl from '../../assets/icon-192.png'
 
 interface Item {
   to: string
@@ -142,7 +144,7 @@ export function SideRail({ role }: { role: Role }) {
       {/* px matches the nav links below so the mark and the icons share a left edge. */}
       <div className="mb-5 flex items-center px-1 lg:px-3">
         <img
-          src="/icon-192.png"
+          src={appIconUrl}
           alt=""
           width={192}
           height={192}
