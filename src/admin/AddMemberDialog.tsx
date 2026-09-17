@@ -152,7 +152,14 @@ export function AddMemberDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+      /*
+        Sized to the visible viewport, so the keyboard cannot take the form
+        with it. See `ConfirmDialog` for the whole reasoning; this dialog is
+        the one that needed it most — five fields, a role picker and a submit
+        button is taller than a phone before anything is typed.
+      */
+      className="fixed inset-x-0 top-0 z-50 grid place-items-center bg-black/40 p-4"
+      style={{ height: 'var(--app-h, 100dvh)' }}
       role="dialog"
       aria-modal="true"
       aria-label="Add a team member"
@@ -160,7 +167,17 @@ export function AddMemberDialog({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="w-full max-w-lg rounded-card bg-surface p-6 shadow-float">
+      {/*
+        The panel scrolls as a whole rather than pinning its actions, because
+        this one holds three different bodies with three different button rows
+        and splitting each of them would be a rewrite where a scroll is enough:
+        what matters is that Send invite can be reached at all, which on a
+        phone it could not.
+      */}
+      <div
+        className="w-full max-w-lg overflow-y-auto rounded-card bg-surface p-6 shadow-float"
+        style={{ maxHeight: 'calc(var(--app-h, 100dvh) - 2rem)' }}
+      >
         {created?.alreadyMember ? (
           /*
             The address already belongs to somebody who can sign in. Nothing

@@ -21,9 +21,21 @@ const DISMISS_KEY = 'allstar.inAppNoticeDismissed'
  */
 export function InAppBrowserNotice({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
   const [info] = useState(detectInAppBrowser)
-  const [dismissed, setDismissed] = useState(
-    () => sessionStorage.getItem(DISMISS_KEY) === '1',
-  )
+  /*
+    Read in a try, like the write below it already was.
+
+    `sessionStorage` is not merely empty where site data is blocked — a private
+    window, a locked-down WebView, some enterprise profiles — the accessor
+    itself throws. This component mounts in the app shell, so an exception here
+    is not a missing banner, it is a white screen for the whole app.
+  */
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem(DISMISS_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
   const [copied, setCopied] = useState(false)
 
   if (!info.isInApp || dismissed) return null

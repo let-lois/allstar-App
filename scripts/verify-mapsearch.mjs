@@ -111,6 +111,33 @@ for (const width of [320, 390, 1024]) {
   const rowBox = await firstRow.boundingBox()
   ok((rowBox?.height ?? 0) >= 44, `[${width}] result rows clear the tap floor (${Math.round(rowBox?.height ?? 0)}px)`)
 
+  /*
+    The panel is bounded, and scrolls what does not fit.
+
+    It can hold six lead rows at a full tap target each, a section label and
+    four places — and it is only ever open while somebody is typing, which is
+    precisely when the keyboard has taken the bottom of the screen. It used to
+    be `overflow-hidden` with no height cap, so anything past the edge was
+    clipped rather than reachable: results were there, and there was no way to
+    get to them and no sign they existed.
+
+    The keyboard is simulated by moving `--app-h`, the property the app pins to
+    visualViewport.height, which is the measurement the cap is written against.
+  */
+  const panel = matches.locator('xpath=ancestor::div[contains(@class,"card")][1]')
+  await page.evaluate(() => document.documentElement.style.setProperty('--app-h', '400px'))
+  await page.waitForTimeout(300)
+  const panelBox = await panel.boundingBox()
+  const scrolls = await panel.evaluate((el) => getComputedStyle(el).overflowY)
+  ok(scrolls === 'auto' || scrolls === 'scroll', `[${width}] the results panel scrolls rather than clipping`, scrolls)
+  ok(
+    !!panelBox && panelBox.y + panelBox.height <= 400 + 1,
+    `[${width}] and stays inside the screen the keyboard leaves`,
+    panelBox ? `ends at ${Math.round(panelBox.y + panelBox.height)}px of 400px` : 'no box',
+  )
+  await page.evaluate(() => document.documentElement.style.removeProperty('--app-h'))
+  await page.waitForTimeout(200)
+
   /* --- picking one ------------------------------------------------------- */
   await firstRow.click()
   await page.waitForTimeout(900)

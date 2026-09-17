@@ -338,7 +338,15 @@ console.log('\n--- structure ---')
 // translucent, nothing blurred, nothing lit, and every panel edged and shadowed
 // from the same two tokens, so a screen cannot end up nearly consistent.
 {
-  const rule = (name) => css.match(new RegExp(`\\.${name}\\s*\\{[^}]*`))?.[0] ?? ''
+  /*
+    The rule's own definition, not any selector that happens to end in the same
+    class. Anchored to a line start and the block's two-space indent, the way
+    `declared()` above already does it — without that, an override written
+    anywhere earlier in the file (`… ~ * .topbar-lit { padding-top: 0 }`) is
+    what gets measured, and the assertions below report a surface with no
+    background because they are reading the wrong four lines.
+  */
+  const rule = (name) => css.match(new RegExp(`\\n  \\.${name}\\s*\\{[^}]*`))?.[0] ?? ''
   const paint = css.replace(/\/\*[\s\S]*?\*\//g, ' ')
 
   ok(!/backdrop-filter\s*:/.test(paint), 'nothing in the stylesheet blurs what is behind it')

@@ -189,12 +189,6 @@ export function polygonAreaSqMiles(polygon: { lat: number; lng: number }[]): num
   }
   return Math.abs(sum / 2) * milesPerDegLat * milesPerDegLng
 }
-
-export function compassLabel(deg: number): string {
-  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
-  return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8]
-}
-
 /* --- Web Mercator, used by the in-app map renderer ----------------------- */
 
 export function project(lat: number, lng: number) {
@@ -282,12 +276,6 @@ async function permissionState(): Promise<PermissionState | undefined> {
     return undefined
   }
 }
-
-/** The freshest fix this device has, or null. Never triggers a request. */
-export function knownPosition(): Position | null {
-  return lastFix
-}
-
 /**
  * A fix, reusing a recent one rather than asking again.
  *

@@ -194,6 +194,18 @@
      * to run on them.
      */
     --app-h: 100vh;
+
+    /*
+     * The notch, as a token rather than a literal.
+     *
+     * Exactly one rule used to read `env(safe-area-inset-top)` directly, which
+     * was fine until something needed testing: `env()` resolves to zero in
+     * every desktop browser and cannot be set, so no gate could tell a screen
+     * that clears the status bar from one that does not. Behind a custom
+     * property the value is still the real inset on a phone and can be given a
+     * value in a test, which is how the banners below are measured.
+     */
+    --safe-top: env(safe-area-inset-top, 0px);
   }
 
   @supports (height: 100dvh) {
@@ -616,7 +628,35 @@
   }
 
   .pad-top {
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: var(--safe-top);
+  }
+
+  /*
+    The strip above everything: the offline banner and the in-app-browser
+    notice.
+
+    Both used to render straight into the app shell with no inset at all, so
+    "Working offline — 3 changes saved on this phone" sat under the clock and
+    the notch on an installed phone. That it was an oversight rather than a
+    choice is settled by the onboarding shell, which wraps the same two
+    components in `pad-top`.
+
+    `:not(:empty)` because both components return null when they have nothing
+    to say, and a rail holding nothing must not reserve the notch — otherwise
+    every screen gains a band of dead space for a banner that is not there.
+
+    The second rule is the other half of the same bug. `.pad-top` on the title
+    bar is unconditional, so on the days a banner *was* showing the app paid
+    the inset twice: once under the banner, once again beneath it, about 47px
+    of nothing on a notched iPhone. When the rail has content it owns the
+    inset, and the title bar below it stops claiming it.
+  */
+  .banner-rail:not(:empty) {
+    padding-top: var(--safe-top);
+  }
+
+  .banner-rail:not(:empty) ~ * .topbar-lit {
+    padding-top: 0;
   }
 
   /*

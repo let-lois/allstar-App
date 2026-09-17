@@ -122,6 +122,37 @@ try {
   await browser.close()
 }
 
+/* ========================================================================== */
+/* One way to save a file, not three                                          */
+/* ========================================================================== */
+/*
+  Three implementations of "hand a blob to the browser" existed, and they were
+  not equivalent: the reports screen neither put the anchor in the document nor
+  waited before revoking the object URL, and Safari starts the download after
+  `click()` returns — so it was handed a URL that no longer existed. The other
+  two carried the comment explaining exactly that, which is what a lesson
+  learned in one place and not the others looks like.
+
+  A browser gate cannot catch that: headless Chromium downloads fine either
+  way, which is precisely why the broken copy survived. So this asserts the
+  thing that *is* checkable and is the real regression risk — that there is one
+  implementation, and everything else calls it.
+*/
+{
+  const { readdirSync, statSync } = await import('node:fs')
+  const walk = (dir) =>
+    readdirSync(dir).flatMap((f) => {
+      const full = `${dir}/${f}`
+      return statSync(full).isDirectory() ? walk(full) : /\.tsx?$/.test(full) ? [full] : []
+    })
+  const owners = walk('src').filter((f) => /\ba\.download\s*=/.test(readFileSync(f, 'utf8')))
+  ok(
+    owners.length === 1 && owners[0].endsWith('src/lib/download.ts'),
+    'exactly one module builds a download anchor, and it is the shared helper',
+    owners.join(', ') || 'none found',
+  )
+}
+
 console.log('')
 if (fails.length) {
   console.log(`${fails.length} check(s) failed:`)

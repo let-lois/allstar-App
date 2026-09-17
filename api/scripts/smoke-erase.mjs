@@ -314,6 +314,64 @@ try {
     )
   }
 
+  /* ===== 6b. the block has a door, and it is a loud one =============== */
+  {
+    /*
+      The tombstone stops an erasure being undone *silently*. It never had a
+      way to be undone deliberately, which made every erased address permanently
+      un-importable for that company — fine for a homeowner who asked to be
+      removed, a trap for somebody clearing out test data. This is the door:
+      admin only, a reason, an audit line.
+    */
+    // Demoted in place, the way the bulk-erase section below does it, because
+    // this smoke has one account and the question is about the guard.
+    await query(`UPDATE users SET role='manager' WHERE id='${q(user.id)}'`)
+    const refused = await call('/api/leads/unblock', {
+      method: 'POST', body: JSON.stringify({ rows: [{ address1: ADDRESS, city: 'Round Rock', state: 'TX', zip: '78664' }], reason: 'let me back in' }),
+    }, session)
+    ok(refused.status === 403, 'a manager cannot lift an erasure block', `${refused.status}`)
+    await query(`UPDATE users SET role='client_admin' WHERE id='${q(user.id)}'`)
+
+    const noWhy = await call('/api/leads/unblock', {
+      method: 'POST', body: JSON.stringify({ rows: [{ address1: ADDRESS, city: 'Round Rock', state: 'TX', zip: '78664' }] }),
+    }, session)
+    ok(noWhy.status === 400, 'and neither can an admin without saying why', `${noWhy.status}`)
+    ok(n(await query(`SELECT COUNT(*) FROM deletions WHERE client_id='${q(clientId)}' AND entity_id='${q(P)}'`)) === 1,
+       'neither refusal touched the tombstone')
+
+    const lifted = await call('/api/leads/unblock', {
+      method: 'POST',
+      body: JSON.stringify({
+        rows: [{ address1: ADDRESS, city: 'Round Rock', state: 'TX', zip: '78664' }],
+        reason: 'Deleted while clearing test data, this is a real house',
+      }),
+    }, session)
+    const liftOut = await lifted.json().catch(() => ({}))
+    ok(lifted.ok && liftOut.unblocked === 1, 'an admin with a reason lifts it', JSON.stringify(liftOut))
+    ok(n(await query(`SELECT COUNT(*) FROM deletions WHERE client_id='${q(clientId)}' AND entity_id='${q(P)}'`)) === 0,
+       'and the tombstone is gone')
+
+    const again = await call('/api/import/properties', {
+      method: 'POST',
+      body: JSON.stringify({ rows: [{ ref: '1', address1: ADDRESS, city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.5, lng: -97.6 }] }),
+    }, session)
+    const againOut = await again.json().catch(() => ({}))
+    ok(again.ok && n(await query(`SELECT COUNT(*) FROM properties WHERE id='${q(P)}'`)) === 1,
+       'so the address imports again — as a new lead, with none of the old one on it', JSON.stringify(againOut).slice(0, 90))
+    const notes = n(await query(`SELECT COUNT(*) FROM notes WHERE property_id='${q(P)}'`))
+    const visits = n(await query(`SELECT COUNT(*) FROM visits WHERE property_id='${q(P)}'`))
+    ok(notes === 0 && visits === 0, 'nothing was restored — lifting a block is not an undelete', `${notes} notes, ${visits} visits`)
+
+    const line = await (await call('/api/audit?limit=20', {}, session)).json().catch(() => ({ entries: [] }))
+    const entry = (line.entries ?? []).find((e) => e.action === 'leads.unblocked')
+    ok(!!entry && /clearing test data/.test(JSON.stringify(entry.detail ?? {})), 'and the audit log carries who did it and why', JSON.stringify(entry?.detail ?? {}).slice(0, 90))
+
+    // Put it back so the sections after this one still describe an erased lead.
+    await call('/api/leads/erase', {
+      method: 'DELETE', body: JSON.stringify({ propertyId: P, reason: 'Re-erased so the rest of this smoke still holds' }),
+    }, session)
+  }
+
   /* ===== 7. erasing again confirms rather than errors ================= */
   {
     const res = await call('/api/leads/erase', {

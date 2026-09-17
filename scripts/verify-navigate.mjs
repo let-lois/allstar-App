@@ -102,6 +102,23 @@ async function toLead(opts = {}) {
   )
   ok(/Start visit/i.test(body), 'with the visit one tap away, which is the point of staying here')
 
+  /*
+    And nothing sitting on top of it. The floating add button is suppressed on
+    screens that pin their own bottom action, by a list of route prefixes that
+    `navigate` was missing from — so the circle landed on the right-hand end of
+    Start visit, which is the exact collision the list was written to prevent
+    and the reason its comment exists.
+  */
+  ok((await page.getByRole('button', { name: 'Quick actions' }).count()) === 0, 'and no floating add button on top of it')
+  {
+    const start = page.getByRole('button', { name: /Start visit/i }).first()
+    const fab = page.getByRole('button', { name: 'Quick actions' })
+    const a = await start.boundingBox()
+    const b = (await fab.count()) ? await fab.boundingBox() : null
+    const overlap = !!a && !!b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+    ok(!overlap, 'nothing overlaps Start visit — the one control this screen exists to offer')
+  }
+
   // The demo account has no server to ask; inventing a path would be the one
   // dishonest thing this screen could do.
   /*

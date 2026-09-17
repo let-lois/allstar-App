@@ -193,6 +193,21 @@ try {
   await page.waitForTimeout(1200)
   ok(page.url().endsWith('/street'), 'the map’s own control reaches the street view', page.url())
 
+  /*
+    The floating add button is suppressed on screens that pin their own bottom
+    action, by a list of route prefixes. `street` was missing from it: the
+    screen pins nothing, but its list of doors runs under the button, so the
+    last door on a street sat beneath a 56px circle. `navigate` was missing for
+    the worse version of the same — the circle landed on Start visit.
+
+    And the way back to the map is the only escape from this screen, so it is
+    measured as a thumb target rather than assumed to be one.
+  */
+  ok((await page.getByRole('button', { name: 'Quick actions' }).count()) === 0, 'the floating add button stays off the street screen, where the list runs under it')
+  const backToMap = page.getByRole('button', { name: /^Map$/ }).first()
+  const mapBox = await backToMap.boundingBox()
+  ok(!!mapBox && mapBox.height >= 44, 'and the only way back to the map is a thumb target', mapBox ? `${Math.round(mapBox.height)}px` : 'no box')
+
   const body = () => page.locator('body').innerText().then((t) => t.replace(/\s+/g, ' '))
 
   /* ===== 2. the doors are in walking order ============================== */

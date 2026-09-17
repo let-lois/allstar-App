@@ -238,13 +238,6 @@ export const IconList = () => (
   </svg>
 )
 
-export const IconSettings = () => (
-  <svg {...base}>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M12 2.5v3M12 18.5v3M3.6 7.2l2.6 1.5M17.8 15.3l2.6 1.5M3.6 16.8l2.6-1.5M17.8 8.7l2.6-1.5" />
-  </svg>
-)
-
 export const IconPencil = () => (
   <svg {...base}>
     <path d="M4 20h4l10.5-10.5a2.1 2.1 0 00-3-3L5 17z" />

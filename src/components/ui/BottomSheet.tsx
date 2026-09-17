@@ -102,7 +102,24 @@ export function BottomSheet({
       the panel, and drops `aria-modal` because it isn't one.
     */
     <div
-      className={`fixed inset-0 z-40 ${scrim ? '' : 'pointer-events-none'}`}
+      /*
+        Bounded by the *visible* viewport rather than the layout one.
+
+        The sheet is `bottom-0` inside this box and sizes itself as a fraction
+        of it. `inset-0` made that box the layout viewport — which iOS does not
+        shrink when the software keyboard opens — so a sheet asking for 46% of
+        the screen got 46% of a height that no longer existed, and both the
+        fields and the pinned action row underneath them ended up behind the
+        keyboard. On the map that is the Add-lead form and its Save button: the
+        first thing a rep does at a door, with no way to reach the control that
+        finishes it.
+
+        `--app-h` is already pinned to `visualViewport.height` for the app
+        shell, so this is the measurement the rest of the app already trusts.
+        Android resizes the layout viewport itself, where this changes nothing.
+      */
+      className={`fixed inset-x-0 top-0 z-40 ${scrim ? '' : 'pointer-events-none'}`}
+      style={{ height: 'var(--app-h, 100dvh)' }}
       role="dialog"
       aria-modal={scrim ? true : undefined}
       aria-label={title}

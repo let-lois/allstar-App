@@ -129,7 +129,7 @@ export function StreetScreen() {
           right={
             <button
               onClick={() => nav('/map')}
-              className="focusable metal metal-quiet min-h-[38px] rounded-full px-3.5 text-[12.5px] font-semibold"
+              className="focusable metal metal-quiet min-h-tap rounded-full px-3.5 text-[12.5px] font-semibold"
             >
               Map
             </button>
@@ -159,14 +159,14 @@ export function StreetScreen() {
         right={
           <button
             onClick={() => nav('/map')}
-            className="focusable metal metal-quiet min-h-[38px] rounded-full px-3.5 text-[12.5px] font-semibold"
+            className="focusable metal metal-quiet min-h-tap rounded-full px-3.5 text-[12.5px] font-semibold"
           >
             Map
           </button>
         }
       />
 
-      <div className="scroll-pane bg-surface-sunk pb-4">
+      <div className="scroll-pane pad-nav bg-surface-sunk">
         {/* --- which street ------------------------------------------------- */}
         <div className="snap-x-row bg-surface px-3 py-2" data-testid="street-picker">
           {streets.map((s) => (

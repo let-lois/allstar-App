@@ -733,6 +733,25 @@ export function apiEraseLeads(token: string, input: { propertyIds: string[]; rea
   return request<BulkEraseDTO>('/api/leads/erase-bulk', { method: 'POST', body: input, token })
 }
 
+/**
+ * Let erased addresses be imported again.
+ *
+ * Addresses rather than ids, because the id is a hash of the company and the
+ * normalised street line that only the server knows how to compute. It brings
+ * nothing back — the lead and everything on it stay destroyed — it only lifts
+ * the block that stops the address existing a second time.
+ */
+export function apiUnblockLeads(
+  token: string,
+  input: { rows: { address1: string; city?: string; state?: string; zip?: string }[]; reason: string },
+) {
+  return request<{ ok: true; unblocked: number; requested: number }>('/api/leads/unblock', {
+    method: 'POST',
+    body: input,
+    token,
+  })
+}
+
 export function apiAssignProperties(
   token: string,
   input: { propertyIds: string[]; repId: string | null },
@@ -874,9 +893,16 @@ export interface LeadListDTO {
   repIds: string[]
 }
 
-export const apiLists = (token: string) =>
-  request<{ lists: LeadListDTO[] }>('/api/lists', { token })
+/*
+  Three list wrappers used to sit here — GET /api/lists, PATCH a list, POST its
+  members — written when the feature was first built and superseded before it
+  shipped: lists arrive on the bootstrap, and a rename, an archive or a member
+  change is queued through the outbox so it works with no signal.
 
+  The *server* routes are very much alive. They are what the outbox applies
+  against, and they are covered by api/scripts/smoke-lists.mjs. Removing the
+  client wrappers is not a reason to go looking for the endpoints behind them.
+*/
 export const apiCreateList = (
   token: string,
   body: {
@@ -889,20 +915,8 @@ export const apiCreateList = (
   },
 ) => request<{ list: LeadListDTO; skipped: number }>('/api/lists', { method: 'POST', body, token })
 
-export const apiUpdateList = (
-  token: string,
-  id: string,
-  body: { name?: string; description?: string; archived?: boolean },
-) => request<{ ok: true }>(`/api/lists/${encodeURIComponent(id)}`, { method: 'PATCH', body, token })
-
 export const apiDeleteList = (token: string, id: string) =>
   request<{ ok: true }>(`/api/lists/${encodeURIComponent(id)}`, { method: 'DELETE', token })
-
-export const apiListMembers = (token: string, id: string, body: { add?: string[]; remove?: string[] }) =>
-  request<{ added: number; removed: number; skipped: number }>(
-    `/api/lists/${encodeURIComponent(id)}/members`,
-    { method: 'POST', body, token },
-  )
 
 export const apiSetListReps = (token: string, id: string, repIds: string[]) =>
   request<{ repIds: string[] }>(`/api/lists/${encodeURIComponent(id)}/reps`, {
