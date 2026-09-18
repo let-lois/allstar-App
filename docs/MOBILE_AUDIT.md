@@ -195,20 +195,44 @@ reports no runtime errors.
 So this is dependency hygiene rather than a defect: two Reacts in one
 `node_modules` tree is worth resolving, and it is not why anything was broken.
 
-### 2.11 The Android back button does nothing — *open*
+### 2.11 The Android back button closed the app — *fixed*
 
-Established, not fixed. The web app runs under `MemoryRouter`, so its history
-is not the webview's, and nothing on the native side handles
-`hardwareBackPress` — there is no `BackHandler` anywhere in `apps/mobile`. The
-Expo Router stack has a single route, so a back press **exits the app**. A rep
-three screens into a lead form presses back and loses what they were typing.
+The web app runs under `MemoryRouter`, so its history is not the webview's, and
+nothing on the native side handled `hardwareBackPress`. The Expo Router stack
+has one route, so a back press **exited the app** — a rep three screens into a
+lead form reached for back and lost what they were typing.
 
-Fixing it properly needs two things across the bridge: a native action the web
-side calls whenever its history depth changes, so the native side knows whether
-going back is possible, and an imperative handle (`useDOMImperativeHandle`) the
-native side calls to go back. Worth doing before Android ships; it is a daily
-annoyance rather than a crash, which is why it is recorded here rather than
-rushed.
+Two things cross the bridge in opposite directions, because neither side knows
+both halves: whether going back is possible is a fact only the web side has and
+travels up as a native action, and the instruction to do it comes down as an
+imperative handle. Depth is counted (push deeper, pop shallower, replace
+neither) because React Router does not expose its memory history's index, and
+counting beats tracking keys — a pop returns to an entry's *original* key, so a
+key-based scheme reads a revisit as a new screen.
+
+Returning `false` at the home screen is deliberate: exiting from the root is
+what Android users expect, and it is why `canGoBack` is reported at all.
+
+### 2.12 The shell duplicated itself on every re-render — *fixed*
+
+`ownTheScreen()` and `installApiProxy()` run in the component body rather than
+an effect, which has to stay: React renders a parent before its children, so an
+effect would run after the first screen had mounted and the session's first
+request would already have gone out through the browser and failed. The cost is
+that both run again on every render, and the DOM root re-renders whenever the
+native side emits props.
+
+Neither was idempotent. `ownTheScreen` set an `id` on its stylesheet and then
+appended unconditionally, so each render added another copy. Worse,
+`installApiProxy` captured `target.fetch` as "the browser's" — which on a second
+call is the *previous proxy*. So each install retained the one before it and
+every request that is **not** the API walked the whole chain, which means every
+map tile, the hot path while a rep pans the map. Measured at two shim frames per
+install.
+
+My first attempt to measure this reported no problem, because it counted whether
+the real `fetch` was reached once — which it is, at the bottom of an N-deep
+chain.
 
 ## 3. Feature matrix
 
@@ -240,7 +264,7 @@ and the API path — and no evidence at all about WKWebView or Android's WebView
 | Pipeline | ✅ | ⬜ | ⬜ | — | layout, 2.1 | needs a device read |
 | Route | ✅ | ⬜ | ⬜ | `/api/directions` | 2.2 location | — |
 | Navigate (handoff) | ✅ | ⬜ | ⬜ | — | 2.3 — it ate the app | `Linking.openURL` |
-| Android hardware back | n/a | n/a | ❌ | — | 2.11 — it exits the app | **open** |
+| Android hardware back | n/a | n/a | ⬜ | — | 2.11 — it exited the app | web half gated; `BackHandler` needs a device |
 | App icon / launch screen | ✅ | ✅ | ✅ | — | 2.9 — it was Expo's | generated from `brand/` |
 | Street View | ✅ | ⚠️ | ⚠️ | — | no Google key | placeholder, by design |
 | Visit Mode | ✅ | ⬜ | ⬜ | `/api/mutations` | 2.1, 2.5 | — |
@@ -350,8 +374,6 @@ Ours:
 
 - Deploy the Worker so `/api/geocode/reverse` exists. Lou or Curtis, through
   the company's Cloudflare process.
-- Handle the Android hardware back button (§2.11). Not a crash, but a rep loses
-  a half-typed lead every time they reach for it.
 - Run a `preview` build on a real iPhone and a real Android device. Nothing in
   §3's ⬜ column becomes ✅ without it.
 
@@ -382,18 +404,37 @@ Blocked here specifically:
 
 **Not ready, and not testable as ready from here.**
 
-What is established: the shell boots from `file://`, renders sign-in, refuses a
-wrong password with the server's own message, accepts a right one, sends the
-bearer token, decodes every asset, and owns the page box — all proved by
-`verify:shell` against the real exported bundle. The bridge carries text and
-binary in both directions and honours a deadline, proved by `verify:bridge` in
-24 sabotage-tested checks. 80 gates pass.
+What is established, and by what:
 
-What is not established: any of it on hardware. The webview swap in §2.1 is the
-single largest change and Chromium cannot observe it — it rests on reading
-`@expo/dom-webview`'s and `react-native-webview`'s native sources. Storage
-persistence across a cold start, the camera, geolocation prompts and the
-directions handoff all need a device.
+- `verify:shell` — 21 checks against the **real exported bundle** from a
+  `file://` URL. The shell boots, renders sign-in, refuses a wrong password
+  with the server's own message, accepts a right one, sends the bearer token,
+  decodes every image, owns the page box, survives five re-renders without
+  duplicating itself, and tracks its own history for the back button.
+- `verify:bridge` — 28 checks. Text and binary bodies in both directions, the
+  null-body statuses, a missing native action, the abort path, and that a
+  re-install does not stack.
+- `verify:reverse-geocode` — 15 checks, the important one being that
+  `ZERO_RESULTS` and `REQUEST_DENIED` cannot be confused.
+- `verify:shell-assets` — the inlined data URIs match their PNGs, to the byte.
+- The whole suite: **80 of 80 gates pass in 32.4 minutes**, on the tree as
+  committed.
+
+Each of the new gates was sabotage-proved rather than assumed: the fix was
+reverted, the gate was watched to fail, and the fix was restored.
+
+What is not established: any of it on hardware. Chromium cannot observe the
+native side at all, and two of the largest changes live there — the webview
+swap in §2.1, which rests on reading `@expo/dom-webview`'s and
+`react-native-webview`'s own sources, and the `BackHandler` wiring in §2.11,
+whose web half is gated and whose native half is not. Storage persistence
+across a cold start, the camera, the geolocation prompt and the directions
+handoff all need a device.
+
+One specific caution for whoever runs the first device test: use a **preview
+build**, not Expo Go. §2.4 explains why — Expo Go plus EAS Update mis-locates
+DOM assets in a way a real build does not, so it shows faults that are not
+there.
 
 The acceptance tests in the Phase 1 plan also need re-scoping against §1: Test
 E (CSV export) is a desktop console workflow, not a mobile one, and Test B
