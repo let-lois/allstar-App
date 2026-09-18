@@ -45,6 +45,7 @@
     "verify:bridge": "node --experimental-strip-types scripts/verify-bridge.mjs",
     "verify:core": "tsc -p packages/core",
     "verify:shell-assets": "node scripts/gen-shell-assets.mjs --check",
+    "verify:store-assets": "node scripts/verify-store-assets.mjs",
     "verify:all": "node scripts/verify-all.mjs",
     "verify:api-access": "node scripts/verify-api-access.mjs",
     "verify:backups": "node api/scripts/verify-backup-crypto.mjs",
