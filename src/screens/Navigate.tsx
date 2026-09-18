@@ -12,6 +12,7 @@ import {
   distanceMiles,
   formatDistance,
   greatCirclePath,
+  navigationAppName,
   navigationUrl,
   walkMinutes,
 } from '../lib/geo'
@@ -230,10 +231,18 @@ export function Navigate() {
     )
   }
 
+  /*
+    The whole address, not just the street. A maps app handed "1302 Deepwood
+    Drive" with no town picks one of the dozens that exist; with the town it
+    routes to this house and names it on the turn list.
+  */
   const external = navigationUrl({
     lat: property.lat,
     lng: property.lng,
-    label: property.address1,
+    address1: property.address1,
+    city: property.city,
+    state: property.state,
+    zip: property.zip,
   })
 
   /*
@@ -405,7 +414,7 @@ export function Navigate() {
             onClick={() => haptic('tap')}
             className="metal metal-quiet press focusable flex min-h-tap flex-1 items-center justify-center rounded-field text-[14px] font-semibold !text-accent-strong"
           >
-            Google Maps
+            {navigationAppName()}
           </a>
           <Button className="flex-1" onClick={() => nav(`/property/${property.id}?start=1`)}>
             Start visit

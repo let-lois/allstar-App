@@ -58,7 +58,7 @@
     "verify:lasso": "node scripts/verify-lasso.mjs",
     "verify:route": "node scripts/verify-route.mjs",
     "verify:maptiles": "node scripts/verify-map-tiles.mjs",
-    "verify:navigate": "node scripts/verify-navigate.mjs",
+    "verify:navigate": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-navigate.mjs",
     "verify:flightline": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-flightline.mjs",
     "verify:classes": "node scripts/verify-classes.mjs",
     "verify:schema": "node scripts/verify-schema-drift.mjs",

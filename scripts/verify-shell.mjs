@@ -238,6 +238,16 @@ const box = await page.evaluate(() => ({
   bodyMargin: getComputedStyle(document.body).marginLeft,
 }))
 ok(box.viewport.includes('viewport-fit=cover'), 'viewport carries viewport-fit=cover, so the safe-area insets resolve')
+/*
+  And page zoom is off, which the web app deliberately allows and the shell
+  deliberately does not. `FieldMap` has its own pinch handler, so on the map one
+  gesture zoomed both the map and the page — and the page zoom survived
+  navigation, leaving a rep magnified on Overview with no way back.
+*/
+ok(
+  box.viewport.includes('user-scalable=no'),
+  'and user-scalable=no, so pinching the map cannot zoom the page with it',
+)
 ok(box.styled, 'the shell stylesheet is installed')
 ok(box.rootDisplay === 'block', `#root is not left as Expo's flex child (got ${box.rootDisplay})`)
 ok(box.bodyMargin === '0px', `body margin is reset (got ${box.bodyMargin})`)
