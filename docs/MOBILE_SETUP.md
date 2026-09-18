@@ -175,26 +175,48 @@ laptop:
 
 ### Step 4 — Basemap imagery: test before you buy *(20 minutes)*
 
-The obvious move is to set `EXPO_PUBLIC_MAPTILER_KEY` to the existing web key.
-**Test it first**, because the web key is locked to the app's origin and the
-shell sends no referrer — the same shape of problem as §2.8 in the audit. And
-MapTiler's free plan allows only **one active key**, so if a second is needed it
-is a plan change, not a click.
+The obvious move is to set `EXPO_PUBLIC_MAPTILER_KEY` to the existing web key,
+and it will probably **work today for the wrong reason**.
 
-The test, once a preview build is on a phone: set the variable to the existing
-key, publish, open the map. Tiles appear or they do not — that is the whole
-answer.
+Check the key's **Allowed HTTP Origins** in the MapTiler console. `LAUNCH.md`
+item 4 records that it includes `?`, a wildcard permitting requests that arrive
+with **no `Origin` header at all** — which is exactly what a `file://` webview
+sends. That entry is a known security hole with an open action to remove it: it
+also lets anyone who reads the key out of the JavaScript bundle use it from
+`curl`.
 
-If they do not, three options in order of preference:
+So the two facts are:
 
-1. **A second, unrestricted MapTiler key**, used only by the app. Simplest.
-   The cost is that it sits in a public bundle and can be lifted; MapTiler rate
-   limits and a spend cap are the mitigation.
-2. **Proxy tiles through the Worker.** The key stays server-side and
-   Cloudflare's cache makes it cheap after the first request per tile. More
-   work, and it is the right answer if the key being liftable is unacceptable.
+- Set the existing key now and the phone's map will draw, **because** `?` is
+  still there.
+- Remove `?` — which item 4 says to do, and should be done — and **the phone's
+  map goes blank**, while the website is unaffected.
+
+Do not let that talk you out of removing `?`. It means the phone needs a key of
+its own rather than a shared one, and MapTiler's free plan allows one active key
+**per account** — so the company-owned account that item 4 already calls for can
+hold the web key, and the app needs either a second account, a paid plan, or the
+proxy below.
+
+Three options, in order of preference:
+
+1. **Proxy tiles through the Worker.** The key stays server-side, never ships in
+   a bundle, and Cloudflare's cache makes it cheap after the first request per
+   tile. It also closes the hole permanently rather than moving it. More work
+   than the others, and the only one that is actually secure.
+2. **A second MapTiler key that accepts no-origin requests**, used only by the
+   app. Quickest. It is the same exposure as `?` is today, just scoped to one
+   key you can rate-limit and cap independently — so if it is abused, the
+   website's map keeps working.
 3. **Ship without imagery.** The app draws its own basemap and every other
    feature works. This is the current state and it is not broken, just plainer.
+
+The free tier is a hard 100k/month cap with **no overage billing**, so the worst
+case for 1 and 2 is a blank map until the month rolls over — an outage, not an
+invoice.
+
+Whichever is chosen, the key belongs in the company-owned account from
+`LAUNCH.md` item 4, not in a personal one.
 
 ### Step 5 — Decide about the Google basemap *(a decision, not a task)*
 
