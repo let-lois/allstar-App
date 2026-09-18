@@ -48,6 +48,19 @@ import { chromiumPath } from './lib/browser.mjs'
 const BUNDLE = resolve('apps/mobile/dist/www.bundle')
 const HOST_OS = process.argv[2] === 'android' ? 'android' : 'ios'
 
+/**
+ * Every native action the route passes, named exactly as it is there.
+ *
+ * One list, used both for the initial props and for the re-render below,
+ * because a `$$props` message **replaces** the marshalled props rather than
+ * merging them. The first version of this gate re-rendered with `['apiFetch']`
+ * alone, which silently deleted `onCanGoBack` for the rest of the run — and
+ * then reported that the app had stopped tracking its history. It had not; the
+ * gate had unplugged it. The wrapper marshals by prop name, so a name that
+ * drifts from `src/app/index.tsx` tests a bridge the app does not have.
+ */
+const ACTIONS = ['apiFetch', 'onCanGoBack']
+
 if (!existsSync(BUNDLE)) {
   console.error(
     `FAIL  no export at ${BUNDLE}\n` +
@@ -77,7 +90,7 @@ const ok = (cond, msg) => {
   `$$native_action_result` with the same uid. Getting any of that wrong would
   make this gate pass while the app hung on the phone.
 */
-function nativeSide(hostOs) {
+function nativeSide({ hostOs, actions }) {
   const NATIVE_ACTION = '$$native_action'
   const NATIVE_ACTION_RESULT = '$$native_action_result'
   const DOM_EVENT = '$$dom_event'
@@ -122,13 +135,21 @@ function nativeSide(hostOs) {
     injectedObjectJson: () =>
       JSON.stringify({
         EXPO_DOM_HOST_OS: hostOs,
-        initialProps: { names: ['apiFetch'], props: {} },
+        // Both native actions the route passes. Named exactly as there: the
+        // wrapper marshals by prop name, so a rename here would test a bridge
+        // the app does not have.
+        initialProps: { names: actions, props: {} },
       }),
     postMessage: (raw) => {
       const msg = JSON.parse(raw)
       if (msg.type !== NATIVE_ACTION) return
       const { uid, actionId, args } = msg.data
       const reply = (detail) => window.dispatchEvent(new CustomEvent(DOM_EVENT, { detail }))
+      if (actionId === 'onCanGoBack') {
+        globalThis.__canGoBack = args[0]
+        reply({ type: NATIVE_ACTION_RESULT, data: { uid, actionId, result: null } })
+        return
+      }
       if (actionId !== 'apiFetch') {
         reply({
           type: NATIVE_ACTION_RESULT,
@@ -174,7 +195,7 @@ page.on('requestfailed', (r) => {
   }
 })
 
-await page.addInitScript(nativeSide, HOST_OS)
+await page.addInitScript(nativeSide, { hostOs: HOST_OS, actions: ACTIONS })
 await page.goto(`file://${resolve(BUNDLE, html)}`, { waitUntil: 'load' })
 
 // The app boots asynchronously — the store reads storage before it renders.
@@ -249,15 +270,15 @@ ok(fit.scrollH <= fit.clientH, `no page-level vertical overflow (${fit.scrollH} 
 const beforeRender = await page.evaluate(
   () => document.querySelectorAll('#allstar-shell-box').length,
 )
-await page.evaluate(() => {
+await page.evaluate((NAMES) => {
   for (let i = 0; i < 5; i++) {
     window.dispatchEvent(
       new CustomEvent('$$dom_event', {
-        detail: { type: '$$props', data: { names: ['apiFetch'], props: {} } },
+        detail: { type: '$$props', data: { names: NAMES, props: {} } },
       }),
     )
   }
-})
+}, ACTIONS)
 await page.waitForTimeout(500)
 const afterRender = await page.evaluate(() => ({
   styles: document.querySelectorAll('#allstar-shell-box').length,
@@ -295,7 +316,86 @@ ok(
   'the token is sent on requests after sign-in',
 )
 
-/* 7. Nothing threw on the way. */
+/* 7. Android's back button, as far as Chromium can see it.
+      The native half is `BackHandler`, which does not exist here — so what
+      this establishes is that the web side counts its own history correctly
+      and that `goBack` navigates. Whether Android's button is wired to it
+      needs a device, and is said so in the audit.
+
+      Driven through the same channels the native side uses: the `onCanGoBack`
+      native action arrives as a `$$native_action` message, and `goBack` is
+      called through `window._domRefProxy`, which is what the wrapper's ref
+      proxy injects. */
+{
+  const reported = await page.evaluate(() => globalThis.__canGoBack)
+  ok(reported === false, `at the home screen, back is not possible (reported ${reported})`)
+
+  ok(
+    await page.evaluate(() => typeof globalThis._domRefProxy?.goBack === 'function'),
+    'the shell publishes a goBack handle for the native side to call',
+  )
+
+  /*
+    The first-run tour sits over the bottom dock, so it has to go before the
+    dock can be tapped. Skipping it is also the honest thing to drive: a rep
+    who skips the tour is the one most likely to reach for back.
+  */
+  const skip = page.getByRole('button', { name: 'Skip' })
+  if (await skip.count()) {
+    await skip.first().click()
+    await page.waitForTimeout(600)
+  }
+
+  // Navigate with the app's own navigation, so this is a real push rather than
+  // a synthetic history entry.
+  await page.getByRole('link', { name: 'More' }).click()
+
+  /*
+    Waited for, not slept on. The report crosses the bridge as a native action
+    — postMessage out, CustomEvent back — after an effect has flushed, and a
+    fixed 900ms was enough on one run and not the next. A sleep here makes this
+    gate fail for a reason that has nothing to do with the app, which is the
+    same mistake `verify-lists-e2e` was carrying.
+  */
+  let deeper = null
+  try {
+    await page.waitForFunction(() => globalThis.__canGoBack === true, null, { timeout: 10_000 })
+    deeper = true
+  } catch {
+    deeper = await page.evaluate(() => globalThis.__canGoBack)
+  }
+  ok(deeper === true, `one screen in, back becomes possible (reported ${deeper})`)
+
+  const before = await page.evaluate(() => document.body.innerText.slice(0, 80))
+  await page.evaluate(() => globalThis._domRefProxy.goBack())
+  /*
+    Reported rather than thrown. Waiting and letting the timeout escape would
+    kill the gate on the one failure this check exists to describe, and the
+    remaining checks would never run.
+  */
+  let left = false
+  try {
+    await page.waitForFunction(
+      (was) => document.body.innerText.slice(0, 80) !== was,
+      before,
+      { timeout: 10_000 },
+    )
+    left = true
+  } catch {
+    left = false
+  }
+  ok(left, 'calling goBack actually leaves the screen')
+  let home = null
+  try {
+    await page.waitForFunction(() => globalThis.__canGoBack === false, null, { timeout: 10_000 })
+    home = false
+  } catch {
+    home = await page.evaluate(() => globalThis.__canGoBack)
+  }
+  ok(home === false, `and back becomes impossible again at the bottom of the stack (${home})`)
+}
+
+/* 8. Nothing threw on the way. */
 ok(errors.length === 0, `no runtime errors${errors.length ? `:\n      ${errors.join('\n      ')}` : ''}`)
 
 await browser.close()

@@ -8,10 +8,11 @@
  */
 import * as Linking from 'expo-linking'
 import * as WebBrowser from 'expo-web-browser'
-import { StyleSheet, View } from 'react-native'
+import { useCallback, useEffect, useRef } from 'react'
+import { BackHandler, StyleSheet, View } from 'react-native'
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes'
 
-import AllStarWeb from '@/components/allstar-web'
+import AllStarWeb, { type AllStarWebRef } from '@/components/allstar-web'
 import type { ApiRequest, ApiResponse } from '@/lib/api-bridge'
 
 /** Content types whose bytes will not survive being read as text. */
@@ -135,10 +136,49 @@ function onShouldStartLoadWithRequest(req: ShouldStartLoadRequest): boolean {
 }
 
 export default function Index() {
+  const shell = useRef<AllStarWebRef>(null)
+  /*
+    In a ref rather than state, and read inside the handler rather than closed
+    over. The back handler is registered once; state would either re-register
+    it on every navigation or capture a stale value and exit the app from the
+    third screen of a lead form.
+  */
+  const canGoBack = useRef(false)
+
+  /*
+    Stable, because it is a native action: the wrapper marshals function props
+    by identity and emits a `$$props` message whenever they change, which
+    re-renders the DOM root. A fresh closure each render would do that on every
+    render of this route.
+  */
+  const onCanGoBack = useCallback(async (can: boolean) => {
+    canGoBack.current = can
+  }, [])
+
+  /*
+    Android's back button. The web app runs under `MemoryRouter`, so pressing
+    back reached the native stack — which has one route — and closed the app,
+    taking a half-typed lead with it.
+
+    Returning `true` consumes the press; `false` lets Android do what it would
+    have done, which at the app's own home screen is exit, and that is correct.
+    `BackHandler` is a no-op on iOS, which has no such button.
+  */
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!canGoBack.current) return false
+      shell.current?.goBack()
+      return true
+    })
+    return () => sub.remove()
+  }, [])
+
   return (
     <View style={styles.fill}>
       <AllStarWeb
+        ref={shell}
         apiFetch={apiFetch}
+        onCanGoBack={onCanGoBack}
         dom={{
           /*
             `react-native-webview`, not Expo's own `@expo/dom-webview`, which is
