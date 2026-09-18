@@ -10,12 +10,23 @@
  *
  * So: in the document, clicked, removed, and the URL revoked on a later tick.
  *
- * Worth knowing before this is packaged as a native app: `<a download>` with a
- * `blob:` URL is unreliable to non-functional inside a WebView — Android needs
- * the host to implement a download listener and does not hand it blob URLs at
- * all, and iOS ignores the attribute in most configurations. The failure is
- * silent: no file, no error, nothing to catch. This is the right shape for the
- * web, and the place to change when there is a shell to change it for.
+ * `<a download>` with a `blob:` URL is unreliable to non-functional inside a
+ * WebView — Android needs the host to implement a download listener and does
+ * not hand it blob URLs at all, and iOS ignores the attribute in most
+ * configurations. The failure is silent: no file, no error, nothing to catch.
+ *
+ * There is a native shell now, and it deliberately changes nothing here,
+ * because every caller is a screen the shell does not bundle. All three —
+ * `AdminLeads`, `AdminLists`, `AdminReports` — are behind `adminRoutes.tsx`,
+ * which `apps/mobile/metro.config.js` swaps for a stub: the phone bundle
+ * contains no reference to any of them. Exporting is an office job done on a
+ * desktop, and a rep has no screen that reaches this.
+ *
+ * So the native path is a real piece of work — a save action over the bridge
+ * into `expo-file-system` and a share sheet — for a button that is not there.
+ * It belongs with the first mobile screen that actually needs to hand a file
+ * to the OS, and not before. Checked rather than assumed: `grep saveFile src/`
+ * and `grep -c Admin apps/mobile/dist/www.bundle/*.js`.
  */
 export function saveFile(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)

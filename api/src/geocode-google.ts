@@ -225,3 +225,94 @@ export async function googleGeocode(
   }
   return out
 }
+
+/* --- the other direction: a point, not an address -------------------------- */
+
+/**
+ * What Google says is at a point, in the shape the client already parses.
+ *
+ * This is the map's Add-lead step. A rep taps the house in front of them and
+ * the form opens with the address already in it, instead of asking somebody
+ * standing in a driveway to type what is written on the door they are looking
+ * at.
+ *
+ * ## Why this is on the server at all
+ *
+ * The web app does this in the browser, through the Maps JavaScript geocoder
+ * and the referrer-restricted browser key — see `src/lib/reverseGeocode.ts`.
+ * That cannot work in the native shell, and no key can make it: a DOM
+ * component's page is loaded from `file://`, so it sends no `Referer` at all,
+ * and an HTTP-referrer restriction is the only application restriction the
+ * Maps JavaScript API supports. An iOS- or Android-restricted key validates a
+ * bundle identifier sent by the *native* Maps SDK, which is not what a webview
+ * running JavaScript is. The remaining options were an unrestricted key in a
+ * shipped bundle, which is a key anybody can lift and spend, or this.
+ *
+ * ## The response is deliberately raw
+ *
+ * `address_components` and `location_type` are returned as Google gave them,
+ * because the client already knows how to read them: `fromGeocoder`,
+ * `partsToFields` and `precisionOf` in `src/lib/address.ts` do that work for
+ * the browser path today and are gates' worth of accumulated judgement about
+ * which component is the street number and what a coarse answer is allowed to
+ * claim. Re-deciding any of that here would be a second, diverging opinion
+ * about a rep's address field.
+ *
+ * Never throws. A refusal comes back as `null` and the caller reports the same
+ * "no address here" it reports for a point in a lake, because from a rep's
+ * side those are the same thing — and the console is where a revoked key is
+ * diagnosed, which is why this logs the provider's own words.
+ */
+export interface ReverseGeocodeResult {
+  /** Google's `address_components`, untouched. */
+  parts: unknown[]
+  /** ROOFTOP, RANGE_INTERPOLATED, GEOMETRIC_CENTER or APPROXIMATE. */
+  locationType?: string
+}
+
+export async function googleReverseGeocode(
+  at: { lat: number; lng: number },
+  key: string,
+): Promise<ReverseGeocodeResult | null> {
+  const url =
+    `${googleBase}?latlng=${encodeURIComponent(`${at.lat},${at.lng}`)}` +
+    `&key=${encodeURIComponent(key)}`
+
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Geocoder returned ${res.status}`)
+  const body = (await res.json()) as GoogleResponse & {
+    results?: (GoogleResult & { address_components?: unknown[] })[]
+  }
+
+  /*
+    ZERO_RESULTS is an answer — there is genuinely nothing at that point, which
+    happens for a tap in a field or a lake. Every other non-OK status is a
+    failure of ours rather than of the point, and the two must not look alike:
+    the client caches "nothing here" and deliberately does not cache "could not
+    ask", because a rep in a dead zone would otherwise leave that house blank
+    for the rest of the session.
+  */
+  if (body.status === 'ZERO_RESULTS') return null
+  if (body.status !== 'OK') {
+    throw new Error(
+      `Geocoder said ${body.status ?? 'nothing'}${
+        body.error_message ? `: ${body.error_message}` : ''
+      }`,
+    )
+  }
+
+  const best = body.results?.[0]
+  if (!best?.address_components) return null
+
+  /*
+    No `tooCoarse` check here, unlike the forward path.
+
+    Forward, a coarse answer is Google failing to parse an address and handing
+    back the middle of a state — a pin 300 miles from the house, and worthless.
+    Reverse, the coordinates are the rep's own finger and are exact by
+    definition; `location_type` describes only how much to trust the *text*. The
+    client already drops the street number from an `approximate` answer and
+    keeps the town, which is the right trade and is already gated.
+  */
+  return { parts: best.address_components, locationType: best.geometry?.location_type }
+}

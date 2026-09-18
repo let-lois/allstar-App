@@ -1217,6 +1217,31 @@ export function apiLatestBackup(token: string) {
   return request<BackupEvidenceDTO>('/api/ops/backups', { token })
 }
 
+/**
+ * The address under a point, asked of our own server.
+ *
+ * The browser asks Google directly through the Maps JavaScript geocoder — see
+ * `reverseGeocode.ts`. The native shell cannot, and no key fixes it: a DOM
+ * component's page is loaded from `file://` so it sends no `Referer`, and an
+ * HTTP-referrer restriction is the only application restriction the Maps
+ * JavaScript API supports. This is the same lookup on the Worker's key, which
+ * is also where it gets counted against the company's geocoder quota.
+ *
+ * `parts: null` is a real answer — a tap in a field or a lake. The refusals are
+ * `no_reverse_geocoder` (this company has no provider that can do it) and
+ * `geocoder_unavailable`, and both arrive as an `ApiError` with that code.
+ */
+export function apiReverseGeocode(token: string, at: { lat: number; lng: number }) {
+  return request<{ parts: unknown[] | null; locationType?: string }>('/api/geocode/reverse', {
+    method: 'POST',
+    token,
+    body: at,
+    // A geocoder round trip behind a Worker. A rep waiting on the Add-lead form
+    // would rather see an empty field than a spinner.
+    timeoutMs: 10_000,
+  })
+}
+
 export function apiGeocoders(token: string) {
   return request<GeocodersDTO>('/api/geocoders', { token })
 }

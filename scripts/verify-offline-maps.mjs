@@ -1,6 +1,7 @@
 import { chromium } from 'playwright'
 import { chromiumPath } from './lib/browser.mjs'
 import { dismissTour } from './lib/tour.mjs'
+import { prefetchTiles, tileStorageAvailable } from '../src/lib/tiles.ts'
 
 /**
  * Territory tile prefetch verification.
@@ -31,6 +32,44 @@ const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
   'base64',
 )
+
+/* --- 0. a platform that cannot store imagery at all --------------------- */
+//
+// Run before the browser, and in Node deliberately: Node defines no `caches`,
+// so this is the unsupported platform, for free and without faking anything.
+//
+// The case is real. Cache Storage is exposed only to a secure context, and the
+// native shell's page is loaded from `file://` — an origin some engines treat
+// as trustworthy and some do not. `cachedCount` asked the question and
+// `clearTileCache` swallowed the answer, while `prefetchTiles`, the one a rep
+// taps, called `caches.open` unguarded — into a caller with a `finally` and no
+// `catch`. The button un-pressed, no note appeared, and a rep would walk out
+// believing their territory was saved.
+{
+  const preFails = []
+  const preOk = (cond, msg) => {
+    console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}`)
+    if (!cond) preFails.push(msg)
+  }
+
+  preOk(!tileStorageAvailable(), 'Node has no Cache Storage, so this is the unsupported platform')
+
+  const urls = ['https://api.maptiler.com/a.png', 'https://api.maptiler.com/b.png']
+  let threw = null
+  let result = null
+  try { result = await prefetchTiles(urls) } catch (e) { threw = e }
+
+  preOk(threw === null, `a download on such a platform does not throw${threw ? ` (threw ${threw.name})` : ''}`)
+  preOk(result?.unsupported === true, 'it says the platform cannot store imagery')
+  preOk(
+    result?.done === 0 && result?.failed === urls.length && result?.total === urls.length,
+    'and reports nothing saved rather than a silent success',
+    )
+  if (preFails.length) {
+    console.log(`\n${preFails.length} check(s) failed before the browser started.`)
+    process.exit(1)
+  }
+}
 
 const browser = await chromium.launch({
   executablePath: chromiumPath(),

@@ -102,10 +102,10 @@ account, so the cron covers "nobody remembered" and does not cover "the account 
 gone". `npm run backup` onto a machine is still a person's job, and still the only
 copy that survives losing the account.
 
-### 4. The MapTiler key is exposed — two console steps left, both yours
-**Owner: Curtis · Severity: blocker until the key is rotated**
+### 4. The MapTiler key is exposed, and owned by somebody who has left
+**Owner: Curtis · Severity: blocker until the key is reissued from an account we control**
 
-Two problems that resolved together. **The code half is done.**
+Three problems now. **The code half is done.**
 
 *Origin-unlocked (fixed in code):* `Allowed HTTP Origins` includes `?`, which
 permits requests arriving with no `Origin` header. That was deliberate — the free
@@ -118,10 +118,42 @@ browser-only and can be fully origin-locked.
 *Exposed (still open):* the browser key appeared in a screenshot during a working
 session and has not been rotated.
 
-**Your two steps, both in the MapTiler console:**
+*Owned by a former team member (found 2026-09-18):* the key was created under the
+personal MapTiler account of someone who started this project and has since left.
+Nobody currently here owns it. If that account is closed, reclaimed, or its card
+expires, **every map in both the website and the phone app goes blank at once**,
+with no warning and nothing in this repo to fix it. It is also an access-control
+problem in its own right: a former employee's account still holds a live
+production credential.
 
-1. **Rotate the key**, and put the new one in `VITE_MAPTILER_KEY`.
-2. **Remove `?` from Allowed HTTP Origins**, listing only the app's origins.
+So the answer is not a rotation inside that account — that keeps the ownership
+problem. It is a **new key in a company-owned MapTiler account**, and the old
+account then has nothing of ours in it.
+
+**The order matters, because the naive one causes an outage.** The free plan
+allows one active key *per account*, so a second account has its own allowance —
+which means the cutover can be seamless:
+
+1. Create a MapTiler account owned by the company, not a person.
+2. Create the key there. Set **Allowed HTTP Origins** to the app's origins only
+   — and **not** `?`, which was the whole first half of this item.
+3. Put the new value in **both** places (see below), deploy, and confirm tiles
+   draw on the website and in the app.
+4. Only then delete the old key and close the old account.
+
+Doing it the other way round — rotating first — blanks the map until both
+deployments catch up.
+
+**Two systems hold this key, not one.** That is new since the native app exists,
+and missing either half leaves one of the two products with a dead map:
+
+| Where | Variable | To take effect |
+| --- | --- | --- |
+| Cloudflare Pages | `VITE_MAPTILER_KEY` | Vite inlines it, so the **web app must be rebuilt** — a variable change alone does nothing |
+| expo.dev (EAS) | `EXPO_PUBLIC_MAPTILER_KEY` | Set in all three environments. Metro inlines it into the JS bundle, so an `eas update` carries it — **no native rebuild needed** |
+
+`docs/MOBILE_SETUP.md` has the commands. Note the phone half is not set at all
+yet, so until it is, the app has no imagery and only the web key is live.
 
 Then confirm with `/api/selftest/geocode` — `attempts` should name `google`
 and/or `census` and never MapTiler. `MAPTILER_API_KEY` on the Worker is unused

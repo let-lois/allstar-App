@@ -94,6 +94,13 @@ const ROUTES = {
   // Super admin alone: the payload describes the database's size over time, and
   // the database is every customer's rather than one company's.
   "/api/ops/backups|GET": { how: 'inline', guard: 'canSeeBackups' },
+  // The address under a point, for the map's Add-lead step. Any signed-in
+  // person: every rep does this, and it is what makes the form worth opening.
+  // On the Worker because the browser key cannot be used from the native
+  // shell at all — a file:// page sends no Referer, and an HTTP-referrer
+  // restriction is the only one the Maps JavaScript API supports. Metered
+  // per company through geocodeKeysFor, like the import path below.
+  "/api/geocode/reverse|POST": { how: 'session' },
   "/api/import/geocode|POST": { how: 'inline', guard: 'canImport' },
   "/api/import/properties|POST": { how: 'inline', guard: 'canImport' },
   "/api/integrations|GET": { how: 'inline', guard: 'canManageIntegrations' },

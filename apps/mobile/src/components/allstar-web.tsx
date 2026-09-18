@@ -19,7 +19,9 @@
  * forces, each one commented below rather than left to be rediscovered.
  */
 
-import { MemoryRouter } from 'react-router-dom'
+import { useDOMImperativeHandle, type DOMImperativeFactory } from 'expo/dom'
+import { useEffect, useRef, type Ref } from 'react'
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 
 import { App } from '@web/App'
 import { apply, readChoice } from '@web/lib/theme'
@@ -69,7 +71,14 @@ function ownTheScreen() {
     without editing it. Deliberately only the box: every colour, size and
     spacing decision stays in the app's index.css, which is the single source
     for them.
+
+    Guarded by its own id, which is what the id was for and was not doing. This
+    runs in the component body rather than an effect (see below, and it has to),
+    and the DOM root re-renders whenever the native side emits props — so it
+    appended another identical stylesheet every time. The viewport rewrite above
+    needs no guard: setting an attribute to the value it already has is free.
   */
+  if (document.getElementById('allstar-shell-box')) return
   const style = document.createElement('style')
   style.id = 'allstar-shell-box'
   style.textContent = `
@@ -93,10 +102,73 @@ function ownTheScreen() {
 */
 apply(readChoice())
 
+export interface AllStarWebRef extends DOMImperativeFactory {
+  /** Go back one screen inside the web app. See `BackBridge`. */
+  goBack: () => void
+}
+
+/**
+ * Android's back button, which the web app cannot see.
+ *
+ * The app runs under `MemoryRouter`, so its history is its own — it never
+ * touches `window.history`, and the native side has a single Expo Router
+ * route. So a back press had nothing to go back to and **exited the app**: a
+ * rep three screens into a lead form reached for back and lost what they were
+ * typing.
+ *
+ * Two things have to cross the bridge for this to work, in opposite
+ * directions. Whether going back is even possible is a fact only the web side
+ * knows, and it travels up as a native action. The instruction to do it comes
+ * down as an imperative handle, which is the documented way for native code to
+ * call into a DOM component.
+ *
+ * Depth is counted rather than read, because React Router does not expose its
+ * memory history's index. `useNavigationType` says how the *last* navigation
+ * happened, so the arithmetic is: a push is one deeper, a pop is one shallower,
+ * and a replace changes nothing. Counting rather than tracking keys is
+ * deliberate — a pop returns to an entry's original key, so a key-based scheme
+ * mistakes a revisit for a new screen.
+ *
+ * There is no `StrictMode` in this tree (the shell renders the router directly
+ * rather than going through the web app's `main.tsx`), so the effect is not
+ * double-invoked and the count does not drift.
+ */
+function BackBridge({
+  onCanGoBack,
+  register,
+}: {
+  onCanGoBack?: (canGoBack: boolean) => Promise<void>
+  register: (goBack: () => void) => void
+}) {
+  const navigate = useNavigate()
+  const navigationType = useNavigationType()
+  const location = useLocation()
+  const depth = useRef(0)
+
+  register(() => {
+    if (depth.current > 0) navigate(-1)
+  })
+
+  useEffect(() => {
+    if (navigationType === 'PUSH') depth.current += 1
+    else if (navigationType === 'POP') depth.current = Math.max(0, depth.current - 1)
+    void onCanGoBack?.(depth.current > 0)
+    // `location` rather than `location.key`: the object identity changes once
+    // per navigation, which is exactly how often this should run.
+  }, [location, navigationType, onCanGoBack])
+
+  return null
+}
+
 export default function AllStarWeb({
   apiFetch,
+  onCanGoBack,
+  ref,
 }: {
   apiFetch: (req: ApiRequest) => Promise<ApiResponse>
+  /** Native action: told whenever going back becomes possible or impossible. */
+  onCanGoBack?: (canGoBack: boolean) => Promise<void>
+  ref?: Ref<AllStarWebRef>
   dom?: import('expo/dom').DOMProps
 }) {
   /*
@@ -108,9 +180,46 @@ export default function AllStarWeb({
   ownTheScreen()
   installApiProxy(apiFetch, API_URL)
 
+  /*
+    The handle is published from here because `useDOMImperativeHandle` has to
+    run in the component the native side holds a ref to — but `useNavigate`
+    only works inside the router. So `BackBridge` fills this in from in there
+    and the handle reads through it. A box, not a callback, so publishing it
+    does not re-render anything.
+  */
+  const goBack = useRef<(() => void) | null>(null)
+  useDOMImperativeHandle<AllStarWebRef>(
+    // `null` is a valid ref and the hook's parameter is not optional, so an
+    // absent one is spelled out rather than passed through as `undefined`.
+    ref ?? null,
+    (): AllStarWebRef => ({
+      goBack: () => {
+        goBack.current?.()
+      },
+    }),
+    [],
+  )
+
   return (
     <MemoryRouter>
+      <BackBridge
+        onCanGoBack={onCanGoBack}
+        register={(fn) => {
+          goBack.current = fn
+        }}
+      />
       <App />
     </MemoryRouter>
   )
 }
+
+/*
+  No named export here, deliberately, and Metro will not let there be one: a
+  module with `use dom` "only support[s] a single default export", because the
+  directive replaces the module with a proxy reference. So `verify-shell.mjs`
+  cannot import `BackBridge` to test it and drives it through the real bridge
+  channels instead — the `onCanGoBack` action and the `_domRefProxy` handle,
+  which is the more faithful test anyway.
+
+  `AllStarWebRef` above is an `interface`, erased before the check sees it.
+*/

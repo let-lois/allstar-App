@@ -57,6 +57,26 @@ export function tilesAvailable(): boolean {
   return KEY.length > 0
 }
 
+/**
+ * Can this platform keep imagery at all?
+ *
+ * Cache Storage is not universal. It is exposed only to a secure context, and
+ * the native shell's page is loaded from `file://` — an origin some engines
+ * treat as trustworthy and some do not. `cachedCount` already asked this
+ * question and `clearTileCache` already swallowed the answer, while
+ * `prefetchTiles` — the one a rep actually taps — called `caches.open`
+ * unguarded. So on a platform without it the *count* politely returned zero
+ * and the *download* threw, into a caller with a `finally` and no `catch`: the
+ * button un-pressed, no note appeared, and nothing was saved.
+ *
+ * That is the same lesson learned in two places out of three, which is the
+ * shape `download.ts` names in its own header. Asked in one place now, and the
+ * screen can decline the offer instead of failing it.
+ */
+export function tileStorageAvailable(): boolean {
+  return typeof globalThis !== 'undefined' && 'caches' in globalThis
+}
+
 export interface TileRef {
   key: string
   url: string
@@ -318,6 +338,13 @@ export interface PrefetchProgress {
   done: number
   total: number
   failed: number
+  /**
+   * Set only when this platform cannot store imagery at all, so the screen can
+   * say that instead of blaming the connection. Absent on every ordinary
+   * result, including a completely failed download over a bad link — those two
+   * need opposite advice.
+   */
+  unsupported?: boolean
 }
 
 /**
@@ -340,6 +367,15 @@ export async function prefetchTiles(
   } = {},
 ): Promise<PrefetchProgress> {
   const { onProgress, signal, concurrency = 6 } = opts
+  /*
+    Refused rather than thrown. The caller wraps this in `try`/`finally` with no
+    `catch`, so a throw here un-pressed the button and said nothing — the rep
+    would conclude their territory was saved when nothing had been written. A
+    result they can read beats an exception nobody catches.
+  */
+  if (!tileStorageAvailable()) {
+    return { done: 0, total: urls.length, failed: urls.length, unsupported: true }
+  }
   const cache = await caches.open(TILE_CACHE)
   // Snapshot what is already stored once, for the same reason as cachedCount:
   // a match() per tile inside the loop is a thousand serialised lookups.

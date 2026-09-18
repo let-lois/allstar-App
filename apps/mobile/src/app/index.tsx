@@ -6,9 +6,13 @@
  * shell is imported rather than declared here. That split is the rule, not a
  * preference.
  */
-import { StyleSheet, View } from 'react-native'
+import * as Linking from 'expo-linking'
+import * as WebBrowser from 'expo-web-browser'
+import { useCallback, useEffect, useRef } from 'react'
+import { BackHandler, StyleSheet, View } from 'react-native'
+import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes'
 
-import AllStarWeb from '@/components/allstar-web'
+import AllStarWeb, { type AllStarWebRef } from '@/components/allstar-web'
 import type { ApiRequest, ApiResponse } from '@/lib/api-bridge'
 
 /** Content types whose bytes will not survive being read as text. */
@@ -34,10 +38,24 @@ const BINARY = /^(image|video|audio|application\/(octet-stream|pdf|zip))/i
  * response would be waste on the hot path.
  */
 async function apiFetch(req: ApiRequest): Promise<ApiResponse> {
+  /*
+    A binary request body, decoded back to bytes.
+
+    A photo upload is a `Blob`, which cannot cross a JSON bridge, so the web
+    side base64s it — see `encodeBody` in api-bridge.ts. React Native's `fetch`
+    takes a typed array as a body and sends it as-is, which is what the
+    Worker's `POST /api/photos/:id` expects: raw bytes with the image's own
+    content type, not a multipart form.
+  */
+  const requestBody =
+    req.body != null && req.isBase64
+      ? Uint8Array.from(atob(req.body), (c) => c.charCodeAt(0))
+      : req.body
+
   const res = await fetch(req.url, {
     method: req.method,
     headers: req.headers,
-    body: req.body,
+    body: requestBody,
   })
 
   const headers: Record<string, string> = {}
@@ -68,12 +86,147 @@ async function apiFetch(req: ApiRequest): Promise<ApiResponse> {
   return { status: res.status, statusText: res.statusText, headers, body, isBase64: isBinary }
 }
 
+/**
+ * A link that leaves the app.
+ *
+ * The web app has four `target="_blank"` links, and one of them is the
+ * turn-by-turn handoff on the Navigate screen. Inside a webview a new window
+ * has nowhere to go, so the URL loads *in place* — the All-Star app becomes
+ * Google Maps, with no back button and no way out but force-quitting. That is
+ * the worst of the "buttons do not work" reports: the button works, and it
+ * eats the app.
+ *
+ * So nothing but the shell's own page is allowed to navigate the webview, and
+ * everything else is handed to the OS.
+ *
+ * Two destinations, because they want different things:
+ *
+ *   **Directions** go to `Linking.openURL`, so `maps.apple.com` and
+ *   `google.com/maps` open the real Maps app with the route loaded. That is the
+ *   point of the button — a rep driving to the next street needs the app with
+ *   the voice, not a map in a browser tab.
+ *
+ *   **Everything else** — Street View, a badge page — opens in the in-app
+ *   browser, which keeps the rep one Done button away from where they were
+ *   instead of switching apps.
+ *
+ * `openURL` can reject when no app claims the URL; the in-app browser is the
+ * fallback rather than a dead tap.
+ */
+const DIRECTIONS = /^https:\/\/(maps\.apple\.com|(?:www\.)?google\.[a-z.]+\/maps)/i
+
+function handOff(url: string): void {
+  if (DIRECTIONS.test(url)) {
+    void Linking.openURL(url).catch(() => WebBrowser.openBrowserAsync(url))
+    return
+  }
+  void WebBrowser.openBrowserAsync(url)
+}
+
+/**
+ * `file://` is the shell. Nothing else navigates this webview.
+ *
+ * `about:` is allowed because a webview issues `about:blank` on its own during
+ * set-up, and refusing it would fight the host rather than the app.
+ */
+function onShouldStartLoadWithRequest(req: ShouldStartLoadRequest): boolean {
+  if (req.url.startsWith('file://') || req.url.startsWith('about:')) return true
+  handOff(req.url)
+  return false
+}
+
 export default function Index() {
+  const shell = useRef<AllStarWebRef>(null)
+  /*
+    In a ref rather than state, and read inside the handler rather than closed
+    over. The back handler is registered once; state would either re-register
+    it on every navigation or capture a stale value and exit the app from the
+    third screen of a lead form.
+  */
+  const canGoBack = useRef(false)
+
+  /*
+    Stable, because it is a native action: the wrapper marshals function props
+    by identity and emits a `$$props` message whenever they change, which
+    re-renders the DOM root. A fresh closure each render would do that on every
+    render of this route.
+  */
+  const onCanGoBack = useCallback(async (can: boolean) => {
+    canGoBack.current = can
+  }, [])
+
+  /*
+    Android's back button. The web app runs under `MemoryRouter`, so pressing
+    back reached the native stack — which has one route — and closed the app,
+    taking a half-typed lead with it.
+
+    Returning `true` consumes the press; `false` lets Android do what it would
+    have done, which at the app's own home screen is exit, and that is correct.
+    `BackHandler` is a no-op on iOS, which has no such button.
+  */
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!canGoBack.current) return false
+      shell.current?.goBack()
+      return true
+    })
+    return () => sub.remove()
+  }, [])
+
   return (
     <View style={styles.fill}>
       <AllStarWeb
+        ref={shell}
         apiFetch={apiFetch}
+        onCanGoBack={onCanGoBack}
         dom={{
+          /*
+            `react-native-webview`, not Expo's own `@expo/dom-webview`, which is
+            the default. This one prop decides more about whether the app works
+            than anything else in this file, so here is the whole reason.
+
+            `@expo/dom-webview` installs **no `WebChromeClient`** on Android
+            (see its `DomWebView.kt`, which sets `javaScriptEnabled` and the two
+            file-access flags and nothing more). Four things follow, and all four
+            are silent:
+
+              - `settings.domStorageEnabled` is never set, and Android's
+                documented default is `false`. So `localStorage` **and**
+                IndexedDB are off — and this app is offline-first, reads every
+                screen out of IndexedDB, and keeps the session token there. It
+                falls back to `db.ts`'s in-memory store, so a rep is signed out
+                every cold start and a day's work never reaches disk.
+              - no `onGeolocationPermissionsShowPrompt`, so
+                `navigator.geolocation` is denied with no prompt and no error.
+              - no `onShowFileChooser`, so `<input type="file">` does nothing
+                and the camera and photo library are simply unreachable.
+              - no alert or confirm handling on either platform, so the app's
+                two `window.confirm` calls always answer no.
+
+            It also has no navigation interception at all — no
+            `shouldOverrideUrlLoading`, no `decidePolicyFor` — which is why
+            `onShouldStartLoadWithRequest` below could not be honoured under it.
+
+            `react-native-webview` implements every one of those, requests the
+            Android runtime permission itself, and sets `domStorageEnabled` at
+            view creation. It is also the older, far more exercised path.
+
+            What it costs: `@expo/dom-webview`'s `useExpoModulesBridge`, which
+            lets DOM code call Expo native modules directly. Nothing here uses
+            it, and its own docs say to leave it off for content that is not
+            fully trusted.
+          */
+          useExpoDOMWebView: false,
+
+          /*
+            Stated rather than inherited. The whole app's persistence hangs on
+            this one flag, and `react-native-webview` happens to default it on
+            — which is exactly the sort of invisible dependency that produced
+            the bug above. Say it, and a library changing its mind cannot sign
+            every rep out.
+          */
+          domStorageEnabled: true,
+
           /*
             The web app draws its own scrolling regions and its own safe-area
             padding — it is a mobile-first PWA that reps already run full-screen
@@ -83,16 +236,39 @@ export default function Index() {
           */
           scrollEnabled: false,
           contentInsetAdjustmentBehavior: 'never',
+
           /*
-            Location, which the webview will not ask for on its own. Without
-            this WKWebView denies `navigator.geolocation` with no prompt, so
-            the route cannot order itself from where the rep is standing and a
-            tapped house has no position to compare against — the app looks
-            broken rather than unpermitted. The Info.plist string that the
-            system prompt shows is in app.json.
+            Location, which the webview will not ask for on its own. On Android
+            this is what installs the permission prompt; without it
+            `navigator.geolocation` is refused silently, the route cannot order
+            itself from where the rep is standing, and a tapped house has no
+            position to compare against — the app looks broken rather than
+            unpermitted.
+
+            iOS does not read this prop: WKWebView implements geolocation
+            itself and gates it on the app's own authorisation, so what matters
+            there is the `NSLocationWhenInUseUsageDescription` in app.json.
           */
           geolocationEnabled: true,
+
+          /*
+            Android routes a `target="_blank"` through
+            `shouldOverrideUrlLoading` only when it is not asked to support
+            multiple windows. Left at its default of `true`, the four external
+            links in the app would do nothing at all on Android — including the
+            directions handoff — and `onShouldStartLoadWithRequest` would never
+            see them.
+          */
+          setSupportMultipleWindows: false,
+          onShouldStartLoadWithRequest,
+
           mediaPlaybackRequiresUserAction: false,
+          /*
+            `react-native-webview` defaults this off, where Expo's webview
+            defaults it on. Off forces every video fullscreen, which is not what
+            a training clip inside a screen should do.
+          */
+          allowsInlineMediaPlayback: true,
           style: styles.fill,
         }}
       />
