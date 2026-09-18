@@ -1,6 +1,7 @@
 import { chromium } from 'playwright'
 import { chromiumPath } from './lib/browser.mjs'
 import { dismissTour } from './lib/tour.mjs'
+import { navigationAppName, navigationUrl } from '../src/lib/geo.ts'
 
 /**
  * Getting to the door.
@@ -28,6 +29,75 @@ import { dismissTour } from './lib/tour.mjs'
  */
 
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:4173'
+
+/* --- 0. the hand-off URL, both platforms, no browser needed ------------- */
+//
+// Reported from a phone: the maps app opened on an **unnamed pin**, so the rep
+// could not tell what they were driving to and retyped the address by hand —
+// the one thing this button exists to prevent. It was sending bare coordinates
+// and throwing the address away.
+//
+// The dangerous half is the opposite mistake. `address1` alone — "1302 Deepwood
+// Drive" — exists in dozens of states, and a maps app handed an ambiguous
+// string picks one. So a street without a town or postcode must fall back to
+// coordinates rather than route somewhere plausible and wrong.
+{
+  const preFails = []
+  const preOk = (cond, msg, measured) => {
+    console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}${measured ? `  (${measured})` : ''}`)
+    if (!cond) preFails.push(msg)
+  }
+
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15'
+  const ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/120'
+  const HOUSE = {
+    lat: 30.5083,
+    lng: -97.6789,
+    address1: '1302 Deepwood Drive',
+    city: 'Round Rock',
+    state: 'TX',
+    zip: '78681',
+  }
+
+  const apple = navigationUrl(HOUSE, IPHONE)
+  preOk(apple.startsWith('https://maps.apple.com/'), 'an iPhone is sent to Apple Maps')
+  preOk(
+    decodeURIComponent(apple).includes('1302 Deepwood Drive, Round Rock, TX, 78681'),
+    'with the whole address, so the destination has a name',
+    decodeURIComponent(apple).slice(0, 78),
+  )
+
+  const google = navigationUrl(HOUSE, ANDROID)
+  preOk(google.includes('google.com/maps/dir/'), 'anything else is sent to Google Maps')
+  preOk(
+    decodeURIComponent(google).includes('1302 Deepwood Drive, Round Rock, TX, 78681'),
+    'with the whole address too',
+  )
+
+  // The label has to agree with where the link goes, or the button lies.
+  preOk(navigationAppName(IPHONE) === 'Apple Maps', 'and the button names Apple Maps on an iPhone')
+  preOk(navigationAppName(ANDROID) === 'Google Maps', 'and Google Maps elsewhere')
+
+  // A street with no town is ambiguous, so it must NOT be routed on.
+  const noTown = navigationUrl({ ...HOUSE, city: '', zip: '' }, IPHONE)
+  preOk(
+    decodeURIComponent(noTown).includes('30.5083,-97.6789'),
+    'a street with no town falls back to coordinates rather than guessing a town',
+    decodeURIComponent(noTown).slice(0, 60),
+  )
+
+  // And a coarse reverse-geocode, which drops the street number entirely.
+  const noStreet = navigationUrl({ lat: HOUSE.lat, lng: HOUSE.lng, city: 'Round Rock' }, ANDROID)
+  preOk(
+    decodeURIComponent(noStreet).includes('30.5083,-97.6789'),
+    'and a town with no street does too',
+  )
+
+  if (preFails.length) {
+    console.log(`\n${preFails.length} check(s) failed before the browser started.`)
+    process.exit(1)
+  }
+}
 
 const browser = await chromium.launch({
   executablePath: chromiumPath(),
@@ -97,7 +167,7 @@ async function toLead(opts = {}) {
   const body = await page.locator('body').innerText()
   ok(/Walking route/i.test(body), 'the screen says what it is')
   ok(
-    /Google Maps/i.test(body),
+    /(Apple|Google) Maps/i.test(body),
     'and still offers the hand-off, which is the only way to get spoken directions',
   )
   ok(/Start visit/i.test(body), 'with the visit one tap away, which is the point of staying here')
@@ -148,7 +218,7 @@ async function toLead(opts = {}) {
     'a rep with no location is told where the switch is, not just that one exists',
   )
   ok(
-    /Google Maps/i.test(body),
+    /(Apple|Google) Maps/i.test(body),
     'plus the fix that needs no permission from us at all',
   )
   /*

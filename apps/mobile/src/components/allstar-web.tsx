@@ -53,10 +53,28 @@ import { installApiProxy, type ApiRequest, type ApiResponse } from '@/lib/api-br
   Both are corrected here rather than worked around per screen. The viewport
   tag is rewritten in place because a second one is ignored, and WKWebView
   applies a change to the existing tag immediately.
+
+  3. And one difference from the web app on purpose: **page zoom is off here.**
+
+     The web app's own index.html allows it (`maximum-scale=5`), which is right
+     for a website — pinch-zoom is an accessibility affordance and a browser
+     always gives you a way back out of it.
+
+     Inside the shell it is a bug, reported from a phone. `FieldMap` implements
+     its own pinch-to-zoom, so on the map screen one gesture drives two things:
+     the map zooms *and* the page zooms. The page zoom then persists across
+     navigation — a rep pinched the map, went to Overview, and found the whole
+     app magnified with no URL bar, no reload and no way to undo it. And a
+     magnified page is why the Add-lead form needed scrolling for every field.
+
+     `user-scalable=no` rather than `maximum-scale=1`, because iOS honours the
+     former in a WKWebView and treats the latter as advisory. Text size is not
+     lost: the app's fields are already 16px so iOS never zooms to a focused
+     input, and OS-level text sizing still applies.
 */
 function ownTheScreen() {
   const content =
-    'width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5'
+    'width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no'
   const tag = document.querySelector('meta[name="viewport"]')
   if (tag) tag.setAttribute('content', content)
   else {

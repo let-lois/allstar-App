@@ -13,17 +13,74 @@
 export * from '@allstar/core/geo'
 
 
+/** Where a hand-off will land. `navigationAppName` is the same answer, for a label. */
+export function navigationApp(ua: string = navigator.userAgent): 'apple' | 'google' {
+  return /iPhone|iPad|iPod|Macintosh/.test(ua) ? 'apple' : 'google'
+}
+
 /**
- * Hands the address off to whatever the device actually uses for turn-by-turn.
- * Apple Maps on iOS, Google Maps elsewhere — reps should not have to copy/paste.
+ * The name of the app the hand-off will actually open.
+ *
+ * Exists because the button used to say "Google Maps" on every platform while
+ * `navigationUrl` sent an iPhone to Apple Maps. A rep tapping a button named
+ * after one app and getting another is a small thing that makes the whole
+ * screen feel untrustworthy.
  */
-export function navigationUrl(dest: { lat: number; lng: number; label?: string }): string {
-  const isApple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent)
-  const q = `${dest.lat},${dest.lng}`
-  if (isApple) {
-    return `https://maps.apple.com/?daddr=${encodeURIComponent(q)}&dirflg=d`
+export function navigationAppName(ua: string = navigator.userAgent): string {
+  return navigationApp(ua) === 'apple' ? 'Apple Maps' : 'Google Maps'
+}
+
+export interface NavDestination {
+  lat: number
+  lng: number
+  address1?: string
+  city?: string
+  state?: string
+  zip?: string
+}
+
+/**
+ * Enough of an address to hand to a maps app, or nothing.
+ *
+ * `address1` alone is not enough and is actively dangerous: "1302 Deepwood
+ * Drive" exists in dozens of states, and a maps app handed an ambiguous string
+ * picks one. A street needs a town or a postcode with it before it identifies a
+ * house rather than a name.
+ */
+function oneLine(dest: NavDestination): string | null {
+  const street = dest.address1?.trim()
+  const city = dest.city?.trim()
+  const zip = dest.zip?.trim()
+  if (!street || !(city || zip)) return null
+  return [street, city, dest.state?.trim(), zip].filter(Boolean).join(', ')
+}
+
+/**
+ * Hands the destination off to whatever the device actually uses for
+ * turn-by-turn. Apple Maps on iOS, Google Maps elsewhere — reps should not have
+ * to copy/paste.
+ *
+ * **The address, when there is one.** This used to send bare coordinates, and
+ * the result was reported from a phone: the maps app opened on an unnamed pin,
+ * so the rep could not tell what they were driving to and retyped the address
+ * by hand — which is the one thing this button exists to prevent.
+ *
+ * The trade is real and worth stating. Coordinates are the rep's own finger and
+ * exact by definition; an address is re-geocoded by the maps app and can land a
+ * few metres off, or on the wrong half of a duplex. For *driving to a street*
+ * the address wins: it is named, it is recognisable on the turn list, and the
+ * last few metres are walked anyway. Where there is no usable address — a
+ * coarse reverse-geocode drops the street number — coordinates are all there
+ * is, and they still route.
+ *
+ * `ua` is injectable so both platforms can be exercised without a device.
+ */
+export function navigationUrl(dest: NavDestination, ua: string = navigator.userAgent): string {
+  const destination = oneLine(dest) ?? `${dest.lat},${dest.lng}`
+  if (navigationApp(ua) === 'apple') {
+    return `https://maps.apple.com/?daddr=${encodeURIComponent(destination)}&dirflg=d`
   }
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}&travelmode=driving`
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`
 }
 
 export interface Position {

@@ -262,6 +262,15 @@ export default function Index() {
           setSupportMultipleWindows: false,
           onShouldStartLoadWithRequest,
 
+          /*
+            Android's own zoom, which is on by default in this webview
+            (`RNCWebViewManagerImpl` sets `builtInZoomControls = true`) and is a
+            second way into the same bug `user-scalable=no` closes on iOS: the
+            map's own pinch handler and the page's zoom both answer one gesture,
+            and the page stays magnified after the rep navigates away.
+          */
+          setBuiltInZoomControls: false,
+
           mediaPlaybackRequiresUserAction: false,
           /*
             `react-native-webview` defaults this off, where Expo's webview

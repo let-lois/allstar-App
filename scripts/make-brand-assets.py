@@ -135,7 +135,9 @@ def trim(im: Image.Image, pad_ratio: float = 0.0) -> Image.Image:
     return canvas
 
 
-def save(im: Image.Image, name: str, quantize: bool = False, out: Path = None) -> None:
+def save(
+    im: Image.Image, name: str, quantize: bool = False, out: Path = None, opaque: bool = False
+) -> None:
     """Write a PNG, optionally palette-quantised.
 
     The sources are AI-generated and carry compression noise — thousands of
@@ -146,7 +148,25 @@ def save(im: Image.Image, name: str, quantize: bool = False, out: Path = None) -
     path = (out or OUT) / name
     path.parent.mkdir(parents=True, exist_ok=True)
     img = im
-    if quantize:
+    if opaque:
+        """
+        No alpha channel at all, for the one asset Apple rejects for having one.
+
+        App Store validation refuses an app icon with an alpha channel, and it
+        refuses a fully-opaque RGBA file too — the channel's presence is the
+        fault, not its contents. Quantising is what introduced it here: a
+        palette image carries a `transparency` entry even when nothing in it is
+        transparent, so the icon looked fine and would have failed on the first
+        upload.
+
+        Flattened onto the artwork's own field colour rather than onto white, so
+        an edge pixel that was anti-aliased against transparency lands on the
+        colour it was meant to sit on.
+        """
+        flat = Image.new("RGB", img.size, TEAL)
+        flat.paste(img, (0, 0), img if img.mode in ("RGBA", "LA") else None)
+        img = flat
+    elif quantize:
         img = im.quantize(colors=64, method=Image.Quantize.FASTOCTREE)
     img.save(path, "PNG", optimize=True)
     kb = path.stat().st_size / 1024
@@ -246,7 +266,7 @@ def mobile() -> None:
     """
     ios = Image.new("RGBA", (1024, 1024), (*TEAL, 255))
     ios.paste(glyph, (offset, offset), glyph)
-    save(ios, "icon.png", quantize=True, out=MOBILE)
+    save(ios, "icon.png", opaque=True, out=MOBILE)
 
     # The launch screen, which sits on its own background colour — so here the
     # artwork's rounded tile is right, and the same mark a rep tapped.
