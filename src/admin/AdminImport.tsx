@@ -137,6 +137,7 @@ export default function AdminImport() {
     null,
   )
   const [result, setResult] = useState<ImportResultDTO | null>(null)
+  const [copiedSkipped, setCopiedSkipped] = useState(false)
 
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -357,6 +358,63 @@ export default function AdminImport() {
     [prepared],
   )
   const noAddress = useMemo(() => prepared.filter((r) => !r.values.address1), [prepared])
+
+  /**
+   * Every row that did not become a lead, in one list, each with its address.
+   *
+   * Three separate failures were being summed into a single "Rows skipped"
+   * count, and only the server's refusals were ever listed. From the operator's
+   * side it is one question — which of my rows did not make it, and why — so
+   * they are answered together.
+   *
+   * The address leads because it is the only part an operator can act on: `L37`
+   * is a line number in a file they may have edited since, and the address is
+   * what they will search for to fix it.
+   */
+  const skipped = useMemo(() => {
+    const byRef = new Map(prepared.map((r) => [r.ref, r]))
+    const addressOf = (ref: string) => {
+      const row = byRef.get(ref)
+      if (!row) return ''
+      return [row.values.address1, row.values.city, row.values.state, row.values.zip]
+        .filter(Boolean)
+        .join(', ')
+    }
+    const out: { ref: string; address: string; reason: string }[] = []
+    for (const r of result?.rejected ?? []) {
+      out.push({ ref: r.ref, address: addressOf(r.ref), reason: r.reason })
+    }
+    for (const r of unplaced) {
+      out.push({
+        ref: r.ref,
+        address: [r.values.address1, r.values.city, r.values.state, r.values.zip]
+          .filter(Boolean)
+          .join(', '),
+        /*
+          Named by what the geocoder actually said where it said anything. "No
+          coordinates" is the symptom; "the geocoder could not find it" and "the
+          lookup errored" need different fixes — the first is a bad address, the
+          second is usually a key or a quota.
+        */
+        reason:
+          r.geocodeStatus === 'error'
+            ? 'The address lookup failed — this is usually a key or a quota problem, not the address.'
+            : r.geocodeStatus === 'tie'
+              ? 'The address matched more than one place, so it was not guessed at.'
+              : r.geocodeStatus === 'no_match'
+                ? 'No coordinates could be found for this address.'
+                : 'No coordinates, so it would have had no place on the map.',
+      })
+    }
+    for (const r of noAddress) {
+      out.push({
+        ref: r.ref,
+        address: '',
+        reason: 'No address — check that the address column is mapped to the right column.',
+      })
+    }
+    return out
+  }, [result, prepared, unplaced, noAddress])
 
   /*
     Whether the operator still has to agree to be charged.
@@ -985,19 +1043,65 @@ export default function AdminImport() {
             </p>
           )}
 
-          {result.rejected.length > 0 && (
-            <details className="mt-4">
+          {/*
+            Every row that did not become a lead, named and explained.
+
+            The counts were here before this and the detail was not, which is
+            the wrong way round: "Rows skipped: 9" tells an operator that
+            something is wrong and nothing about what to do next. Reported from
+            the console — "there were some imported and some not, we need to see
+            who was an error/why they were not imported".
+
+            Three different failures were being added into that one number and
+            only one of them was ever listed:
+
+              - the server refused it (a duplicate, an erased address)
+              - no coordinates, so it would have been a lead with no place on
+                the map — the geocoder was asked and could not answer
+              - no address at all, which is usually a column mapped wrongly
+
+            All three are shown together, because from the operator's side they
+            are one question. And each row leads with its **address**, not its
+            line number: `L37` is not something anybody can look up, and the
+            address is what they will search for in the spreadsheet they are
+            about to fix.
+
+            Copyable as a block, because fixing ten of these means pasting them
+            somewhere — and re-uploading a corrected file is the whole point.
+          */}
+          {skipped.length > 0 && (
+            <details className="mt-4" open>
               <summary className="cursor-pointer text-sm font-semibold">
-                {result.rejected.length} row{result.rejected.length === 1 ? '' : 's'} the
-                server rejected
+                {skipped.length} row{skipped.length === 1 ? '' : 's'} did not import
               </summary>
-              <ul className="mt-2 max-h-52 overflow-y-auto text-sm text-ink-mute">
-                {result.rejected.map((r) => (
+
+              <ul className="mt-2 max-h-64 overflow-y-auto text-sm">
+                {skipped.map((r) => (
                   <li key={r.ref} className="border-b border-line-soft py-1.5">
-                    <span className="font-mono text-xs">{r.ref}</span> — {r.reason}
+                    <span className="font-medium text-ink">{r.address || '(no address)'}</span>
+                    <span className="ml-2 font-mono text-[11px] text-ink-mute">{r.ref}</span>
+                    <span className="block text-[13px] text-ink-mute">{r.reason}</span>
                   </li>
                 ))}
               </ul>
+
+              <Button
+                size="sm"
+                variant="secondary"
+                className="mt-3"
+                data-testid="copy-skipped"
+                onClick={() => {
+                  const text = skipped
+                    .map((r) => `${r.ref}\t${r.address}\t${r.reason}`)
+                    .join('\n')
+                  void navigator.clipboard?.writeText(text).then(
+                    () => setCopiedSkipped(true),
+                    () => setCopiedSkipped(false),
+                  )
+                }}
+              >
+                {copiedSkipped ? 'Copied' : 'Copy these rows'}
+              </Button>
             </details>
           )}
 

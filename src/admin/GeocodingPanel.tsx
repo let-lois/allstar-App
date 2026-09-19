@@ -7,6 +7,7 @@ import {
   apiSaveGeocoderKey,
   apiSetActiveGeocoder,
   type GeocodeProviderDTO,
+  type GeocodeUsageDTO,
   type GeocodersDTO,
 } from '../lib/http'
 import { liveToken } from '../lib/session'
@@ -46,6 +47,97 @@ const STORAGE_TONE: Record<GeocodeProviderDTO['storage'], string> = {
   permanent: 'bg-good-bg text-good',
   conditional: 'bg-warn-bg text-warn',
   temporary: 'bg-bad-bg text-bad',
+}
+
+/**
+ * What the company is actually spending on address lookups.
+ *
+ * Deliberately not a bill and never presented as one. Three separate facts,
+ * each qualified by how much we can really know about it:
+ *
+ *   - **Who charges.** Nobody here does. The key is the company's own and the
+ *     vendor invoices them for it, which is the part an operator most often has
+ *     backwards when they ask what a lookup costs.
+ *   - **What has gone through.** A count of the lookups this app sent on the
+ *     active key, which is a floor: the same key used anywhere else is invisible
+ *     to us and very visible to the vendor.
+ *   - **What is left of the allowance.** Derived from that floor, so it is a
+ *     ceiling — it can only be optimistic, and it says so.
+ *
+ * The prices in the catalogue below came from vendors' public pages rather than
+ * from an account, so nothing here is a quote and the copy does not pretend it
+ * is. A number an operator trusts and should not is worse on this screen than
+ * no number at all.
+ */
+function BillingSummary({
+  active,
+  usage,
+}: {
+  active: GeocodeProviderDTO | null
+  usage: GeocodeUsageDTO
+}) {
+  const n = (v: number) => v.toLocaleString()
+
+  // Census, or nothing chosen: there is no key, so there is no bill, and the
+  // counters would only invite the question of what they are costing.
+  if (!active || !active.needsKey) {
+    return (
+      <div className="rounded-card bg-surface-sunk px-4 py-3">
+        <p className="text-[15px] font-semibold text-ink">
+          Address lookups are costing you nothing.
+        </p>
+        <p className="mt-1 text-[14px] text-ink-mute">
+          {active?.label ?? 'The US Census lookup'} needs no account and bills nobody.{' '}
+          {n(usage.month)} address{usage.month === 1 ? '' : 'es'} looked up this month,{' '}
+          {n(usage.today)} today.
+        </p>
+      </div>
+    )
+  }
+
+  const period = active.freePeriod
+  const spent = period === 'day' ? usage.today : period === 'month' ? usage.month : 0
+  const left = active.freeCount === null ? null : Math.max(0, active.freeCount - spent)
+  const word = period === 'day' ? 'today' : 'this month'
+
+  return (
+    <div className="rounded-card bg-surface-sunk px-4 py-3">
+      <p className="text-[15px] font-semibold text-ink">
+        {active.label} bills you directly — we never charge for a lookup.
+      </p>
+      <p className="mt-1 text-[14px] text-ink-mute">
+        {n(usage.month)} address{usage.month === 1 ? '' : 'es'} looked up this month,{' '}
+        {n(usage.today)} today, on the key you pasted here.
+      </p>
+
+      {left !== null && period && (
+        <p className="mt-1 text-[14px] text-ink-mute">
+          {left > 0
+            ? `About ${n(left)} of ${active.label}’s ${n(active.freeCount ?? 0)} free lookups ${word} left, then ${active.price}.`
+            : `${active.label}’s free allowance for ${word} looks spent — further lookups are billed at ${active.price}.`}
+        </p>
+      )}
+      {left === null && (
+        <p className="mt-1 text-[14px] text-ink-mute">
+          {active.label} prices by plan rather than per thousand, so we cannot put
+          a figure on it — check the account.
+        </p>
+      )}
+
+      {/*
+        The qualification belongs next to the numbers, not in a footnote. An
+        operator who reads "8,796 left" and plans an import around it needs to
+        know in the same breath that the figure only counts what went through
+        this app.
+      */}
+      <p className="mt-2 text-[13px] text-ink-mute">
+        Counted from what this app sent, so treat it as a minimum: the same key
+        used anywhere else adds to {active.label}’s count and not to ours. Prices
+        shown here are the vendors’ published rates for orientation, not a quote
+        — your account is the authority.
+      </p>
+    </div>
+  )
 }
 
 export function GeocodingPanel() {
@@ -114,6 +206,7 @@ export function GeocodingPanel() {
   if (!data) return <p className="p-4 text-[15px] text-ink-mute">Could not load providers.</p>
 
   const configured = new Map(data.configured.map((c) => [c.provider, c]))
+  const active = data.providers.find((p) => p.id === data.active) ?? null
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -126,6 +219,24 @@ export function GeocodingPanel() {
           you rather than to us.
         </p>
       </div>
+
+      {/*
+        --- what it is costing, right now -------------------------------------
+
+        The panel was already fetching `usage` and throwing it away, which is
+        how "I'm not sure about the billing" happens on a screen that lists a
+        price beside every vendor: a list price answers what a lookup costs and
+        not what this company has spent, and those are the same sentence only
+        to somebody who already knows how many lookups they have made.
+
+        So this says the three things an operator actually needs — who bills
+        them, how much has gone through the key, and how much of the allowance
+        is left — and says which of them are floors rather than totals. The
+        counter only sees lookups this app sent; the same key pasted into
+        anything else adds to the vendor's count and not to ours, and claiming
+        otherwise would be the one error that costs real money.
+      */}
+      <BillingSummary active={active} usage={data.usage ?? { today: 0, month: 0 }} />
 
       {notice && (
         <p className="rounded-card bg-good-bg px-4 py-3 text-[15px] text-good">{notice}</p>
@@ -163,7 +274,7 @@ export function GeocodingPanel() {
 
               <p className="mt-2 text-[14px] text-ink-mute">{p.accuracy}</p>
               <p className="mt-1 text-[14px] text-ink-mute">
-                {p.price} · {p.free} free
+                List price {p.price} · {p.free} free
               </p>
               <p className="mt-2 text-[14px] text-ink-soft">{p.storageNote}</p>
 

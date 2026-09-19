@@ -26,7 +26,7 @@ import { googleReverseGeocode, useGoogleBase } from './geocode-google'
 import { findProvider } from './geocode-providers'
 import { MAX_IMPORT_ROWS, canImport, importProperties, propertyIdFor, type ImportInput, type ImportRow } from './import'
 import { assignProperties, assignTerritory } from './assign'
-import { createTerritory } from './territories'
+import { createTerritory, deleteTerritory, renameTerritory } from './territories'
 import { createList, deleteList, listsFor, setReps, updateList, updateMembers } from './lists'
 import { readAudit, record as recordAudit } from './audit'
 import {
@@ -1641,6 +1641,29 @@ export default {
         })
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 201, cors)
+      }
+
+      /*
+        Renaming and deleting one. Matched after the two fixed paths above, so
+        `/api/territories/assign` is never read as a territory called "assign" —
+        that route is a POST and these are not, but relying on the method to
+        keep them apart is the kind of thing that stops being true later.
+      */
+      {
+        const m = /^\/api\/territories\/([A-Za-z0-9_-]{1,40})$/.exec(path)
+        if (m) {
+          if (req.method === 'PATCH') {
+            const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+            const result = await renameTerritory(env, user, m[1]!, { name: body.name })
+            if ('error' in result) return json({ error: result.error }, result.status, cors)
+            return json(result, 200, cors)
+          }
+          if (req.method === 'DELETE') {
+            const result = await deleteTerritory(env, user, m[1]!)
+            if ('error' in result) return json({ error: result.error }, result.status, cors)
+            return json(result, 200, cors)
+          }
+        }
       }
 
       /* --- lead lists ------------------------------------------------------ */

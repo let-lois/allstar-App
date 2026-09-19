@@ -10,7 +10,7 @@ import { liveToken } from '../lib/session'
 import { saveFile } from '../lib/download'
 import { pointInPolygon, polygonAreaSqMiles } from '../lib/geo'
 import { canManageLists, tallyStatuses } from '../lib/leadLists'
-import { STATUS_LABEL } from '../data/outcomes'
+import { STATUS_COLOR, STATUS_LABEL } from '../data/outcomes'
 import type { LeadList } from '../types'
 
 /**
@@ -630,6 +630,81 @@ export function AdminLists() {
             <p className="px-4 py-6 text-sm text-ink-mute">
               Draw a list to see its leads here.
             </p>
+          )}
+
+          {/*
+            The leads themselves, which this screen did not show.
+
+            Selecting a list gave a name, a status tally and a map — and no way
+            to read the actual houses on it. Reported from the console: "I don't
+            think I can view a list of leads on the list without exporting it,
+            it just shows a map." That was exactly right. Export CSV was the
+            only route to the rows, which is a strange thing to need in order to
+            answer "who is on this list".
+
+            Above the map rather than below it, because it is the answer to the
+            question the screen is open for; the map is the context. Capped and
+            scrolled on its own so a four-hundred-lead list does not push the
+            map off the bottom of the page.
+
+            Same `DataList` the Leads console uses, so a row reads the same in
+            both places and a phone gets cards instead of a broken table.
+          */}
+          {!draft && current && shown.length > 0 && (
+            <div className="max-h-[320px] overflow-y-auto border-b border-line-soft">
+              <DataList
+                rows={shown}
+                keyOf={(p) => p.id}
+                empty="Nothing on this list yet."
+                columns={[
+                  {
+                    header: 'Address',
+                    phone: 'title',
+                    cell: (p) => (
+                      <>
+                        <span className="font-medium">{p.address1}</span>
+                        <span className="block text-xs text-ink-mute">
+                          {[p.city, p.state, p.zip].filter(Boolean).join(', ')}
+                        </span>
+                      </>
+                    ),
+                  },
+                  {
+                    header: 'Status',
+                    phone: 'trailing',
+                    cell: (p) => (
+                      /* A word as well as a colour — never colour alone. */
+                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium">
+                        <span
+                          aria-hidden
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: STATUS_COLOR[p.status] }}
+                        />
+                        {STATUS_LABEL[p.status]}
+                      </span>
+                    ),
+                  },
+                  {
+                    header: 'Owner',
+                    phone: 'meta',
+                    cell: (p) =>
+                      p.contacts[0]?.name ?? <span className="text-ink-mute">—</span>,
+                  },
+                  {
+                    header: 'Assigned',
+                    phone: 'meta',
+                    cell: (p) =>
+                      p.assignedRepId ? (
+                        repName(p.assignedRepId)
+                      ) : (
+                        /* Unassigned is the state worth seeing: a lead nobody
+                           owns reaches no rep's phone at all. */
+                        <span className="text-warn">Nobody</span>
+                      ),
+                  },
+                ]}
+              />
+            </div>
           )}
 
           <FieldMap

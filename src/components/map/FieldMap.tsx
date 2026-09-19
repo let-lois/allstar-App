@@ -502,10 +502,64 @@ export function FieldMap({
     }
   }
 
-  const onWheel = (e: React.WheelEvent) => {
-    setFollowMe(false)
-    setView((v) => ({ ...v, zoom: clamp(v.zoom - e.deltaY * 0.002, MIN_ZOOM, MAX_ZOOM) }))
-  }
+  /**
+   * Wheel zoom, which was on the map and effectively did not work.
+   *
+   * Reported from the console: "Zooming is difficult and you have to use the +
+   * and - buttons." Two faults, and either alone is enough to make a wheel feel
+   * broken.
+   *
+   * **It was far too slow, and unpredictably so.** `deltaY * 0.002` assumes
+   * `deltaY` is in pixels — one mouse notch is about 100, so a fifth of a zoom
+   * level per notch, five notches to move one step. But `deltaMode` is not
+   * always pixels: Firefox and some Windows configurations report *lines*,
+   * where a notch is about 3, giving 0.006 of a zoom level — a wheel that
+   * genuinely does nothing at all. That is almost certainly what was seen.
+   * Normalising by `deltaMode` first is what makes the gesture behave the same
+   * everywhere.
+   *
+   * **The page scrolled instead.** Without `preventDefault` the wheel does its
+   * usual job as well, so the console scrolls away under the cursor while the
+   * map creeps. And `preventDefault` from React's `onWheel` cannot fix it:
+   * React attaches wheel at the root as a *passive* listener, where
+   * `preventDefault()` is a silent no-op. It has to be a native listener
+   * registered with `{ passive: false }`, which is why this is an effect on the
+   * box rather than a prop on the SVG.
+   */
+  useEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+
+    const onWheel = (e: WheelEvent) => {
+      // The map owns the gesture; the page must not also scroll.
+      e.preventDefault()
+      /*
+        A notch, in whatever unit this browser chose to report it.
+
+        The conversion is chosen so that one detent of a wheel is one detent
+        everywhere, which is the only thing a hand can feel. In pixel mode a
+        detent is about 100; in line mode it is three lines; in page mode it is
+        one page. So a line is a third of a detent and a page is a whole one,
+        and all three arrive here as the same number.
+      */
+      const perLine = 100 / 3
+      const perPage = 100
+      const pixels =
+        e.deltaMode === 1 ? e.deltaY * perLine : e.deltaMode === 2 ? e.deltaY * perPage : e.deltaY
+
+      /*
+        About half a zoom level per mouse notch: two notches to a step, which is
+        fast enough to cross a city and slow enough to land on a street. A
+        trackpad sends many small deltas and lands on the same rate.
+      */
+      const step = -pixels * 0.005
+      setFollowMe(false)
+      setView((v) => ({ ...v, zoom: clamp(v.zoom + step, MIN_ZOOM, MAX_ZOOM) }))
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   /* --- basemap ----------------------------------------------------------- */
 
@@ -717,7 +771,6 @@ export function FieldMap({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onWheel={onWheel}
       >
         {/* basemap */}
         {/* Deep ground, lit roads — the same navy family as the app background,

@@ -78,6 +78,13 @@ export function AdminTerritories() {
       setDrawDone(
         `Created ${name} with ${res.assigned.toLocaleString()} lead${res.assigned === 1 ? '' : 's'}.`,
       )
+      /*
+        Select what was just made. Without this the map left drawing mode with
+        no selection, reframed itself on every lead in the company, and the
+        patch that had just been drawn was nowhere on screen — which read as
+        the map jumping somewhere else the moment the work was saved.
+      */
+      setSelected(res.id)
       setDraft(null)
       setDraftName('')
       setDraftRep('')
@@ -175,6 +182,102 @@ export function AdminTerritories() {
     }
   }
 
+  /* --- renaming and deleting ---------------------------------------- */
+  /*
+    Both live on the panel beside the map rather than in the table, and that is
+    not only about column width. A delete needs the operator to be looking at
+    the thing they are deleting — the panel is already showing the shape and the
+    lead count for the selected territory, so the question "is this the one?" is
+    answered on screen instead of from memory of which row was clicked.
+
+    The unassigned bucket is excluded because it is not a row in the database:
+    it is every lead with no territory, and there is nothing to rename or drop.
+    Same for a territory id that only appears on leads — an import can name one
+    that was never drawn — where renaming would be writing to a row that does
+    not exist.
+  */
+  const renameTerritory = useAppStore((s) => s.renameTerritory)
+  const deleteTerritory = useAppStore((s) => s.deleteTerritory)
+  const editable = selected !== null && selected !== UNASSIGNED_TERRITORY && !!territories[selected]
+
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renameTo, setRenameTo] = useState('')
+  const [confirming, setConfirming] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [manageError, setManageError] = useState<string | null>(null)
+  const [managed, setManaged] = useState<string | null>(null)
+  /*
+    The delete confirmation is a separate note, and not because there are two
+    kinds of good news.
+
+    Everything else here is cleared when the selection moves, which is right —
+    "Renamed to X" must not sit over a different territory. But a delete *is* a
+    selection change: it drops the row, so the panel moves on, and a note
+    cleared by that effect would vanish in the same frame it appeared. So this
+    one is cleared by hand, at the start of the next thing the operator does.
+  */
+  const [removedNote, setRemovedNote] = useState<string | null>(null)
+
+  // Leaving a half-typed rename open while the selection moves would apply it
+  // to a different territory on the next Save.
+  useEffect(() => {
+    setRenaming(null)
+    setConfirming(null)
+    setManageError(null)
+    setManaged(null)
+  }, [selected])
+
+  async function saveRename() {
+    if (!renaming) return
+    const name = renameTo.trim()
+    if (!name) {
+      setManageError('Give the area a name — the reps will see it.')
+      return
+    }
+    setBusy(true)
+    setManageError(null)
+    setManaged(null)
+    try {
+      await renameTerritory(renaming, name)
+      setRenaming(null)
+      setManaged(`Renamed to ${name}.`)
+      setRemovedNote(null)
+    } catch (err) {
+      setManageError(
+        err instanceof ApiError ? err.message : 'Could not rename that. Nothing was changed.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmDelete() {
+    if (!confirming) return
+    const name = label(confirming)
+    setBusy(true)
+    setManageError(null)
+    setManaged(null)
+    try {
+      const res = await deleteTerritory(confirming)
+      setConfirming(null)
+      // Off the row that no longer exists, rather than leaving the panel
+      // titled with a deleted name over an empty map. The effect a few lines
+      // up picks the first remaining territory.
+      setSelected(null)
+      setRemovedNote(
+        `Deleted ${name}. ${res.released.toLocaleString()} lead${
+          res.released === 1 ? '' : 's'
+        } went back to Unassigned; whoever was walking them still has them.`,
+      )
+    } catch (err) {
+      setManageError(
+        err instanceof ApiError ? err.message : 'Could not delete that. Nothing was changed.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
   // Frame the selected territory rather than inheriting the rep's street-level
   // zoom, where the whole patch collapses into cluster bubbles.
   const view = useMemo(() => {
@@ -213,7 +316,21 @@ export function AdminTerritories() {
               setDraft({ points: [] })
               setDrawDone(null)
               setDrawError(null)
-              setSelected(null)
+              setRemovedNote(null)
+              /*
+                The selection is deliberately kept.
+
+                Clearing it used to be the first thing this did, and it is why
+                drawing was reported as hard: `view` is framed on the selected
+                territory, so dropping the selection reframed the map on every
+                lead the company owns. A manager looking at one neighbourhood
+                pressed New territory and was thrown out to the whole state,
+                with the streets they meant to draw round now a few pixels
+                wide. Keeping it means the shape is drawn on the map that was
+                already on screen. Every lead is still *shown* while drawing —
+                that is the `properties` prop below — which was the only thing
+                clearing the selection was really for.
+              */
             }}
           >
             New territory
@@ -333,6 +450,104 @@ export function AdminTerritories() {
                 : `${shown.length} properties`}
             </span>
           </div>
+
+          {/*
+            --- renaming and deleting the selected one -----------------------
+
+            Under the heading that names it, so the name being changed and the
+            name on screen are the same words. Hidden while drawing: the panel
+            below is already the drawing controls, and offering to delete
+            something while outlining something else is a misfire waiting to
+            happen.
+          */}
+          {!draft && editable && (
+            <div className="border-b border-line-soft px-4 py-3">
+              {renaming ? (
+                <div className="space-y-3">
+                  <Field
+                    label="Name"
+                    value={renameTo}
+                    autoFocus
+                    onChange={(e) => setRenameTo(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void saveRename()
+                      if (e.key === 'Escape') setRenaming(null)
+                    }}
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" disabled={busy} onClick={() => void saveRename()}>
+                      {busy ? 'Saving…' : 'Save name'}
+                    </Button>
+                    <Button size="sm" variant="secondary" disabled={busy} onClick={() => setRenaming(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : confirming ? (
+                <div className="space-y-3">
+                  {/*
+                    Says what survives, not just what goes. "Delete?" on its own
+                    invites the reading that the leads go with it, which is the
+                    fear that stops somebody tidying up a map full of mistakes.
+                  */}
+                  <p className="text-[13px] leading-relaxed text-ink-soft">
+                    Delete <span className="font-semibold text-ink">{label(confirming)}</span>? Its{' '}
+                    {shown.length.toLocaleString()} lead{shown.length === 1 ? '' : 's'} go back to
+                    Unassigned — nothing is erased, and whoever is walking them keeps them.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="danger" disabled={busy} onClick={() => void confirmDelete()}>
+                      {busy ? 'Deleting…' : 'Delete territory'}
+                    </Button>
+                    <Button size="sm" variant="secondary" disabled={busy} onClick={() => setConfirming(null)}>
+                      Keep it
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setRenameTo(label(selected!))
+                      setRenaming(selected)
+                      setRemovedNote(null)
+                    }}
+                  >
+                    Rename
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setConfirming(selected)
+                      setRemovedNote(null)
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              )}
+
+              {manageError && (
+                <p role="alert" className="mt-3 text-[13px] font-medium text-bad">
+                  {manageError}
+                </p>
+              )}
+              {managed && !manageError && (
+                <p role="status" className="mt-3 text-[13px] font-medium text-good">
+                  {managed}
+                </p>
+              )}
+            </div>
+          )}
+
+          {removedNote && !draft && (
+            <p role="status" className="border-b border-line-soft px-4 py-3 text-[13px] font-medium text-good">
+              {removedNote}
+            </p>
+          )}
 
           {/*
             --- the drawing panel -------------------------------------------
@@ -485,7 +700,13 @@ export function AdminTerritories() {
               than the gaps between the doors. A small territory still shows
               every pin, which is what makes a handful of leads legible.
             */
-            disableClustering={shown.length <= 25}
+            /*
+              Counted over what is on the map, which while drawing is every
+              lead rather than the selected patch — the two diverged once the
+              selection stopped being cleared, and a thousand pins with
+              clustering switched off is a map nobody can draw on.
+            */
+            disableClustering={(draft ? list : shown).length <= 25}
             selectedId={null}
             onSelect={() => {}}
             /* `key` forces a refit when the selection changes. While drawing it

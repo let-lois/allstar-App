@@ -31,8 +31,10 @@ import {
   apiCreateList,
   apiCreateTerritory,
   apiDeleteList,
+  apiDeleteTerritory,
   apiLogin,
   apiLogout,
+  apiRenameTerritory,
   apiSetListReps,
   apiUsers,
   apiJoin,
@@ -189,7 +191,21 @@ interface AppState {
     name: string
     repId: string | null
     boundary: { lat: number; lng: number }[]
-  }) => Promise<{ assigned: number }>
+  }) => Promise<{ id: string; assigned: number }>
+  /**
+   * Rename a territory, and delete one.
+   *
+   * Added because neither existed: a drawn patch could be created and its rep
+   * changed, and that was the whole vocabulary — so a typo was permanent and a
+   * shape round the wrong streets could only be abandoned where it lay.
+   *
+   * Deleting keeps the leads. They go back to the unassigned bucket, which is
+   * where they were before anybody drew round them; `released` is how many the
+   * server actually moved, so the console reports a fact rather than its own
+   * arithmetic.
+   */
+  renameTerritory: (id: string, name: string) => Promise<void>
+  deleteTerritory: (id: string) => Promise<{ released: number }>
   /**
    * Lead lists.
    *
@@ -749,7 +765,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // The server has moved rows; pull its view back rather than patching a
       // guess into local state and hoping the two agree.
       await get().refreshFromServer()
-      return { assigned: res.assigned }
+      return { id: res.territory.id, assigned: res.assigned }
     }
 
     /*
@@ -779,7 +795,76 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...Object.fromEntries(moved.map((p) => [p.id, p])),
       },
     }))
-    return { assigned: moved.length }
+    return { id, assigned: moved.length }
+  },
+
+  /*
+    Rename and delete, live and local, sharing the shape of every other write
+    here: the server is asked when there is a token, and the device does it
+    itself in the demo so the feature can be shown.
+
+    The local delete has to do by hand what `ON DELETE SET NULL` does on the
+    server — walk the leads carrying this territory and clear the field — and it
+    writes them to IndexedDB before touching state, so a reload does not bring
+    a deleted patch back.
+  */
+  async renameTerritory(id, name) {
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error('Give the area a name.')
+    const token = liveToken()
+
+    if (token) {
+      await apiRenameTerritory(token, id, trimmed)
+      await get().refreshFromServer()
+      return
+    }
+
+    const existing = get().territories[id]
+    if (!existing) throw new Error('No such territory.')
+    const clash = Object.values(get().territories).some(
+      (t) => t.id !== id && t.name.toLowerCase() === trimmed.toLowerCase(),
+    )
+    if (clash) throw new Error('A territory already has that name.')
+
+    const territory: Territory = { ...existing, name: trimmed }
+    await db.put('territories', territory)
+    set((state) => ({ territories: { ...state.territories, [id]: territory } }))
+  },
+
+  async deleteTerritory(id) {
+    const token = liveToken()
+
+    if (token) {
+      const res = await apiDeleteTerritory(token, id)
+      await get().refreshFromServer()
+      return { released: res.released }
+    }
+
+    if (!get().territories[id]) throw new Error('No such territory.')
+    /*
+      The rep stays on the lead. Which patch a house belongs to and who walks
+      it are two separate facts, and clearing the second here would empty a
+      rep's day because somebody tidied a map.
+    */
+    const released = Object.values(get().properties)
+      .filter((p) => p.territoryId === id)
+      .map((p) => ({ ...p, territoryId: undefined, updatedAt: Date.now() }))
+
+    if (released.length > 0) await db.putAll('properties', released)
+    await db.del('territories', id)
+
+    set((state) => {
+      const territories = { ...state.territories }
+      delete territories[id]
+      return {
+        territories,
+        properties: {
+          ...state.properties,
+          ...Object.fromEntries(released.map((p) => [p.id, p])),
+        },
+      }
+    })
+    return { released: released.length }
   },
 
   async createList({ name, description, propertyIds = [], repIds = [], boundary }) {

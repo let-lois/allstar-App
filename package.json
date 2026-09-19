@@ -40,6 +40,7 @@
     "verify:mapfilters": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-mapfilters.mjs",
     "verify:address": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-address.mjs",
     "verify:mapchrome": "node scripts/verify-mapchrome.mjs",
+    "verify:mapzoom": "node scripts/verify-mapzoom.mjs",
     "verify:console": "node scripts/verify-console-access.mjs",
     "verify:login": "node scripts/verify-login.mjs",
     "verify:bridge": "node --experimental-strip-types scripts/verify-bridge.mjs",

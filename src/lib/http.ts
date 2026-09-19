@@ -701,6 +701,29 @@ export function apiCreateTerritory(
   )
 }
 
+/**
+ * Rename a territory, and delete one.
+ *
+ * Live-only, like every other territory write: the server owns which leads a
+ * shape claims, so there is nothing sensible for these to do against a cached
+ * copy. The delete returns the number of leads it handed back to the unassigned
+ * bucket, because that is the sentence the console shows afterwards and a
+ * locally-guessed count would sometimes be wrong.
+ */
+export function apiRenameTerritory(token: string, id: string, name: string) {
+  return request<{ territory: { id: string; name: string } }>(
+    `/api/territories/${encodeURIComponent(id)}`,
+    { method: 'PATCH', body: { name }, token },
+  )
+}
+
+export function apiDeleteTerritory(token: string, id: string) {
+  return request<{ ok: true; released: number }>(
+    `/api/territories/${encodeURIComponent(id)}`,
+    { method: 'DELETE', token, timeoutMs: 30_000 },
+  )
+}
+
 /** Move specific leads to a rep, rather than a whole territory. */
 /**
  * Set a status on a batch of leads.
