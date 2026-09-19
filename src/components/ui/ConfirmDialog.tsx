@@ -60,7 +60,25 @@ export function ConfirmDialog({
         `--app-h` is already pinned to `visualViewport.height` for the app
         shell; this borrows the same measurement.
       */
-      className="fixed inset-x-0 top-0 z-50 grid place-items-center bg-black/40 p-4"
+/*
+        `!m-0` is load-bearing, and it is not tidiness.
+
+        A sheet is rendered *inline*, next to whatever opened it — the photo
+        strip's is a sibling of the camera button, inside that component's
+        `space-y-2`. Tailwind implements that spacing as `> * + *
+        { margin-top: 0.5rem }`, which does not care that this child is
+        `position: fixed`: the overlay got an 8px top margin, the box that is
+        supposed to be exactly the visible viewport started 8px down, and the
+        bottom 8px of every sheet — the safe-area padding, the footer's lower
+        edge, the last row of a grid — went off the end of the screen.
+
+        Found while measuring the photo categoriser, which is the screen the
+        field reported as cut off. It is fixed here rather than at that one call
+        site because every caller is exposed to it: any parent with a spacing,
+        divide or flow utility can move a fixed overlay, and the symptom is
+        eight silent pixels at the bottom of a phone.
+      */
+      className="!m-0 fixed inset-x-0 top-0 z-50 grid place-items-center bg-black/40 p-4"
       style={{ height: 'var(--app-h, 100dvh)' }}
       role={destructive ? 'alertdialog' : 'dialog'}
       aria-modal="true"

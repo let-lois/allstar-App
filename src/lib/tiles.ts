@@ -234,12 +234,42 @@ export function boundsOf(
 }
 
 /** Every tile URL covering `bounds` across `zooms`, for one layer. */
+/**
+ * The most URLs this will ever build, whatever it is asked for.
+ *
+ * This exists because of a crash on a phone, and the number is not the
+ * interesting part — the ceiling is.
+ *
+ * Tapping "Offline maps" mounts the panel, which calls this in a `useMemo`.
+ * With a rep's leads spread across a state, `zoomsWithinBudget` handed it a
+ * 291,551-tile job; with one lead geocoded to 0,0 — an ordinary import
+ * failure — the bounds spanned a hemisphere and the job was 6.5 *million*
+ * strings; against world bounds, 267 million. A WebView renderer does not
+ * survive that. It either restarts, which reads as the app throwing the rep
+ * back to the first screen, or the process dies and takes the app with it.
+ * Both were reported from the field, from the same tap.
+ *
+ * 60,000 is comfortably past the 44,000 the byte budget implies and nowhere
+ * near what hurts. Anything over it is not a download anybody wants anyway —
+ * it is a mistake upstream, and `zoomsWithinBudget` now refuses it before this
+ * is ever reached. This is the second line: a cap on the *allocation* rather
+ * than on the estimate, because the estimate is arithmetic that can drift and
+ * the allocation is the thing that kills the app.
+ */
+export const MAX_PREFETCH_TILES = 60_000
+
 export function tilesForBounds(
   bounds: Bounds,
   layer: LayerId,
   zooms: number[] = PREFETCH_ZOOMS,
 ): string[] {
   if (!tilesAvailable()) return []
+  /*
+    Counted before anything is built. `tileCountForBounds` is multiplication
+    and costs nothing, which is exactly why it can be the guard — asking "how
+    many would this be" must not itself be the expensive operation.
+  */
+  if (tileCountForBounds(bounds, layer, zooms) > MAX_PREFETCH_TILES) return []
   const def = LAYERS[layer]
   const urls: string[] = []
   const seen = new Set<string>()
@@ -328,7 +358,23 @@ export function zoomsWithinBudget(
   budget = SAVE_BUDGET_BYTES,
 ): number[] {
   const zooms = [...PREFETCH_ZOOMS].sort((a, b) => a - b)
-  while (zooms.length > 1 && estimateBytes(tileCountForBounds(bounds, layer, zooms), layer) > budget) {
+  /*
+    `length > 0`, not `length > 1`.
+
+    Stopping at one zoom meant this function could not express "none of this
+    fits", so it returned `[14]` for bounds where level 14 alone was 2.6 GB —
+    six times the budget it exists to enforce — and 2.4 TB for a set of leads
+    spanning the world. The caller believed it, showed the number, and the
+    panel then tried to build a URL for every one of those tiles.
+
+    An empty list is the honest answer and the callers handle it: the panel
+    says the area is too large to save rather than offering a download that
+    cannot happen, and `tilesForBounds` builds nothing.
+  */
+  while (
+    zooms.length > 0 &&
+    estimateBytes(tileCountForBounds(bounds, layer, zooms), layer) > budget
+  ) {
     zooms.pop()
   }
   return zooms

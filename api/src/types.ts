@@ -52,6 +52,8 @@ export interface Env {
    * every real deployment.
    */
   GOOGLE_GEOCODE_BASE_URL?: string
+  /** Same purpose as the line above, for the Street View endpoints. */
+  GOOGLE_STREETVIEW_BASE_URL?: string
   /*
    * Encrypts third-party credentials at rest — see secretbox.ts.
    *

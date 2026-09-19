@@ -27,6 +27,7 @@ import { findProvider } from './geocode-providers'
 import { MAX_IMPORT_ROWS, canImport, importProperties, propertyIdFor, type ImportInput, type ImportRow } from './import'
 import { assignProperties, assignTerritory } from './assign'
 import { createTerritory, deleteTerritory, renameTerritory } from './territories'
+import { streetViewAt, useStreetViewBase } from './streetview'
 import { createList, deleteList, listsFor, setReps, updateList, updateMembers } from './lists'
 import { readAudit, record as recordAudit } from './audit'
 import {
@@ -1423,6 +1424,70 @@ export default {
         Any signed-in user, with no role check: every rep does this, and it is
         the one thing on the map that makes the Add-lead form worth opening.
       */
+      /*
+        A photo of the house, fetched here so the key is never in the app.
+
+        A GET with the point in the query rather than a POST, because the
+        answer is an image and the browser, the bridge and any cache in between
+        all understand a GET that returns bytes. See `streetview.ts` for why
+        this cannot be a browser call at all on a phone.
+
+        The status carries the meaning, so the client needs no envelope to
+        parse: 200 with bytes, 204 for a street Google has photographed and
+        found nothing at, 501 when nobody has configured a key that can answer,
+        502 when we asked and could not get a reply. The client caches the
+        second and deliberately does not cache the fourth.
+      */
+      if (path === '/api/streetview' && req.method === 'GET') {
+        const lat = Number(url.searchParams.get('lat'))
+        const lng = Number(url.searchParams.get('lng'))
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+          return json({ error: 'Send a lat and lng.', code: 'bad_point' }, 400, cors)
+        }
+
+        // The company's own key, exactly as reverse geocoding uses it — so the
+        // imagery is billed to the account the Geocoders screen describes.
+        const { keys } = await geocodeKeysFor(env, user.clientId)
+        useStreetViewBase(env.GOOGLE_STREETVIEW_BASE_URL)
+        const shot = await streetViewAt(keys.google, lat, lng)
+
+        if (shot.kind === 'unconfigured') {
+          return json(
+            {
+              error: 'No Google key is configured, so there are no photos of houses.',
+              code: 'no_streetview_key',
+            },
+            501,
+            cors,
+          )
+        }
+        if (shot.kind === 'error') {
+          console.error(`street view failed for client ${user.clientId}: ${shot.detail}`)
+          return json(
+            { error: 'The photo service is unavailable.', code: 'streetview_unavailable' },
+            502,
+            cors,
+          )
+        }
+        if (shot.kind === 'none') return new Response(null, { status: 204, headers: cors })
+
+        return new Response(shot.bytes, {
+          status: 200,
+          headers: {
+            ...cors,
+            'content-type': shot.contentType,
+            /*
+              Short, and short on purpose. Google's terms limit how long their
+              imagery may be kept, so this is a browser cache that saves a rep
+              paying twice for the same house in one visit — not a store. It is
+              also why Street View cannot be pulled into the offline map the way
+              basemap tiles are.
+            */
+            'cache-control': 'private, max-age=600',
+          },
+        })
+      }
+
       if (path === '/api/geocode/reverse' && req.method === 'POST') {
         const body = (await req.json().catch(() => ({}))) as { lat?: unknown; lng?: unknown }
         const lat = typeof body.lat === 'number' ? body.lat : NaN

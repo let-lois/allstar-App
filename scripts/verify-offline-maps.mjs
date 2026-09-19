@@ -82,8 +82,8 @@ const ctx = await browser.newContext({
 })
 
 const fails = []
-const ok = (cond, msg) => {
-  console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}`)
+const ok = (cond, msg, measured) => {
+  console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}${measured ? `  (${measured})` : ''}`)
   if (!cond) fails.push(msg)
 }
 
@@ -114,6 +114,84 @@ await page.waitForTimeout(1800)
 await page.getByRole('link', { name: /^More$/ }).first().click()
 await page.waitForTimeout(1200)
 
+/* === the tap that crashed the app ======================================== */
+/*
+ * Reported from the field: "Hitting the offline map drop down forcefully resets
+ * the app back to the Home Screen or in another instance crashes me from the
+ * app entirely." Two symptoms, one cause, and it is arithmetic rather than
+ * anything to do with maps.
+ *
+ * Opening the section mounts the panel, whose first act is `tilesForBounds` —
+ * one string per tile, synchronously. `zoomsWithinBudget` was supposed to keep
+ * that job small, but its loop stopped at `length > 1`, so it could never say
+ * "none of this fits": for a state-sized spread it returned `[14]` and 291,551
+ * tiles (2.6 GB, six times the budget it exists to enforce); for one lead
+ * geocoded to 0,0 — an ordinary import failure — 6.5 *million*; against world
+ * bounds, 267 million. A WebView renderer does not survive allocating that. It
+ * restarts, which reads as the app throwing the rep back to the first screen,
+ * or the process dies and takes the app with it.
+ *
+ * Checked as arithmetic, with no browser, because that is what it is. The
+ * numbers below are the real ones — they are what the probe measured on the
+ * day, and a regression would move them.
+ */
+async function budgetChecks() {
+  // A fresh evaluation with a key present: the module reads it once, at load,
+  // and the import at the top of this file ran before anything could set it.
+  process.env.EXPO_PUBLIC_MAPTILER_KEY ||= 'gate-probe'
+  const t = await import('../src/lib/tiles.ts?with-key')
+
+  const CASES = [
+    ['one street', { minLat: 30.5, maxLat: 30.51, minLng: -97.69, maxLng: -97.68 }, true],
+    ['a town', { minLat: 30.4, maxLat: 30.6, minLng: -97.8, maxLng: -97.6 }, true],
+    ['a state', { minLat: 26, maxLat: 36, minLng: -106, maxLng: -94 }, false],
+    ['one lead at 0,0', { minLat: 0, maxLat: 30.51, minLng: -97.69, maxLng: 0 }, false],
+    ['the whole world', { minLat: -85, maxLat: 85, minLng: -180, maxLng: 180 }, false],
+  ]
+
+  for (const [name, bounds, shouldOffer] of CASES) {
+    const zooms = t.zoomsWithinBudget(bounds, 'streets')
+    const bytes = t.estimateBytes(t.tileCountForBounds(bounds, 'streets', zooms), 'streets')
+    const urls = t.tilesForBounds(bounds, 'streets', zooms)
+
+    if (shouldOffer) {
+      ok(zooms.length > 0 && urls.length > 0, `${name} is still offered as a download`)
+      ok(
+        bytes <= t.SAVE_BUDGET_BYTES,
+        `and ${name} stays inside the budget (${(bytes / 1e6).toFixed(0)} MB)`,
+      )
+    } else {
+      /*
+        The assertion that matters is the second one. The first says the screen
+        will not offer an impossible download; the second says that even if it
+        somehow did, nothing allocates — which is the difference between a
+        wrong number and a dead app.
+      */
+      ok(zooms.length === 0, `${name} is refused rather than offered`)
+      ok(urls.length === 0, `and building ${name} allocates nothing`)
+    }
+
+    ok(
+      urls.length <= t.MAX_PREFETCH_TILES,
+      `${name} never builds more than the ceiling`,
+      `${urls.length.toLocaleString()} of ${t.MAX_PREFETCH_TILES.toLocaleString()}`,
+    )
+  }
+
+  /*
+    And the ceiling holds even when the budget is told to allow anything, which
+    is the point of having two of them: the budget is an estimate that can drift
+    and the ceiling is a cap on the allocation itself.
+  */
+  const world = { minLat: -85, maxLat: 85, minLng: -180, maxLng: 180 }
+  const forced = t.zoomsWithinBudget(world, 'streets', Number.MAX_SAFE_INTEGER)
+  ok(forced.length > 0, 'a budget with no limit does offer every zoom')
+  ok(
+    t.tilesForBounds(world, 'streets', forced).length === 0,
+    'and the ceiling still refuses to build 267 million strings for it',
+  )
+}
+
 const card = page.getByRole('button', { name: /Offline maps/ })
 
 // With no key the map draws its own basemap and already works offline, so the
@@ -122,8 +200,12 @@ const card = page.getByRole('button', { name: /Offline maps/ })
 if ((await card.count()) === 0) {
   ok(true, 'offline maps control is correctly hidden when no tile key is configured')
   await browser.close()
-  console.log('\n=== offline maps OK (imagery not configured) ===')
-  process.exit(0)
+  // The budget arithmetic is not about this deployment's key — it is about what
+  // the panel would allocate if somebody opened it. It runs in both modes, or
+  // the crash it exists to prevent is only covered where imagery is configured.
+  await budgetChecks()
+  console.log(fails.length ? `\n${fails.length} FAILED` : '\n=== offline maps OK (imagery not configured) ===')
+  process.exit(fails.length ? 1 : 0)
 }
 
 ok(true, 'offline maps control is offered when imagery is configured')
@@ -289,5 +371,7 @@ ok(
 }
 
 await browser.close()
+await budgetChecks()
+
 console.log(fails.length ? `\n${fails.length} FAILED` : '\n=== offline maps OK ===')
 process.exit(fails.length ? 1 : 0)
