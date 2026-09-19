@@ -10,6 +10,8 @@ import { OfflineMaps } from '../components/map/OfflineMaps'
 import { useAppStore } from '../store/useAppStore'
 import { estimateStorage, storageIsPersisted } from '../lib/db'
 import { isForcedOffline, setForcedOffline } from '../lib/api'
+import { isNativeShell } from '../lib/webview'
+import { publicOrigin } from '../lib/badge'
 import { drain, listOutbox, retryFailed } from '../lib/sync'
 import { drainPhotos, retryFailedPhotos } from '../lib/photos'
 import { relative } from '../lib/format'
@@ -407,8 +409,33 @@ export function More() {
               {user?.role !== 'field_rep' && (
                 <>
                   <MoreLink label="Team activity" onClick={() => nav('/team')} />
-                  <MoreLink label="Admin console" onClick={() => nav('/admin')} />
+                  {/*
+                    Not in the native app, where the console does not exist.
+
+                    `apps/mobile/src/admin-routes-stub.tsx` is swapped in for
+                    `adminRoutes` when Metro bundles the DOM shell — the console
+                    is 8,575 lines of wide tables, a territory lasso and a CSV
+                    importer, and it is deliberately left out of the phone
+                    bundle. But this link stayed, so a manager on a phone tapped
+                    Admin console and the catch-all route sent them to Today: a
+                    control that silently does the wrong thing, which is worse
+                    than one that is not there.
+
+                    Hidden rather than disabled, and followed by a line saying
+                    where it actually is — a greyed-out row invites the same tap
+                    and answers nothing.
+                  */}
+                  {!isNativeShell() && (
+                    <MoreLink label="Admin console" onClick={() => nav('/admin')} />
+                  )}
                 </>
+              )}
+              {user?.role !== 'field_rep' && isNativeShell() && (
+                <p className="px-4 py-3 text-[13px] leading-relaxed text-ink-mute">
+                  The admin console is desktop software — wide tables, the
+                  territory map, the importer. Open {publicOrigin().replace(/^https?:\/\//, '')} on
+                  a computer to reach it.
+                </p>
               )}
             </nav>
           </section>

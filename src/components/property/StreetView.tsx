@@ -111,8 +111,28 @@ export function StreetView({
       >
         <div>
           <Glyph name="house" className="icon-lg mx-auto text-ink-faint" />
+          {/*
+            Three different sentences, because they are three different facts
+            and only one of them is about the house.
+
+            Without a key this said "No photo of this house yet", which reads as
+            "Google has not been down this street". In the native app that was
+            wrong on every lead at once — `EXPO_PUBLIC_GOOGLE_MAPS_KEY` is
+            unset there and documented as unable to work in the shell, since a
+            referrer-restricted key cannot be restricted to a `file://` page
+            that sends no referrer. So every rep on a phone was told their whole
+            territory had no imagery, and nothing on screen suggested otherwise.
+
+            Naming it as a setting rather than a gap is what makes it
+            actionable: it is a thing the office can turn on, not a thing about
+            the address.
+          */}
           <p className="mt-2 text-[12.5px] text-ink-mute">
-            {state === 'checking' ? 'Looking for a photo of this house…' : 'No photo of this house yet'}
+            {!KEY
+              ? 'Street View isn’t switched on for this app'
+              : state === 'checking'
+                ? 'Looking for a photo of this house…'
+                : 'No photo of this house yet'}
           </p>
         </div>
       </div>

@@ -69,14 +69,37 @@ export function OfflineMaps() {
   if (!tilesAvailable()) return null
 
   const megabytes = (estimateBytes(tileCount, layer) / 1_000_000).toFixed(0)
-  const trimmed = zooms.length < PREFETCH_ZOOMS.length
+  const trimmed = zooms.length > 0 && zooms.length < PREFETCH_ZOOMS.length
+  /*
+    No zoom level fits the budget — the leads are spread so wide that even the
+    shallowest one is gigabytes.
+
+    This is a different state from "nothing is assigned", and telling them
+    apart matters because they point at different things to do. A rep with an
+    empty patch waits for their manager. A rep whose patch spans a state almost
+    always has one lead in the wrong place — a row that geocoded to 0,0 is the
+    usual culprit — and the fix is on the lead, not on this screen.
+
+    Until this existed the budget could not say "none of it", so it said `[14]`
+    and the panel offered a 2.6 GB download it then tried to enumerate. See
+    `zoomsWithinBudget`.
+  */
+  const tooWide = !!bounds && zooms.length === 0
 
   return (
     <Collapsible
       title="Offline maps"
-      right={<span className="nums text-xs text-ink-soft">{megabytes} MB</span>}
+      right={
+        <span className="nums text-xs text-ink-soft">{tooWide ? '—' : `${megabytes} MB`}</span>
+      }
     >
-      {!bounds || tileCount === 0 ? (
+      {tooWide ? (
+        <p className="text-[14px] leading-relaxed text-ink-mute">
+          Your leads are spread too far apart to save as one area — it would run to
+          gigabytes. Usually that means one lead is in the wrong place; check the
+          map for a pin a long way from the rest, fix its address, and try again.
+        </p>
+      ) : !bounds || tileCount === 0 ? (
         <p className="text-[14px] text-ink-mute">
           Nothing is assigned to you yet, so there is no area to download.
         </p>

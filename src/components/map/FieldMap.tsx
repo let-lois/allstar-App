@@ -362,6 +362,26 @@ export function FieldMap({
   const pinchStart = useRef<{ dist: number; zoom: number } | null>(null)
   const panMoved = useRef(0)
   /**
+   * Did this gesture ever have two fingers on the map?
+   *
+   * Reported from the field as "can't zoom in or out without having a pop up
+   * for a new pin". Pinching ended with the add-lead sheet open on whatever
+   * house happened to be under the last finger up, every time.
+   *
+   * The reason is that a pinch never accumulates `panMoved`: the two-finger
+   * branch of `onPointerMove` returns before the pan arithmetic, so the
+   * distance travelled stays zero. Lifting the first finger was suppressed by
+   * the `pointers.size > 0` check — but lifting the *second* left no pointers,
+   * zero travel, and a marker captured on the way down. That is indistinguishable
+   * from a tap, so it was treated as one.
+   *
+   * Tracked for the whole gesture rather than inferred at release, because by
+   * the time the last finger comes up every trace of the second one is gone.
+   * Cleared only when the map is empty of pointers — a pinch that turns into a
+   * one-finger drag is still a pinch, and must not end in a pin either.
+   */
+  const pinched = useRef(false)
+  /**
    * Which marker the gesture started on.
    *
    * Taps are resolved here rather than with per-marker handlers because the SVG
@@ -419,8 +439,14 @@ export function FieldMap({
       : null
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    panMoved.current = 0
+    // Only the first finger starts a fresh gesture. Resetting on the second
+    // was how a pinch arrived at release claiming to have travelled nowhere.
+    if (pointers.current.size === 1) {
+      panMoved.current = 0
+      pinched.current = false
+    }
     if (pointers.current.size === 2) {
+      pinched.current = true
       const [a, b] = [...pointers.current.values()]
       pinchStart.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: view.zoom }
     }
@@ -454,9 +480,13 @@ export function FieldMap({
     if (pointers.current.size < 2) pinchStart.current = null
 
     // A drag is never a tap. Anything under ~6px of travel counts as one, which
-    // tolerates the wobble of tapping while walking.
-    if (panMoved.current >= 6 || pointers.current.size > 0) {
+    // tolerates the wobble of tapping while walking. Nor is a pinch — see
+    // `pinched`, which is the whole reason zooming used to end in a new pin.
+    if (panMoved.current >= 6 || pointers.current.size > 0 || pinched.current) {
       downMarker.current = null
+      // The gesture is over once the last finger leaves; the next one starts
+      // clean. Left set, the first genuine tap after a pinch would be eaten.
+      if (pointers.current.size === 0) pinched.current = false
       return
     }
 

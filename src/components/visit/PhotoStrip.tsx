@@ -147,7 +147,29 @@ export function PhotoStrip({
         open={pending.length > 0}
         onClose={() => setPending([])}
         title={pending.length > 1 ? `Categorize ${pending.length} photos` : 'Categorize photo'}
-        detents={[0.62]}
+        /*
+          Tall enough for the whole grid, and raisable.
+
+          Reported from the field: "cut off and has to be manually lifted and
+          then cuts off again." Both halves have a cause.
+
+          **Cut off.** Seven categories in two columns is four rows — 286px of
+          buttons, over a 112px strip of thumbnails, under a 72px handle and
+          title, above the home indicator. That is about 530px of content in
+          62% of a phone, which on anything smaller than a Pro Max clips the
+          last row. `Before` and `After` were simply below the edge.
+
+          **Lifted, then cut off again.** With one detent there was nothing to
+          lift to: `onPointerUp` clamps to `detents.length - 1`, so the drag
+          resisted and sprang straight back. The rep's instinct was right and
+          the sheet had no answer to it.
+
+          So the first detent now fits the grid outright, and the second exists
+          so the gesture does something. The pane scrolls either way — a
+          company that renames its way to ten categories still reaches them —
+          but nobody should have to scroll to find the button they came for.
+        */
+        detents={[0.78, 0.94]}
       >
         <div className="space-y-3">
           <div className="snap-x-row">

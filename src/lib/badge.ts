@@ -20,6 +20,17 @@
 const PUBLIC_ORIGIN =
   (process.env.EXPO_PUBLIC_ORIGIN as string | undefined)?.replace(/\/$/, '') || undefined
 
+/**
+ * Where this app lives on the open web, for telling somebody where to go.
+ *
+ * Exported because the badge's QR code is no longer the only thing that needs
+ * it: inside the native shell the More screen has to name the address of the
+ * admin console, which does not exist in that bundle. Same constant, same
+ * reason — `window.location.origin` in the shell is a `file://` path that is
+ * useless to a person.
+ */
+export const publicOrigin = (): string => PUBLIC_ORIGIN ?? window.location.origin
+
 export const verifyUrl = (badgeId: string): string =>
   `${PUBLIC_ORIGIN ?? window.location.origin}/verify/${badgeId}`
 
