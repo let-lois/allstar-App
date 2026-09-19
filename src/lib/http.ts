@@ -710,6 +710,58 @@ export function apiCreateTerritory(
  * bucket, because that is the sentence the console shows afterwards and a
  * locally-guessed count would sometimes be wrong.
  */
+/**
+ * The photo of a house, fetched through our own server.
+ *
+ * Deliberately not `request()`. That helper parses JSON and throws an
+ * `ApiError` on anything that is not 2xx, and here three of the four answers
+ * are not JSON and only one of them is a failure worth throwing about: an
+ * image, a 204 for a street with no coverage, a 501 for a company with no key,
+ * and a 502 for a lookup that could not be made. Those are states the frame on
+ * screen has to tell apart, not errors.
+ *
+ * The bytes come back as an object URL rather than a `src` pointing at the API.
+ * An `<img>` cannot send an Authorization header, and the endpoint is
+ * authenticated — so the app fetches it as a request like any other and hands
+ * the result to the tag. In the native shell that ride is over the bridge,
+ * which already carries binary: `image/*` is decoded from base64 on arrival,
+ * so a Blob comes out the far side exactly as it does on the web.
+ *
+ * The caller owns the URL and must revoke it. See the effect in `StreetView`.
+ */
+export type StreetViewShot =
+  | { kind: 'image'; url: string }
+  | { kind: 'none' }
+  | { kind: 'unconfigured' }
+  | { kind: 'error' }
+
+export async function apiStreetView(
+  token: string,
+  lat: number,
+  lng: number,
+): Promise<StreetViewShot> {
+  const controller = new AbortController()
+  // Shorter than a data call: this is decoration on a screen that is already
+  // useful, and a rep must never wait on it.
+  const timer = setTimeout(() => controller.abort(), 12_000)
+  try {
+    const res = await fetch(`${API_URL}/api/streetview?lat=${lat}&lng=${lng}`, {
+      headers: { authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    })
+    if (res.status === 204) return { kind: 'none' }
+    if (res.status === 501) return { kind: 'unconfigured' }
+    if (!res.ok) return { kind: 'error' }
+    return { kind: 'image', url: URL.createObjectURL(await res.blob()) }
+  } catch {
+    // Offline, aborted, refused. Never cached by the caller — a rep in a dead
+    // zone must not have every house marked "no photo" for the rest of the day.
+    return { kind: 'error' }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export function apiRenameTerritory(token: string, id: string, name: string) {
   return request<{ territory: { id: string; name: string } }>(
     `/api/territories/${encodeURIComponent(id)}`,

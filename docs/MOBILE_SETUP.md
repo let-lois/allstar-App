@@ -88,7 +88,7 @@ anyone who downloads it. Never put a private secret behind that prefix.
 | `EXPO_PUBLIC_ORIGIN` | The QR code on every team member badge. Without it the code is built from the webview's local origin — a URL no homeowner's camera can open, and nothing on screen looks wrong | ✅ set in all three |
 | `EXPO_PUBLIC_MAPTILER_KEY` | Basemap imagery. Without it the map draws its own basemap and everything else works | ❌ **unset — see step 4 before setting it** |
 | `EXPO_PUBLIC_API_URL` | Points the app at a different API | Leave unset. Unset falls back to the deployed Worker, which is what a shipping build wants |
-| `EXPO_PUBLIC_GOOGLE_MAPS_KEY` | The Google basemap, Places autocomplete, Street View | ❌ unset, and **cannot work in the shell** — see step 5 |
+| `EXPO_PUBLIC_GOOGLE_MAPS_KEY` | The Google basemap and Places autocomplete. **Not** Street View any more — that goes through `/api/streetview`, so the phone has it without a key | ❌ unset, and **cannot work in the shell** — see step 5 |
 | `EXPO_PUBLIC_GOOGLE_MAP_ID` | Advanced markers, required with the key above | ❌ unset; all-or-nothing with it |
 
 ---
@@ -225,9 +225,15 @@ restriction does not match a request with no referrer, and a bundle-ID
 restriction does not apply to a webview.
 
 My recommendation: **leave the Google basemap to the web and let the phone use
-its own renderer plus MapTiler.** Reverse geocoding — the part reps actually
-need — already runs on the Worker, so the phone loses only the satellite
-imagery and Street View, and gains not shipping a spendable key.
+its own renderer plus MapTiler.** The parts reps actually need already run on
+the Worker — reverse geocoding, and now Street View — so the phone loses only
+the satellite basemap, and gains not shipping a spendable key.
+
+That is the pattern for anything else Google is wanted for here, and it is the
+only one that works: the key stays a server secret and the app deals in
+coordinates and results. `/api/streetview` is the worked example — the app
+sends a point, the Worker reads the company's encrypted key, checks the free
+metadata endpoint, and returns bytes. See `api/src/streetview.ts`.
 
 If the Google basemap is genuinely wanted on the phone, it belongs with the
 first **native** map screen (`react-native-maps` and the real iOS/Android Maps

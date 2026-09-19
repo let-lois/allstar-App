@@ -266,7 +266,7 @@ and the API path — and no evidence at all about WKWebView or Android's WebView
 | Navigate (handoff) | ✅ | ⬜ | ⬜ | — | 2.3 — it ate the app | `Linking.openURL` |
 | Android hardware back | n/a | n/a | ⬜ | — | 2.11 — it exited the app | web half gated; `BackHandler` needs a device |
 | App icon / launch screen | ✅ | ✅ | ✅ | — | 2.9 — it was Expo's | generated from `brand/` |
-| Street View | ✅ | ⚠️ | ⚠️ | — | no Google key | placeholder, by design |
+| Street View | ✅ | ✅ | ✅ | — | — | fetched by the Worker — `api/src/streetview.ts`, added after device testing found a blank frame on every lead |
 | Visit Mode | ✅ | ⬜ | ⬜ | `/api/mutations` | 2.1, 2.5 | — |
 | Team / standings / rep | ✅ | ⬜ | ⬜ | `/api/users` | 2.1 storage | — |
 | Profile / avatar | ✅ | ⬜ | ⬜ | `/api/me/profile` | 2.1 picker, 2.7 | — |

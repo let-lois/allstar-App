@@ -101,6 +101,15 @@ const ROUTES = {
   // restriction is the only one the Maps JavaScript API supports. Metered
   // per company through geocodeKeysFor, like the import path below.
   "/api/geocode/reverse|POST": { how: 'session' },
+  /*
+    A photo of a house, fetched with the company's own Google key. Session-
+    scoped and nothing more: the point comes from the caller and the answer is
+    an image of a public street, so there is no row to leak. What it protects
+    is the *key* — this route exists precisely so the key is never in a client
+    — and the money, since every image that comes back is billed to whoever
+    pasted it in.
+  */
+  "/api/streetview|GET": { how: 'session' },
   "/api/import/geocode|POST": { how: 'inline', guard: 'canImport' },
   "/api/import/properties|POST": { how: 'inline', guard: 'canImport' },
   "/api/integrations|GET": { how: 'inline', guard: 'canManageIntegrations' },
