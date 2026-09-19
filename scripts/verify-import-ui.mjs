@@ -356,6 +356,32 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
     'naming the consequence, not just the state',
   )
 
+  /* --- every row that did not import is named, with its address --------- */
+  //
+  // Reported from the console: "there were some imported and some not, we need
+  // to see who was an error/why they were not imported." The counts were on
+  // screen and the detail was not, and three different failures were being
+  // summed into one number with only the server's refusals ever listed.
+  //
+  // This file produces two of the three: `1422 Cedar Bend Dr` comes back
+  // `no_match` from the geocoder, and the last row has no address at all. Both
+  // have to appear, by address rather than by line number — `L37` is not
+  // something an operator can look up, and the address is what they will search
+  // for in the spreadsheet they are about to fix.
+  ok(/2 rows did not import/.test(done), 'the skipped rows are counted together')
+  ok(
+    /1422 Cedar Bend Dr/.test(done),
+    'the row the geocoder could not place is named by its address',
+  )
+  ok(
+    /No coordinates could be found/.test(done),
+    'and says why, distinguishing "not found" from a lookup that errored',
+  )
+  ok(
+    /address column is mapped to the right column/.test(done),
+    'a row with no address points at the likeliest cause rather than just saying it is empty',
+  )
+
   /* --- and it can be fixed without leaving the screen -------------------- */
   const picker = page.locator('select').last()
   await picker.selectOption('u_rep_1')
