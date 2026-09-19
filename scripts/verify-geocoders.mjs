@@ -27,8 +27,8 @@ import { describeSpend, estimateLookupSpend } from '../src/lib/spend.ts'
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:4173'
 
 const fails = []
-const ok = (cond, msg) => {
-  console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}`)
+const ok = (cond, msg, measured) => {
+  console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}${measured ? `  (${measured})` : ''}`)
   if (!cond) fails.push(msg)
 }
 
@@ -273,6 +273,13 @@ const browser = await chromium.launch({ executablePath: chromiumPath() })
     providers: GEOCODE_PROVIDERS,
     configured: [{ provider: 'google', active: true, hint: 'AIza…9fQ4', status: 'active' }],
     active: 'google',
+    /*
+      Lookups already sent on the key. The panel fetched this and rendered none
+      of it, which is how a screen listing a price beside every vendor still
+      left an operator unsure what they were being billed: a list price says
+      what a lookup costs, not what this company has spent.
+    */
+    usage: { today: 120, month: 3400 },
   }
 
   const json = (body) => (route) =>
@@ -330,6 +337,24 @@ const browser = await chromium.launch({ executablePath: chromiumPath() })
     ok(/Not connected yet/.test(body), 'a provider with no adapter is marked unavailable')
     ok(/Key on file: AIza…9fQ4/.test(body), 'a saved key shows as a mask, not a value')
     ok(/In use/.test(body), 'the provider actually in use is identifiable')
+
+    /* --- what it is costing, not just what it lists at -------------------- */
+    ok(
+      /Google bills you directly/.test(body),
+      'the screen says who charges for a lookup, and that it is not us',
+    )
+    ok(/3,400/.test(body), 'and how many lookups have gone through the key this month')
+    // 10,000 free a month, 3,400 already spent. The arithmetic is the point:
+    // an allowance reported at its full size is the one that gets overrun.
+    ok(
+      /6,600/.test(body),
+      'and what is left of the free allowance, net of what has already gone',
+      body.match(/About [^.]*\./)?.[0] ?? '',
+    )
+    ok(
+      /minimum/i.test(body),
+      'and that the figure is a floor, since the same key used elsewhere is invisible to us',
+    )
 
     // The one that matters most. Nothing on this screen may render a whole key,
     // and the mask is deliberately short enough that a full one is longer.
