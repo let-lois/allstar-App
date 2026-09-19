@@ -189,3 +189,117 @@ export function parseBoundary(raw: unknown): { lat: number; lng: number }[] | un
     return undefined
   }
 }
+
+/* --- changing one after it exists ----------------------------------------- */
+
+/**
+ * Rename and delete, which a drawn territory went without for its whole life.
+ *
+ * The gap was not obvious from the console, because the console never showed
+ * it: a territory could be created and its rep could be changed, and that was
+ * the whole vocabulary. So a typo in a name was permanent and a shape drawn
+ * round the wrong streets could only be abandoned in place — which is how a
+ * list of territories fills up with "Cypress Ridge", "Cypress Ridge 2" and
+ * "cypress ridge (real)", none of which can be removed.
+ *
+ * Both are office actions, permissioned exactly like creation: a rep walks a
+ * patch, they do not redraw it. The test is written out in each one rather than
+ * shared through a helper, so all three territory writes state their rule in
+ * the same words in the same place — a role check one indirection away is one
+ * a reader has to go and look up, and `verify:api-access` reads these functions
+ * to prove each decides for itself.
+ */
+
+export async function renameTerritory(
+  env: Env,
+  actor: SessionUser,
+  id: string,
+  input: { name?: unknown },
+): Promise<{ territory: { id: string; name: string } } | { error: string; status: number }> {
+  if (actor.role === 'field_rep') return { error: 'Not permitted.', status: 403 }
+
+  const name = typeof input.name === 'string' ? input.name.trim() : ''
+  if (!name) return { error: 'Give the area a name.', status: 400 }
+  if (name.length > 120) return { error: 'That name is too long.', status: 400 }
+
+  const existing = await env.DB.prepare(
+    'SELECT id, name FROM territories WHERE id = ?1 AND client_id = ?2',
+  )
+    .bind(id, actor.clientId)
+    .first<{ id: string; name: string }>()
+  if (!existing) return { error: 'No such territory.', status: 404 }
+
+  // Excluding itself, so re-saving a name unchanged — or only its capitalisation
+  // — is not refused as a clash with the row being edited.
+  const clash = await env.DB.prepare(
+    'SELECT id FROM territories WHERE client_id = ?1 AND lower(name) = lower(?2) AND id <> ?3',
+  )
+    .bind(actor.clientId, name, id)
+    .first<{ id: string }>()
+  if (clash) return { error: 'A territory already has that name.', status: 409 }
+
+  await env.DB.prepare('UPDATE territories SET name = ?1 WHERE id = ?2 AND client_id = ?3')
+    .bind(name, id, actor.clientId)
+    .run()
+
+  await record(env, actor, {
+    action: 'territory.renamed',
+    targetType: 'territory',
+    targetId: id,
+    targetLabel: name,
+    detail: { from: existing.name },
+  })
+
+  return { territory: { id, name } }
+}
+
+/**
+ * Delete a territory, and say how many leads it let go of.
+ *
+ * The leads are kept. They lose their `territory_id` and land back in the
+ * unassigned bucket, which is the state they were in before anybody drew round
+ * them — deleting a shape on a map is not a decision about whether those houses
+ * exist, and a delete that took a few hundred leads with it would be a
+ * catastrophe wearing the same button as a tidy-up.
+ *
+ * `assigned_rep_id` is deliberately left alone. Who walks a house and which
+ * patch it belongs to are two facts, and the console has a separate control for
+ * the first; clearing it here would silently unassign a rep's whole day because
+ * somebody renamed the map. The returned count is what the console tells the
+ * operator, so the sentence on screen is the number the database actually moved.
+ */
+export async function deleteTerritory(
+  env: Env,
+  actor: SessionUser,
+  id: string,
+): Promise<{ ok: true; released: number } | { error: string; status: number }> {
+  if (actor.role === 'field_rep') return { error: 'Not permitted.', status: 403 }
+
+  const existing = await env.DB.prepare(
+    'SELECT id, name FROM territories WHERE id = ?1 AND client_id = ?2',
+  )
+    .bind(id, actor.clientId)
+    .first<{ id: string; name: string }>()
+  if (!existing) return { error: 'No such territory.', status: 404 }
+
+  const res = await env.DB.prepare(
+    'UPDATE properties SET territory_id = NULL, updated_at = ?1 WHERE client_id = ?2 AND territory_id = ?3',
+  )
+    .bind(Date.now(), actor.clientId, id)
+    .run()
+  const released = res.meta.changes ?? 0
+
+  await env.DB.prepare('DELETE FROM territories WHERE id = ?1 AND client_id = ?2')
+    .bind(id, actor.clientId)
+    .run()
+
+  await record(env, actor, {
+    action: 'territory.deleted',
+    targetType: 'territory',
+    targetId: id,
+    targetLabel: existing.name,
+    detail: { released },
+  })
+
+  return { ok: true, released }
+}

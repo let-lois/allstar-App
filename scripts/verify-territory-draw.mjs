@@ -162,6 +162,19 @@ const after = await page.locator('body').innerText()
 ok(new RegExp(`Created ${NAME}`).test(after), 'the territory is created and says so')
 ok(new RegExp(NAME).test(after), 'and appears in the list')
 
+/* --- the map stays where the work was done -------------------------------- */
+//
+// Reported from the console as the map jumping somewhere else the moment a
+// territory was saved. It was: leaving drawing mode with no selection reframed
+// the map on every lead in the company, so the patch just drawn was off screen.
+// The panel heading names what the map is framed on, which makes it the cheapest
+// true statement of where the map went.
+ok(
+  (await page.getByRole('heading', { name: NAME }).count()) > 0,
+  'and the map lands on the new territory rather than jumping back out',
+  (await page.locator('h2').allInnerTexts()).join(' / '),
+)
+
 // Written to the device, not just to React state — a territory that vanishes on
 // reload is worse than one that was never created, because the leads moved.
 await page.reload({ waitUntil: 'domcontentloaded' })
@@ -172,6 +185,104 @@ ok(
   new RegExp(NAME).test(await page.locator('body').innerText()),
   'it survives a reload',
 )
+
+/* === renaming and deleting ================================================ */
+//
+// Neither existed until the console asked for them: a patch could be drawn and
+// its rep changed, and nothing else. A typo in a name was permanent, and a shape
+// round the wrong streets could only be abandoned in place — which is how a
+// territory list fills with three spellings of the same neighbourhood, none of
+// which can be removed.
+//
+// The delete assertion that matters is not that the row goes. It is that the
+// leads do not: deleting a shape on a map is not a decision about whether those
+// houses exist, and a delete that quietly took a few hundred leads with it would
+// be a catastrophe wearing the same button as a tidy-up.
+
+/** "12 territories · 1,234 properties · $…" from the page description. */
+const propertyTotal = async () => {
+  const m = (await page.locator('body').innerText()).match(/·\s*([\d,]+)\s*properties/)
+  return m ? Number(m[1].replace(/,/g, '')) : null
+}
+
+const pick = async (name) => {
+  await page.getByRole('button', { name: `Show ${name} on the map` }).click()
+  await page.waitForTimeout(600)
+}
+
+await pick(NAME)
+const RENAMED = 'Gate Renamed Patch'
+ok((await page.getByRole('button', { name: /^Rename$/ }).count()) > 0,
+  'a selected territory offers a rename')
+await page.getByRole('button', { name: /^Rename$/ }).click()
+await page.waitForTimeout(400)
+await page.getByLabel('Name').fill(RENAMED)
+await page.getByRole('button', { name: /Save name/ }).click()
+await page.waitForTimeout(1200)
+
+const renamed = await page.locator('body').innerText()
+ok(new RegExp(RENAMED).test(renamed), 'the new name is on the page')
+ok(!new RegExp(NAME).test(renamed), 'and the old one is gone rather than both existing', 
+  renamed.match(new RegExp(`.{0,30}${NAME}.{0,30}`))?.[0] ?? '')
+
+// Same reason the creation is checked this way: a rename that only happened in
+// React state is a rename that un-happens on the next reload.
+await page.reload({ waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(2200)
+await page.goto(`${BASE}/admin/territories`, { waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(1600)
+ok(
+  new RegExp(RENAMED).test(await page.locator('body').innerText()),
+  'and the rename survives a reload',
+)
+
+/* --- delete keeps the leads ----------------------------------------------- */
+await pick(RENAMED)
+const heldBefore = Number(
+  ((await page.locator('body').innerText()).match(/([\d,]+) properties/) ?? ['', '0'])[1].replace(/,/g, ''),
+)
+const totalBefore = await propertyTotal()
+ok(heldBefore > 0 && totalBefore > 0, 'the territory holds leads worth not losing',
+  `${heldBefore} of ${totalBefore}`)
+
+await page.getByRole('button', { name: /^Delete$/ }).click()
+await page.waitForTimeout(400)
+const warning = await page.locator('body').innerText()
+ok(/go back to Unassigned/i.test(warning),
+  'the confirmation says where the leads go rather than only asking twice')
+ok(/nothing is erased/i.test(warning), 'and that nothing is erased')
+
+await page.getByRole('button', { name: /Delete territory/ }).click()
+await page.waitForTimeout(1600)
+
+const afterDelete = await page.locator('body').innerText()
+/*
+  The row, not the name. The confirmation note names what was deleted — which is
+  the point of it — so a check for the string anywhere on the page fails on the
+  very sentence that reports success. The row is the thing that has to go.
+*/
+ok(
+  (await page.getByRole('button', { name: `Show ${RENAMED} on the map` }).count()) === 0,
+  'the territory is gone from the list',
+)
+ok(/went back to Unassigned/i.test(afterDelete), 'and the console says what happened to its leads',
+  afterDelete.match(/Deleted[^\n]*/)?.[0] ?? '')
+
+const totalAfter = await propertyTotal()
+ok(totalAfter === totalBefore,
+  'every lead the territory held is still in the company',
+  `${totalBefore} before, ${totalAfter} after`)
+
+await page.reload({ waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(2200)
+await page.goto(`${BASE}/admin/territories`, { waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(1600)
+ok(
+  !new RegExp(RENAMED).test(await page.locator('body').innerText()),
+  'and it stays deleted after a reload',
+)
+ok((await propertyTotal()) === totalBefore, 'with the leads still there too',
+  `${totalBefore} → ${await propertyTotal()}`)
 
 ok(errors.length === 0, `no page errors${errors.length ? ': ' + errors[0] : ''}`)
 

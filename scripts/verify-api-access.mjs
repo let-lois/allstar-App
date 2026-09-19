@@ -236,6 +236,17 @@ const REGEX_ROUTES = {
     delegates: ['renameTeam', 'deleteTeam'],
     file: 'teams.ts',
   },
+  /*
+    One territory: rename or delete. Both delegate to territories.ts, which
+    refuses a field rep and treats another company's id as "no such territory"
+    — the same shape as teams above, and for the same reason: an id is a guess
+    anybody can make, so existence must not be answerable across a tenant line.
+  */
+  '/^\\/api\\/territories\\/([A-Za-z0-9_-]{1,40})$/': {
+    match: "/^\\/api\\/territories\\/([A-Za-z0-9_-]{1,40})$/.exec(path)",
+    delegates: ['renameTerritory', 'deleteTerritory'],
+    file: 'territories.ts',
+  },
   '/^\\/api\\/lists\\/([A-Za-z0-9_-]{1,40})(?:\\/(members|reps))?$/': {
     match: "/^\\/api\\/lists\\/([A-Za-z0-9_-]{1,40})(?:\\/(members|reps))?$/.exec(path)",
     delegates: ['updateList', 'deleteList', 'updateMembers', 'setReps'],
