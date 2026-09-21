@@ -66,6 +66,31 @@ const head = async (origin, method = 'GET') => {
   )
 }
 
+/* --- the packaged app, which has no web address -------------------------- */
+//
+// A shipped iOS or Android build is not served from a website. The same bundle
+// is loaded off the device, and the WebView stamps its own scheme on every
+// request: `capacitor://localhost` from WKWebView, `https://localhost` from
+// Android's. Those are the origins this Worker sees from a phone.
+//
+// Left off the list it is the silent failure the allowlist already exists to
+// prevent, except worse, because the website keeps working: the Worker answers
+// every request perfectly, the WebView throws every reply away, and the app can
+// only say it lost the connection. Nothing goes red anywhere. Asserted here so
+// a shell build cannot ship against a Worker that will not talk to it.
+//
+// These two exactly, because they are the Capacitor defaults — `iosScheme:
+// 'capacitor'` and `androidScheme: 'https'`. A shell that changes either has to
+// change ALLOWED_ORIGINS with it.
+for (const origin of ['capacitor://localhost', 'https://localhost']) {
+  const { allow } = await head(origin)
+  ok(allow === origin, `the packaged app is allowed: ${origin}`, allow ?? '(none)')
+  // And the preflight, which is the half that fails invisibly: refused there,
+  // the browser never sends the real request at all, so the server logs nothing.
+  const pre = await head(origin, 'OPTIONS')
+  ok(pre.allow === origin, `and its preflight is granted: ${origin}`, pre.allow ?? '(none)')
+}
+
 /* --- one that is not, is refused, and refused *exactly* ------------------ */
 //
 // A prefix or substring comparison would pass every check above and quietly
@@ -75,6 +100,15 @@ for (const near of [
   'https://localhost:5173',
   'http://localhost:51730',
   'http://localhost:5173.evil.example',
+  // The native pair has the same near misses, and one of them is a domain
+  // anybody can register. `localhost.evil.example` resolves wherever its owner
+  // points it, so a prefix comparison would hand the API to a stranger.
+  'https://localhost.evil.example',
+  'capacitor://localhost.evil.example',
+  // Plain http on the default port is nobody's shell — Capacitor has served
+  // Android over https since v3. Admitting it would widen the list to every
+  // unencrypted local server on the machine for nothing.
+  'http://localhost',
 ]) {
   const { allow } = await head(near)
   ok(!allow, `refused: ${near}`, allow ?? 'no allow-origin header')
