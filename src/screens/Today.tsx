@@ -16,10 +16,9 @@ import { BottomSheet } from '../components/ui/BottomSheet'
 import { PullToRefresh } from '../components/ui/PullToRefresh'
 import { Button } from '../components/ui/Button'
 import { Card, SectionHeader } from '../components/ui/Card'
-import { ProgressBar } from '../components/ui/ProgressBar'
 import { OutcomePill } from '../components/ui/StatusPill'
 import { distanceMiles, formatDistance, walkMinutes } from '../lib/geo'
-import { money, relative, relativeLower, time } from '../lib/format'
+import { relative, relativeLower, time } from '../lib/format'
 import { drain } from '../lib/sync'
 import { outcomeByCode } from '../data/outcomes'
 import { DEFAULT_ROUTE_SIZE, routableLeads } from '../lib/route'
@@ -89,21 +88,6 @@ export function Today() {
     return activity.filter((a) => a.type === 'visit' && a.at >= from)
   }, [activity, tz])
 
-  const wins = todayVisits.filter(
-    (v) => v.outcome && ['interested', 'appointment', 'quote_requested', 'sold'].includes(v.outcome),
-  ).length
-
-  const pipelineToday = useMemo(
-    () =>
-      todayVisits.reduce((sum, v) => {
-        const p = v.propertyId ? properties[v.propertyId] : undefined
-        return sum + (v.outcome === 'sold' || v.outcome === 'quote_requested'
-          ? (p?.opportunityValue ?? 0)
-          : 0)
-      }, 0),
-    [todayVisits, properties],
-  )
-
   /*
     The date under the greeting names the day the counts beside it were totalled
     on, so it is read off the same key rather than off this device. UTC noon
@@ -145,47 +129,11 @@ export function Today() {
       >
         <div className="content-col page anim-rise">
           {/*
-            Above the numbers, because it is the one thing here that is not
+            Above the next door, because it is the one thing here that is not
             about today and goes away once done — a rep who joined before
             badges existed has never been asked for one.
           */}
           <BadgeNudge />
-
-          {/* --- progress ------------------------------------------------- */}
-          <Card aria-label="Today's progress" data-tour="progress">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="eyebrow">Route progress</p>
-                <p className="nums mt-1 text-[34px] font-semibold leading-none tracking-[-0.02em] text-ink">
-                  {progress.done}
-                  <span className="text-[19px] font-medium text-ink-faint"> / {progress.total}</span>
-                </p>
-                <p className="mt-1 text-[13px] text-ink-mute">
-                  {progress.remaining} doors left
-                  {progress.skipped ? ` · ${progress.skipped} skipped` : ''}
-                </p>
-              </div>
-              {/* The right column is the outcome, not the effort — so it gets
-                  green, and the doors number stays neutral. */}
-              <div className="shrink-0 text-right" data-tour="conversations">
-                <p className="eyebrow">Conversations</p>
-                <p className="nums mt-1 text-[28px] font-semibold leading-none tracking-[-0.02em] text-accent">
-                  {wins}
-                </p>
-                {pipelineToday > 0 && (
-                  <p className="nums mt-1 text-[13px] font-medium text-ink-mute">
-                    +{money(pipelineToday)} pipeline
-                  </p>
-                )}
-              </div>
-            </div>
-            <ProgressBar
-              value={progress.done}
-              max={Math.max(progress.total, 1)}
-              className="mt-4"
-              label={`${progress.done} of ${progress.total} doors`}
-            />
-          </Card>
 
           {/* --- next stop: the single most important block --------------- */}
           {nextStop ? (

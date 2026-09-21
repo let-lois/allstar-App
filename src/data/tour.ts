@@ -132,20 +132,6 @@ const MORE_SHARED: TourStep[] = [
 export const REP_STEPS: TourStep[] = [
   {
     route: '/today',
-    target: 'progress',
-    title: 'Your day at a glance',
-    body: 'Doors knocked out of doors planned, and how many are left. This is the number that moves as you work.',
-    prefer: 'below',
-  },
-  {
-    route: '/today',
-    target: 'conversations',
-    title: 'Conversations, not just knocks',
-    body: 'How many doors actually opened, and what the resulting pipeline is worth. Knocks are effort; this is progress.',
-    prefer: 'below',
-  },
-  {
-    route: '/today',
     target: 'next-stop',
     title: 'The app picks the next door',
     body: 'Your route is ordered by distance, so the closest unknocked door is always on top.',

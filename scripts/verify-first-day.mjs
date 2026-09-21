@@ -183,8 +183,24 @@ const ctxOpts = {
   // innerText reflects CSS text-transform, so the label renders uppercase.
   const after = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
   ok(/next stop/i.test(after), 'planning the day produces a next stop')
-  ok(/0 \/ 5/.test(after), `route progress reads zero of five (${after.match(/\d+ \/ \d+/)?.[0]})`)
   ok(after.includes('100 Cedar Bend Dr'), 'the nearest lead is the first stop')
+
+  /*
+    The done-out-of-planned count lives on the route screen, which is where a
+    rep goes to see the whole day. Today used to repeat it in a card above the
+    next door; that card is gone, so this reads it where it now is rather than
+    dropping the assertion — a route that was built but counts nothing is a
+    real failure, and it has to stay caught somewhere.
+  */
+  await page.goto(`${BASE}/route`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1200)
+  const routeBody = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+  ok(
+    /0 of 5 complete/.test(routeBody),
+    `the route screen counts zero of five done (${routeBody.match(/\d+ of \d+ complete/)?.[0]})`,
+  )
+  await page.goto(`${BASE}/today`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(600)
 
   const routeMutation = posted.find((m) => m.kind === 'route.create')
   ok(!!routeMutation, 'the new route is queued for the server')
