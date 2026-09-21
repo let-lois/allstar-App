@@ -42,6 +42,8 @@
     "verify:mapchrome": "node scripts/verify-mapchrome.mjs",
     "verify:mapzoom": "node scripts/verify-mapzoom.mjs",
     "verify:phonefield": "node scripts/verify-phonefield.mjs",
+    "verify:shellios": "node scripts/verify-shell.mjs ios",
+    "verify:shellandroid": "node scripts/verify-shell.mjs android",
     "verify:console": "node scripts/verify-console-access.mjs",
     "verify:login": "node scripts/verify-login.mjs",
     "verify:bridge": "node --experimental-strip-types scripts/verify-bridge.mjs",

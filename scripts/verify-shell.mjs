@@ -1,5 +1,6 @@
 import { chromium } from 'playwright'
-import { readdirSync, existsSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { readdirSync, existsSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { chromiumPath } from './lib/browser.mjs'
 
@@ -35,18 +36,68 @@ import { chromiumPath } from './lib/browser.mjs'
  *   node scripts/verify-shell.mjs            # iOS host
  *   node scripts/verify-shell.mjs android    # Android host
  *
- * Needs an export first: `cd apps/mobile && npx expo export --platform ios`.
+ * ## Why it exports for itself
  *
- * Deliberately *not* a `verify:` script in package.json yet, which is the only
- * reason it is not in `verify:all`: that runner discovers gates by name, and it
- * builds the web app but not the native export. A gate in the suite whose input
- * the suite does not build is the stale-`dist/` trap `verify-all.mjs` was
- * written to prevent — it would test whichever export happened to be on disk
- * and pass. It joins the suite when the runner exports first.
+ * This sat outside `verify:all` for a good reason, and it cost an afternoon.
+ * The runner builds the web app but not the native export, so a gate in the
+ * suite whose input the suite does not build is the stale-`dist/` trap
+ * `verify-all.mjs` exists to prevent: it would test whichever export happened
+ * to be on disk and pass. So it was left unregistered "until the runner
+ * exports first" — and the runner never did.
+ *
+ * What that meant in practice: 83 gates green, an OTA update published, and a
+ * black screen on a phone, with the one gate that loads the real bundle never
+ * having run. An unregistered gate is not a gate.
+ *
+ * So it builds its own input. It compares the bundle against every source file
+ * that goes into it and re-exports when anything is newer, which makes the
+ * staleness trap impossible rather than merely documented — and costs the
+ * export only when something actually changed.
  */
 
 const BUNDLE = resolve('apps/mobile/dist/www.bundle')
 const HOST_OS = process.argv[2] === 'android' ? 'android' : 'ios'
+
+/** The newest modification time anywhere under a directory. */
+function newestUnder(dir) {
+  let newest = 0
+  const walk = (d) => {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue
+      const full = resolve(d, entry.name)
+      if (entry.isDirectory()) walk(full)
+      else newest = Math.max(newest, statSync(full).mtimeMs)
+    }
+  }
+  if (existsSync(dir)) walk(dir)
+  return newest
+}
+
+/*
+  Everything the DOM bundle is built from. `src/` is the web app the component
+  imports wholesale; `packages/core` is shared with the server; `apps/mobile/src`
+  is the shell itself. A change in any of them makes an existing export a lie.
+*/
+const SOURCES = ['src', 'packages/core/src', 'apps/mobile/src']
+
+function exportBundle(why) {
+  console.log(`exporting the native bundle (${why})…`)
+  execFileSync('npx', ['expo', 'export', '--platform', 'android'], {
+    cwd: resolve('apps/mobile'),
+    stdio: 'inherit',
+  })
+}
+
+{
+  const bundleAt = existsSync(BUNDLE) ? newestUnder(BUNDLE) : 0
+  if (bundleAt === 0) exportBundle('none on disk')
+  else {
+    const newestSource = Math.max(...SOURCES.map(newestUnder))
+    if (newestSource > bundleAt) {
+      exportBundle(`source is ${Math.round((newestSource - bundleAt) / 1000)}s newer`)
+    }
+  }
+}
 
 /**
  * Every native action the route passes, named exactly as it is there.
