@@ -53,9 +53,30 @@ await page.waitForTimeout(1200)
 
 /** Read the counters the pitch actually depends on. */
 const snapshot = async (p = page) => {
-  return p.evaluate(() => {
+  /*
+    The route's size comes off the route screen; everything else off Today.
+
+    Today used to carry a done-out-of-planned card above the next door, and this
+    read the pair straight out of the body text with a bare `\d+ / \d+`. That
+    card has been removed, and the match then found nothing and reported a route
+    of zero — which is indistinguishable from the demo having emptied out
+    overnight, the one failure this whole file exists to catch. So the number is
+    read where it now lives rather than quietly lost.
+
+    Two loads rather than one because of it, and worth the seconds: a snapshot
+    that cannot see the route is not a snapshot of the pitch.
+  */
+  await p.goto(`${BASE}/route`, { waitUntil: 'domcontentloaded' })
+  await p.waitForTimeout(1200)
+  const routeTotal = await p.evaluate(() => {
+    const m = document.body.innerText.match(/(\d+)\s+of\s+(\d+)\s+complete/i)
+    return m ? Number(m[2]) : 0
+  })
+
+  await p.goto(`${BASE}/today`, { waitUntil: 'domcontentloaded' })
+  await p.waitForTimeout(1200)
+  return p.evaluate((total) => {
     const text = document.body.innerText
-    const progress = text.match(/(\d+)\s*\/\s*(\d+)/)
     const section = (name) => {
       // Section headings render as "<name> <count>"
       const re = new RegExp(`${name}\\s*\\n?\\s*(\\d+)`)
@@ -63,13 +84,13 @@ const snapshot = async (p = page) => {
       return m ? Number(m[1]) : 0
     }
     return {
-      routeTotal: progress ? Number(progress[2]) : 0,
+      routeTotal: total,
       appointments: section('Appointments'),
       followUps: section('Follow-ups'),
       activity: section("Today's activity"),
       hasNextStop: /NEXT STOP/i.test(text),
     }
-  })
+  }, routeTotal)
 }
 
 const day0 = await snapshot()
