@@ -238,9 +238,40 @@ try {
     }, session)
   }
 
+  /*
+    Read straight from the table, with the Worker stopped, rather than through
+    /api/bootstrap.
+
+    Bootstrap deliberately serves only the last 30 days — read.ts, where it says
+    that is what the console's longest range needs and the phone ignores the
+    rest. The fixtures here are necessarily months apart: an evening in daylight
+    time and one in standard time cannot both sit inside a 30-day window, except
+    for the few weeks either side of the change itself.
+
+    So reading them back through bootstrap made this file quietly
+    date-dependent. It passed while the August fixture was 29 days old and
+    started failing at 31 — months after anyone had touched either the test or
+    the code — and it failed as four day-bucketing assertions, which had been
+    right the whole time. A test that goes red on a calendar rather than on a
+    change costs more than the bug it was watching for.
+
+    The table has no window, and which day a knock lands on is what this file is
+    about. Bootstrap's window is worth pinning too, so it is pinned on purpose
+    further down instead of being depended on by accident.
+  */
   const days = async () => {
-    const boot = await (await call('/api/bootstrap', {}, session)).json()
-    return (boot.dailyStats ?? []).map((r) => r.day)
+    await stop()
+    const rows = d1(`SELECT day FROM daily_stats ORDER BY day`)
+    await start()
+    return rows.map((r) => r.day)
+  }
+
+  /** The same rows with their counts, for the assertions that check both. */
+  const dayRows = async () => {
+    await stop()
+    const rows = d1(`SELECT day, knocks FROM daily_stats ORDER BY day`)
+    await start()
+    return rows
   }
 
   /* --- on UTC, the evening lands on tomorrow ------------------------------ */
@@ -332,14 +363,48 @@ try {
       still produces the right day key and then aggregates over the wrong 24
       hours, so the row is present and empty.
     */
-    const counted = await (await call('/api/bootstrap', {}, session)).json()
+    const counted = await dayRows()
     for (const e of EVENINGS) {
-      const row = (counted.dailyStats ?? []).find((r) => r.day === e.local)
+      const row = counted.find((r) => r.day === e.local)
       ok(
         Number(row?.knocks) === 1,
         `${e.label}: and the day it is counted on actually contains it (knocks=${row?.knocks})`,
       )
     }
+  }
+
+  /* --- and the console is served the window it asks for -------------------- */
+  //
+  // Bootstrap serves 30 days and no more. Invisible from outside, and left
+  // unpinned it is what broke this file: the moment the August fixture aged past
+  // the window, four assertions about day bucketing went red for a reason that
+  // had nothing to do with day bucketing. Asserted here so the next person meets
+  // it as a statement rather than as a mystery.
+  {
+    const cutoff = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date(Date.now() - 30 * 86_400_000))
+    const stored = await days()
+    const served = ((await (await call('/api/bootstrap', {}, session)).json()).dailyStats ?? [])
+      .map((r) => r.day)
+    const old = stored.filter((d) => d < cutoff)
+    const recent = stored.filter((d) => d >= cutoff)
+    // Only assert the halves the fixtures actually produced: which side of the
+    // cutoff they fall on moves with the real date, and an assertion that needs
+    // a particular month is the bug this block exists because of.
+    if (old.length) {
+      ok(
+        old.every((d) => !served.includes(d)),
+        `history older than the window is not served (${old.join(', ')} before ${cutoff})`,
+      )
+    }
+    if (recent.length) {
+      ok(
+        recent.every((d) => served.includes(d)),
+        `and everything inside it is (${recent.join(', ')} from ${cutoff})`,
+      )
+    }
+    ok(old.length + recent.length > 0, 'with something on both sides to compare')
   }
 
   /* --- the rebuild ---------------------------------------------------------- */
