@@ -75,25 +75,7 @@ crons = ["*/5 * * * *", "17 7 * * *"]
 [vars]
 # Comma-separated. The console and the field app are the same origin today, but
 # local development is a second one.
-#
-# The last two are the packaged app, which has no web address at all. A native
-# shell serves the same bundle from the device: WKWebView loads it from
-# `capacitor://localhost` on iOS and Android's WebView from `https://localhost`,
-# and those are the Origin headers this Worker sees from a phone. Omit them and
-# the failure is the silent one this list already exists to prevent — every
-# request is answered perfectly, the WebView discards every reply, and the app
-# can only report a network problem while the website carries on working.
-#
-# They are the Capacitor defaults (`iosScheme: 'capacitor'`, `androidScheme:
-# 'https'`). If the shell ever sets either to something else, this line has to
-# move with it, and nothing will tell you but a device that cannot sign in.
-#
-# What it costs: a page served from `https://localhost` on someone's own machine
-# can now read the endpoints that need no token. That is the whole widening —
-# sessions here are bearer-only, never cookies, so no browser will attach a
-# rep's credential to somebody else's page. The reasoning is at `corsHeaders`
-# in src/index.ts.
-ALLOWED_ORIGINS = "https://allstar.letlois.com,https://allstar-app.pages.dev,http://localhost:5173,http://127.0.0.1:4173,capacitor://localhost,https://localhost"
+ALLOWED_ORIGINS = "https://allstar.letlois.com,https://allstar-app.pages.dev,http://localhost:5173,http://127.0.0.1:4173"
 
 # Secrets, never committed. Set them with `wrangler secret put NAME`, or in the
 # dashboard under Settings -> Variables and Secrets.

@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "type": "module",
-  "description": "Allstar \u2014 mobile-first field sales (D2D) application",
+  "description": "Allstar — mobile-first field sales (D2D) application",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -49,6 +49,7 @@
     "verify:bridge": "node --experimental-strip-types scripts/verify-bridge.mjs",
     "verify:core": "tsc -p packages/core",
     "verify:shell-assets": "node scripts/gen-shell-assets.mjs --check",
+    "verify:webview-patch": "node scripts/verify-webview-patch.mjs",
     "verify:store-assets": "node scripts/verify-store-assets.mjs",
     "verify:all": "node scripts/verify-all.mjs",
     "verify:api-access": "node scripts/verify-api-access.mjs",
