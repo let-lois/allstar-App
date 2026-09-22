@@ -1,6 +1,6 @@
 import { Image } from 'expo-image'
 import * as SplashScreen from 'expo-splash-screen'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import Animated, { Easing, Keyframe } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
@@ -36,12 +36,31 @@ import { scheduleOnRN } from 'react-native-worklets'
  */
 const DURATION = 600
 
+/**
+ * How long after the fade begins the overlay is removed regardless.
+ *
+ * The fade normally reports back through `withCallback` and unmounts itself.
+ * If it does not — a layout animation that never ran, a worklet callback that
+ * never crossed back — the alternatives are a plate that never leaves, or an
+ * invisible full-screen view at `zIndex: 1000` that swallows every tap over a
+ * perfectly working app. A tester would report either as "the app is dead", and
+ * neither can be told from the outside. So the overlay also leaves on a clock.
+ * Generous enough that the animation finishing first is the normal case.
+ */
+const REMOVE_BY = DURATION + 400
+
 /** Matches the `splash.backgroundColor` in app.json, and the app's own. */
 const BACKDROP = '#f0f2f7'
 
 export function AnimatedSplashOverlay() {
   const [animate, setAnimate] = useState(false)
   const [visible, setVisible] = useState(true)
+
+  useEffect(() => {
+    if (!animate) return
+    const t = setTimeout(() => setVisible(false), REMOVE_BY)
+    return () => clearTimeout(t)
+  }, [animate])
 
   if (!visible) return null
 
@@ -55,7 +74,12 @@ export function AnimatedSplashOverlay() {
   const mark = <Image style={styles.mark} source={require('@/assets/images/splash-icon.png')} />
 
   return animate ? (
+    /*
+      Nothing behind this overlay should have to wait for it: from the moment
+      the fade begins, touches go straight through to the app.
+    */
     <Animated.View
+      pointerEvents="none"
       entering={splashKeyframe.duration(DURATION).withCallback((finished) => {
         'worklet'
         if (finished) {

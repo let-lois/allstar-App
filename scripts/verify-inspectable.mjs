@@ -1,0 +1,82 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+import { isInspectable } from '../apps/mobile/src/lib/inspectable.ts'
+
+/**
+ * Who can open the app's webview in a desktop inspector.
+ *
+ * Two failures are possible here and they are not symmetric. Closed when it
+ * should be open costs a build: a preview APK renders a blank page and there is
+ * no console and no inspector to ask why, which is what happened three times
+ * running on Android. Open when it should be closed ships a store build whose
+ * DOM, network and IndexedDB — the session token, every lead the rep has
+ * touched — can be read by anyone with the app and a Mac.
+ *
+ * So the rule is closed by default and opens only for a channel this project
+ * recognises as its own, and this gate drives every case rather than the two
+ * obvious ones. The cases that matter most are the ones that are neither
+ * "preview" nor "production": a null channel, an empty one, something
+ * unrecognised. All of those must be shut.
+ */
+
+const fails = []
+const ok = (cond, msg, measured) => {
+  console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}${measured ? `  (${measured})` : ''}`)
+  if (!cond) fails.push(msg)
+}
+
+const is = (dev, channel, want, why) => {
+  const got = isInspectable(dev, channel)
+  ok(got === want, `${why} → ${want ? 'inspectable' : 'closed'}`, got === want ? undefined : `got ${got}`)
+}
+
+console.log('--- a development machine, already talking to a device it owns ---')
+is(true, null, true, '__DEV__ with no channel')
+is(true, 'production', true, '__DEV__ even on the production channel')
+
+console.log('\n--- the builds we hand out ourselves ---')
+is(false, 'development', true, 'the development channel')
+is(false, 'preview', true, 'the preview channel')
+is(false, 'PREVIEW', true, 'the preview channel, shouted')
+is(false, ' preview ', true, 'the preview channel with stray whitespace')
+
+console.log('\n--- everything else is shut, including every way of not knowing ---')
+is(false, 'production', false, 'the production channel')
+is(false, null, false, 'no channel at all (updates not configured)')
+is(false, undefined, false, 'an undefined channel')
+is(false, '', false, 'an empty channel')
+is(false, '   ', false, 'a blank channel')
+is(false, 'prod', false, 'a channel nobody declared')
+is(false, 'preview-device', false, 'a profile name that merely starts with one of ours')
+is(false, 'previews', false, 'a channel that merely starts with one of ours')
+
+/* --- and the shell actually asks --------------------------------------- */
+//
+// The function can be perfect while the route still ships Expo's `__DEV__`
+// default, which is the state that costs the build.
+const route = readFileSync(
+  resolve(new URL('..', import.meta.url).pathname, 'apps/mobile/src/app/index.tsx'),
+  'utf8',
+)
+console.log('')
+ok(
+  /isInspectable\(__DEV__, Updates\.channel\)/.test(route),
+  'the shell decides with the channel, not with __DEV__ alone',
+)
+ok(
+  /webviewDebuggingEnabled: WEBVIEW_INSPECTABLE/.test(route),
+  'and hands the answer to the webview',
+)
+ok(
+  !/webviewDebuggingEnabled: (true|__DEV__)\b/.test(route),
+  'never as a bare literal, which would ship whatever it was left at',
+)
+
+console.log('')
+if (fails.length) {
+  console.log(`${fails.length} check(s) failed:`)
+  fails.forEach((f) => console.log(`  - ${f}`))
+  process.exit(1)
+}
+console.log('=== the inspector is open for our builds and shut for everyone else ===')

@@ -88,6 +88,7 @@
     "verify:offlinemaps": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-offline-maps.mjs",
     "verify:firstday": "node scripts/verify-first-day.mjs",
     "leads:sample": "node scripts/make-test-leads.mjs",
+    "verify:inspectable": "node scripts/verify-inspectable.mjs",
     "verify:invite": "node scripts/verify-invite.mjs",
     "verify:avatar": "node scripts/verify-avatar.mjs",
     "verify:tour": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-tour.mjs",

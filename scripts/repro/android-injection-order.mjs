@@ -7,6 +7,13 @@
 //      about:blank (before navigation) and at onPageFinished (after the page's
 //      own scripts). window.ReactNativeWebView itself exists from document
 //      start (WebMessageListener) but carries only postMessage.
+//
+// The fix (apps/mobile/patches/react-native-webview+*.patch) binds
+// window.ReactNativeWebView as a JavascriptInterface with a Java
+// injectedObjectJson(), the way @expo/dom-webview does — present from the first
+// line of page script, so the patched build follows the iOS-like order below.
+// This script still reproduces the *unpatched* behaviour: it is the record of
+// why the patch exists, not a test of it (verify:webview-patch is that).
 import { chromium } from 'playwright'
 import { chromiumPath } from '../lib/browser.mjs'
 import { readdirSync } from 'node:fs'

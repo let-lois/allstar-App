@@ -138,15 +138,26 @@ Three things follow, and they decide the whole plan:
 - **Platform:** Android (Expo Go via EAS Update; also any build using
   `react-native-webview` as-is)
 - **Root cause:** above.
-- **Fix:** give Android a document-start `injectedObjectJson`. The smallest
-  correct change is a patch to `react-native-webview`'s Android side registering
-  a tiny `@JavascriptInterface` object and, where the WebView supports it,
-  `WebViewCompat.addDocumentStartJavaScript` mapping
-  `ReactNativeWebView.injectedObjectJson` to it — the same shape
-  `@expo/dom-webview` already uses. Shipped as `patches/react-native-webview+13.16.1.patch`
-  via `patch-package`, applied in `postinstall`, and worth sending upstream.
-  It only takes effect in a build that compiles native code: **development,
-  preview, production — not Expo Go.**
+- **Fix:** bind `window.ReactNativeWebView` as a **JavascriptInterface** whose
+  `@JavascriptInterface injectedObjectJson()` the page calls at runtime — bound
+  once in the `RNCWebView` constructor, before any prop is applied and before
+  any load. A JavascriptInterface is present from the first line of page script
+  in every frame, by construction: no timing, no origin rule, nothing to race.
+  This is exactly what `@expo/dom-webview` does (`DomWebView.kt`:
+  `addJavascriptInterface(rncWebViewBridge, "ReactNativeWebView")`), and it is
+  the only configuration known to boot this page on Android. The
+  message-listener binding is removed rather than kept as a second claim on the
+  same global name. Shipped as `patches/react-native-webview+13.16.1.patch` via
+  `patch-package`, applied in `postinstall`. It only takes effect in a build
+  that compiles native code: **development, preview, production — not Expo Go.**
+- **What was tried first, and why it is gone:** a
+  `WebViewCompat.addDocumentStartJavaScript` script defining
+  `injectedObjectJson` alongside upstream's message listener. It compiled, it
+  was in three preview builds, and none of them rendered — and a release build
+  could not say why (P0-4). Reading `@expo/dom-webview` showed Expo never used a
+  document-start script for this at all. Two mechanisms binding one global is
+  the kind of arrangement that fails in ways a device log has to explain, so
+  the patch now has one.
 - **What is not the fix:** setting `dom.injectedJavaScriptBeforeContentLoaded: 'true;'`
   makes `react-native-webview` re-inject the object in `onPageStarted`
   (`RNCWebView.java:311-318`). Because the page's body scripts are blocked
@@ -157,8 +168,16 @@ Three things follow, and they decide the whole plan:
 - **Files:** `apps/mobile/patches/react-native-webview+13.16.1.patch` (new),
   `apps/mobile/package.json` (`postinstall`, `patch-package` devDependency),
   `scripts/verify-shell.mjs` (an Android-order boot, so the gate can see this)
-- **Risk:** Medium — native patch, but ~20 lines mirroring a shipped
-  implementation, and the failure mode is the one we already have.
+- **Risk:** Medium — native patch, but it mirrors a shipped implementation
+  line for line, and the failure mode is the one we already have. Both patched
+  Java files parse clean under `javac` (288 errors, all missing Android
+  classes, zero syntax-class).
+- **Unverified [unverified]:** whether Expo's Android template minifies release
+  builds. `@JavascriptInterface` methods must survive R8; AGP's default
+  ProGuard file keeps them, and Expo's template defaults
+  `enableMinifyInReleaseBuilds` off, but neither file is in this repository to
+  read. If a future release build boots blank while a debug build works, this
+  is the first thing to check.
 - **Verification:** `verify:shellandroid` booting the exported page with
   `injectedObjectJson` absent at document start must **fail** before the patch
   (it does today, by the repro above) and the patched build must render the
@@ -214,12 +233,25 @@ Three things follow, and they decide the whole plan:
   Error level only: the web app calls `console.error` nowhere itself, so
   everything at that level is an uncaught exception or the browser's own
   complaint, and a rep's ordinary session stays out of logcat.
-- **Files:** `apps/mobile/patches/react-native-webview+13.16.1.patch`
+- **The same blindness on iOS [source]:** Expo's wrapper sets
+  `webviewDebuggingEnabled: __DEV__` and nothing else
+  (`expo/src/dom/webview-wrapper.tsx:117`), which becomes
+  `WKWebView.inspectable` (`apple/RNCWebViewImpl.m:571`) — off since iOS 16.4
+  unless set. So a preview `.app` has no Safari Web Inspector either. No native
+  patch is needed there: the wrapper spreads the caller's `dom` props *after*
+  its own defaults, so the shell now decides. `lib/inspectable.ts` opens it for
+  the `development` and `preview` channels and keeps it shut for `production`
+  and for every channel it does not recognise, including a null one — an
+  inspectable webview exposes IndexedDB, and that is where the session token
+  and the rep's leads live.
+- **Files:** `apps/mobile/patches/react-native-webview+13.16.1.patch`,
+  `apps/mobile/src/lib/inspectable.ts`, `apps/mobile/src/app/index.tsx`
 - **Risk:** Low
 - **Verification:** `verify:webview-patch` reads the installed
   `RNCWebChromeClient.java`, isolates `onConsoleMessage`, and checks the
   forwarding sits **below** the debug branch at error level only; restoring the
-  pristine file fails four named checks.
+  pristine file fails four named checks. `verify:inspectable` drives every
+  channel case and checks the route asks rather than shipping a literal.
 
 ### What the blank preview APK ruled out
 

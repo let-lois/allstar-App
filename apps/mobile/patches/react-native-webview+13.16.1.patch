@@ -1,67 +1,135 @@
 --- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
 +++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
-@@ -18,6 +18,7 @@
- import androidx.annotation.NonNull;
- import androidx.annotation.Nullable;
- import androidx.webkit.JavaScriptReplyProxy;
-+import androidx.webkit.ScriptHandler;
- import androidx.webkit.WebMessageCompat;
- import androidx.webkit.WebViewCompat;
- import androidx.webkit.WebViewFeature;
-@@ -58,6 +59,11 @@
-     RNCWebViewBridge fallbackBridge;
+@@ -54,10 +54,12 @@
      protected @Nullable
-     WebViewCompat.WebMessageListener bridgeListener = null;
+     String injectedJSBeforeContentLoaded;
+     protected static final String JAVASCRIPT_INTERFACE = "ReactNativeWebView";
 +    /**
-+     * The document-start copy of injectedObjectJson. See installInjectedObjectAtDocumentStart().
++     * window.ReactNativeWebView, bound as a JavascriptInterface at construction. Not a fallback
++     * any more: see bindJavascriptInterface().
 +     */
-+    protected @Nullable
-+    ScriptHandler injectedObjectStartScript = null;
+     protected @Nullable
+     RNCWebViewBridge fallbackBridge;
+-    protected @Nullable
+-    WebViewCompat.WebMessageListener bridgeListener = null;
  
      /**
       * android.webkit.WebChromeClient fundamentally does not support JS injection into frames other
-@@ -279,7 +285,41 @@
-           "    window." + JAVASCRIPT_INTERFACE + ".injectedObjectJson = function () { return " + (injectedJavaScriptObject == null ? null : ("`" + injectedJavaScriptObject + "`")) + "; };\n" +
-           "})();";
-         evaluateJavascriptWithFallback(js);
-+        installInjectedObjectAtDocumentStart();
+@@ -89,6 +91,7 @@
+         super(reactContext);
+         mMessagingJSModule = ((ThemedReactContext) this.getContext()).getReactApplicationContext().getJSModule(RNCWebViewMessagingModule.class);
+         progressChangedFilter = new ProgressChangedFilter();
++        bindJavascriptInterface();
+     }
+ 
+     public void setBasicAuthCredential(RNCBasicAuthCredential credential) {
+@@ -247,39 +250,46 @@
+         return this.messagingEnabled;
+     }
+ 
++    /**
++     * window.ReactNativeWebView as a JavascriptInterface, bound once at construction.
++     *
++     * Upstream binds it two different ways. With WEB_MESSAGE_LISTENER it uses
++     * WebViewCompat.addWebMessageListener, which puts an object carrying only postMessage on the
++     * page, and then defines injectedObjectJson on it with evaluateJavascript() -- which for a page
++     * without injectedJavaScriptBeforeContentLoaded reaches about:blank before the navigation and
++     * the page at onPageFinished, and nothing in between. Expo's DOM component page reads
++     * injectedObjectJson() inline, synchronously, in its <head>, and refuses to boot without it.
++     * On Android that was a blank screen every time.
++     *
++     * A JavascriptInterface object has no such window: it is present from the first line of page
++     * script in every frame, by construction. This is exactly what Expo's own webview does
++     * (@expo/dom-webview, DomWebView.kt: addJavascriptInterface(rncWebViewBridge,
++     * "ReactNativeWebView") with an @JavascriptInterface injectedObjectJson()), and it is the
++     * only configuration known to boot this page on Android. So it is the one mechanism here, on
++     * every WebView, and the message-listener path is gone rather than kept as a second binding
++     * of the same global name.
++     *
++     * The page calls the Java method at runtime, so the value is read when asked for and there is
++     * no ordering between setting the prop and loading the source to get right.
++     */
++    private void bindJavascriptInterface() {
++      if (fallbackBridge == null) {
++        fallbackBridge = new RNCWebViewBridge(this);
++        addJavascriptInterface(fallbackBridge, JAVASCRIPT_INTERFACE);
 +      }
 +    }
 +
+     protected void createRNCWebViewBridge(RNCWebView webView) {
+-        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)){
+-          if (this.bridgeListener == null) {
+-            this.bridgeListener = new WebViewCompat.WebMessageListener() {
+-              @Override
+-              public void onPostMessage(@NonNull WebView view, @NonNull WebMessageCompat message, @NonNull Uri sourceOrigin, boolean isMainFrame, @NonNull JavaScriptReplyProxy replyProxy) {
+-                RNCWebView.this.onMessage(message.getData(), sourceOrigin.toString());
+-              }
+-            };
+-            WebViewCompat.addWebMessageListener(
+-              webView,
+-              JAVASCRIPT_INTERFACE,
+-              Set.of("*"),
+-              this.bridgeListener
+-            );
+-          }
+-        } else {
+-          if (fallbackBridge == null) {
+-            fallbackBridge = new RNCWebViewBridge(webView);
+-            addJavascriptInterface(fallbackBridge, JAVASCRIPT_INTERFACE);
+-          }
+-        }
+-        injectJavascriptObject();
++        bindJavascriptInterface();
+     }
+ 
 +    /**
-+     * Make injectedObjectJson available from the first line of page script, the way the iOS side
-+     * already does with a WKUserScript at document start.
-+     *
-+     * evaluateJavascript() above only ever reaches a page that has finished loading, or about:blank
-+     * before navigation. Between the navigation and onPageFinished nothing is injected unless
-+     * injectedJavaScriptBeforeContentLoaded is set, so an inline <script> in the page's head cannot
-+     * see the object. Expo DOM components read it exactly there — synchronously, before their
-+     * bundle — and refuse to boot without it, which on Android was a black screen.
-+     *
-+     * Registered per value and replaced when the prop changes; the evaluateJavascript() path is
-+     * kept as the fallback for WebViews without DOCUMENT_START_SCRIPT. JSONObject.quote() rather
-+     * than the backtick template above: the value is arbitrary JSON, and a template literal breaks
-+     * on a backtick or "${" inside it.
++     * Upstream re-stated injectedObjectJson on the page as a JS function after every injection,
++     * because with a message listener that was the only place the value could live. The Java
++     * method is the source of truth now and is read live, so there is nothing to re-state; the
++     * callers are kept so the surrounding code reads as upstream's.
 +     */
-+    private void installInjectedObjectAtDocumentStart() {
-+      if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-+        return;
-+      }
-+      if (injectedObjectStartScript != null) {
-+        injectedObjectStartScript.remove();
-+        injectedObjectStartScript = null;
-+      }
-+      if (injectedJavaScriptObject == null) {
-+        return;
-       }
-+      String js = "(function(){\n" +
-+        "    window." + JAVASCRIPT_INTERFACE + " = window." + JAVASCRIPT_INTERFACE + " || {};\n" +
-+        "    window." + JAVASCRIPT_INTERFACE + ".injectedObjectJson = function () { return " + JSONObject.quote(injectedJavaScriptObject) + "; };\n" +
-+        "})();";
-+      injectedObjectStartScript = WebViewCompat.addDocumentStartJavaScript(this, js, Set.of("*"));
+     private void injectJavascriptObject() {
+-      if (getSettings().getJavaScriptEnabled()) {
+-        String js = "(function(){\n" +
+-          "    window." + JAVASCRIPT_INTERFACE + " = window." + JAVASCRIPT_INTERFACE + " || {};\n" +
+-          "    window." + JAVASCRIPT_INTERFACE + ".injectedObjectJson = function () { return " + (injectedJavaScriptObject == null ? null : ("`" + injectedJavaScriptObject + "`")) + "; };\n" +
+-          "})();";
+-        evaluateJavascriptWithFallback(js);
+-      }
      }
  
      @SuppressLint("AddJavascriptInterface")
+@@ -317,7 +327,7 @@
+         }
+     }
+ 
+-    protected String injectedJavaScriptObject = null;
++    protected volatile String injectedJavaScriptObject = null;
+ 
+     public void setInjectedJavaScriptObject(String obj) {
+       this.injectedJavaScriptObject = obj;
+@@ -451,6 +461,21 @@
+                 FLog.w(TAG, "ReactNativeWebView.postMessage method was called but messaging is disabled. Pass an onMessage handler to the WebView.");
+             }
+         }
++
++        /**
++         * This method is called whenever JavaScript running within the web view calls:
++         * - window[JAVASCRIPT_INTERFACE].injectedObjectJson()
++         *
++         * Expo's DOM component page does so inline in its <head>, before its bundle. Runs on the
++         * JavaBridge thread; the field is volatile for that reason. "{}" when unset, as Expo's own
++         * bridge answers, so the page's JSON.parse succeeds and the failure -- if the prop truly
++         * never arrived -- is the runtime's own message rather than a parse error.
++         */
++        @JavascriptInterface
++        public String injectedObjectJson() {
++            String json = mWebView.injectedJavaScriptObject;
++            return json == null ? "{}" : json;
++        }
+     }
+ 
+ 
 --- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
 +++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
 @@ -7,6 +7,7 @@
