@@ -49,7 +49,6 @@ export default defineConfig(({ mode }) => {
       rather than bent through `pass()`.
     */
     'process.env.EXPO_PUBLIC_ORIGIN': pass('PUBLIC_ORIGIN'),
-    'process.env.EXPO_PUBLIC_MAPTILER_KEY': pass('MAPTILER_KEY'),
     'process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY': pass('GOOGLE_MAPS_KEY'),
     'process.env.EXPO_PUBLIC_GOOGLE_MAP_ID': pass('GOOGLE_MAP_ID'),
   },

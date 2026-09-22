@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { probeTileSupport } from '../lib/tiles'
 import { create } from 'zustand'
 import type {
   ActivityEvent,
@@ -461,6 +462,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     */
     void initSync()
     void initPhotoSync()
+    // Whether the server has map imagery — a deployment fact remembered on the
+    // device; see `probeTileSupport`. Fire-and-forget: the map draws either way.
+    void probeTileSupport()
 
     if (session?.mode === 'live') {
       // The cache is already on disk from the last session; read it and paint.

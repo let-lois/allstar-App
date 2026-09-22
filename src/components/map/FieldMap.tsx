@@ -8,7 +8,7 @@ import {
   LAYERS,
   loadLayer,
   saveLayer,
-  tilesAvailable,
+  useTilesAvailable,
   visibleTiles,
   type LayerId,
 } from '../../lib/tiles'
@@ -232,7 +232,7 @@ export function FieldMap({
   }))
   const [followMe, setFollowMe] = useState(true)
   const [layer, setLayer] = useState<LayerId>(() => loadLayer())
-  const hasTiles = tilesAvailable()
+  const hasTiles = useTilesAvailable()
 
   /* --- viewport ---------------------------------------------------------- */
 
@@ -258,18 +258,23 @@ export function FieldMap({
   const scale = TILE * 2 ** view.zoom
   const centerWorld = useMemo(() => project(view.lat, view.lng), [view.lat, view.lng])
 
+  // None at all when the server has no imagery: the grid is the whole basemap
+  // then, and asking the tile route for pictures it will answer 501 to is a
+  // request per frame for nothing.
   const tiles = useMemo(
     () =>
-      visibleTiles({
-        layer,
-        zoom: view.zoom,
-        centerLat: view.lat,
-        centerLng: view.lng,
-        width: size.w,
-        height: size.h,
-        scale,
-      }),
-    [layer, view.zoom, view.lat, view.lng, size.w, size.h, scale],
+      hasTiles
+        ? visibleTiles({
+            layer,
+            zoom: view.zoom,
+            centerLat: view.lat,
+            centerLng: view.lng,
+            width: size.w,
+            height: size.h,
+            scale,
+          })
+        : [],
+    [hasTiles, layer, view.zoom, view.lat, view.lng, size.w, size.h, scale],
   )
   /*
     Downloaded imagery, read back in app code. The service worker used to be

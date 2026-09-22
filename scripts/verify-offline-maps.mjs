@@ -53,7 +53,7 @@ const PNG = Buffer.from(
 
   preOk(!tileStorageAvailable(), 'Node has no IndexedDB, so this is the unsupported platform')
 
-  const urls = ['https://api.maptiler.com/a.png', 'https://api.maptiler.com/b.png']
+  const urls = ['http://127.0.0.1:8787/api/tiles/streets/16/1/1.png', 'http://127.0.0.1:8787/api/tiles/streets/16/1/2.png']
   let threw = null
   let result = null
   try { result = await prefetchTiles(urls) } catch (e) { threw = e }
@@ -86,10 +86,16 @@ const ok = (cond, msg, measured) => {
   if (!cond) fails.push(msg)
 }
 
+// Imagery is a server fact now (the key is a Worker secret); the app asks
+// /api/health. Answer yes here so the download path is reachable, and route the
+// Worker's tile path rather than MapTiler's.
+await ctx.route('**/api/health', (r) =>
+  r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, config: { tiles: true } }) }),
+)
 let served = 0
 let failEveryNth = 0
 let offline = false
-await ctx.route('**://api.maptiler.com/**', async (route) => {
+await ctx.route('**/api/tiles/**', async (route) => {
   if (offline) {
     await route.abort('internetdisconnected')
     return
@@ -140,10 +146,9 @@ await page.waitForTimeout(1200)
  * day, and a regression would move them.
  */
 async function budgetChecks() {
-  // A fresh evaluation with a key present: the module reads it once, at load,
-  // and the import at the top of this file ran before anything could set it.
-  process.env.EXPO_PUBLIC_MAPTILER_KEY ||= 'gate-probe'
-  const t = await import('../src/lib/tiles.ts?with-key')
+  // Pure arithmetic: the tile count and the budget no longer depend on any key
+  // being present, so the module already imported is the one to ask.
+  const t = await import('../src/lib/tiles.ts')
 
   const CASES = [
     ['one street', { minLat: 30.5, maxLat: 30.51, minLng: -97.69, maxLng: -97.68 }, true],
@@ -367,7 +372,10 @@ ok(
     serviceWorkers: 'block',
   })
   const page2 = await wide.newPage()
-  await page2.route('**/api.maptiler.com/**', (r) =>
+  await page2.route('**/api/health', (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, config: { tiles: true } }) }),
+  )
+  await page2.route('**/api/tiles/**', (r) =>
     r.fulfill({ status: 200, contentType: 'image/png', body: PNG }),
   )
   await page2.goto(BASE, { waitUntil: 'domcontentloaded' })

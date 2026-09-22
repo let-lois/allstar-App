@@ -86,7 +86,7 @@ anyone who downloads it. Never put a private secret behind that prefix.
 | Name | Needed for | State |
 | --- | --- | --- |
 | `EXPO_PUBLIC_ORIGIN` | The QR code on every team member badge. Without it the code is built from the webview's local origin — a URL no homeowner's camera can open, and nothing on screen looks wrong | ✅ set in all three |
-| `EXPO_PUBLIC_MAPTILER_KEY` | Basemap imagery. Without it the map draws its own basemap and everything else works | ❌ **unset — see step 4 before setting it** |
+| ~~`EXPO_PUBLIC_MAPTILER_KEY`~~ | **Retired.** Tiles come from the Worker's `/api/tiles` on the server-side `MAPTILER_API_KEY`; the app reads `/api/health` → `config.tiles` at launch | remove it from the EAS environments |
 | `EXPO_PUBLIC_API_URL` | Points the app at a different API | Leave unset. Unset falls back to the deployed Worker, which is what a shipping build wants |
 | `EXPO_PUBLIC_GOOGLE_MAPS_KEY` | The Google basemap and Places autocomplete. **Not** Street View any more — that goes through `/api/streetview`, so the phone has it without a key | ❌ unset, and **cannot work in the shell** — see step 5 |
 | `EXPO_PUBLIC_GOOGLE_MAP_ID` | Advanced markers, required with the key above | ❌ unset; all-or-nothing with it |
@@ -99,7 +99,7 @@ Unchanged by any of this, listed so the three sets can be compared.
 
 | Name | Needed for | State |
 | --- | --- | --- |
-| `VITE_MAPTILER_KEY` | Basemap imagery on the web. Referrer-locked to the app's origin | Working |
+| ~~`VITE_MAPTILER_KEY`~~ | **Retired.** The web app reads tiles from `/api/tiles` like the phone; nothing loads from MapTiler directly | remove it from Pages and delete the browser key at MapTiler |
 | `VITE_GOOGLE_MAPS_KEY` | Google basemap, Places, Street View. Referrer-restricted browser key — restrict to **Maps JavaScript API**, **Places API (New)**, **Street View Static API** and nothing else | Optional |
 | `VITE_GOOGLE_MAP_ID` | Required whenever the key above is set | Optional |
 | `VITE_PUBLIC_ORIGIN` | Leave empty for web — the running origin is correct | — |
@@ -173,50 +173,28 @@ laptop:
 - [ ] Android: press back inside a lead form — does it go back rather than
       closing the app?
 
-### Step 4 — Basemap imagery: test before you buy *(20 minutes)*
+### Step 4 — Basemap imagery: one secret on the Worker *(5 minutes)*
 
-The obvious move is to set `EXPO_PUBLIC_MAPTILER_KEY` to the existing web key,
-and it will probably **work today for the wrong reason**.
+**Decided and built (option 1 from the earlier version of this step): tiles are
+proxied through the Worker.** `GET /api/tiles/:layer/:z/:x/:y` holds the key as
+a secret, Cloudflare's edge cache answers repeats, and web and phone share one
+path. Nothing in either bundle carries a key any more.
 
-Check the key's **Allowed HTTP Origins** in the MapTiler console. `LAUNCH.md`
-item 4 records that it includes `?`, a wildcard permitting requests that arrive
-with **no `Origin` header at all** — which is exactly what a `file://` webview
-sends. That entry is a known security hole with an open action to remove it: it
-also lets anyone who reads the key out of the JavaScript bundle use it from
-`curl`.
+1. Create the key in the **company-owned** MapTiler account (`LAUNCH.md` item 4),
+   with **no HTTP-origin restriction** — a Worker sends no `Origin`, so an
+   origin-locked key would refuse every request. It is a secret, not a browser
+   key, which is what makes that safe.
+2. `cd api && npx wrangler secret put MAPTILER_API_KEY`
+3. `curl <api>/api/health | jq .config.tiles` → `true`. Both apps pick it up on
+   their next launch; no Pages rebuild, no `eas update`.
+4. Remove `VITE_MAPTILER_KEY` from Cloudflare Pages and `EXPO_PUBLIC_MAPTILER_KEY`
+   from the three EAS environments, then delete the old browser key at MapTiler.
 
-So the two facts are:
-
-- Set the existing key now and the phone's map will draw, **because** `?` is
-  still there.
-- Remove `?` — which item 4 says to do, and should be done — and **the phone's
-  map goes blank**, while the website is unaffected.
-
-Do not let that talk you out of removing `?`. It means the phone needs a key of
-its own rather than a shared one, and MapTiler's free plan allows one active key
-**per account** — so the company-owned account that item 4 already calls for can
-hold the web key, and the app needs either a second account, a paid plan, or the
-proxy below.
-
-Three options, in order of preference:
-
-1. **Proxy tiles through the Worker.** The key stays server-side, never ships in
-   a bundle, and Cloudflare's cache makes it cheap after the first request per
-   tile. It also closes the hole permanently rather than moving it. More work
-   than the others, and the only one that is actually secure.
-2. **A second MapTiler key that accepts no-origin requests**, used only by the
-   app. Quickest. It is the same exposure as `?` is today, just scoped to one
-   key you can rate-limit and cap independently — so if it is abused, the
-   website's map keeps working.
-3. **Ship without imagery.** The app draws its own basemap and every other
-   feature works. This is the current state and it is not broken, just plainer.
-
-The free tier is a hard 100k/month cap with **no overage billing**, so the worst
-case for 1 and 2 is a blank map until the month rolls over — an outage, not an
-invoice.
-
-Whichever is chosen, the key belongs in the company-owned account from
-`LAUNCH.md` item 4, not in a personal one.
+What the route exposes, and why that is acceptable, is written at the top of
+`api/src/tiles.ts`: the layer and zoom are whitelisted to what the app itself
+asks for, the edge cache absorbs repeats, and MapTiler's free tier is a hard cap
+with no overage billing — so the worst case is a blank map until the month rolls
+over, an outage rather than an invoice. `smoke:tiles` drives all of it.
 
 ### Step 5 — Decide about the Google basemap *(a decision, not a task)*
 

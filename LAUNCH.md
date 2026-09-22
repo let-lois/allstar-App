@@ -149,11 +149,14 @@ and missing either half leaves one of the two products with a dead map:
 
 | Where | Variable | To take effect |
 | --- | --- | --- |
-| Cloudflare Pages | `VITE_MAPTILER_KEY` | Vite inlines it, so the **web app must be rebuilt** — a variable change alone does nothing |
-| expo.dev (EAS) | `EXPO_PUBLIC_MAPTILER_KEY` | Set in all three environments. Metro inlines it into the JS bundle, so an `eas update` carries it — **no native rebuild needed** |
+| Cloudflare Worker | `MAPTILER_API_KEY` (secret) | `cd api && npx wrangler secret put MAPTILER_API_KEY`. The Worker proxies tiles at `/api/tiles` for **both** products; `/api/health` reports `tiles: true` once it is set. No Pages rebuild and no EAS update needed — the apps read the flag at launch |
 
-`docs/MOBILE_SETUP.md` has the commands. Note the phone half is not set at all
-yet, so until it is, the app has no imagery and only the web key is live.
+**Superseded:** `VITE_MAPTILER_KEY` and `EXPO_PUBLIC_MAPTILER_KEY` are no longer
+read by anything. Remove them from Cloudflare Pages and from the EAS
+environments, and delete the browser key at MapTiler — a key with `?` in its
+allowed origins has no reason to exist once nothing loads from MapTiler
+directly. The Worker's key must be origin-free (a Worker sends no Origin), which
+is exactly why it is a secret and never in a bundle.
 
 Then confirm with `/api/selftest/geocode` — `attempts` should name `google`
 and/or `census` and never MapTiler. `MAPTILER_API_KEY` on the Worker is unused

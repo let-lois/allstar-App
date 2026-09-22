@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { project } from './geo'
 
 /**
@@ -16,11 +17,20 @@ import { project } from './geo'
  */
 
 import * as db from './db'
+import { API_URL } from './api-url'
 
-const KEY = (process.env.EXPO_PUBLIC_MAPTILER_KEY as string | undefined)?.trim() || ''
-
-/** Every host tiles may be fetched from. Mirrored in the CSP in public/_headers. */
-export const TILE_HOST = 'https://api.maptiler.com'
+/**
+ * Where tiles come from: our own Worker, never MapTiler directly.
+ *
+ * The key used to be compiled into this bundle and protected by MapTiler's
+ * HTTP-origin restriction — which the phone defeats by construction, since a
+ * `file://` page sends no Origin. `GET /api/tiles/:layer/:z/:x/:y` on the
+ * Worker holds the key as a secret and answers with bytes, and Cloudflare's
+ * edge cache answers the second request for any tile itself. One path for the
+ * web and the phone, and nothing in either bundle worth lifting. See
+ * `api/src/tiles.ts`.
+ */
+export const TILE_HOST = API_URL
 
 export type LayerId = 'streets' | 'satellite'
 
@@ -41,22 +51,80 @@ export const LAYERS: Record<LayerId, Layer> = {
   streets: {
     id: 'streets',
     label: 'Streets',
-    url: (z, x, y) => `${TILE_HOST}/maps/streets-v2/256/${z}/${x}/${y}.png?key=${KEY}`,
+    url: (z, x, y) => `${TILE_HOST}/api/tiles/streets/${z}/${x}/${y}.png`,
     maxZoom: 20,
     attribution: '© MapTiler © OpenStreetMap contributors',
   },
   satellite: {
     id: 'satellite',
     label: 'Satellite',
-    url: (z, x, y) => `${TILE_HOST}/tiles/satellite-v2/${z}/${x}/${y}.jpg?key=${KEY}`,
+    url: (z, x, y) => `${TILE_HOST}/api/tiles/satellite/${z}/${x}/${y}.jpg`,
     maxZoom: 19,
     attribution: '© MapTiler © Planet / Landsat',
   },
 }
 
-/** No key, no imagery. The caller falls back to the drawn basemap. */
+/*
+ * Whether the server has imagery to serve.
+ *
+ * A fact about the deployment, not about this build: the key lives on the
+ * Worker, so the only way to know is to ask it. `/api/health` reports
+ * `config.tiles`, the answer is remembered on the device so every later launch
+ * — including one with no signal — starts from the last known truth, and the
+ * two screens that care re-render when it changes. Until the first answer ever
+ * arrives the map draws its own basemap, which is what it does with no imagery
+ * anyway; nothing is worse than before for a moment, and then it is better.
+ */
+const TILES_FLAG = 'allstar.tiles.v1'
+const TILES_EVENT = 'allstar:tiles'
+let serverHasTiles: boolean | null = null
+
+function readFlag(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(TILES_FLAG) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Is there imagery to draw? Sync, from the last answer the server gave. */
 export function tilesAvailable(): boolean {
-  return KEY.length > 0
+  if (serverHasTiles === null) serverHasTiles = readFlag()
+  return serverHasTiles
+}
+
+/**
+ * Ask the server once per launch, and remember. Never throws: a phone in a
+ * dead zone keeps whatever it knew.
+ */
+export async function probeTileSupport(): Promise<void> {
+  try {
+    const res = await fetch(`${API_URL}/api/health`, { cache: 'no-store' })
+    if (!res.ok) return
+    const body = (await res.json()) as { config?: { tiles?: unknown } }
+    const has = body.config?.tiles === true
+    if (has === tilesAvailable()) return
+    serverHasTiles = has
+    try {
+      localStorage.setItem(TILES_FLAG, has ? '1' : '0')
+    } catch {
+      /* private mode — the in-memory answer still holds for this launch */
+    }
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(TILES_EVENT))
+  } catch {
+    /* offline, or the API is down: keep the last answer */
+  }
+}
+
+/** The same fact, for a component that has to re-render when it changes. */
+export function useTilesAvailable(): boolean {
+  const [has, setHas] = useState(tilesAvailable)
+  useEffect(() => {
+    const onChange = () => setHas(tilesAvailable())
+    window.addEventListener(TILES_EVENT, onChange)
+    return () => window.removeEventListener(TILES_EVENT, onChange)
+  }, [])
+  return has
 }
 
 /**
@@ -111,7 +179,7 @@ export function visibleTiles(opts: {
   scale: number
 }): TileRef[] {
   const { layer, zoom, centerLat, centerLng, width, height, scale } = opts
-  if (!tilesAvailable() || width <= 0 || height <= 0) return []
+  if (width <= 0 || height <= 0) return []
 
   const def = LAYERS[layer]
   // Integer tile zoom, capped at what the provider actually has. Beyond that the
@@ -180,14 +248,6 @@ export function saveLayer(id: LayerId) {
  * in one deliberate action.
  */
 
-/**
- * Must match TILE_CACHE in public/sw.js.
- *
- * The worker cannot import from here, so this is the one duplicated constant in
- * the codebase. It is duplicated rather than passed at runtime because the
- * worker needs it during `activate`, before any page has spoken to it.
- */
-export const TILE_CACHE = 'allstar-tiles-v1'
 
 /**
  * Zooms worth storing.
@@ -270,7 +330,6 @@ export function tilesForBounds(
   layer: LayerId,
   zooms: number[] = PREFETCH_ZOOMS,
 ): string[] {
-  if (!tilesAvailable()) return []
   /*
     Counted before anything is built. `tileCountForBounds` is multiplication
     and costs nothing, which is exactly why it can be the guard — asking "how
@@ -328,7 +387,6 @@ export function tileCountForBounds(
   layer: LayerId,
   zooms: number[] = PREFETCH_ZOOMS,
 ): number {
-  if (!tilesAvailable()) return 0
   const def = LAYERS[layer]
   let total = 0
   for (const rawZ of zooms) {
