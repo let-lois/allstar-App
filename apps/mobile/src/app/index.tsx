@@ -124,13 +124,42 @@ function handOff(url: string): void {
 }
 
 /**
+ * Where the shell's own page comes from while developing.
+ *
+ * A built app loads the DOM component from `file://`. A dev server does not:
+ * Expo serves it from `http://<host>:8081/_expo/@dom/...` (see
+ * `expo/src/dom/base.ts`), and WKWebView asks `onShouldStartLoadWithRequest`
+ * about the very first load, not only about links. So the gate below refused
+ * the shell's own page on iOS under `expo start`, handed it to
+ * `WebBrowser.openBrowserAsync`, and the app opened as a Safari sheet over an
+ * empty webview. Android never asked, which is why only iOS showed it.
+ *
+ * Read the same way Expo reads it rather than assumed to be localhost: on a
+ * phone the dev server is the laptop's LAN address, and a tunnel is another
+ * host again. `__DEV__` only, so a production build keeps the strict rule.
+ */
+const DEV_SERVER_ORIGIN: string | null = __DEV__
+  ? (() => {
+      try {
+        const getDevServer =
+          require('react-native/Libraries/Core/Devtools/getDevServer').default
+        return new URL(getDevServer().url).origin
+      } catch {
+        return null
+      }
+    })()
+  : null
+
+/**
  * `file://` is the shell. Nothing else navigates this webview.
  *
  * `about:` is allowed because a webview issues `about:blank` on its own during
- * set-up, and refusing it would fight the host rather than the app.
+ * set-up, and refusing it would fight the host rather than the app. The dev
+ * server is allowed in development only, for the reason above.
  */
 function onShouldStartLoadWithRequest(req: ShouldStartLoadRequest): boolean {
   if (req.url.startsWith('file://') || req.url.startsWith('about:')) return true
+  if (DEV_SERVER_ORIGIN && req.url.startsWith(DEV_SERVER_ORIGIN + '/')) return true
   handOff(req.url)
   return false
 }
