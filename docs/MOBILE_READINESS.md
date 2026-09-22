@@ -196,6 +196,51 @@ Three things follow, and they decide the whole plan:
   inside the shell; a Navigate hand-off still opens Apple Maps; Street View
   still opens the in-app browser.
 
+### Issue P0-4 — a release build cannot say what went wrong
+
+- **Platform:** Android
+- **Root cause [source]:** `RNCWebChromeClient.java:118-124` returns `true`
+  from `onConsoleMessage` unless `ReactBuildConfig.DEBUG`, which tells WebView
+  the message is handled — so nothing reaches logcat. The same build config
+  gates `WebView.setWebContentsDebuggingEnabled`
+  (`RNCWebViewManagerImpl.kt:93-95`), so `chrome://inspect` is unavailable too.
+  A preview APK that renders a blank page therefore has no channel at all for
+  the reason.
+- **Observed [device]:** three preview builds showed a blank page; a full
+  `adb logcat` of a cold boot (1,438 lines) contained no `CONSOLE`, `Uncaught`,
+  `EXPO_DOM` or `ERR_` line, because there was nothing to catch.
+- **Fix:** the same `patch-package` patch now forwards **error-level** console
+  messages to logcat under the tag `RNCWebViewConsole`, with source and line.
+  Error level only: the web app calls `console.error` nowhere itself, so
+  everything at that level is an uncaught exception or the browser's own
+  complaint, and a rep's ordinary session stays out of logcat.
+- **Files:** `apps/mobile/patches/react-native-webview+13.16.1.patch`
+- **Risk:** Low
+- **Verification:** `verify:webview-patch` reads the installed
+  `RNCWebChromeClient.java`, isolates `onConsoleMessage`, and checks the
+  forwarding sits **below** the debug branch at error level only; restoring the
+  pristine file fails four named checks.
+
+### What the blank preview APK ruled out
+
+Worth recording, because it was the leading theory and it was wrong. Expo's two
+export paths lay DOM assets out differently (§2.4 of `MOBILE_AUDIT.md`), so the
+embedded page was suspected of asking for a script that was not there. It is
+not:
+
+- **[repro]** `expo export:embed --platform android` here produces
+  `assets/www.bundle/<hash>.html` alongside
+  `assets/www.bundle/_expo/static/js/web/entry-<hash>.js`, and the page asks for
+  `./_expo/static/js/web/entry-<hash>.js`. That resolves. The flat layout seen
+  from `expo export` is the `useMd5Filename` path
+  (`exportDomComponents.js:78-110`), and each layout is internally consistent.
+- **[device]** unzipping the preview APK gives exactly the same three files and
+  the same reference.
+- **[repro]** `scripts/repro/android-injection-order.mjs` pointed at the
+  *embedded* page still renders the sign-in screen under the iOS injection
+  order and nothing under the Android one — so the page in the APK is sound and
+  the boot order remains the open question.
+
 ## 3. iOS — what is known and what is likely
 
 The iPhone opens because iOS gets the injection order right. Everything the
