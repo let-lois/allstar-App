@@ -28,6 +28,7 @@ import { MAX_IMPORT_ROWS, canImport, importProperties, propertyIdFor, type Impor
 import { assignProperties, assignTerritory } from './assign'
 import { createTerritory, deleteTerritory, renameTerritory } from './territories'
 import { streetViewAt, useStreetViewBase } from './streetview'
+import { parseTilePath, tileFor } from './tiles'
 import { createList, deleteList, listsFor, setReps, updateList, updateMembers } from './lists'
 import { readAudit, record as recordAudit } from './audit'
 import {
@@ -618,6 +619,10 @@ export default {
               // chain. The Worker needs no MapTiler key at all now — if one is
               // still set as a secret it is unused, and deleting it is safe.
               googleGeocoding: !!env.GOOGLE_MAPS_API_KEY,
+              // Present means /api/tiles serves basemap imagery for the web and
+              // the phone on one server-side key; absent means both draw the
+              // app's own basemap. A name for the fact, never the key.
+              tiles: !!env.MAPTILER_API_KEY,
               // Absent means connecting a CRM is refused rather than storing a
               // customer's token in plaintext — a deliberate refusal, but one
               // that is otherwise indistinguishable from a broken integration.
@@ -764,6 +769,49 @@ export default {
             console.error('inbound webhook failed', String(err))
             return json({ error: 'Could not apply that update.' }, 500, cors)
           }
+        }
+      }
+
+      /*
+        Basemap tiles, proxied so the MapTiler key never ships in a bundle.
+
+        Above the session boundary because the map draws tiles with `<image
+        href>`, which cannot carry a bearer token. What that exposes, and why it
+        is acceptable, is written at the top of tiles.ts: whitelisted layer and
+        zoom, Cloudflare's edge cache in front, and a provider quota that is a
+        hard cap rather than a bill.
+
+        The status carries the meaning, as with /api/streetview: 200 with
+        bytes, 400 for a tile this app would never ask for, 501 when no key is
+        configured — so the client can say "imagery is not set up" instead of
+        drawing nothing — and 502 when MapTiler could not answer. Only the 200 is
+        cacheable; an error page must never be stored as a tile.
+      */
+      {
+        const tile = /^\/api\/tiles\/([a-z]+)\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.(png|jpg)$/.exec(path)
+        if (tile && req.method === 'GET') {
+          const parsed = parseTilePath(tile[1], tile[2], tile[3], tile[4], tile[5])
+          if ('bad' in parsed) return json({ error: parsed.bad, code: 'bad_tile' }, 400, cors)
+          const got = await tileFor(env, url.origin + path, parsed)
+          if (got.kind === 'unconfigured') {
+            return json({ error: 'No map imagery key is configured.', code: 'no_tile_key' }, 501, cors)
+          }
+          if (got.kind === 'error') {
+            console.error(`tile ${path} failed: ${got.detail}`)
+            return json({ error: 'The map imagery service is unavailable.', code: 'tiles_unavailable' }, 502, {
+              ...cors,
+              'cache-control': 'no-store',
+            })
+          }
+          return new Response(got.body, {
+            status: 200,
+            headers: {
+              ...cors,
+              'content-type': got.contentType,
+              'cache-control': 'public, max-age=31536000, immutable',
+              'x-tile-cache': got.fromCache ? 'hit' : 'miss',
+            },
+          })
         }
       }
 

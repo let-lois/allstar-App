@@ -8,13 +8,14 @@ import type { BadgeInfo, BadgeStatus, LeadStatus, OnboardingStatus, OnboardingSt
  * draining the outbox. Nothing on a screen ever awaits it.
  */
 
-/**
- * Overridable at build time so a local dev server can point at `wrangler dev`.
- * The default is the deployed Worker, which is what a Pages build should use.
- */
-export const API_URL: string =
-  (process.env.EXPO_PUBLIC_API_URL as string | undefined)?.replace(/\/$/, '') ||
-  'https://allstar-api.josh-af6.workers.dev'
+/*
+  `API_URL` lives in its own module so that anything needing only the address —
+  the tile URLs, a Node gate — can import it without pulling in this file, whose
+  class fields Node's strip-only TypeScript loader cannot parse. Re-exported so
+  every existing `from './http'` import keeps working.
+*/
+import { API_URL } from './api-url'
+export { API_URL }
 
 export interface SessionUserDTO {
   id: string

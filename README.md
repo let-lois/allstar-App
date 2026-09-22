@@ -2219,8 +2219,9 @@ discarded — so what is lost is a flagged street-level guess on addresses neith
 Google nor Census can place. Those rows now come back unplaced, which is the
 honest answer and, more usefully, the visible one.
 
-The key is now browser-only, used for tiles through `VITE_MAPTILER_KEY`. That
-means it can be fully origin-locked.
+The key is now server-only: the Worker proxies tiles at `/api/tiles` on the
+`MAPTILER_API_KEY` secret, and neither bundle carries a MapTiler key. The old
+browser key (`VITE_MAPTILER_KEY`) is retired and can be deleted.
 
 **Two steps remain, and both are Curtis's:**
 

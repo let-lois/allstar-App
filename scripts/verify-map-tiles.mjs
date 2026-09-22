@@ -38,7 +38,7 @@ const page = await ctx.newPage()
 await page.route(/maps\.googleapis\.com/, (r) => r.abort())
 const reqs = []
 page.on('request', (r) => {
-  if (r.url().includes('maptiler')) reqs.push(r.url())
+  if (r.url().includes('/api/tiles/')) reqs.push(r.url())
 })
 
 const fails = []
@@ -46,6 +46,26 @@ const ok = (cond, msg) => {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}`)
   if (!cond) fails.push(msg)
 }
+
+/*
+  Imagery is a fact about the server now, not about the build: the MapTiler key
+  is a Worker secret and the app asks /api/health whether one is set. So this
+  gate stands in for the Worker — health says yes, and every /api/tiles request
+  is answered with a real PNG — rather than reading a build-time variable the
+  browser cannot see. `MODE=none` runs the other half: health says no, and
+  nothing may be asked of the tile route at all.
+*/
+const MODE = process.env.MODE === 'none' ? 'none' : 'imagery'
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+)
+await page.route('**/api/health', (r) =>
+  r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, config: { tiles: MODE === 'imagery' } }) }),
+)
+await page.route('**/api/tiles/**', (r) =>
+  r.fulfill({ status: 200, contentType: r.request().url().endsWith('.jpg') ? 'image/jpeg' : 'image/png', body: PNG }),
+)
 
 await page.goto(BASE, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1200)
@@ -61,10 +81,11 @@ await page.waitForTimeout(2500)
 // browser cannot see.
 const configured = (await page.getByRole('button', { name: /Switch to satellite view/ }).count()) > 0
 console.log(`\n--- imagery ${configured ? 'configured' : 'not configured'} ---\n`)
+ok(configured === (MODE === 'imagery'), `the map believes what the server said (health tiles=${MODE === 'imagery'}, toggle ${configured ? 'shown' : 'hidden'})`)
 
 if (configured) {
   ok((await page.locator('svg image').count()) > 0, 'imagery tiles are rendered')
-  ok(reqs.some((u) => u.includes('streets-v2')), 'streets tiles requested by default')
+  ok(reqs.some((u) => u.includes('/api/tiles/streets/')), 'streets tiles requested by default, from our own Worker')
   ok(
     (await page.locator('p', { hasText: 'OpenStreetMap contributors' }).count()) > 0,
     'streets attribution credits OpenStreetMap (ODbL requires it)',
@@ -72,7 +93,7 @@ if (configured) {
 
   await page.getByRole('button', { name: /Switch to satellite view/ }).click()
   await page.waitForTimeout(1500)
-  ok(reqs.some((u) => u.includes('satellite')), 'satellite tiles requested after toggle')
+  ok(reqs.some((u) => u.includes('/api/tiles/satellite/')), 'satellite tiles requested after toggle')
   ok(
     (await page.getByRole('button', { name: /Switch to streets view/ }).count()) > 0,
     'toggle flips to offer the other layer',
@@ -87,7 +108,7 @@ if (configured) {
     'layer choice survives a reload',
   )
 } else {
-  ok(reqs.length === 0, 'nothing is fetched from the tile host without a key')
+  ok(reqs.length === 0, 'nothing is asked of the tile route when the server has no imagery')
   ok((await page.locator('svg image').count()) === 0, 'no tile elements are rendered')
   ok(
     (await page.locator('p', { hasText: 'MapTiler' }).count()) === 0,

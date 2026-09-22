@@ -3,6 +3,7 @@ import { Button } from '../ui/Button'
 import { ProgressBar } from '../ui/ProgressBar'
 import { Collapsible } from '../ui/Collapsible'
 import { useScopedProperties } from '../../store/useAppStore'
+import { resetTileSource } from '../../lib/tile-source'
 import {
   boundsOf,
   cachedCount,
@@ -11,7 +12,7 @@ import {
   loadLayer,
   prefetchTiles,
   tileCountForBounds,
-  tilesAvailable,
+  useTilesAvailable,
   tilesForBounds,
   zoomsWithinBudget,
   PREFETCH_ZOOMS,
@@ -57,6 +58,7 @@ export function OfflineMaps() {
     makes opening More instant regardless of whether a rep covers two streets or
     two counties.
   */
+  const hasTiles = useTilesAvailable()
   const zooms = useMemo(
     () => (bounds ? zoomsWithinBudget(bounds, layer) : []),
     [bounds, layer],
@@ -66,7 +68,7 @@ export function OfflineMaps() {
     [bounds, layer, zooms],
   )
 
-  if (!tilesAvailable()) return null
+  if (!hasTiles) return null
 
   const megabytes = (estimateBytes(tileCount, layer) / 1_000_000).toFixed(0)
   const trimmed = zooms.length > 0 && zooms.length < PREFETCH_ZOOMS.length
@@ -197,6 +199,10 @@ function OfflineMapsPanel({
       setBusy(false)
       abort.current = null
       refreshCached()
+      // The map remembers which tiles were missing so a pan does not re-read
+      // storage for imagery that was absent a moment ago. A download is the one
+      // thing that turns those misses into hits, so it says so.
+      resetTileSource()
     }
   }
 
@@ -269,6 +275,7 @@ function OfflineMapsPanel({
             onClick={async () => {
               if (!window.confirm('Delete saved map imagery from this device?')) return
               await clearTileCache()
+              resetTileSource()
               setNote(null)
               refreshCached()
             }}

@@ -54,6 +54,16 @@ export interface Env {
   GOOGLE_GEOCODE_BASE_URL?: string
   /** Same purpose as the line above, for the Street View endpoints. */
   GOOGLE_STREETVIEW_BASE_URL?: string
+  /**
+   * Optional. Present means /api/tiles proxies MapTiler basemap imagery for
+   * the web app and the phone on this one server-side key; absent means the
+   * route answers 501 and both draw the app's own basemap. A key with no
+   * origin restriction, because a Worker sends no Origin — which is exactly
+   * why it must be a secret here and never in a bundle. See tiles.ts.
+   */
+  MAPTILER_API_KEY?: string
+  /** Same purpose as GOOGLE_STREETVIEW_BASE_URL, for the tile proxy. */
+  MAPTILER_BASE_URL?: string
   /*
    * Encrypts third-party credentials at rest — see secretbox.ts.
    *

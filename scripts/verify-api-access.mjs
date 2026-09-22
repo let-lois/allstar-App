@@ -212,6 +212,19 @@ const FAMILIES = {
  * than adding a third special case and hoping that is the last one.
  */
 const REGEX_ROUTES = {
+  /*
+    Basemap tiles, proxied so the MapTiler key is a Worker secret. Public by
+    necessity: the map draws tiles with `<image href>`, which cannot carry a
+    bearer token. The only thing worth asserting about who may ask is that the
+    route sits above the session boundary on purpose and proxies nothing the
+    app would not ask for — tiles.ts whitelists the layer and the zoom, and the
+    smoke drives the refusals. There is no tenant to scope: a tile is the same
+    photograph of a street whoever asks.
+  */
+  '/^\\/api\\/tiles\\/([a-z]+)\\/(\\d{1,2})\\/(\\d{1,7})\\/(\\d{1,7})\\.(png|jpg)$/': {
+    match: "/^\\/api\\/tiles\\/([a-z]+)\\/(\\d{1,2})\\/(\\d{1,7})\\/(\\d{1,7})\\.(png|jpg)$/.exec(path)",
+    public: 'tiles.ts whitelists layer and zoom; smoke:tiles drives the refusals',
+  },
   '/^\\/api\\/properties\\/[^/]+\\/photos$/': {
     match: "/^\\/api\\/properties\\/[^/]+\\/photos$/.test(path)",
     scopedBy: 'client_id = ?2',

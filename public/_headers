@@ -31,9 +31,10 @@
 # names hosts explicitly rather than opening a category. Anything else the app
 # tried to reach would be a bug or a compromise, and either way should fail.
 #
-# api.maptiler.com appears in both `img-src` and `connect-src`: the first for the
-# tiles themselves, the second because the service worker *fetches* them to cache
-# for offline use, which is a fetch rather than an image load.
+# The Worker appears in both `img-src` and `connect-src`: the first because map
+# tiles are `<image>` loads from `/api/tiles` (the MapTiler key lives on the
+# Worker, never here — see api/src/tiles.ts), the second for every API call and
+# for the offline download, which *fetches* tiles to store them.
 #
 # The Google hosts are what the Maps JavaScript API needs, and they are not
 # guessable from the docs alone — each one is here for a specific reason:
@@ -82,7 +83,7 @@
 # ID to a *raster* map, which needs no WebAssembly at all and therefore none of
 # this. Slower and less pretty; no CSP relaxation whatsoever.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://api.maptiler.com https://maps.googleapis.com https://maps.gstatic.com https://www.gstatic.com https://*.ggpht.com https://*.googleusercontent.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' data: blob: https://allstar-api.josh-af6.workers.dev https://api.maptiler.com https://maps.googleapis.com https://places.googleapis.com https://maps.gstatic.com https://www.gstatic.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://allstar-api.josh-af6.workers.dev https://maps.googleapis.com https://maps.gstatic.com https://www.gstatic.com https://*.ggpht.com https://*.googleusercontent.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' data: blob: https://allstar-api.josh-af6.workers.dev https://maps.googleapis.com https://places.googleapis.com https://maps.gstatic.com https://www.gstatic.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(self), camera=(self), microphone=(self), payment=(), usb=()

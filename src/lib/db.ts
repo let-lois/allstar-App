@@ -33,7 +33,27 @@ interface AllstarDB extends DBSchema {
   leadLists: { key: string; value: LeadList }
   team: { key: string; value: TeamMember }
   outbox: { key: string; value: Mutation; indexes: { 'by-created': number } }
+  tiles: { key: string; value: TileBlob }
   meta: { key: string; value: unknown }
+}
+
+/**
+ * One stored map tile.
+ *
+ * Deliberately not in `StoreName`, alongside `meta`, so the generic loops in
+ * `hydrate`, `demo` and `erase-local` cannot reach it. Imagery is not tenant
+ * data: it is the same public photograph of a street whoever is signed in, and
+ * wiping a rep's downloaded territory because they signed out — or because the
+ * office erased a lead — would take away the thing they are carrying a phone
+ * for. Removing it is `clearTileCache`, which a person asks for by name.
+ */
+export interface TileBlob {
+  /** The tile's source URL, and the key. */
+  url: string
+  blob: Blob
+  bytes: number
+  /** When it was stored, so a future eviction pass can start with the oldest. */
+  at: number
 }
 
 /** Every keyed store (i.e. everything except the loose `meta` bag). */
@@ -56,7 +76,7 @@ let dbPromise: Promise<IDBPDatabase<AllstarDB>> | null = null
 
 export function db(): Promise<IDBPDatabase<AllstarDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<AllstarDB>('allstar-field', 6, {
+    dbPromise = openDB<AllstarDB>('allstar-field', 7, {
       /**
        * Idempotent by design. `upgrade` runs for a first-time install *and* for
        * every version bump, so creating a store unconditionally throws
@@ -64,7 +84,7 @@ export function db(): Promise<IDBPDatabase<AllstarDB>> {
        * is every existing user, and it bricks their local database.
        */
       upgrade(d) {
-        const store = <N extends StoreName | 'meta'>(
+        const store = <N extends StoreName | 'meta' | 'tiles'>(
           name: N,
           keyPath?: string,
           indexes: [string, string][] = [],
@@ -97,6 +117,21 @@ export function db(): Promise<IDBPDatabase<AllstarDB>> {
         // themselves, with their members and reps, so the map can filter by
         // one with no signal.
         store('leadLists', 'id')
+        /*
+          v7 — map tiles, moved here from Cache Storage.
+
+          Cache Storage is exposed only to a secure context with a network
+          scheme, and a packaged app is served from neither: WKWebView loads it
+          through a custom scheme handler, where `caches` is absent and no
+          service worker runs. Tiles were written to Cache Storage and read back
+          only by the worker's fetch handler, so on iOS the download would
+          decline and, had it not, the imagery would never have been served — a
+          rep tapping download, seeing it succeed, and finding a blank map in a
+          dead zone. IndexedDB is there under every scheme, and reading it in app
+          code means one path that works everywhere instead of two that differ
+          silently.
+        */
+        store('tiles', 'url')
         store('meta')
       },
 
@@ -307,6 +342,45 @@ export async function metaSet(key: string, value: unknown): Promise<void> {
   }
   const d = await db()
   await d.put('meta', value, key)
+}
+
+/* --- map tiles -------------------------------------------------------------
+ *
+ * Their own small API rather than the generic `put`/`all`/`clear` above, for
+ * two reasons. They are keyed on a URL instead of an `id`, so the generic
+ * signatures do not fit; and none of them falls back to the in-memory map the
+ * rest of this file uses when IndexedDB is missing. A territory is hundreds of
+ * megabytes of imagery — holding that in a JavaScript object would trade a
+ * blank map for a dead tab, and `tileStorageAvailable()` already lets the
+ * screen decline the download instead.
+ */
+
+export async function tilePut(url: string, blob: Blob): Promise<void> {
+  const d = await db()
+  await d.put('tiles', { url, blob, bytes: blob.size, at: Date.now() })
+}
+
+export async function tileGet(url: string): Promise<Blob | undefined> {
+  const d = await db()
+  return (await d.get('tiles', url))?.blob
+}
+
+/**
+ * Every stored tile URL, in one read.
+ *
+ * `getAllKeys` rather than a lookup per URL, which is the mistake the old
+ * `cachedCount` header already records: 1,159 serialised lookups for a 3.6 km
+ * territory, every time the screen mounted, which left the count reading zero
+ * for seconds after a download had plainly finished.
+ */
+export async function tileKeys(): Promise<Set<string>> {
+  const d = await db()
+  return new Set((await d.getAllKeys('tiles')) as string[])
+}
+
+export async function tileClear(): Promise<void> {
+  const d = await db()
+  await d.clear('tiles')
 }
 
 /**

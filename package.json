@@ -47,6 +47,7 @@
     "verify:console": "node scripts/verify-console-access.mjs",
     "verify:login": "node scripts/verify-login.mjs",
     "verify:bridge": "node --experimental-strip-types scripts/verify-bridge.mjs",
+    "verify:handoff": "node --experimental-strip-types scripts/verify-handoff.mjs",
     "verify:core": "tsc -p packages/core",
     "verify:shell-assets": "node scripts/gen-shell-assets.mjs --check",
     "verify:webview-patch": "node scripts/verify-webview-patch.mjs",

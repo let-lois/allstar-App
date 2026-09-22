@@ -37,31 +37,16 @@ const CACHE = `allstar-shell-${VERSION}`
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon-32.png']
 
 /*
- * Basemap tiles, kept apart from the app shell.
+ * Basemap tiles are NOT handled here any more.
  *
- * Separate cache because the two have opposite lifecycles: the shell is replaced
- * wholesale on every deploy, while tiles for a rep's territory stay valid for
- * months and are expensive to re-fetch on a metered connection. Bumping the
- * shell version must not throw away a morning's downloaded imagery.
- *
- * Tiles arrive as opaque cross-origin responses, so their status is not readable
- * — that is expected and they are stored anyway, which is the one place this
- * worker cannot verify what it is caching.
+ * They used to be: cache-first from a `TILE_CACHE` bucket, which was the only
+ * thing that turned a downloaded territory into an offline map — and the
+ * packaged app has no service worker, so on a phone the download could never be
+ * drawn. Tiles now live in IndexedDB and the map reads them itself
+ * (`src/lib/tile-source.ts`), and they come from our own Worker rather than
+ * MapTiler (`/api/tiles`). The old bucket is no longer exempted from the
+ * activate-time sweep below, so a long-time user gets that space back.
  */
-const TILE_HOST = 'api.maptiler.com'
-const TILE_CACHE = 'allstar-tiles-v1'
-/*
- * Cap chosen against what a real territory costs, not picked round.
- *
- * A 3.6 km territory prefetched across z14-18 is ~1,160 tiles. At the old cap of
- * 1,500 a single download all but filled the cache, and the oldest-first trim
- * below would then start evicting the tiles the rep had just downloaded the
- * moment they panned anywhere else — the exact opposite of what a deliberate
- * offline download is for. 4,000 leaves room for a territory plus normal
- * wandering, and is around 100 MB worst case for satellite, which is opt-in and
- * clearable from the More screen.
- */
-const TILE_LIMIT = 4000
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -81,7 +66,7 @@ self.addEventListener('activate', (event) => {
       const keys = await caches.keys()
       await Promise.all(
         keys
-          .filter((k) => k !== CACHE && k !== TILE_CACHE)
+          .filter((k) => k !== CACHE)
           .map((k) => caches.delete(k)),
       )
       await self.clients.claim()
@@ -99,14 +84,6 @@ self.addEventListener('fetch', (event) => {
   } catch {
     return
   }
-  // Tiles are the one cross-origin thing worth handling: cache-first, because an
-  // imagery tile for a given z/x/y never changes, and a rep who walked a street
-  // yesterday should see it today with no signal.
-  if (url.hostname === TILE_HOST) {
-    event.respondWith(tile(req))
-    return
-  }
-
   if (url.origin !== self.location.origin) return
 
   if (req.mode === 'navigate') {
@@ -203,39 +180,3 @@ async function asset(req, url) {
   }
 }
 
-async function tile(req) {
-  const cache = await caches.open(TILE_CACHE)
-  const hit = await cache.match(req)
-  if (hit) return hit
-
-  try {
-    const res = await fetch(req)
-    // An opaque response reports status 0, so `ok` is useless here. Store it —
-    // a broken tile costs one blank square, and refusing to cache would mean
-    // no offline imagery at all.
-    if (res) {
-      cache.put(req, res.clone()).then(() => trim(cache)).catch(() => {})
-    }
-    return res
-  } catch {
-    // No signal and not cached. Resolving empty rather than rejecting lets the
-    // drawn basemap show through instead of the browser logging a failure for
-    // every tile in the viewport.
-    return new Response(null, { status: 504 })
-  }
-}
-
-/**
- * Evict oldest-first once over the cap.
- *
- * Cache Storage has no eviction policy of its own, so without this a rep who
- * pans around for a month fills their device quota and the browser starts
- * dropping the app shell — the offline cold start goes with it. `keys()` returns
- * insertion order, which is a good enough proxy for least-recently-added.
- */
-async function trim(cache) {
-  const keys = await cache.keys()
-  const excess = keys.length - TILE_LIMIT
-  if (excess <= 0) return
-  await Promise.all(keys.slice(0, excess).map((k) => cache.delete(k)))
-}
