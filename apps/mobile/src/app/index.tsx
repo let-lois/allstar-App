@@ -14,6 +14,7 @@ import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTyp
 
 import AllStarWeb, { type AllStarWebRef } from '@/components/allstar-web'
 import type { ApiRequest, ApiResponse } from '@/lib/api-bridge'
+import { destinationFor } from '@/lib/handoff'
 
 /** Content types whose bytes will not survive being read as text. */
 const BINARY = /^(image|video|audio|application\/(octet-stream|pdf|zip))/i
@@ -89,38 +90,32 @@ async function apiFetch(req: ApiRequest): Promise<ApiResponse> {
 /**
  * A link that leaves the app.
  *
- * The web app has four `target="_blank"` links, and one of them is the
- * turn-by-turn handoff on the Navigate screen. Inside a webview a new window
- * has nowhere to go, so the URL loads *in place* — the All-Star app becomes
- * Google Maps, with no back button and no way out but force-quitting. That is
- * the worst of the "buttons do not work" reports: the button works, and it
- * eats the app.
+ * Which way it leaves is decided in `lib/handoff.ts`, which has the reasoning
+ * and a gate. In short: directions open the real Maps app; `tel:`, `sms:` and
+ * `mailto:` go to the OS, which is the only thing that can open them — the
+ * in-app browser cannot, and handing it `tel:` is how Call, Text and Email on
+ * every lead did nothing on a phone; every other web link opens in the in-app
+ * browser, one Done button away from where the rep was.
  *
- * So nothing but the shell's own page is allowed to navigate the webview, and
- * everything else is handed to the OS.
- *
- * Two destinations, because they want different things:
- *
- *   **Directions** go to `Linking.openURL`, so `maps.apple.com` and
- *   `google.com/maps` open the real Maps app with the route loaded. That is the
- *   point of the button — a rep driving to the next street needs the app with
- *   the voice, not a map in a browser tab.
- *
- *   **Everything else** — Street View, a badge page — opens in the in-app
- *   browser, which keeps the rep one Done button away from where they were
- *   instead of switching apps.
- *
- * `openURL` can reject when no app claims the URL; the in-app browser is the
- * fallback rather than a dead tap.
+ * `openURL` can reject when no app claims the URL. For a web link the in-app
+ * browser is the fallback rather than a dead tap. For a system link there is
+ * nothing to fall back to: a phone with no dialler is a tablet, and the tap
+ * ends there rather than in a browser tab that cannot help either.
  */
-const DIRECTIONS = /^https:\/\/(maps\.apple\.com|(?:www\.)?google\.[a-z.]+\/maps)/i
-
 function handOff(url: string): void {
-  if (DIRECTIONS.test(url)) {
-    void Linking.openURL(url).catch(() => WebBrowser.openBrowserAsync(url))
-    return
+  switch (destinationFor(url, DEV_SERVER_ORIGIN)) {
+    case 'directions':
+      void Linking.openURL(url).catch(() => WebBrowser.openBrowserAsync(url))
+      return
+    case 'system':
+      void Linking.openURL(url).catch(() => {})
+      return
+    case 'browser':
+      void WebBrowser.openBrowserAsync(url)
+      return
+    case 'shell':
+      return
   }
-  void WebBrowser.openBrowserAsync(url)
 }
 
 /**
@@ -158,8 +153,7 @@ const DEV_SERVER_ORIGIN: string | null = __DEV__
  * server is allowed in development only, for the reason above.
  */
 function onShouldStartLoadWithRequest(req: ShouldStartLoadRequest): boolean {
-  if (req.url.startsWith('file://') || req.url.startsWith('about:')) return true
-  if (DEV_SERVER_ORIGIN && req.url.startsWith(DEV_SERVER_ORIGIN + '/')) return true
+  if (destinationFor(req.url, DEV_SERVER_ORIGIN) === 'shell') return true
   handOff(req.url)
   return false
 }
