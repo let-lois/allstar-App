@@ -1,0 +1,56 @@
+--- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
++++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
+@@ -58,6 +58,11 @@
+     RNCWebViewBridge fallbackBridge;
+     protected @Nullable
+     WebViewCompat.WebMessageListener bridgeListener = null;
++    /**
++     * The document-start copy of injectedObjectJson. See installInjectedObjectAtDocumentStart().
++     */
++    protected @Nullable
++    WebViewCompat.ScriptHandler injectedObjectStartScript = null;
+ 
+     /**
+      * android.webkit.WebChromeClient fundamentally does not support JS injection into frames other
+@@ -279,7 +284,41 @@
+           "    window." + JAVASCRIPT_INTERFACE + ".injectedObjectJson = function () { return " + (injectedJavaScriptObject == null ? null : ("`" + injectedJavaScriptObject + "`")) + "; };\n" +
+           "})();";
+         evaluateJavascriptWithFallback(js);
++        installInjectedObjectAtDocumentStart();
++      }
++    }
++
++    /**
++     * Make injectedObjectJson available from the first line of page script, the way the iOS side
++     * already does with a WKUserScript at document start.
++     *
++     * evaluateJavascript() above only ever reaches a page that has finished loading, or about:blank
++     * before navigation. Between the navigation and onPageFinished nothing is injected unless
++     * injectedJavaScriptBeforeContentLoaded is set, so an inline <script> in the page's head cannot
++     * see the object. Expo DOM components read it exactly there — synchronously, before their
++     * bundle — and refuse to boot without it, which on Android was a black screen.
++     *
++     * Registered per value and replaced when the prop changes; the evaluateJavascript() path is
++     * kept as the fallback for WebViews without DOCUMENT_START_SCRIPT. JSONObject.quote() rather
++     * than the backtick template above: the value is arbitrary JSON, and a template literal breaks
++     * on a backtick or "${" inside it.
++     */
++    private void installInjectedObjectAtDocumentStart() {
++      if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
++        return;
++      }
++      if (injectedObjectStartScript != null) {
++        injectedObjectStartScript.remove();
++        injectedObjectStartScript = null;
++      }
++      if (injectedJavaScriptObject == null) {
++        return;
+       }
++      String js = "(function(){\n" +
++        "    window." + JAVASCRIPT_INTERFACE + " = window." + JAVASCRIPT_INTERFACE + " || {};\n" +
++        "    window." + JAVASCRIPT_INTERFACE + ".injectedObjectJson = function () { return " + JSONObject.quote(injectedJavaScriptObject) + "; };\n" +
++        "})();";
++      injectedObjectStartScript = WebViewCompat.addDocumentStartJavaScript(this, js, Set.of("*"));
+     }
+ 
+     @SuppressLint("AddJavascriptInterface")

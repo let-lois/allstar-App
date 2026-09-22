@@ -424,7 +424,23 @@ generating `expo-env.d.ts` in CI before `tsc`. P3.
 
 ---
 
-### What changed on this branch during the audit
+### What changed on this branch during and after the audit
+
+P0 is written, gated where a gate can reach it, and unproven on a device:
+
+- `3f05cce` — `expo-dev-client` installed (P0-2).
+- `dc3a09c` — the URL gate allows the dev-server origin under `__DEV__` (P0-3).
+- P0-1 — `apps/mobile/patches/react-native-webview+13.16.1.patch` registers
+  `injectedObjectJson` as a document-start script on Android
+  (`WebViewCompat.addDocumentStartJavaScript`, behind the
+  `DOCUMENT_START_SCRIPT` feature check, value quoted with
+  `JSONObject.quote`), applied by `patch-package` from the workspace's
+  `postinstall`. `verify:webview-patch` checks the installed module carries it
+  and fails by name when the patch is dropped or `postinstall` removed. The
+  Java was checked to parse (`javac`: only missing-dependency errors); it has
+  not been compiled into an APK from here. **Next: `eas build --profile
+  development --platform android`, install, boot, sign in, force-quit, reopen.**
+
 
 - `21e73f4` — reverted the Capacitor origins added to `ALLOWED_ORIGINS`
   earlier in the week. This app does not send them; the native path is the
