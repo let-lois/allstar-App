@@ -7,6 +7,7 @@
  * preference.
  */
 import * as Linking from 'expo-linking'
+import * as Updates from 'expo-updates'
 import * as WebBrowser from 'expo-web-browser'
 import { useCallback, useEffect, useRef } from 'react'
 import { BackHandler, StyleSheet, View } from 'react-native'
@@ -15,6 +16,7 @@ import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTyp
 import AllStarWeb, { type AllStarWebRef } from '@/components/allstar-web'
 import type { ApiRequest, ApiResponse } from '@/lib/api-bridge'
 import { destinationFor } from '@/lib/handoff'
+import { isInspectable } from '@/lib/inspectable'
 
 /** Content types whose bytes will not survive being read as text. */
 const BINARY = /^(image|video|audio|application\/(octet-stream|pdf|zip))/i
@@ -144,6 +146,16 @@ const DEV_SERVER_ORIGIN: string | null = __DEV__
       }
     })()
   : null
+
+/**
+ * Whether Safari's Web Inspector and `chrome://inspect` can see the page.
+ *
+ * Read once, at module scope, because it cannot change while the app runs. The
+ * reasoning — and why this is not simply "not production" — is in
+ * `lib/inspectable.ts`. `Updates.channel` is `null` when updates are not
+ * configured, which that function treats as closed.
+ */
+const WEBVIEW_INSPECTABLE = isInspectable(__DEV__, Updates.channel)
 
 /**
  * `file://` is the shell. Nothing else navigates this webview.
@@ -293,6 +305,17 @@ export default function Index() {
             and the page stays magnified after the rep navigates away.
           */
           setBuiltInZoomControls: false,
+
+          /*
+            Expo's wrapper sets this to `__DEV__` and stops there, which leaves a
+            preview build with no inspector and — since `RNCWebChromeClient`
+            drops console output outside `DEBUG` as well — no way to report a
+            blank page at all. Three Android preview builds were undiagnosable
+            for exactly that reason. The wrapper spreads these props after its
+            own, so this one wins. `lib/inspectable.ts` keeps it shut for
+            production and for any channel it does not recognise.
+          */
+          webviewDebuggingEnabled: WEBVIEW_INSPECTABLE,
 
           mediaPlaybackRequiresUserAction: false,
           /*

@@ -214,12 +214,25 @@ Three things follow, and they decide the whole plan:
   Error level only: the web app calls `console.error` nowhere itself, so
   everything at that level is an uncaught exception or the browser's own
   complaint, and a rep's ordinary session stays out of logcat.
-- **Files:** `apps/mobile/patches/react-native-webview+13.16.1.patch`
+- **The same blindness on iOS [source]:** Expo's wrapper sets
+  `webviewDebuggingEnabled: __DEV__` and nothing else
+  (`expo/src/dom/webview-wrapper.tsx:117`), which becomes
+  `WKWebView.inspectable` (`apple/RNCWebViewImpl.m:571`) — off since iOS 16.4
+  unless set. So a preview `.app` has no Safari Web Inspector either. No native
+  patch is needed there: the wrapper spreads the caller's `dom` props *after*
+  its own defaults, so the shell now decides. `lib/inspectable.ts` opens it for
+  the `development` and `preview` channels and keeps it shut for `production`
+  and for every channel it does not recognise, including a null one — an
+  inspectable webview exposes IndexedDB, and that is where the session token
+  and the rep's leads live.
+- **Files:** `apps/mobile/patches/react-native-webview+13.16.1.patch`,
+  `apps/mobile/src/lib/inspectable.ts`, `apps/mobile/src/app/index.tsx`
 - **Risk:** Low
 - **Verification:** `verify:webview-patch` reads the installed
   `RNCWebChromeClient.java`, isolates `onConsoleMessage`, and checks the
   forwarding sits **below** the debug branch at error level only; restoring the
-  pristine file fails four named checks.
+  pristine file fails four named checks. `verify:inspectable` drives every
+  channel case and checks the route asks rather than shipping a literal.
 
 ### What the blank preview APK ruled out
 
