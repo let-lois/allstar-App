@@ -3,6 +3,7 @@ import { Button } from '../ui/Button'
 import { ProgressBar } from '../ui/ProgressBar'
 import { Collapsible } from '../ui/Collapsible'
 import { useScopedProperties } from '../../store/useAppStore'
+import { resetTileSource } from '../../lib/tile-source'
 import {
   boundsOf,
   cachedCount,
@@ -197,6 +198,10 @@ function OfflineMapsPanel({
       setBusy(false)
       abort.current = null
       refreshCached()
+      // The map remembers which tiles were missing so a pan does not re-read
+      // storage for imagery that was absent a moment ago. A download is the one
+      // thing that turns those misses into hits, so it says so.
+      resetTileSource()
     }
   }
 
@@ -269,6 +274,7 @@ function OfflineMapsPanel({
             onClick={async () => {
               if (!window.confirm('Delete saved map imagery from this device?')) return
               await clearTileCache()
+              resetTileSource()
               setNote(null)
               refreshCached()
             }}

@@ -15,6 +15,8 @@ import { project } from './geo'
  * enhancement, never a dependency.
  */
 
+import * as db from './db'
+
 const KEY = (process.env.EXPO_PUBLIC_MAPTILER_KEY as string | undefined)?.trim() || ''
 
 /** Every host tiles may be fetched from. Mirrored in the CSP in public/_headers. */
@@ -60,21 +62,26 @@ export function tilesAvailable(): boolean {
 /**
  * Can this platform keep imagery at all?
  *
- * Cache Storage is not universal. It is exposed only to a secure context, and
- * the native shell's page is loaded from `file://` — an origin some engines
- * treat as trustworthy and some do not. `cachedCount` already asked this
- * question and `clearTileCache` already swallowed the answer, while
- * `prefetchTiles` — the one a rep actually taps — called `caches.open`
- * unguarded. So on a platform without it the *count* politely returned zero
- * and the *download* threw, into a caller with a `finally` and no `catch`: the
- * button un-pressed, no note appeared, and nothing was saved.
+ * It used to ask for Cache Storage, and that was the wrong question. Cache
+ * Storage is exposed only to a secure context with a network scheme, and a
+ * packaged app has neither: WKWebView serves the bundle through a custom scheme
+ * handler, where `caches` is absent and no service worker runs. Since tiles were
+ * written to Cache Storage and read back only by the worker's fetch handler,
+ * iOS lost the feature twice over — the download declined, and had it not, the
+ * imagery would never have been served back.
  *
- * That is the same lesson learned in two places out of three, which is the
- * shape `download.ts` names in its own header. Asked in one place now, and the
- * screen can decline the offer instead of failing it.
+ * IndexedDB is present under every scheme, which is why the tiles now live
+ * there. What is left to ask is whether this is a browser-like environment at
+ * all: the gates import this module into Node, where it is not.
+ *
+ * Still asked in one place. The lesson that put it here stands — `cachedCount`
+ * returned zero politely, `clearTileCache` swallowed the answer, and
+ * `prefetchTiles`, the one a rep actually taps, threw into a caller with a
+ * `finally` and no `catch`: the button un-pressed, no note appeared, and a rep
+ * walked out believing their territory was saved.
  */
 export function tileStorageAvailable(): boolean {
-  return typeof globalThis !== 'undefined' && 'caches' in globalThis
+  return typeof indexedDB !== 'undefined'
 }
 
 export interface TileRef {
@@ -394,15 +401,16 @@ export interface PrefetchProgress {
 }
 
 /**
- * Download tiles into the cache the service worker reads from.
+ * Download tiles onto the device.
  *
- * Writes to Cache Storage directly rather than relying on the worker to catch
- * the fetches, so a download still works on a first visit before any worker has
- * taken control.
+ * Into IndexedDB, which the map reads directly. It used to be Cache Storage,
+ * which only the service worker read, and that made the whole feature
+ * conditional on something no one could see: a platform without a worker
+ * downloaded imagery it could never display.
  *
  * Requests are made in CORS mode deliberately. An image fetch would be opaque —
  * status unreadable — and a rep would be told their territory downloaded fine
- * while a few hundred quota-exceeded error bodies filled the cache.
+ * while a few hundred quota-exceeded error bodies were stored as tiles.
  */
 export async function prefetchTiles(
   urls: string[],
@@ -422,10 +430,9 @@ export async function prefetchTiles(
   if (!tileStorageAvailable()) {
     return { done: 0, total: urls.length, failed: urls.length, unsupported: true }
   }
-  const cache = await caches.open(TILE_CACHE)
   // Snapshot what is already stored once, for the same reason as cachedCount:
-  // a match() per tile inside the loop is a thousand serialised lookups.
-  const stored = new Set((await cache.keys()).map((r) => r.url))
+  // a lookup per tile inside the loop is a thousand serialised reads.
+  const stored = await db.tileKeys()
   const progress: PrefetchProgress = { done: 0, total: urls.length, failed: 0 }
 
   let cursor = 0
@@ -439,7 +446,7 @@ export async function prefetchTiles(
         if (!stored.has(url)) {
           const res = await fetch(url, { mode: 'cors', signal })
           if (!res.ok) throw new Error(String(res.status))
-          await cache.put(url, res.clone())
+          await db.tilePut(url, await res.blob())
         }
         progress.done += 1
       } catch {
@@ -463,10 +470,9 @@ export async function prefetchTiles(
  * count reading zero for seconds after a download had plainly finished.
  */
 export async function cachedCount(urls: string[]): Promise<number> {
-  if (!('caches' in globalThis) || urls.length === 0) return 0
+  if (!tileStorageAvailable() || urls.length === 0) return 0
   try {
-    const cache = await caches.open(TILE_CACHE)
-    const stored = new Set((await cache.keys()).map((r) => r.url))
+    const stored = await db.tileKeys()
     let n = 0
     for (const url of urls) if (stored.has(url)) n += 1
     return n
@@ -477,7 +483,7 @@ export async function cachedCount(urls: string[]): Promise<number> {
 
 export async function clearTileCache(): Promise<void> {
   try {
-    await caches.delete(TILE_CACHE)
+    await db.tileClear()
   } catch {
     /* nothing cached, or storage unavailable */
   }

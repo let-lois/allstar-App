@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Property, Route } from '../../types'
 import { project, unproject, type Position, centerOf } from '../../lib/geo'
 import { LocationPinSvg } from './LocationPin'
+import { useStoredTiles } from '../../lib/tile-source'
 import { STATUS_COLOR } from '../../data/outcomes'
 import {
   LAYERS,
@@ -270,6 +271,13 @@ export function FieldMap({
       }),
     [layer, view.zoom, view.lat, view.lng, size.w, size.h, scale],
   )
+  /*
+    Downloaded imagery, read back in app code. The service worker used to be
+    the only thing that turned a tile request into a cache hit, and the packaged
+    app has no service worker — see `lib/tile-source.ts`. A tile that is not
+    stored keeps its network URL, so online this is exactly the map it was.
+  */
+  const tileHref = useStoredTiles(tiles)
 
   const toScreen = useCallback(
     (lat: number, lng: number) => {
@@ -839,7 +847,7 @@ export function FieldMap({
         {tiles.map((t) => (
           <image
             key={t.key}
-            href={t.url}
+            href={tileHref(t.url)}
             x={t.x}
             y={t.y}
             width={t.size + 0.5}

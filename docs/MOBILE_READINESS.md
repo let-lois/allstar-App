@@ -211,7 +211,7 @@ key's allowed origins — `LAUNCH.md` item 4).
 | Issue | Where | Why | Fix |
 | --- | --- | --- | --- |
 | **Call, Text and Email do nothing** | `index.tsx:115-118` `handOff()` | `<a href="tel:…">` (`CommActions.tsx:74-105`, `PropertyRow.tsx:59`) navigates the webview; the gate refuses it and calls `WebBrowser.openBrowserAsync('tel:…')`, which only opens http(s). The tap is swallowed. Both platforms | non-http(s) schemes → `Linking.openURL` |
-| **Offline map download cannot work** | `src/lib/tiles.ts`, `public/sw.js`, `FieldMap.tsx:842` | tiles are written to Cache Storage and served back only by the service worker. Under `file://` there is no service worker on either platform and `caches` is absent, so `tileStorageAvailable()` returns false and the download declines. Latent until a MapTiler key is set for the phone | IndexedDB store + app-side read (started; parked in `git stash`) |
+| **Offline map download cannot work** | `src/lib/tiles.ts`, `public/sw.js`, `FieldMap.tsx:842` | tiles are written to Cache Storage and served back only by the service worker. Under `file://` there is no service worker on either platform and `caches` is absent, so `tileStorageAvailable()` returns false and the download declines. Latent until a MapTiler key is set for the phone | **Fixed on this branch:** tiles live in IndexedDB (DB v7) and `FieldMap` reads them in app code; `verify:offlinemaps` proves the map draws from storage with no worker and no network. Still latent on the phone until a MapTiler key is set |
 | **No basemap imagery** | env | `EXPO_PUBLIC_MAPTILER_KEY` unset in all EAS environments (`MOBILE_SETUP.md` §2). The map draws its own basemap — not broken, plainer | the step-4 decision in `MOBILE_SETUP.md`; proxying tiles through the Worker is the secure option |
 | **Tap-a-house address and Street View depend on a Worker deploy** | `api/src/geocode.ts`, `api/src/streetview.ts` | both are in `main`; whether they are live is `version.commit` at `/api/health`, unreachable from here | confirm the deploy |
 
@@ -406,7 +406,7 @@ generating `expo-env.d.ts` in CI before `tsc`. P3.
 
 **P1 — core functionality broken**
 4. `tel:` / `sms:` / `mailto:` → `Linking.openURL`. Gate it.
-5. Offline tiles → IndexedDB with an app-side read (resume the parked work); retire the service-worker tile path in the shell.
+5. ~~Offline tiles → IndexedDB with an app-side read~~ **done**; retiring the service worker's now-redundant tile handler is P2 housekeeping.
 6. Confirm the Worker deploy (`version.commit`) so address lookup and Street View exist on the phone; set the server Google key if not set.
 7. Decide basemap imagery for the phone (proxy through the Worker recommended) and set the key.
 8. An iOS device build profile (internal distribution) so iOS QA is not Expo Go.
@@ -445,6 +445,7 @@ P0 is written, gated where a gate can reach it, and unproven on a device:
 - `21e73f4` — reverted the Capacitor origins added to `ALLOWED_ORIGINS`
   earlier in the week. This app does not send them; the native path is the
   bridge, and `MOBILE_SETUP.md` already said no CORS entry is needed.
-- Offline-tiles work (IndexedDB store, app-side read) is parked in a `git
-  stash` on the working machine, not committed, pending P0.
+- P1: `tel:`/`sms:`/`mailto:` hand off to the OS (`f504531`, `verify:handoff`),
+  and offline tiles moved to IndexedDB with an app-side read (`verify:offlinemaps`
+  extended and sabotage-proved both ways).
 - No other code changed. This document and the repro script are the output.

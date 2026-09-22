@@ -8,8 +8,9 @@ import { prefetchTiles, tileStorageAvailable } from '../src/lib/tiles.ts'
  *
  * The claim under test is the one a rep bets their morning on: tap download on
  * wi-fi, and the imagery for the area you are about to walk is on the device.
- * So this asserts the tiles actually land in Cache Storage — not that a progress
- * bar reached the end.
+ * So this asserts the tiles actually land in IndexedDB — not that a progress
+ * bar reached the end — and that the map then draws from them with no service
+ * worker and no network, which is the packaged app's situation exactly.
  *
  * It also asserts the failure path, which matters more than the happy one. The
  * prefetch requests tiles in CORS mode specifically so a rejected key or an
@@ -25,7 +26,6 @@ import { prefetchTiles, tileStorageAvailable } from '../src/lib/tiles.ts'
  */
 
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:4173'
-const TILE_CACHE = 'allstar-tiles-v1'
 
 // 1x1 transparent PNG.
 const PNG = Buffer.from(
@@ -35,16 +35,15 @@ const PNG = Buffer.from(
 
 /* --- 0. a platform that cannot store imagery at all --------------------- */
 //
-// Run before the browser, and in Node deliberately: Node defines no `caches`,
-// so this is the unsupported platform, for free and without faking anything.
+// Run before the browser, and in Node deliberately: Node defines no
+// `indexedDB`, so this is the unsupported platform, for free and without faking
+// anything.
 //
-// The case is real. Cache Storage is exposed only to a secure context, and the
-// native shell's page is loaded from `file://` — an origin some engines treat
-// as trustworthy and some do not. `cachedCount` asked the question and
-// `clearTileCache` swallowed the answer, while `prefetchTiles`, the one a rep
-// taps, called `caches.open` unguarded — into a caller with a `finally` and no
-// `catch`. The button un-pressed, no note appeared, and a rep would walk out
-// believing their territory was saved.
+// The case is real. `cachedCount` asked whether storage existed and returned
+// zero politely, `clearTileCache` swallowed the answer, while `prefetchTiles`,
+// the one a rep taps, opened storage unguarded — into a caller with a `finally`
+// and no `catch`. The button un-pressed, no note appeared, and a rep would walk
+// out believing their territory was saved.
 {
   const preFails = []
   const preOk = (cond, msg) => {
@@ -52,7 +51,7 @@ const PNG = Buffer.from(
     if (!cond) preFails.push(msg)
   }
 
-  preOk(!tileStorageAvailable(), 'Node has no Cache Storage, so this is the unsupported platform')
+  preOk(!tileStorageAvailable(), 'Node has no IndexedDB, so this is the unsupported platform')
 
   const urls = ['https://api.maptiler.com/a.png', 'https://api.maptiler.com/b.png']
   let threw = null
@@ -89,7 +88,12 @@ const ok = (cond, msg, measured) => {
 
 let served = 0
 let failEveryNth = 0
+let offline = false
 await ctx.route('**://api.maptiler.com/**', async (route) => {
+  if (offline) {
+    await route.abort('internetdisconnected')
+    return
+  }
   served += 1
   if (failEveryNth && served % failEveryNth === 0) {
     await route.fulfill({ status: 429, body: 'rate limited' })
@@ -229,11 +233,76 @@ await page.waitForFunction(
 const note = await page.locator('[role="status"]').first().innerText()
 ok(/territory is saved/.test(note), `download reports success (${note})`)
 
-const cached = await page.evaluate(async (name) => {
-  const c = await caches.open(name)
-  return (await c.keys()).length
-}, TILE_CACHE)
-ok(cached >= total, `tiles are actually in Cache Storage (${cached} entries, expected >= ${total})`)
+const cached = await page.evaluate(
+  () =>
+    new Promise((resolve, reject) => {
+      const req = indexedDB.open('allstar-field')
+      req.onerror = () => reject(req.error)
+      req.onsuccess = () => {
+        const count = req.result.transaction('tiles', 'readonly').objectStore('tiles').count()
+        count.onsuccess = () => resolve(count.result)
+        count.onerror = () => reject(count.error)
+      }
+    }),
+)
+ok(cached >= total, `tiles are actually in IndexedDB (${cached} entries, expected >= ${total})`)
+
+/* --- and the map draws from them with no worker and no signal ------------ */
+//
+// The half that was missing. Tiles used to be written to Cache Storage and read
+// back only by the service worker's fetch handler, so the feature depended on
+// something nobody could see — and the packaged app, loaded from `file://`, has
+// no service worker on either platform. A rep could watch the download succeed
+// and find a blank map in a dead zone.
+//
+// Service workers are blocked in this context and the tile host is now
+// unreachable, so the only way an <image> ends up with a `blob:` href is the
+// app reading its own store.
+offline = true
+await page.getByRole('link', { name: /^Map$/ }).first().click()
+await page.waitForFunction(
+  () => document.querySelectorAll('svg image[href^="blob:"]').length > 0,
+  null,
+  { timeout: 15_000 },
+).catch(() => {})
+// Let the lookups finish: the resolver re-renders once per batch, and a map
+// still settling its view asks for a new batch each time.
+await page.waitForTimeout(2000)
+const drawn = await page.evaluate(
+  () =>
+    new Promise((resolve, reject) => {
+      const req = indexedDB.open('allstar-field')
+      req.onerror = () => reject(req.error)
+      req.onsuccess = () => {
+        const keys = req.result.transaction('tiles', 'readonly').objectStore('tiles').getAllKeys()
+        keys.onerror = () => reject(keys.error)
+        keys.onsuccess = () => {
+          const stored = new Set(keys.result)
+          const all = [...document.querySelectorAll('svg image')]
+          const href = (i) => i.getAttribute('href') ?? ''
+          // A `blob:` href has no URL left to compare, so which tile it *is* comes
+          // from the element's key — the resolver only ever swaps the href.
+          const blob = all.filter((i) => href(i).startsWith('blob:')).length
+          // The ring beyond the viewport, and any edge of the view outside the
+          // territory, are legitimately not downloaded. Those must stay network
+          // URLs; what must never happen is a stored tile drawn from the network.
+          const storedButNetwork = all.filter((i) => stored.has(href(i))).length
+          resolve({ total: all.length, blob, storedButNetwork })
+        }
+      }
+    }),
+)
+ok(drawn.total > 0, `the map renders tiles offline (${drawn.total})`)
+ok(drawn.blob > 0, `and draws from storage with no worker and no signal (${drawn.blob}/${drawn.total} from blob:)`)
+ok(
+  drawn.storedButNetwork === 0,
+  `no tile that is stored is asked of the network (${drawn.storedButNetwork} were)`,
+)
+offline = false
+await page.getByRole('link', { name: /^More$/ }).first().click()
+await page.waitForTimeout(800)
+await page.getByRole('button', { name: /Offline maps/ }).click()
+await page.waitForTimeout(800)
 
 await page
   .locator('dt', { hasText: 'Already saved' })
