@@ -62,3 +62,39 @@
      }
  
      @SuppressLint("AddJavascriptInterface")
+--- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
++++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
+@@ -7,6 +7,7 @@
+ import android.net.Uri;
+ import android.os.Build;
+ import android.os.Message;
++import android.util.Log;
+ import android.view.Gravity;
+ import android.view.View;
+ import android.view.ViewGroup;
+@@ -119,7 +120,24 @@
+         if (ReactBuildConfig.DEBUG) {
+             return super.onConsoleMessage(message);
+         }
+-        // Ignore console logs in non debug builds.
++        /*
++          Upstream drops the message here and returns true, which tells WebView it
++          was handled -- so a release build writes nothing to logcat at all.
++          That is how an internal build can show a blank page and have no way to say
++          why: setWebContentsDebuggingEnabled is also DEBUG-only, so chrome://inspect
++          is gone too, and the page's own errors have nowhere left to go. Three
++          preview builds in a row were undiagnosable for exactly this reason.
++
++          Errors only. This app calls console.error nowhere itself, so everything at
++          this level is an uncaught exception or the browser's own complaint -- the
++          diagnostic, carrying none of the app's own text. Warnings and logs stay
++          dropped, which is what keeps a rep's day out of logcat.
++        */
++        if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
++            Log.w(
++                "RNCWebViewConsole",
++                message.message() + "  (" + message.sourceId() + ":" + message.lineNumber() + ")");
++        }
+         return true;
+     }
+ 

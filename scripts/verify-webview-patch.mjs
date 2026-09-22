@@ -22,8 +22,15 @@ import { resolve } from 'node:path'
  * So this reads the installed module and checks the three things the fix
  * depends on rather than trusting that a file exists.
  *
+ * The same patch keeps a release build able to say what went wrong. Upstream's
+ * `onConsoleMessage` returns `true` outside `ReactBuildConfig.DEBUG`, which
+ * tells WebView the message is handled, so nothing reaches logcat — and
+ * `setWebContentsDebuggingEnabled` is DEBUG-only too, so `chrome://inspect` is
+ * gone as well. Three preview builds showed a blank page with no way to ask
+ * why. Errors now survive into logcat under `RNCWebViewConsole`.
+ *
  * Chromium cannot observe any of this; only a device can. What this gate can
- * hold is that the build will compile the fix in.
+ * hold is that the build will compile both fixes in.
  */
 
 const root = resolve(new URL('..', import.meta.url).pathname)
@@ -87,6 +94,44 @@ ok(
 ok(
   /\.injectedObjectJson = function \(\) \{ return /.test(src),
   'under the exact name the DOM page calls',
+)
+
+/* --- and a release build can still say what went wrong ----------------- */
+//
+// Without this the app is diagnosable only on a debug build, which is the one
+// configuration the bug may not appear in.
+const chrome = resolve(
+  mobile,
+  'node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java',
+)
+const chromeSrc = existsSync(chrome) ? readFileSync(chrome, 'utf8') : ''
+ok(chromeSrc.length > 0, 'the Android WebChromeClient source is present')
+
+// Just the one method, so a match somewhere else in the file cannot stand in
+// for it — and so the debug branch and the release path can be told apart.
+const method = (chromeSrc.split('public boolean onConsoleMessage(ConsoleMessage message) {')[1] ?? '').split(
+  '@Override',
+)[0]
+ok(method.length > 0, 'onConsoleMessage is there to read')
+ok(
+  /Log\.w\(\s*"RNCWebViewConsole"/.test(method),
+  'a release build forwards console errors to logcat',
+)
+ok(
+  /ConsoleMessage\.MessageLevel\.ERROR/.test(method),
+  'at error level only, so a rep\'s day does not end up in logcat',
+)
+ok(
+  !/MessageLevel\.(WARNING|LOG|TIP|DEBUG)\b/.test(method),
+  'and no other level is forwarded',
+)
+ok(
+  method.indexOf('MessageLevel.ERROR') > method.indexOf('ReactBuildConfig.DEBUG'),
+  'below the debug branch, so it is the release path that reports',
+)
+ok(
+  /sourceId\(\)/.test(method) && /lineNumber\(\)/.test(method),
+  'with the file and line, so the message can be placed',
 )
 
 console.log('')
