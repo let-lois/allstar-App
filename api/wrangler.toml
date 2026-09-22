@@ -127,23 +127,29 @@ ALLOWED_ORIGINS = "https://allstar.letlois.com,https://allstar-app.pages.dev,htt
 #                           the console hands the admin a link to pass on by
 #                           hand — exactly as before email existed.
 #                           /api/health reports `mail` and `mailProvider`.
-#   MAPTILER_API_KEY      — NO LONGER USED. MapTiler was the third link in the
-#                           geocoding chain and has been removed. The Worker
-#                           needs no MapTiler key; if one is still set as a
-#                           secret it does nothing, and deleting it is safe.
+#   MAPTILER_API_KEY      — basemap imagery for the web app AND the phone,
+#                           through GET /api/tiles/:layer/:z/:x/:y (tiles.ts).
+#                           A key with NO origin restriction — a Worker sends no
+#                           Origin — which is exactly why it lives here as a
+#                           secret and never in a bundle. Cloudflare's edge cache
+#                           answers repeats, so MapTiler sees one request per
+#                           tile per edge. Unset, the route answers 501 and both
+#                           apps draw their own basemap; /api/health reports it
+#                           as `tiles`.
 #
-#                           Why it went: the free plan allows one active key, and
-#                           it was the *same* key as the front-end's
-#                           VITE_MAPTILER_KEY. The browser needs that key
-#                           origin-locked; a Worker sends no `Origin` header and
-#                           so needs it origin-free. `?` was in the allowed-origins
-#                           list to make one key serve both, which also let anyone
-#                           who read it out of the bundle use it from `curl`.
-#                           With geocoding gone the key is browser-only and can be
-#                           locked to the app's origin, and `?` comes out.
-#
-#                           Tiles are still MapTiler — that is VITE_MAPTILER_KEY
-#                           in the front-end build, not a Worker variable.
+#                           This is the second life of this name. It was the
+#                           geocoding chain's key until MapTiler left the chain
+#                           (see geocode.ts), and was the SAME key as the
+#                           front-end's VITE_MAPTILER_KEY with `?` in its allowed
+#                           origins so one key could serve both — which let
+#                           anyone who read it out of the bundle spend the
+#                           quota from curl (LAUNCH.md item 4). Now the split is
+#                           clean: this key is origin-free and secret; the
+#                           browser key can be retired once the web app reads
+#                           tiles from here too.
+#   MAPTILER_BASE_URL     — test seam only, pointing the proxy at a stand-in.
+#                           Unset in every real deployment.
+
 #   GOOGLE_MAPS_API_KEY   — optional, and tried FIRST when set. The only
 #                           provider here that returns a rooftop rather than a
 #                           point on a block.

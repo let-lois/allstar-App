@@ -123,6 +123,7 @@ const TESTS = [
   { script: 'smoke:mail', kind: 'hosted', port: 8881 },
   { script: 'smoke:onboarding-steps', kind: 'hosted', port: 8891 },
   { script: 'smoke:export', kind: 'hosted', port: 8901 },
+  { script: 'smoke:tiles', kind: 'hosted', port: 8911 },
 
   // --- manual -----------------------------------------------------------
   {
