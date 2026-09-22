@@ -27,6 +27,13 @@
       },
       "channel": "preview"
     },
+    "preview-device": {
+      "extends": "preview",
+      "ios": {
+        "image": "latest",
+        "simulator": false
+      }
+    },
     "production": {
       "autoIncrement": true,
       "android": {
