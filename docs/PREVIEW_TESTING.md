@@ -1,318 +1,592 @@
-# Google Maps on preview — what to configure, and what to test
+# Google Maps on preview — configuration and device tests
 
-Everything in this document is **manual and preview-only**. Nothing here has
-been done for you, nothing here touches production, and MapTiler stays exactly
-where it is until the checklist at the end comes back clean on all three
-surfaces.
+Everything here is **manual and preview-only**. Nothing in it has been done for
+you, nothing touches production, and MapTiler stays exactly where it is until
+the checklist at the end comes back clean on all three surfaces.
 
-The code change this accompanies did four things: fixed Street View's search and
-its error reporting, gave the Google renderer territory drawing, put every map
-screen behind one renderer-selection component, and left the self-rendered map
-in place as the fallback. None of it is switched on by code — it is switched on
-by the two environment variables in step 2, and switched off by removing them.
+The code change this accompanies is switched on by two environment variables and
+switched off by removing them. With them unset, every map and every byte is what
+it was before.
+
+**Two things to know before you start, both measured on this branch:**
+
+1. **A real iPhone cannot receive a `preview` update today.** See §5.3 — the
+   `preview` build profile is iOS-simulator-only, and the TestFlight build
+   listens to the `production` channel, which is out of scope here.
+2. **Metro's transform cache will silently bake stale values into the bundle.**
+   See §3. This is the single most likely way to spend an afternoon on "I set
+   the variables and nothing happened".
 
 ---
 
-## 1. Google Cloud — the part that must happen first
+## 1. Google Cloud — click by click
+
+Everything below is at <https://console.cloud.google.com>. Pick the right
+project in the project dropdown at the top of every page first — the one that
+already holds the Worker's geocoding key.
 
 ### 1.1 APIs to enable
 
-| API | Why | State to confirm |
+Left-hand menu → **APIs & Services** → **Enabled APIs & services** → the
+**+ ENABLE APIS AND SERVICES** button at the top → search each by name → click
+it → **ENABLE**.
+
+| API | Why | Action |
 | --- | --- | --- |
-| **Maps JavaScript API** | The basemap itself. This is the new one | **Enable** |
+| **Maps JavaScript API** | The basemap itself | **Enable** — this is the new one |
 | **Places API (New)** | Address autocomplete in the map's search field | Confirm enabled |
-| **Street View Static API** | `/api/streetview` — the photo on a lead | Confirm enabled |
-| **Geocoding API** | Server-side, already live | Confirm enabled |
-| **Routes API** | Server-side walking/driving routes | Confirm enabled |
-| ~~Map Tiles API~~ | — | **Do not enable.** Its terms forbid the permanent tile storage the offline map does, and nothing in this app asks for it |
+| **Street View Static API** | The photo on a lead, via `/api/streetview` | Confirm enabled |
+| **Geocoding API** | Server-side address → coordinate | Confirm enabled |
+| **Routes API** | Server-side walking/driving route | Confirm enabled |
 
-The Maps JavaScript libraries — `marker`, `places`, `geometry` — are not separate
-products and need nothing enabled. They are requested in the bootstrap URL by
-`src/lib/gmaps.ts`.
+The Maps JavaScript *libraries* — `marker`, `places`, `geometry` — are not
+separate products and need nothing enabled. They are named in the bootstrap URL
+by `src/lib/gmaps.ts`.
 
-### 1.2 Credentials — three keys, and they are not interchangeable
+### 1.2 APIs that must NOT be enabled
 
-| Key | Where it lives | Restriction | Notes |
-| --- | --- | --- | --- |
-| **Web browser key** | Cloudflare Pages build var `VITE_GOOGLE_MAPS_KEY` | **HTTP referrers**: `https://allstar.letlois.com/*`, `https://allstar-app.pages.dev/*`, `http://localhost:5173/*`, `http://127.0.0.1:4173/*` | Compiled into the web bundle and therefore public. The referrer list is what protects it |
-| **Shell key** | EAS env var `EXPO_PUBLIC_GOOGLE_MAPS_KEY` | **None possible** — see below | A *separate* key, so the web key stays locked |
-| **Server key** | Worker secret `GOOGLE_MAPS_API_KEY` | IP or none; never referrer | **Unchanged. Do not reuse it for either of the above.** It is read server-side for geocoding, routes and Street View |
+| API | Why not |
+| --- | --- |
+| **Map Tiles API** | Its terms forbid the permanent tile storage the offline map does. Nothing in this app requests it, and enabling it only widens what a leaked key can spend |
+| **Maps SDK for Android / iOS** | Those are for Google's native SDKs. This app's map runs in a webview and cannot use them; enabling them adds spend surface for nothing |
+| **Places API** (the *old* one) | The app uses Places **(New)**. Leave the legacy one off |
 
-**The shell key cannot be restricted, and this is the one thing to understand
-before agreeing to any of it.** The native app's page is `file://`. It sends no
-`Referer`, so a referrer restriction can never match it; and Google's Android
-and iOS key restrictions authenticate their own native SDKs by app signature,
-which a `fetch()` from inside a webview cannot present. An in-app key is
-unrestricted or rejected. There is no third setting.
+### 1.3 The web browser key
 
-MapTiler had the same problem and the blast radius was a blank map, because its
-free tier is a hard cap. Google is metered with no ceiling. So:
+**APIs & Services** → **Credentials** → **+ CREATE CREDENTIALS** → **API key**.
+A dialog shows the new key. Click **Edit API key** (or find it in the list and
+click its name).
 
-### 1.3 Restrictions and caps — not optional
+1. **Name**: `allstar-web-browser` — so the next person knows which is which.
+2. **Application restrictions** → select **Websites**.
+3. Under *Website restrictions*, click **ADD** once per entry:
+   ```
+   https://allstar.letlois.com/*
+   https://allstar-app.pages.dev/*
+   http://localhost:5173/*
+   http://127.0.0.1:4173/*
+   ```
+   The last two are for local development and the local preview in §4. Google
+   matches these exactly, so the `/*` suffix matters.
+4. **API restrictions** → select **Restrict key** → in the dropdown tick exactly:
+   - Maps JavaScript API
+   - Places API (New)
+   - Street View Static API
 
-On **both** browser keys, set **API restrictions** to exactly:
+   Nothing else. Not Geocoding, not Routes — those are server-side and use a
+   different key.
+5. **SAVE**. Restriction changes can take up to five minutes to take effect.
 
-- Maps JavaScript API
-- Places API (New)
-- Street View Static API
+### 1.4 The mobile / webview shell key
 
-On the **shell key**, additionally:
+Same path: **Credentials** → **+ CREATE CREDENTIALS** → **API key** → **Edit**.
 
-- **A per-API daily quota cap** (Cloud console → APIs & Services → the API →
-  Quotas → *Requests per day*). This is what replaces the hard stop MapTiler
-  gave for free. Pick a number a few times your expected daily map loads. It
-  turns a leaked key from an invoice into an outage, which is the right way
-  round.
-- **A billing budget alert** on the project, at a figure somebody will act on.
+1. **Name**: `allstar-shell-unrestricted-quota-capped` — name it after what it
+   is, so nobody re-uses it by accident.
+2. **Application restrictions** → **None**. See §1.6 for why this is forced
+   rather than lazy.
+3. **API restrictions** → **Restrict key** → the same three APIs as above.
+4. **SAVE**.
+5. Go straight to §1.8 and set the quota caps. This key is spendable by anyone
+   who unzips the APK, and the cap is the only thing bounding it.
 
-Do both before the key exists anywhere outside the console.
+**This must be a different key from §1.3.** One key doing both jobs would mean
+dropping the website restriction from the web build too, which throws away
+protection you can actually have.
 
-### 1.4 The Map ID
+### 1.5 The existing Worker key — unchanged
 
-Cloud console → Google Maps Platform → **Map Management** → Create Map ID.
+**Do not touch it.** `GOOGLE_MAPS_API_KEY` is a Cloudflare Worker secret used
+server-side for Geocoding, Routes and Street View Static. It is not in any
+bundle, it is not referrer-restricted (a Worker sends no `Referer`), and none of
+the work here reads or changes it.
 
-- **Map type: JavaScript**
-- **Raster or vector: Vector**
-- **No Map Style attached.**
+To confirm it is still configured:
 
-The last one matters and is invisible afterwards. The app asks for
-`colorScheme: 'DARK'` so Google's basemap matches the rest of the app; a Map
-Style attached to the Map ID silently overrides that and still reports
-`VECTOR`, so the map comes up light inside a near-black app with nothing
-explaining why. `packages/core/src/basemap.ts` logs a console warning naming
-both causes — check the browser console if the map looks wrong.
+```
+curl -s https://allstar-api.josh-af6.workers.dev/api/health | jq '.config.googleGeocoding, .config.tiles'
+```
 
-Use the **same Map ID** for web and shell. It carries no quota and nothing
+`true, true` means Google geocoding and MapTiler imagery are both still on.
+
+### 1.6 Why the shell key cannot use a referrer restriction
+
+Not a preference — a property of the platform:
+
+- The native app's page is served from `file://`. A `file://` page sends **no
+  `Referer` header at all**, so a website restriction has nothing to match and
+  Google refuses the request.
+- Google's **Android apps** and **iOS apps** key restrictions authenticate a
+  request coming from *Google's own native SDKs*, by app signature or bundle ID.
+  A `fetch()` from inside a webview has no way to present either.
+
+So an in-app key is unrestricted or it is rejected. There is no third setting.
+This is the same mechanism that put a `?` wildcard on the old MapTiler key
+(LAUNCH.md item 4) — except the consequence is worse: MapTiler's free tier is a
+hard cap, so abuse produced a blank map, while Google is metered with no ceiling
+and abuse produces an invoice. §1.8 is what puts the ceiling back.
+
+### 1.7 The Map ID
+
+Left-hand menu → **Google Maps Platform** → **Map management** →
+**CREATE MAP ID**.
+
+1. **Map ID name**: `allstar-field-map`
+2. **Map type**: **JavaScript**
+3. **Raster or vector**: **Vector**
+4. **SAVE**. Copy the ID it gives you (a short alphanumeric string).
+5. **Do not attach a Map style.** Leave the *Map style* field empty.
+
+The last point is invisible afterwards and worth the extra second: the app asks
+for `colorScheme: 'DARK'` so Google's basemap matches the rest of the app, and a
+Map Style attached to the Map ID silently overrides that while still reporting
+`VECTOR`. If the map comes up light inside the dark app, that is where to look —
+`packages/core/src/basemap.ts` logs a console warning naming both causes.
+
+**Use the same Map ID for web and shell.** It carries no quota and nothing
 spendable.
+
+### 1.8 Quota caps — not optional for the shell key
+
+**APIs & Services** → **Enabled APIs & services** → click the API → the
+**QUOTAS & SYSTEM LIMITS** tab → find the *Requests per day* row → tick it →
+**EDIT QUOTAS** → enter a value → **SUBMIT REQUEST**.
+
+Do this for each of the three APIs.
+
+Sizing it: count reps × how many times a day each opens the map, then roughly
+double it. For a 20-rep crew opening the map ~100 times a day that is ~2,000
+loads/day, so a 5,000/day cap leaves headroom and still stops a leaked key cold.
+
+| API | Suggested starting cap | What it counts |
+| --- | --- | --- |
+| Maps JavaScript API | 5,000 / day | One per map screen mount |
+| Street View Static API | 5,000 / day | One per lead whose photo loads — uncovered leads cost nothing, because the free metadata call answers first |
+| Places API (New) | 2,000 / day | One per autocomplete session, not per keystroke |
+
+Check current pricing and free-tier terms in the console before settling on a
+number — Google changes both, and this file will not.
+
+### 1.9 Billing budget alert
+
+Left-hand menu → **Billing** → **Budgets & alerts** → **CREATE BUDGET**.
+
+1. **Name**: `All-Star Maps`
+2. **Scope** → Projects → select this project only.
+3. **Amount** → *Specified amount* → a monthly figure somebody will act on.
+4. **Actions** → leave the 50% / 90% / 100% thresholds, tick **Email alerts to
+   billing admins and users**.
+5. **FINISH**.
+
+The budget alert emails; it does **not** stop spend. The quota caps in §1.8 are
+what actually stop it. Set both.
 
 ---
 
-## 2. Preview activation — the exact variables
+## 2. Preview environment variables
 
-**Do not run any of this against production.**
+**Nothing below goes anywhere near production.**
 
-### 2.1 Web
+### 2.1 Cloudflare Pages — Preview scope only
 
-Cloudflare Pages → the project → Settings → Environment variables →
-**Preview** (not Production):
+<https://dash.cloudflare.com> → **Workers & Pages** → the All-Star Pages project
+→ **Settings** → **Environment variables** → the **Preview** section (not
+Production) → **Add variable**:
 
-```
-VITE_GOOGLE_MAPS_KEY = <the referrer-restricted web key>
-VITE_GOOGLE_MAP_ID   = <the Map ID>
-```
+| Name | Value |
+| --- | --- |
+| `VITE_GOOGLE_MAPS_KEY` | the **web** key from §1.3 |
+| `VITE_GOOGLE_MAP_ID` | the Map ID from §1.7 |
 
 Then redeploy the preview branch. These are **build-time** values — Vite inlines
-them, so setting them without a rebuild changes nothing.
+them into the bundle, so setting them without a rebuild changes nothing.
 
-> **Known blocker for Pages preview URLs.** `ALLOWED_ORIGINS` in
-> `api/wrangler.toml` is an exact-match list, and the hashed
-> `*.allstar-app.pages.dev` preview hostnames are not on it — so sign-in fails
-> with a CORS error on a preview deployment. This is LAUNCH.md item 16 and
-> predates this work. Two ways round it, pick one:
->
-> - **Local, no Worker change (recommended for this test):** build locally with
->   the two variables set and serve it on a port that *is* allowed —
->   `VITE_GOOGLE_MAPS_KEY=… VITE_GOOGLE_MAP_ID=… npm run build && npx vite preview --port 4173 --host 127.0.0.1`.
->   `http://127.0.0.1:4173` is already in `ALLOWED_ORIGINS`.
-> - **Add the specific preview hostname** to `ALLOWED_ORIGINS` and redeploy the
->   Worker. This is a production Worker change; it is listed here for
->   completeness, not as a recommendation.
+> See §4 first. Hashed Pages preview URLs cannot sign in, so the local workflow
+> is the one to use for web testing.
 
-### 2.2 Mobile
+### 2.2 EAS — preview environment only
 
-The `eas-cli` is not installed in this repo, so the exact flag spellings below
-could not be run and confirmed here — check them against `eas env:create --help`
-and `eas update --help` for your version. The variable **names and values** are
-the part that has been verified, and they are what matters.
+Easiest without any CLI-flag risk: <https://expo.dev> → the `all-star-app`
+project → **Environment variables** → **Create variable**, once per row:
+
+| Name | Value | Environment | Visibility |
+| --- | --- | --- | --- |
+| `EXPO_PUBLIC_GOOGLE_MAPS_KEY` | the **shell** key from §1.4 | **Preview** only | Plain text |
+| `EXPO_PUBLIC_GOOGLE_MAP_ID` | the Map ID from §1.7 | **Preview** only | Plain text |
+
+Leave Production unticked on both.
+
+Plain text, not Secret, and the honesty is the point: these values are compiled
+into the bundle and readable by anyone who unzips the APK. Marking them secret
+would misdescribe what ships, and a "secret" EAS variable is not exposed to the
+bundler anyway. The quota cap in §1.8 is the actual control.
+
+The CLI equivalent, if you prefer it — confirm the flags against
+`eas env:create --help` for your version, since `eas-cli` is not installed in
+this repo and the spellings could not be run and checked here:
+
+```
+cd apps/mobile
+eas env:create --environment preview --name EXPO_PUBLIC_GOOGLE_MAPS_KEY --value '<shell key>' --visibility plaintext
+eas env:create --environment preview --name EXPO_PUBLIC_GOOGLE_MAP_ID   --value '<map id>'    --visibility plaintext
+eas env:list preview     # both present
+eas env:list production  # neither present
+```
+
+### 2.3 `EXPO_PUBLIC_MAPTILER_KEY` — leave it or delete it, it does nothing
+
+Verified: **no source file reads `EXPO_PUBLIC_MAPTILER_KEY` or
+`VITE_MAPTILER_KEY`, and `vite.config.ts` does not pass either.** They have been
+dead since the tile proxy moved to the Worker.
+
+- Keeping them during preview costs nothing and changes nothing.
+- Deleting them costs nothing and changes nothing.
+- **Neither affects MapTiler imagery.** That comes from the Worker secret
+  `MAPTILER_API_KEY`, which must stay — `/api/health` reporting `"tiles": true`
+  is what keeps the offline map and the `FieldMap` fallback drawing imagery.
+
+Recommendation: leave them alone for now. Deleting a dead variable during a test
+window only adds a variable to the experiment.
+
+---
+
+## 3. Metro cache safety — the OTA publish sequence
+
+Measured on this branch, not inferred. Exporting with both variables set:
+
+- **Warm cache**: `src/lib/gmaps.ts` came out of the bundle with **both** Google
+  values compiled to `undefined`, while `src/components/property/StreetView.tsx`
+  — edited that day, so a cache miss — got the real literal.
+- **Cleared cache**: both carried correctly.
+
+`EXPO_PUBLIC_*` values are not part of Metro's transform cache key, so a module
+you have not touched keeps whatever was inlined the last time it was
+transformed. `gmapsConfigured()` then returns false, the app quietly keeps its
+own renderer, and nothing errors — identical to never having set the variables.
+
+**So clear the cache by deleting it, which no CLI flag spelling can get wrong:**
+
+```
+cd apps/mobile
+rm -rf "${TMPDIR:-/tmp}"/metro-cache "${TMPDIR:-/tmp}"/metro-file-map-* .expo
+```
+
+### 3.1 Verify the bundle before publishing
+
+Export locally first and check what came out. **Nothing below prints a key** —
+`grep -c` reports a count and never the matched text.
+
+```
+cd apps/mobile
+rm -rf "${TMPDIR:-/tmp}"/metro-cache "${TMPDIR:-/tmp}"/metro-file-map-* .expo
+
+export EXPO_PUBLIC_GOOGLE_MAPS_KEY='<shell key>'
+export EXPO_PUBLIC_GOOGLE_MAP_ID='<map id>'
+
+npx expo export --clear --platform android --output-dir /tmp/gmaps-check
+
+BUNDLE=$(ls /tmp/gmaps-check/www.bundle/*.js)
+echo "map id occurrences: $(grep -c -F -- "$EXPO_PUBLIC_GOOGLE_MAP_ID" "$BUNDLE")"
+echo "key occurrences:    $(grep -c -F -- "$EXPO_PUBLIC_GOOGLE_MAPS_KEY" "$BUNDLE")"
+```
+
+**The map-id count is the one that decides it, and it must be ≥ 1.**
+
+Why that one line is sufficient: `EXPO_PUBLIC_GOOGLE_MAP_ID` is read in exactly
+one place in the entire codebase — `src/lib/gmaps.ts:27`. So if the string is in
+the bundle at all, `MAP_ID` is non-empty in that module; and `KEY` is the
+constant on the line above it, transformed by the same cache entry, so it is
+non-empty too. `gmapsConfigured()` is `!!KEY && !!MAP_ID`, so it evaluates
+**true**.
+
+A count of `0` means the bundle has no Map ID, `gmapsConfigured()` is false, and
+the Google map will not appear on the device — whatever the EAS dashboard says
+the variables are. Delete the caches and export again.
+
+Clean up when you are done, so no key sits in a temp directory:
+
+```
+rm -rf /tmp/gmaps-check
+unset EXPO_PUBLIC_GOOGLE_MAPS_KEY EXPO_PUBLIC_GOOGLE_MAP_ID
+```
+
+---
+
+## 4. Local web preview — the workflow that actually works
+
+Hashed Cloudflare Pages preview URLs **cannot sign in**: `ALLOWED_ORIGINS` in
+`api/wrangler.toml` is an exact-match list and the per-deployment
+`*.allstar-app.pages.dev` hostnames are not on it. That is LAUNCH.md item 16 and
+it predates this work. Changing it is a production Worker change and is out of
+scope here.
+
+`http://127.0.0.1:4173` **is** on the list, so build and serve locally:
+
+```
+cd /path/to/allstar-App
+
+VITE_GOOGLE_MAPS_KEY='<web key>' \
+VITE_GOOGLE_MAP_ID='<map id>' \
+npm run build
+
+npx vite preview --port 4173 --host 127.0.0.1
+```
+
+Then open **http://127.0.0.1:4173** — not `localhost:4173`, which is a different
+origin string and is on the list only for the dev server on port 5173.
+
+### 4.1 Confirming the Google renderer is actually active
+
+Two checks, neither needing a console:
+
+1. **Look at the bottom-left of the map.** `FieldMap` prints its tile
+   attribution there — `© MapTiler © OpenStreetMap contributors`. If you can see
+   that, you are on the fallback renderer. Google draws its own attribution and
+   logo along the bottom instead.
+2. **Sign in as an admin → `/admin/settings` → "Google Maps on this build".**
+   A built-in panel that reports, in order: whether a browser key is compiled
+   in, whether a Map ID is compiled in, whether Maps JavaScript accepts the key,
+   whether Places is enabled, and whether Geocoding is enabled. It also has a
+   button that makes one billed request against a public landmark, so you can
+   prove the key works without driving anywhere.
+
+If you want a one-liner in the browser console:
+
+```js
+!!document.querySelector('.gm-style')                        // true  → Google
+document.querySelectorAll('[data-marker="pin"]').length > 0  // true  → FieldMap
+```
+
+### 4.2 Testing the Admin Console locally
+
+The console is desktop software and is **not in the phone bundle at all** — see
+§7. On the web it works at any width. Sign in as each role using the demo
+accounts:
+
+| Role | Demo name | Expect |
+| --- | --- | --- |
+| super admin | Curtis Lane | everything, including Clients |
+| admin | Nadia Petrov | Settings yes, Clients refused |
+| manager | Ray Okafor | no Settings, no Clients, both refused by URL |
+| field rep | Dana Whitfield | no console link at all; `/admin` refused |
+
+---
+
+## 5. Mobile preview OTA
+
+### 5.1 The publish
 
 ```
 cd apps/mobile
 
-# preview only — production is deliberately absent from these commands
-eas env:create --environment preview \
-  --name EXPO_PUBLIC_GOOGLE_MAPS_KEY --value '<the shell key>' --visibility plaintext
-eas env:create --environment preview \
-  --name EXPO_PUBLIC_GOOGLE_MAP_ID --value '<the Map ID>' --visibility plaintext
+# 1. clear the cache (§3) — this is the step that matters
+rm -rf "${TMPDIR:-/tmp}"/metro-cache "${TMPDIR:-/tmp}"/metro-file-map-* .expo
 
-eas env:list preview          # confirm both are there and production has neither
+# 2. confirm the channel points where you think it does
+eas channel:view preview
 
-# Clear the bundler cache for this one — see the box below for why.
-# Confirm the flag's spelling for your CLI version first:
-#   eas update --help | grep -i cache
-eas update --branch preview --channel preview \
-  --message "Google basemap + Street View fixes (preview only)"
+# 3. publish to the preview branch only
+eas update --branch preview --message "Google basemap + Street View fixes (preview)"
 ```
 
-> **Metro's transform cache can bake a stale value into the bundle, silently.**
-> Measured on this branch, not inferred:
->
-> ```
-> EXPO_PUBLIC_GOOGLE_MAPS_KEY=<value> EXPO_PUBLIC_GOOGLE_MAP_ID=<value> \
->   npx expo export --platform android
-> ```
->
-> With a warm cache, `src/lib/gmaps.ts` came out of the bundle compiled as
-> `(null == void 0 ? void 0 : …) || ''` — **both variables substituted with
-> `undefined`** — while `src/components/property/StreetView.tsx`, which had been
-> edited that day and so missed the cache, got the real literal. The same export
-> with `--clear` carried both values correctly.
->
-> `EXPO_PUBLIC_*` values are not part of Metro's transform cache key, so a module
-> you have not touched keeps whatever was inlined the last time it was
-> transformed. `gmapsConfigured()` then returns false, the app quietly keeps its
-> own renderer, and nothing errors — the failure looks exactly like not having
-> set the variables at all.
->
-> **So publish the preview update with the bundler cache cleared** — the
-> `eas-cli` is not installed in this repo, so confirm the flag's exact spelling
-> with `eas update --help` rather than taking one from here — and then check the
-> result, which is the part that does not depend on a flag name:
->
-> ```
-> npx expo export --clear --platform android --output-dir /tmp/check
-> grep -c '<the first 8 characters of your Map ID>' /tmp/check/www.bundle/*.js
-> ```
->
-> A count of `0` means the bundle has no Map ID and the Google map will not
-> appear on the device, whatever EAS says the variables are.
+`eas update` bundles **on the machine you run it from**, which is exactly why
+step 1 matters. If your `eas-cli` has a cache flag
+(`eas update --help | grep -i cache`), pass it as well — belt and braces.
 
-`plaintext`, not `secret`, and the honesty is the point: these values are
-compiled into the bundle and readable by anyone who unzips the APK. Marking them
-secret would misdescribe what ships. The quota cap in step 1.3 is the actual
-control.
+Never `--branch production`, never `--channel production`.
 
-**No new native build is required.** Nothing added a native module, a config
-plugin or an `Info.plist` key, so `runtimeVersion` (`sdkVersion` →
-`exposdk:57.0.0`) does not move and an OTA update carries the change.
+### 5.2 Confirming the OTA reached the device
 
-Note that the `production` channel has never had an update published to it, so
-the first `eas update --channel production` — when you eventually get there —
-will be the first time that path has ever been exercised. Not a reason to do it
-now; a reason to not do it casually.
+**Relaunch twice.** `expo-updates` defaults to downloading on launch and
+applying on the *next* launch, so the first reopen fetches it and the second
+shows it. Force-close the app fully between the two.
 
-### 2.3 Rolling back
+Then, in order of how much they prove:
 
-Delete the two variables and redeploy / re-update. `gmapsConfigured()` becomes
-false, every map falls back to the self-rendered renderer with MapTiler imagery,
-and the app is byte-for-byte what it is today. There is no other switch to find.
+1. **The Street View sentence.** Open the map, tap a pin, look at the photo
+   frame on the sheet. If it can say *"No Street View imagery is available near
+   this property"* or *"Property imagery is temporarily unavailable"*, the new
+   bundle is running. The old bundle can only say *"No photo of this house
+   yet"*, and that sentence no longer exists anywhere in the code. This check
+   works **even if the Google configuration is wrong**, which makes it the one
+   to do first: it separates "the OTA did not arrive" from "the OTA arrived and
+   the key is wrong".
+2. **The map itself.** Google imagery instead of the drawn grid, and no
+   `© MapTiler` attribution at the bottom-left.
+3. **From your machine**: `eas update:list --branch preview` shows the update
+   group, its runtime version and its platforms. Confirm the runtime version
+   matches the installed build's — both should be `exposdk:57.0.0`, since
+   `app.json` sets `runtimeVersion.policy: "sdkVersion"`.
+
+### 5.3 A real iPhone cannot take a `preview` update today
+
+This is a genuine blocker, not a caveat. From `apps/mobile/eas.json`:
+
+- The **`preview`** profile sets `ios.simulator: true` — it builds for the iOS
+  **Simulator only** and cannot be installed on a phone.
+- The **`preview-device`** profile exists for exactly this (`simulator: false`,
+  inheriting `channel: preview` and `distribution: internal`), but no build has
+  been made from it. It needs an ad-hoc provisioning profile with each test
+  device's UDID registered, and this project's history is that
+  `eas credentials --platform ios` has to be run interactively.
+- The existing **TestFlight build listens to the `production` channel**, so a
+  `preview` update will not reach it — and publishing to `production` is out of
+  scope.
+
+So iPhone testing needs one of:
+
+- **(a)** `eas build --profile preview-device --platform ios`, after registering
+  the test devices (`eas device:create`) and completing credentials
+  interactively. Then install via the internal-distribution link and the
+  `preview` OTA reaches it. **This is an iOS-only requirement forced by the
+  simulator flag — not by anything in this change, and Android needs no new
+  build.**
+- **(b)** The iOS **Simulator** on a Mac, using the existing `preview` profile.
+  Good enough for everything except the two things a simulator cannot tell you:
+  real GPS and real WebKit performance on device hardware.
+
+Android has no equivalent problem: the `preview` profile builds an internal APK
+on `channel: preview`, so an already-installed preview APK takes the update.
 
 ---
 
-## 3. Device checklist
+## 6. Device test order
 
-Three columns to fill in: **pass / fail / not reached**. A blank is not a pass.
+Run them in this order. Each stage catches things that would waste your time in
+the next.
 
-### 3.1 iPhone (TestFlight or a `preview` dev build)
+### Stage 1 — Desktop / local web (§4)
+
+Fastest feedback, and the console only exists here.
 
 **Map**
-- [ ] The map loads and draws Google imagery (streets, with labels)
-- [ ] SAT toggle switches to satellite/hybrid
-- [ ] Satellite choice **survives leaving the screen and coming back**
-- [ ] Satellite choice survives a full app restart
+- [ ] Google renderer active (no `© MapTiler` attribution; `/admin/settings` panel all green)
+- [ ] Standard map draws with labels
+- [ ] SAT button switches to hybrid/satellite
+- [ ] Map type persists across a navigation away and back
+- [ ] Map type persists across a full page reload
 - [ ] Pins render in status colours
-- [ ] Clustering groups pins when zoomed out, and a cluster tap zooms to it
-- [ ] Tapping a pin opens the property sheet
-- [ ] Tapping open map dismisses the sheet
-- [ ] "Center on my location" works and the blue dot is where you are
-- [ ] Pinch-zoom does not drop a new-lead pin (this was a reported bug)
-- [ ] Zoom out fully — the map keeps going to a world view, not a neighbourhood
+- [ ] Clusters group when zoomed out; a cluster tap zooms to it
+- [ ] Tapping a pin opens the sheet; tapping open map dismisses it
+- [ ] Add a lead: the picker places a pin where you click
+- [ ] With the form open, clicking an existing lead's dot still places the *new* pin
+- [ ] Current location works
+- [ ] Route line draws on the navigate screen
+- [ ] Flight line: open a lead on another continent — dashed line with a plane, whole arc framed
 
-**Add a lead**
-- [ ] The add-lead picker places a pin where you tap
-- [ ] With the form open, a tap on an *existing* lead's dot still places the new
-      pin rather than opening that lead
+**Drawing (console)**
+- [ ] `/admin/territories` → New territory → each tap places a white vertex handle
+- [ ] Outline dashed under three points, filled at three
+- [ ] A tap **inside** the filled shape adds a vertex (does not get swallowed)
+- [ ] A tap **on a lead pin** while drawing adds a vertex (does not open the lead)
+- [ ] A tap **on a cluster bubble** while drawing adds a vertex (does not zoom)
+- [ ] Undo point / Start over clear the shape from the map
+- [ ] "Create with N leads" counts what you enclosed
+- [ ] `/admin/lists` → same, plus a saved list's boundary shows read-only
+- [ ] `/admin/leads` → lasso selects the same leads it used to
 
 **Street View**
-- [ ] A lead on a photographed street shows a photo
-- [ ] The photo is **of the house**, not of the road ahead — this is the heading
-      fix and it is the whole point
-- [ ] A house set back from the road still gets a photo — this is the radius fix
-- [ ] A genuinely uncovered rural lead reads
-      *"No Street View imagery is available near this property"*
-- [ ] Nothing anywhere reads "No photo of this house yet" — that sentence is gone
+- [ ] A normal suburban lead shows a photo
+- [ ] The photo is **of the house**, not of the road ahead
+- [ ] A lead set well back from the road still gets a photo
+- [ ] A genuinely uncovered rural lead reads *"No Street View imagery is available near this property"*
+- [ ] Nothing anywhere reads *"No photo of this house yet"*
+- [ ] **Failure simulation** (safe and reversible): in the Cloud console disable
+      **Street View Static API**, wait a minute, reload a lead → the frame must
+      read *"Property imagery is temporarily unavailable"* and must **not** claim
+      the street is unphotographed. Re-enable it and confirm the photo returns.
+      Do this against the preview key's project only.
 
-**Street View failure states** *(needs a deliberate break — easiest is to
-temporarily disable Street View Static API in the console, then re-enable)*
-- [ ] With the API disabled, the frame reads
-      *"Property imagery is temporarily unavailable"*
-- [ ] It does **not** claim the street is unphotographed
-- [ ] Re-enabling the API restores the photo without an app restart
+**Roles** — the table in §4.2.
 
-**Console and roles**
-- [ ] Signed in as **admin**: no "Admin console" row in More (expected — the
-      console is not in the phone bundle; see §4)
-- [ ] Signed in as **rep**: no console link anywhere, and typing `/admin`
-      lands on Today rather than a blank screen
+**Fallback**
+- [ ] Temporarily blank `VITE_GOOGLE_MAPS_KEY`, rebuild, reload → `FieldMap`
+      renders with MapTiler imagery and the `© MapTiler` attribution returns
+- [ ] Offline maps download still works and the saved area draws with no network
+- [ ] Restore the key and rebuild
 
-### 3.2 Android (`preview` APK)
+### Stage 2 — Android preview APK
 
-Everything in 3.1, plus the four that are Android-specific:
+Everything in Stage 1 that is not console-only, plus the Android-specific set.
+The console is **not in this bundle** and must not appear (§7).
 
-- [ ] **The map is not blank.** This is the highest-risk unknown in the whole
-      change: Google's vector renderer compiles WebAssembly and runs label
-      layout in a worker created from a `blob:` URL, and Android System WebView
-      has historically blocked blob-URL workers under a `file://` origin
-- [ ] Labels and roads paint correctly (a blank grey rectangle with the chips
-      floating on it is the failure)
-- [ ] If the map **does** fail, it falls back to the self-rendered map with
-      MapTiler tiles within ~10 seconds rather than staying grey
-- [ ] The app does not crash or reset to Home on any map interaction
+- [ ] **Blank-map check.** The map is not a grey rectangle with the filter chips
+      floating on it. This is the highest-risk unknown in the whole change:
+      Google's vector renderer compiles WebAssembly and runs label layout in a
+      worker created from a `blob:` URL, and Android System WebView has
+      historically blocked blob-URL workers under a `file://` origin
+- [ ] Labels and roads paint correctly
+- [ ] If the map does fail, it falls back to `FieldMap` with MapTiler imagery
+      within ~10 seconds rather than staying grey
+- [ ] No crash and no reset to Home on any map interaction
+- [ ] Pinch-zoom does not drop a new-lead pin
+- [ ] Offline map download still works
 
-> If the blob-worker problem bites: the fix is **not** a code change. Switch the
-> Map ID to **raster** in the Cloud console — raster needs no WebAssembly and no
-> blob worker. Slower and less pretty, and it costs nothing else.
+**If the map is blank on Android** — the fix is not a code change:
 
-### 3.3 Desktop (the office console)
+1. Cloud console → **Google Maps Platform** → **Map management** → your Map ID.
+2. Change **Raster or vector** from Vector to **Raster**. Save.
+3. Force-close and reopen the app twice.
 
-- [ ] `/admin/territories` — the map draws Google imagery
-- [ ] **Drawing a territory**: each tap places a visible white vertex handle
-- [ ] The outline is dashed while under three points and fills in at three
-- [ ] Tapping *inside* the filled shape adds a vertex — it does not get
-      swallowed by the polygon
-- [ ] Tapping *on a lead pin* while drawing adds a vertex — it does not open
-      the lead
-- [ ] Tapping *on a cluster bubble* while drawing adds a vertex — it does not
-      zoom
-- [ ] Undo point / Start over clear the shape from the map
-- [ ] "Create with N leads" counts the same N as the self-rendered map did
-- [ ] `/admin/lists` — the same, plus a saved list's boundary displays read-only
-- [ ] `/admin/leads` — the lasso selects the same leads it used to
-- [ ] Territory rename and delete still work
-- [ ] Street View shows on a lead's detail
+A raster map needs no WebAssembly and no blob worker. It is slower and less
+pretty, the dark colour scheme will not apply, and it costs nothing else. If
+that fixes it, you have confirmed the cause; decide then whether to keep raster
+or stay on `FieldMap` for Android.
 
-**Role safety, on desktop where the console exists**
-- [ ] **rep** → no console link in the side rail; `/admin` by URL is refused
-      with "Not available for your role"
-- [ ] **manager** → console visible; no Settings, no Clients; both refused by URL
-- [ ] **admin** → console visible; Settings yes, Clients no
-- [ ] **super admin** → everything
+### Stage 3 — iPhone
+
+Only reachable via §5.3 option (a) or (b). Same list as Stage 2 minus the
+Android-specific section, plus:
+
+- [ ] Safe-area insets correct — map runs under the notch, dock clear of the
+      home indicator
+- [ ] Page zoom does not happen when pinching the map
 
 ---
 
-## 4. The Admin Console on a phone — what is actually true
+## 7. The Admin Console on a phone
 
 Worth stating plainly, because "Admin Console can't be reached in app" has been
-reported as a bug and it is not one:
+reported as a bug and is not one.
 
 **The console is deliberately absent from the native bundle.**
 `apps/mobile/metro.config.js` swaps `src/adminRoutes.tsx` for
-`apps/mobile/src/admin-routes-stub.tsx`, which returns `null`. So inside the
-shell the `/admin/*` routes do not exist, and `App`'s catch-all sends `/admin`
-to `/today`.
+`apps/mobile/src/admin-routes-stub.tsx`, which returns `null`, so inside the
+shell the `/admin/*` routes do not exist and `App`'s catch-all sends `/admin` to
+`/today`.
 
-It is not a role check, not a breakpoint, and not `Platform.OS`. The console
-screens themselves are mobile-first and gated at 390px and 412px by
-`verify:console`; they render fine on a phone *on the web*.
+It is not a role check, not a responsive breakpoint, and not `Platform.OS`. The
+console screens are mobile-first and are gated at 390px and 412px by
+`verify:console`; they render fine on a phone **on the web**.
 
-What was fixed here is the navigation half: `More` already hid the dead link in
-the shell, and the **side rail did not** — so on any native surface wide enough
-for the rail (an Android tablet, a large display mode) a manager was offered a
-Console link that silently dropped them on the rep's Today screen. That link is
-now hidden in the shell too, and `verify:console` holds it.
+What was fixed alongside this work is the navigation half: `More` already hid
+the dead link inside the shell, and the **side rail did not** — so on any native
+surface wide enough for the rail (an Android tablet, a large display mode) a
+manager was offered a Console link that silently dropped them on the rep's Today
+screen. That link is now hidden in the shell too.
 
-**Putting the console in the phone bundle is a separate decision and has not
+**Putting the console in the phone bundle is a separate decision that has not
 been made.** It means removing the Metro swap and converting
 `src/adminRoutes.tsx`'s eleven `lazy()` imports to static ones — the dynamic
 imports are why the swap exists, because `expo export` could not serialise the
-shared chunk they produced. It adds ~9,300 lines of desktop-first console to
-every rep's download. Ask for it explicitly if it is wanted.
+shared chunk they produced — and adding ~9,300 lines of desktop-first console to
+every rep's download.
+
+---
+
+## 8. MapTiler stays
+
+Nothing in this document removes MapTiler, and nothing should until every box
+above is ticked on web, iPhone and Android.
+
+The `FieldMap` renderer is what runs when Google is unavailable — no signal, a
+device whose WebGL is blocked, a rejected key — and it draws MapTiler imagery
+through `/api/tiles` and serves the offline download. Removing MapTiler before
+Google is proven would mean the fallback loses its imagery at exactly the moment
+it is needed.
+
+When the time comes, the list is: the `MAPTILER_API_KEY` Worker secret,
+`api/src/tiles.ts` and its route, the `tiles` flag in `/api/health`,
+`MAPTILER_API_KEY`/`MAPTILER_BASE_URL` in `api/src/types.ts` and
+`api/wrangler.toml`, `src/lib/tiles.ts`, the offline-map subsystem, four gates
+and the docs. Not before.
