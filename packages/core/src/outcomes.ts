@@ -193,4 +193,7 @@ export const PHOTO_CATEGORIES: PhotoCategoryDef[] = [
   { key: 'document', label: 'Document', icon: 'doc' },
   { key: 'before', label: 'Before', letter: 'B' },
   { key: 'after', label: 'After', letter: 'A' },
+  // Last, and the only one that asks a question: what is it? The answer is
+  // stored as `Photo.type`, and the strip will not file an "other" without one.
+  { key: 'other', label: 'Other', letter: 'O' },
 ]

@@ -241,6 +241,9 @@ CREATE TABLE IF NOT EXISTS photos (
   property_id  TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
   visit_id     TEXT REFERENCES visits(id) ON DELETE SET NULL,
   category     TEXT NOT NULL,
+  -- What an 'other' photo is of, in the rep's words. NULL for every named
+  -- category: the type belongs to the category it was typed for.
+  type         TEXT,
   -- The image lives in R2; only the key is relational.
   r2_key       TEXT NOT NULL,
   width        INTEGER,

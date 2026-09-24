@@ -324,6 +324,7 @@ export async function syncPropertyPhotos(propertyId: string): Promise<void> {
       propertyId: r.propertyId,
       visitId: r.visitId,
       category: r.category as Photo['category'],
+      type: r.type ?? undefined,
       width: r.width ?? 0,
       height: r.height ?? 0,
       bytes: r.bytes ?? 0,

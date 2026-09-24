@@ -548,6 +548,20 @@ const MIGRATIONS: Migration[] = [
       },
     ],
   },
+  {
+    /*
+      A photo filed as "other" says what it is. Additive and nullable: every
+      existing photo has a named category and no type, which is exactly what
+      NULL means here.
+    */
+    id: '023-photos-type',
+    statements: [
+      {
+        sql: 'ALTER TABLE photos ADD COLUMN type TEXT',
+        skipIfColumn: { table: 'photos', column: 'type' },
+      },
+    ],
+  },
 ]
 
 async function hasColumn(

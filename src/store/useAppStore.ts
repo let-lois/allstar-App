@@ -269,7 +269,14 @@ interface AppState {
     img: { dataUrl: string; width: number; height: number; bytes: number },
     category: PhotoCategory,
     visitId?: string,
+    /** What an `other` photo is of. Ignored for every named category. */
+    type?: string,
   ) => Promise<string>
+  /**
+   * Refile a photo: a new category, and a type when that category is
+   * `other`. Leaving `other` drops the old type on purpose — see `Photo.type`.
+   */
+  updatePhotoCategory: (id: string, category: PhotoCategory, type?: string) => Promise<void>
   /** Set or clear the signed-in person's profile photo. `null` removes it. */
   setMyAvatar: (dataUrl: string | null) => Promise<void>
   /**
@@ -366,6 +373,17 @@ async function enterLive(token: string, dto: SessionUserDTO): Promise<void> {
   void store.refreshPosition()
   // Anything queued before the session lapsed can go up now.
   void drain()
+}
+
+/**
+ * The type a photo keeps: only what was typed for `other`, trimmed, and
+ * nothing at all for a named category — the same rule the server applies
+ * (`photoType` in api/src/mutations.ts), so the phone never shows a type the
+ * office will not have.
+ */
+function photoTypeFor(category: PhotoCategory, type: string | undefined): string | undefined {
+  const t = type?.trim()
+  return category === 'other' && t ? t.slice(0, 60) : undefined
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -1194,7 +1212,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return id
   },
 
-  async addPhoto(propertyId, img, category, visitId) {
+  async addPhoto(propertyId, img, category, visitId, type) {
     const id = uid('ph')
     const pos = get().position
     const photo: Photo = {
@@ -1202,6 +1220,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       propertyId,
       visitId,
       category,
+      type: photoTypeFor(category, type),
       dataUrl: img.dataUrl,
       width: img.width,
       height: img.height,
@@ -1222,8 +1241,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
     // The blob rides the queue; on a weak link this is the row that waits.
-    await enqueue('photo.create', { id, propertyId, category, bytes: photo.bytes })
+    await enqueue('photo.create', { id, propertyId, category, type: photo.type ?? null, bytes: photo.bytes })
     return id
+  },
+  async updatePhotoCategory(id, category, type) {
+    const photo = get().photos[id]
+    if (!photo) return
+    // Local first, queued second, like every other write. The type is
+    // decided by the category it is filed under, so leaving `other` clears it.
+    const updated: Photo = { ...photo, category, type: photoTypeFor(category, type) }
+    await db.put('photos', updated)
+    set((s) => ({ photos: { ...s.photos, [id]: updated } }))
+    await enqueue('photo.update', { id, category, type: updated.type ?? null })
   },
 
   /**

@@ -186,12 +186,21 @@ export type PhotoCategory =
   | 'document'
   | 'before'
   | 'after'
+  /** Anything the seven above do not name — with `Photo.type` saying what. */
+  | 'other'
 
 export interface Photo {
   id: string
   propertyId: string
   visitId?: string
   category: PhotoCategory
+  /**
+   * What an `other` photo is of, in the rep's words — "skylight", "gutter",
+   * "permit". Present only when the category is `other`; choosing any of the
+   * named categories clears it, because a type that describes a category the
+   * photo no longer has is a lie waiting to be read.
+   */
+  type?: string
   /**
    * The compressed image itself.
    *
@@ -417,6 +426,8 @@ export type MutationKind =
   | 'visit.complete'
   | 'note.create'
   | 'photo.create'
+  /** A photo filed under a different category, or a different `type`, after the fact. */
+  | 'photo.update'
   | 'property.status'
   /** Address and contact details corrected at the door. Never status. */
   | 'property.update'

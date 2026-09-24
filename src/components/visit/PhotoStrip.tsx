@@ -28,12 +28,36 @@ export function PhotoStrip({
 }) {
   const categories = usePhotoCategories()
   const addPhoto = useAppStore((s) => s.addPhoto)
+  const updatePhotoCategory = useAppStore((s) => s.updatePhotoCategory)
   const [pending, setPending] = useState<
     { dataUrl: string; width: number; height: number; bytes: number }[]
   >([])
   const [busy, setBusy] = useState(false)
   const [viewing, setViewing] = useState<number | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
+  /*
+    Refiling an existing photo. The same sheet as the one after the shot, over
+    the same grid, with the photo's current category and type already in it —
+    so "what is this?" is answered once, in one place, whichever way the rep
+    arrived at the question.
+  */
+  const [editing, setEditing] = useState<Photo | null>(null)
+  /*
+    "Other" is the one category that asks a question, and the question is
+    answered in a text field that only exists while Other is the choice.
+    Tapping any named category files the photo at once, as it always has;
+    tapping Other opens the field and waits for a word. Leaving Other for a
+    named category throws the word away — a type describing a category the
+    photo does not have would be read by the office as a fact.
+  */
+  const [asking, setAsking] = useState(false)
+  const [otherType, setOtherType] = useState('')
+  const closeSheet = () => {
+    setPending([])
+    setEditing(null)
+    setAsking(false)
+    setOtherType('')
+  }
 
   const handleFiles = async (files: File[]) => {
     setBusy(true)
@@ -48,14 +72,37 @@ export function PhotoStrip({
     }
   }
 
-  const commit = async (category: PhotoCategory) => {
+  /* A tap on a category: file it now, or — for Other — ask what it is first. */
+  const choose = (category: PhotoCategory) => {
+    if (category === 'other') {
+      setAsking(true)
+      return
+    }
+    setAsking(false)
+    setOtherType('')
+    void commit(category)
+  }
+
+  const commit = async (category: PhotoCategory, type?: string) => {
     haptic('confirm')
+    if (editing) {
+      const target = editing
+      closeSheet()
+      setFailed(null)
+      try {
+        await updatePhotoCategory(target.id, category, type)
+      } catch {
+        setFailed('The photo could not be refiled. Try again.')
+        haptic('warn')
+      }
+      return
+    }
     const batch = pending
-    setPending([])
+    closeSheet()
     setFailed(null)
     for (const img of batch) {
       try {
-        await addPhoto(propertyId, img, category, visitId)
+        await addPhoto(propertyId, img, category, visitId, type)
       } catch (err) {
         /*
           A photo the rep believes they took and does not have is the worst
@@ -122,8 +169,11 @@ export function PhotoStrip({
                 alt={`${cat?.label ?? 'Photo'} of property`}
                 className="h-full w-full object-cover"
               />
-              <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-4 text-left text-[11px] font-bold text-white">
-                {cat?.label}
+              <span
+                className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-4 text-left text-[11px] font-bold text-white"
+                data-testid="photo-label"
+              >
+                {photoLabel(cat?.label, p)}
               </span>
               <PhotoDot photo={p} />
             </button>
@@ -144,9 +194,9 @@ export function PhotoStrip({
 
       {/* Categorize after the shot, in one tap. */}
       <BottomSheet
-        open={pending.length > 0}
-        onClose={() => setPending([])}
-        title={pending.length > 1 ? `Categorize ${pending.length} photos` : 'Categorize photo'}
+        open={pending.length > 0 || editing !== null}
+        onClose={closeSheet}
+        title={editing ? 'Change category' : pending.length > 1 ? `Categorize ${pending.length} photos` : 'Categorize photo'}
         /*
           Tall enough for the whole grid, and raisable.
 
@@ -171,30 +221,79 @@ export function PhotoStrip({
         */
         detents={[0.78, 0.94]}
       >
-        <div className="space-y-3">
+        <div className="space-y-3" data-testid="categorize-sheet" data-mode={editing ? 'edit' : 'new'}>
           <div className="snap-x-row">
-            {pending.map((p, i) => (
-              <img
-                key={i}
-                src={p.dataUrl}
-                alt=""
-                className="h-28 w-28 shrink-0 rounded-field object-cover"
-              />
-            ))}
+            {editing ? (
+              <PhotoImage photo={editing} alt="" className="h-28 w-28 shrink-0 rounded-field object-cover" />
+            ) : (
+              pending.map((p, i) => (
+                <img
+                  key={i}
+                  src={p.dataUrl}
+                  alt=""
+                  className="h-28 w-28 shrink-0 rounded-field object-cover"
+                />
+              ))
+            )}
           </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            {categories.map((c) => (
+          {/*
+            The question, above the grid rather than below it, because on a
+            phone the keyboard takes the bottom half of the sheet: a field
+            under the buttons is a field the rep cannot see while typing.
+          */}
+          {asking && (
+            <form
+              className="rounded-card border-2 border-accent bg-surface-tint p-3"
+              data-testid="photo-type-form"
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (otherType.trim()) void commit('other', otherType)
+              }}
+            >
+              <label className="block">
+                <span className="text-[13px] font-semibold text-ink">Type</span>
+                <input
+                  value={otherType}
+                  onChange={(e) => setOtherType(e.target.value)}
+                  autoFocus
+                  maxLength={60}
+                  enterKeyHint="done"
+                  autoCapitalize="sentences"
+                  className="field-sunk mt-1.5 h-12 w-full rounded-field px-3.5 text-base text-ink placeholder:text-ink-faint"
+                  placeholder="What is it? e.g. skylight, gutter, permit"
+                  data-testid="photo-type"
+                />
+              </label>
               <button
-                key={c.key}
-                onClick={() => void commit(c.key)}
-                className="press focusable flex min-h-[64px] items-center gap-2.5 rounded-card border-2 border-accent/40 px-4 font-semibold active:bg-surface-field"
+                type="submit"
+                disabled={!otherType.trim()}
+                className="metal metal-brand press focusable mt-2.5 grid h-12 w-full place-items-center rounded-field text-[15px] font-semibold disabled:opacity-50"
+                data-testid="photo-type-save"
               >
-                <span className="text-xl" aria-hidden>
-                  {c.icon ? <Glyph name={c.icon} /> : c.letter}
-                </span>
-                {c.label}
+                {editing ? 'Save' : 'Save photo'}
               </button>
-            ))}
+            </form>
+          )}
+          <div className="grid grid-cols-2 gap-2.5">
+            {categories.map((c) => {
+              const selected = asking ? c.key === 'other' : editing?.category === c.key
+              return (
+                <button
+                  key={c.key}
+                  onClick={() => choose(c.key)}
+                  aria-pressed={selected}
+                  className={`press focusable flex min-h-[64px] items-center gap-2.5 rounded-card border-2 px-4 font-semibold active:bg-surface-field ${
+                    selected ? 'border-accent bg-surface-tint' : 'border-accent/40'
+                  }`}
+                  data-testid={`photo-category-${c.key}`}
+                >
+                  <span className="text-xl" aria-hidden>
+                    {c.icon ? <Glyph name={c.icon} /> : c.letter}
+                  </span>
+                  {c.label}
+                </button>
+              )
+            })}
           </div>
         </div>
       </BottomSheet>
@@ -205,6 +304,13 @@ export function PhotoStrip({
         index={viewing}
         onClose={() => setViewing(null)}
         onIndex={setViewing}
+        onRefile={(photo) => {
+          // The sheet opens with the photo's own answer already in it.
+          setViewing(null)
+          setEditing(photo)
+          setAsking(photo.category === 'other')
+          setOtherType(photo.type ?? '')
+        }}
       />
     </div>
   )
@@ -346,11 +452,14 @@ function PhotoViewer({
   index,
   onClose,
   onIndex,
+  onRefile,
 }: {
   photos: Photo[]
   index: number | null
   onClose: () => void
   onIndex: (i: number) => void
+  /** Open the category sheet for this photo — the one place a filing is changed. */
+  onRefile: (photo: Photo) => void
 }) {
   const categories = usePhotoCategories()
   if (index == null || !photos[index]) return null
@@ -369,10 +478,16 @@ function PhotoViewer({
             <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
           </svg>
         </button>
-        <span className="nums text-sm font-semibold">
-          {index + 1} / {photos.length} · {cat?.label}
+        <span className="nums min-w-0 truncate px-2 text-sm font-semibold" data-testid="viewer-label">
+          {index + 1} / {photos.length} · {photoLabel(cat?.label, photo)}
         </span>
-        <span className="w-11" />
+        <button
+          onClick={() => onRefile(photo)}
+          className="focusable grid h-11 shrink-0 place-items-center rounded-full px-3 text-[13px] font-semibold active:bg-white/10"
+          data-testid="photo-refile"
+        >
+          Change
+        </button>
       </div>
 
       <div
@@ -399,4 +514,14 @@ function PhotoViewer({
       </div>
     </div>
   )
+}
+
+/**
+ * What a thumbnail or the viewer calls a photo: the category's label, and for
+ * "other" the rep's own word after it — "Other · skylight" — because "Other"
+ * alone is the one label that tells the office nothing.
+ */
+function photoLabel(label: string | undefined, photo: Photo): string {
+  const base = label ?? 'Photo'
+  return photo.category === 'other' && photo.type ? `${base} · ${photo.type}` : base
 }

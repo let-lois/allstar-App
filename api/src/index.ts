@@ -147,6 +147,7 @@ const PHOTO_CATEGORY_KEYS = [
   'document',
   'before',
   'after',
+  'other',
 ]
 
 const reply = (ctx: RequestContext) =>
@@ -1944,7 +1945,7 @@ export default {
         if (!owner) return json({ error: 'Unknown property.' }, 404, cors)
 
         const rows = await env.DB.prepare(
-          `SELECT id, property_id, visit_id, category, width, height, bytes,
+          `SELECT id, property_id, visit_id, category, type, width, height, bytes,
                   captured_lat, captured_lng, created_at
              FROM photos WHERE property_id = ?1 AND client_id = ?2
             ORDER BY created_at`,
@@ -1959,6 +1960,7 @@ export default {
               propertyId: r.property_id,
               visitId: r.visit_id ?? undefined,
               category: r.category,
+              type: r.type ?? undefined,
               width: r.width ?? undefined,
               height: r.height ?? undefined,
               bytes: r.bytes ?? undefined,
