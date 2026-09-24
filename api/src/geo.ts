@@ -137,3 +137,50 @@ export function territoryFor(point: LatLng, shapes: TerritoryShape[]): Territory
   }
   return best
 }
+
+/* --- bearing and metric distance ------------------------------------------
+ *
+ * The second pair of copies, and they are here for Street View.
+ *
+ * `streetViewAt` finds the nearest panorama to a house and then has to point
+ * the camera at the house — which is a bearing from one coordinate to another,
+ * and a check that the two are far enough apart for that bearing to mean
+ * anything. Both are spherical rather than flat, unlike `pointInPolygon` above:
+ * these run over tens of metres, where the flat approximation's error is a
+ * fraction of a degree, but they also run over a lead geocoded to the wrong
+ * continent, where it is not. Cheap to do properly, so done properly.
+ *
+ * Copied from `packages/core/src/geo.ts` for the reason at the top of this
+ * file, and held to it the same way: `verify:geo-parity` runs both over the
+ * same fixtures.
+ */
+
+const EARTH_RADIUS_M = 6_371_008.8
+
+const toRad = (deg: number) => (deg * Math.PI) / 180
+
+/**
+ * Initial great-circle bearing from `a` to `b`, in degrees.
+ *
+ * Signed the way `Math.atan2` returns it, −180 to 180. Street View's `heading`
+ * parameter takes 0–360 and treats them as the same circle, so the caller
+ * normalises rather than this — a bearing is a bearing, and the wrapping is the
+ * API's convention, not the geometry's.
+ */
+export function bearing(a: LatLng, b: LatLng): number {
+  const y = Math.sin(toRad(b.lng - a.lng)) * Math.cos(toRad(b.lat))
+  const x =
+    Math.cos(toRad(a.lat)) * Math.sin(toRad(b.lat)) -
+    Math.sin(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.cos(toRad(b.lng - a.lng))
+  return (Math.atan2(y, x) * 180) / Math.PI
+}
+
+/** Great-circle distance in metres — the unit Street View's `radius` is in. */
+export function distanceMeters(a: LatLng, b: LatLng): number {
+  const dLat = toRad(b.lat - a.lat)
+  const dLng = toRad(b.lng - a.lng)
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLng / 2) ** 2 * Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat))
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)))
+}

@@ -7,7 +7,7 @@ import { SectionHeader } from '../components/ui/Card'
 import { Avatar } from '../components/ui/Avatar'
 import { Button } from '../components/ui/Button'
 import { ProgressBar } from '../components/ui/ProgressBar'
-import { FieldMap } from '../components/map/FieldMap'
+import { AllStarMap } from '../components/map/AllStarMap'
 import { useAppStore } from '../store/useAppStore'
 import { useTeamStats } from '../store/teamStats'
 import { scoreOf, standings } from '../data/leaderboard'
@@ -235,7 +235,7 @@ export function RepDetail() {
               </p>
             ) : (
               <div className="overflow-hidden card">
-                <FieldMap
+                <AllStarMap
                   className="h-[300px]"
                   properties={todaysDoors}
                   position={null}

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AdminPage } from './AdminLayout'
 import { DataList } from './DataList'
-import { FieldMap, fitZoom } from '../components/map/FieldMap'
+import { fitZoom } from '../components/map/FieldMap'
+import { AllStarMap } from '../components/map/AllStarMap'
 import { Button } from '../components/ui/Button'
 import { Field, TextArea } from '../components/ui/Input'
 import { useAppStore } from '../store/useAppStore'
@@ -707,7 +708,7 @@ export function AdminLists() {
             </div>
           )}
 
-          <FieldMap
+          <AllStarMap
             className="h-[520px]"
             properties={draft ? allProperties : shown}
             draw={

@@ -233,10 +233,19 @@ function corsHeaders(req: Request, env: Env): Record<string, string> {
     'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     'access-control-allow-headers': 'authorization,content-type',
     'access-control-max-age': '86400',
-    // So the browser can read the id off a failed request and show it to the
-    // person looking at the screen. Without this the header exists but is
-    // invisible to the app, which defeats the point of returning it.
-    'access-control-expose-headers': 'x-request-id,content-disposition,x-rows',
+    /*
+      So the browser can read the id off a failed request and show it to the
+      person looking at the screen. Without this the header exists but is
+      invisible to the app, which defeats the point of returning it.
+
+      `x-streetview-code` is here for the same reason and is easy to forget,
+      because leaving it out fails *silently and only cross-origin*: the Worker
+      sends the header, the Worker's own tests read it, and the browser strips
+      it before the app ever sees it. The photo frame would then be back to
+      guessing which kind of nothing it is holding — see `api/src/streetview.ts`.
+    */
+    'access-control-expose-headers':
+      'x-request-id,content-disposition,x-rows,x-streetview-code',
     vary: 'origin',
   }
 }
@@ -1499,6 +1508,26 @@ export default {
         useStreetViewBase(env.GOOGLE_STREETVIEW_BASE_URL)
         const shot = await streetViewAt(keys.google, lat, lng)
 
+        /*
+          The reason, on every answer including the successful ones.
+
+          The HTTP status stays the coarse signal it always was — 200 bytes, 204
+          nothing, 501 no key, 502 we could not — because that contract is what
+          the client's caching and the existing gates are written against. What
+          it cannot carry is *which* failure, and the difference between "this
+          street has no imagery" and "the Street View Static API was never
+          switched on" is the difference between a fact nobody can fix and a
+          two-minute job in the Cloud console.
+
+          A header rather than a body, because two of these four answers have no
+          body to put it in: 204 is defined as having none, and 200 is the JPEG.
+
+          It is a classification, never Google's prose. `shot.detail` can quote
+          the project back at you and it stays in the log below, where only
+          somebody with Worker access reads it.
+        */
+        const withCode = { ...cors, 'x-streetview-code': shot.code }
+
         if (shot.kind === 'unconfigured') {
           return json(
             {
@@ -1506,23 +1535,25 @@ export default {
               code: 'no_streetview_key',
             },
             501,
-            cors,
+            withCode,
           )
         }
         if (shot.kind === 'error') {
-          console.error(`street view failed for client ${user.clientId}: ${shot.detail}`)
+          console.error(
+            `street view ${shot.code} for client ${user.clientId}: ${shot.detail}`,
+          )
           return json(
             { error: 'The photo service is unavailable.', code: 'streetview_unavailable' },
             502,
-            cors,
+            withCode,
           )
         }
-        if (shot.kind === 'none') return new Response(null, { status: 204, headers: cors })
+        if (shot.kind === 'none') return new Response(null, { status: 204, headers: withCode })
 
         return new Response(shot.bytes, {
           status: 200,
           headers: {
-            ...cors,
+            ...withCode,
             'content-type': shot.contentType,
             /*
               Short, and short on purpose. Google's terms limit how long their

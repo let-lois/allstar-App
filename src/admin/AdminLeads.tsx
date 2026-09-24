@@ -13,7 +13,7 @@ import { PIPELINE_STAGES, STATUS_COLOR, STATUS_LABEL, outcomeByCode } from '../d
 import { money, relative } from '../lib/format'
 import type { LeadStatus } from '../types'
 import { DataList } from './DataList'
-import { FieldMap } from '../components/map/FieldMap'
+import { AllStarMap } from '../components/map/AllStarMap'
 import { pointInPolygon } from '../lib/geo'
 import { VISITED_WINDOWS, matchesVisited, type VisitedWindow } from '../lib/leadFilter'
 
@@ -816,11 +816,12 @@ export default function AdminLeads() {
             block without ticking forty rows.
 
             The gesture and the geometry are both reused rather than rebuilt:
-            `FieldMap` already turns taps into coordinates and draws the shape
-            for territory drawing, and `pointInPolygon` is the same function the
-            server uses to decide which leads a territory claims — kept in step
-            by `verify:geo-parity`. What is new here is only where the answer
-            goes: into the selection the checkboxes already feed.
+            the map already turns taps into coordinates and draws the shape for
+            territory drawing — both renderers do, through the same `draw`
+            contract — and `pointInPolygon` is the same function the server uses
+            to decide which leads a territory claims, kept in step by
+            `verify:geo-parity`. What is new here is only where the answer goes:
+            into the selection the checkboxes already feed.
           */}
           <div className="mb-2 flex flex-wrap items-center gap-2">
             {!lasso ? (
@@ -868,7 +869,7 @@ export default function AdminLeads() {
             An operator who has narrowed to one rep's follow-ups and then opens
             the map to draw round them should not be handed the whole company.
           */}
-          <FieldMap
+          <AllStarMap
             className="h-[520px] rounded-card"
             properties={rows}
             draw={
@@ -884,7 +885,7 @@ export default function AdminLeads() {
             // and passing it would recentre the map away from the work.
             position={null}
             selectedId={null}
-            // FieldMap deselects by passing null; there is nothing to toggle
+            // The map deselects by passing null; there is nothing to toggle
             // then, and the selection is cleared from the bulk bar instead.
             onSelect={(id) => id && toggle(id)}
           />

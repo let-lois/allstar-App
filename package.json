@@ -41,6 +41,7 @@
     "verify:address": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-address.mjs",
     "verify:mapchrome": "node scripts/verify-mapchrome.mjs",
     "verify:mapzoom": "node scripts/verify-mapzoom.mjs",
+    "verify:mapparity": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-map-parity.mjs",
     "verify:phonefield": "node scripts/verify-phonefield.mjs",
     "verify:shellios": "node scripts/verify-shell.mjs ios",
     "verify:shellandroid": "node scripts/verify-shell.mjs android",

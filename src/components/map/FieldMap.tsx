@@ -4,14 +4,21 @@ import { project, unproject, type Position, centerOf } from '../../lib/geo'
 import { LocationPinSvg } from './LocationPin'
 import { useStoredTiles } from '../../lib/tile-source'
 import { STATUS_COLOR } from '../../data/outcomes'
+import { LAYERS, useTilesAvailable, visibleTiles } from '../../lib/tiles'
+import { loadLayer, saveLayer, type LayerId } from '../../lib/map-layer'
 import {
-  LAYERS,
-  loadLayer,
-  saveLayer,
-  useTilesAvailable,
-  visibleTiles,
-  type LayerId,
-} from '../../lib/tiles'
+  DRAW_FILL,
+  DRAW_FILL_OPACITY,
+  DRAW_STROKE,
+  DRAW_STROKE_WIDTH,
+  DRAW_VERTEX_FILL,
+  DRAW_VERTEX_RADIUS,
+  FIELDMAP_MAX_ZOOM,
+  MAP_MIN_ZOOM,
+  drawClosed,
+  mapAriaLabel,
+  tapIntent,
+} from './map-contract'
 
 /** brand-500 — the one place on the map that is allowed to be teal by default. */
 const SELECTED_PIN = '#20C4D3'
@@ -46,18 +53,12 @@ const ESTIMATED_FILL = '#0F1828'
 
 const TILE = 256
 /**
- * How far out this map can go.
- *
- * Was 12 — a neighbourhood — which was right while the only thing this map ever
- * showed was a territory. It is wrong the moment the screen has to show a rep in
- * one country and a door in another: at zoom 12 the two are thousands of
- * kilometres off opposite edges, so the line between them could not be drawn and
- * the far-away case had to be handed to the other renderer. Two renderers that
- * disagree about what they can show is the thing the shared prop contract exists
- * to prevent.
+ * Both from `map-contract`, which is where the argument for each number is
+ * written and where the other renderer reads them from. They are not the same
+ * value at the far end and that is deliberate — see `GOOGLE_MAX_ZOOM`.
  */
-const MIN_ZOOM = 1
-const MAX_ZOOM = 19
+const MIN_ZOOM = MAP_MIN_ZOOM
+const MAX_ZOOM = FIELDMAP_MAX_ZOOM
 /**
  * Below this the drawn street grid stops being a plausible street grid.
  *
@@ -507,28 +508,28 @@ export function FieldMap({
     downMarker.current = null
 
     /*
-      Drawing takes the tap before anything else does. Selecting a pin mid-draw
-      would be the wrong thing twice: it loses the vertex the person meant to
-      place, and it opens a lead they were not asking about.
+      What this tap is for. The whole precedence — draw, then pick, then the
+      pin, then dismiss — lives in `map-contract` so the Google renderer reaches
+      the same verdict from events that arrive in a completely different shape.
+      The argument for each branch is written there.
     */
-    if (draw) {
+    const intent = tapIntent({
+      drawing: !!draw,
+      picking: !!pick,
+      pickExclusive: !!pick?.exclusive,
+      hitMarker: !!hit,
+    })
+
+    if (intent === 'draw' || intent === 'pick') {
       const box = boxRef.current?.getBoundingClientRect()
-      if (box) draw.onAddPoint(toLatLng(e.clientX - box.left, e.clientY - box.top))
+      if (!box) return
+      const at = toLatLng(e.clientX - box.left, e.clientY - box.top)
+      if (intent === 'draw') draw?.onAddPoint(at)
+      else pick?.onPick(at)
       return
     }
 
-    /*
-      Then the location picker — for a tap that hit nothing, or for any tap at
-      all once the form is open. See `pick.exclusive`, which is where the
-      difference between those two is argued.
-    */
-    if (pick && (pick.exclusive || !hit)) {
-      const box = boxRef.current?.getBoundingClientRect()
-      if (box) pick.onPick(toLatLng(e.clientX - box.left, e.clientY - box.top))
-      return
-    }
-
-    if (!hit) {
+    if (intent === 'deselect' || !hit) {
       onSelect(null)
       return
     }
@@ -775,7 +776,7 @@ export function FieldMap({
         pts.length === 0
           ? ''
           : pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ') +
-            (pts.length >= 3 ? ' Z' : ''),
+            (drawClosed(pts) ? ' Z' : ''),
     }
   }, [draw, toScreen, size.w])
 
@@ -802,7 +803,7 @@ export function FieldMap({
         a territory vertex, which makes it a control.
       */
       role="application"
-      aria-label={draw ? (draw.label ?? 'Outline a territory on the map') : 'Map of your leads'}
+      aria-label={mapAriaLabel(draw)}
       data-tour="map-canvas"
       className={`relative touch-none overflow-hidden bg-[#EDF1F3] ${className}`}
     >
@@ -945,21 +946,22 @@ export function FieldMap({
           <g data-draw="territory">
             <path
               d={drawn.d}
-              fill={drawn.pts.length >= 3 ? 'rgba(15,169,184,0.16)' : 'none'}
-              stroke="#20C4D3"
-              strokeWidth={2.5}
+              fill={drawClosed(drawn.pts) ? DRAW_FILL : 'none'}
+              fillOpacity={DRAW_FILL_OPACITY}
+              stroke={DRAW_STROKE}
+              strokeWidth={DRAW_STROKE_WIDTH}
               strokeLinejoin="round"
-              strokeDasharray={drawn.pts.length >= 3 ? undefined : '6 5'}
+              strokeDasharray={drawClosed(drawn.pts) ? undefined : '6 5'}
             />
             {drawn.pts.map((p, i) => (
               <circle
                 key={i}
                 cx={p.x}
                 cy={p.y}
-                r={6}
-                fill="#ffffff"
-                stroke="#20C4D3"
-                strokeWidth={2.5}
+                r={DRAW_VERTEX_RADIUS}
+                fill={DRAW_VERTEX_FILL}
+                stroke={DRAW_STROKE}
+                strokeWidth={DRAW_STROKE_WIDTH}
               />
             ))}
           </g>

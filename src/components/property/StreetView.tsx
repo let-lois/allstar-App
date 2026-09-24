@@ -59,14 +59,46 @@ const H = 300
 /**
  * What the frame is showing.
  *
- * `unconfigured` is the state this component used to be unable to express, and
- * getting it wrong was expensive: with no key it said "No photo of this house
- * yet", so every rep on a phone was told their whole territory had no Street
- * View coverage. One is a fact about a street; the other is a setting nobody
- * has turned on. They are not the same sentence and they are not fixed by the
- * same person.
+ * Four kinds of nothing, because they are four different facts and only one of
+ * them is about the house:
+ *
+ *   `no-coverage`   Google has been down this street and has nothing near it.
+ *                   Nobody can fix this. It is the only one that is about the
+ *                   property.
+ *   `unconfigured`  No Google key for this company at all. Somebody in the
+ *                   office turns it on, in Settings → Address lookup.
+ *   `unavailable`   The key exists and something about it is wrong — refused,
+ *                   API not enabled, no billing account, over quota — or we
+ *                   could not reach Google. Also somebody in the office, but a
+ *                   different somebody and a different screen, which is why
+ *                   this is not folded into `unconfigured`.
+ *   `checking`      Still asking.
+ *
+ * `no-coverage` and `unavailable` used to be one state called `none`, and the
+ * sentence it showed was about the street. So a company whose Street View
+ * Static API had never been enabled was told, on every lead, that Google had
+ * not photographed any of their territory — a true-sounding sentence about the
+ * wrong subject, which is the most expensive kind to ship.
  */
-type State = 'checking' | 'ready' | 'none' | 'unconfigured'
+type State = 'checking' | 'ready' | 'no-coverage' | 'unconfigured' | 'unavailable'
+
+/**
+ * The technical reason, to a developer's console and nowhere else.
+ *
+ * A rep gets one of two sentences and neither of them mentions quota, billing
+ * or an API name — those are true, useless at a door, and the kind of thing
+ * that ends up in a screenshot in a customer's group chat. Whoever is running
+ * the app locally or against preview gets the actual code, which is the one
+ * audience it helps.
+ *
+ * `NODE_ENV` rather than a bundler flag: this file is compiled by Vite for the
+ * web and by Metro for the shell, and `import.meta` is not something Metro
+ * parses. Both define this one.
+ */
+function logReason(code: string, lat: number, lng: number) {
+  if (process.env.NODE_ENV === 'production') return
+  console.warn(`[allstar] street view ${code} at ${lat},${lng}`)
+}
 
 /**
  * The original browser call, kept for the demo alone.
@@ -86,7 +118,9 @@ function demoLookup(
   setSrc: (s: string | null) => void,
 ): (() => void) | undefined {
   if (!DEMO_KEY) {
-    setState('none')
+    // No key in this bundle at all, which is the demo's version of the server's
+    // 501 — a setting, not a street.
+    setState('unconfigured')
     return
   }
   let cancelled = false
@@ -100,7 +134,16 @@ function demoLookup(
     .then((body: { status?: string }) => {
       if (cancelled) return
       if (body.status !== 'OK') {
-        setState('none')
+        /*
+          The same split the server makes, in the one place the browser still
+          talks to Google directly. `ZERO_RESULTS` and `NOT_FOUND` are the
+          street; every other status is the account, and saying "no photo of
+          this house" about a disabled API is the bug this component was fixed
+          for on the signed-in path.
+        */
+        const street = body.status === 'ZERO_RESULTS' || body.status === 'NOT_FOUND'
+        logReason(`demo ${body.status ?? 'no status'}`, lat, lng)
+        setState(street ? 'no-coverage' : 'unavailable')
         return
       }
       setSrc(
@@ -111,8 +154,11 @@ function demoLookup(
       setState('ready')
     })
     .catch(() => {
-      // Offline, quota, rejected key — all "no photo this time" here.
-      if (!cancelled) setState('none')
+      // The request never got an answer: offline, blocked, refused at the edge.
+      // Not a fact about the street, so not the street's sentence.
+      if (cancelled) return
+      logReason('demo NETWORK_ERROR', lat, lng)
+      setState('unavailable')
     })
 
   return () => {
@@ -188,18 +234,23 @@ export function StreetView({
         created = shot.url
         setSrc(shot.url)
         setState('ready')
-      } else if (shot.kind === 'unconfigured') {
-        setState('unconfigured')
-      } else {
-        /*
-          `none` and `error` both land here, and that is deliberate on this
-          screen: neither produces a photo, and a rep at a door does not need
-          to know which. The distinction is kept on the wire so the server can
-          log a revoked key — see the 502 branch in the route — rather than
-          having it look like a street with no coverage.
-        */
-        setState('none')
+        return
       }
+      /*
+        Three different answers, kept apart all the way to the screen.
+
+        They used to collapse here — `none` and `error` both became "no photo of
+        this house yet" — on the argument that a rep at a door cannot act on the
+        difference. That argument is right about the rep and wrong about the
+        product: the rep is not the only person who ever sees this frame, and a
+        whole company being told their territory is unphotographed is how a
+        disabled API survives for months. The rep still gets two sentences; it
+        is *which* two that changes.
+      */
+      logReason(shot.code, lat, lng)
+      if (shot.kind === 'unconfigured') setState('unconfigured')
+      else if (shot.kind === 'none') setState('no-coverage')
+      else setState('unavailable')
     })
 
     return () => {
@@ -222,8 +273,8 @@ export function StreetView({
         <div>
           <Glyph name="house" className="icon-lg mx-auto text-ink-faint" />
           {/*
-            Three different sentences, because they are three different facts
-            and only one of them is about the house.
+            Four different sentences, because they are four different facts and
+            only one of them is about the house.
 
             Without a key this said "No photo of this house yet", which reads as
             "Google has not been down this street". In the native app that was
@@ -233,15 +284,31 @@ export function StreetView({
 
             Naming it as a setting rather than a gap is what makes it
             actionable: it is a thing the office can turn on, in Settings →
-            Address lookup, not a thing about the address. The server decides
-            which of the two it is; see the 501 branch of `/api/streetview`.
+            Address lookup, not a thing about the address.
+
+            The fourth was the same mistake one layer down and survived the first
+            fix: a key that exists but is refused, or an API nobody enabled, or
+            an account with no card on it, still came out as "no photo of this
+            house". The server decides which of the four it is and says so in
+            `x-streetview-code`; see `api/src/streetview.ts`.
           */}
           <p className="mt-2 text-[12.5px] text-ink-mute">
             {state === 'unconfigured'
               ? 'Street View isn’t switched on for this app'
               : state === 'checking'
                 ? 'Looking for a photo of this house…'
-                : 'No photo of this house yet'}
+                : state === 'unavailable'
+                  ? /*
+                      Every configuration and upstream failure, in one sentence
+                      that promises nothing and blames nobody. "Temporarily" is
+                      the honest word for all four of them: a refused key, a
+                      disabled API, an unpaid account and a spent quota are each
+                      fixed by somebody, and none of them is a fact about this
+                      house. The code that says *which* went to the console and
+                      to the Worker's log, where the person who can fix it is.
+                    */
+                    'Property imagery is temporarily unavailable'
+                  : 'No Street View imagery is available near this property'}
           </p>
         </div>
       </div>
@@ -277,8 +344,12 @@ export function StreetView({
           — a truncated body, or a content type the decoder will not take.
           Dropping the frame is better than an empty bordered box, and the
           object URL is revoked by the effect's cleanup either way.
+
+          `unavailable`, not `no-coverage`: Google sent a panorama and something
+          between there and here mangled it. Telling the rep this street has no
+          imagery would be a statement about the world based on a decode error.
         */
-        onError={() => setState('none')}
+        onError={() => setState('unavailable')}
       />
     </a>
   )

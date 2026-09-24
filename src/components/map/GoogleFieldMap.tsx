@@ -8,6 +8,19 @@ import { STATUS_COLOR } from '../../data/outcomes'
 import { locationPinElement } from './LocationPin'
 import { GmapsError, gmapId, loadGmaps } from '../../lib/gmaps'
 import { basemapWarning } from '../../lib/basemap'
+import { loadLayer, saveLayer } from '../../lib/map-layer'
+import {
+  DRAW_STROKE,
+  DRAW_STROKE_WIDTH,
+  DRAW_VERTEX_FILL,
+  DRAW_VERTEX_RADIUS,
+  DRAW_Z_VERTEX,
+  GOOGLE_MAX_ZOOM,
+  MAP_MIN_ZOOM,
+  drawOverlay,
+  mapAriaLabel,
+  tapIntent,
+} from './map-contract'
 import type { MapHandle } from './FieldMap'
 
 /**
@@ -109,6 +122,27 @@ interface Props {
    */
   pathKind?: 'route' | 'flight'
   /**
+   * Territory drawing, matching `FieldMap`'s prop of the same name.
+   *
+   * The gap that kept the whole admin console on the other renderer. Three
+   * screens draw a shape on a map — the territory outline, a lead list's
+   * boundary, and the lasso that selects a block of leads to act on — and until
+   * this existed every one of them had to name `FieldMap` directly, which meant
+   * a console that could never show the Google map however it was configured.
+   *
+   * The points live with the caller, exactly as they do for the self-rendered
+   * map: whoever is drawing owns the undo, the name and the save. This
+   * component's job is to turn a tap into a coordinate and show what has been
+   * drawn. The full reasoning is at `FieldMap`'s copy of this prop, which is
+   * the one place it belongs.
+   */
+  draw?: {
+    points: { lat: number; lng: number }[]
+    onAddPoint: (point: { lat: number; lng: number }) => void
+    /** What the drawing is for, announced to a screen reader. */
+    label?: string
+  }
+  /**
    * Location picking, matching `FieldMap`'s prop of the same name so the map
    * screen can hand either renderer the same picker.
    *
@@ -145,6 +179,30 @@ function pinElement(color: string, selected: boolean): HTMLElement {
     `transform:scale(${selected ? 1.35 : 1})`,
     'transition:transform 140ms ease',
     'cursor:pointer',
+  ].join(';')
+  return el
+}
+
+/**
+ * One placed vertex of a shape being drawn.
+ *
+ * A DOM circle on an advanced marker rather than a `google.maps.Circle`,
+ * because a Circle's radius is in **metres** and would swell and shrink with
+ * the zoom. A handle is a screen object: it has to stay the size of the thing
+ * that placed it — a fingertip — at every zoom, exactly as it does on the
+ * self-rendered map, which draws it as a fixed-radius SVG circle.
+ */
+function vertexElement(): HTMLElement {
+  const el = document.createElement('div')
+  const size = DRAW_VERTEX_RADIUS * 2
+  el.style.cssText = [
+    `width:${size}px`,
+    `height:${size}px`,
+    'border-radius:50%',
+    `background:${DRAW_VERTEX_FILL}`,
+    `border:${DRAW_STROKE_WIDTH}px solid ${DRAW_STROKE}`,
+    'box-sizing:content-box',
+    'pointer-events:none',
   ].join(';')
   return el
 }
@@ -228,6 +286,7 @@ export function GoogleFieldMap({
   handleRef,
   path,
   pathKind = 'route',
+  draw,
   pick,
   onUnavailable,
 }: Props) {
@@ -240,8 +299,19 @@ export function GoogleFieldMap({
   const pathRef = useRef<google.maps.Polyline | null>(null)
   const planeRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
   const pickRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
+  const drawShapeRef = useRef<google.maps.Polygon | google.maps.Polyline | null>(null)
+  const vertexRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([])
   const [ready, setReady] = useState(false)
-  const [satellite, setSatellite] = useState(false)
+  /*
+    The rep's own choice, not this component's default.
+
+    It was `useState(false)`, which meant streets on every mount — so somebody
+    assessing roofs picked satellite, navigated to a lead, came back, and had
+    streets again. The self-rendered map has remembered this since it gained a
+    toggle; the two now read and write the same key through `lib/map-layer`, so
+    the choice also survives Google failing over to `FieldMap` mid-morning.
+  */
+  const [satellite, setSatellite] = useState(() => loadLayer() === 'satellite')
 
   // Held in a ref so the marker click handlers created once do not close over a
   // stale callback when the screen re-renders.
@@ -259,6 +329,15 @@ export function GoogleFieldMap({
   */
   const pickRefProp = useRef(pick)
   pickRefProp.current = pick
+  /*
+    The same trick for drawing, and it is needed in three places rather than
+    one: the map's own click listener, every lead marker's, and the cluster
+    bubble's. All three are attached once and must read what the map is for
+    *now* — a listener that closed over `draw` at construction would keep
+    opening leads after somebody pressed "New territory".
+  */
+  const drawRefProp = useRef(draw)
+  drawRefProp.current = draw
 
   /* --- create the map once ------------------------------------------------ */
   useEffect(() => {
@@ -305,6 +384,17 @@ export function GoogleFieldMap({
           center: initialCenter ??
             (properties[0] ? { lat: properties[0].lat, lng: properties[0].lng } : { lat: 30.5083, lng: -97.6789 }),
           zoom: initialZoom ?? DEFAULT_ZOOM,
+          /*
+            The same floor as the self-rendered map, from the shared contract.
+
+            Not cosmetic: the navigate screen draws a direct line between a rep
+            and a door on another continent, and framing that needs a zoom where
+            both fit. Google's own floor is 0 — the whole world in 256 pixels —
+            which is one level below anything worth aiming at. The ceiling is
+            *higher* than the other renderer's on purpose; see `GOOGLE_MAX_ZOOM`.
+          */
+          minZoom: MAP_MIN_ZOOM,
+          maxZoom: GOOGLE_MAX_ZOOM,
           // Our own controls, sized for thumbs, live in the overlay.
           disableDefaultUI: true,
           // See the header: both of these defaults are wrong for a one-handed
@@ -368,9 +458,26 @@ export function GoogleFieldMap({
         mapRef.current.addListener('click', (ev: google.maps.MapMouseEvent) => {
           const at = ev.latLng?.toJSON()
           if (!at) return
-          const picking = pickRefProp.current
-          if (picking) {
-            picking.onPick(at)
+          /*
+            `hitMarker: false` is a fact about Google rather than an assumption.
+            A tap on an advanced marker fires `gmp-click` on the marker and the
+            map's own `click` does not fire at all — so anything arriving here
+            landed on the basemap. The self-rendered map hit-tests its own SVG
+            and passes the answer it computed; both then get the same verdict
+            out of `tapIntent`, which is the point of it being shared.
+          */
+          const intent = tapIntent({
+            drawing: !!drawRefProp.current,
+            picking: !!pickRefProp.current,
+            pickExclusive: !!pickRefProp.current?.exclusive,
+            hitMarker: false,
+          })
+          if (intent === 'draw') {
+            drawRefProp.current?.onAddPoint(at)
+            return
+          }
+          if (intent === 'pick') {
+            pickRefProp.current?.onPick(at)
             return
           }
           // Parity with the self-rendered map, which has always dismissed the
@@ -398,6 +505,10 @@ export function GoogleFieldMap({
   /* --- imagery toggle ----------------------------------------------------- */
   useEffect(() => {
     mapRef.current?.setMapTypeId(satellite ? 'hybrid' : 'roadmap')
+    // Written on change rather than in the button's handler so the stored value
+    // cannot drift from what is on screen — including the first render, which
+    // reads the stored value back and would otherwise never write one.
+    saveLayer(satellite ? 'satellite' : 'streets')
   }, [satellite])
 
   /* --- markers ------------------------------------------------------------ */
@@ -440,11 +551,13 @@ export function GoogleFieldMap({
         // `gmp-click`, not `click`: advanced markers deprecated the DOM event
         // name and warn about it on every listener attached.
         marker.addListener('gmp-click', (ev: { latLng?: google.maps.LatLng | null }) => {
-          const picking = pickRefProp.current
           /*
             While the form is open every tap answers "which house?" — including
-            one that lands on a lead the rep already has. See `pick.exclusive`
-            in FieldMap, where the reasoning lives.
+            one that lands on a lead the rep already has. And while a shape is
+            being drawn, a tap is a vertex wherever it lands: a marker that ate
+            it would lose the point *and* open a lead nobody asked about, which
+            is the same double failure the self-rendered map avoids. See
+            `tapIntent`, where the precedence and its reasoning live.
 
             The event's own coordinate, not the marker's: a rep aiming at the
             house next door lands on the edge of a 22px dot, and snapping their
@@ -452,8 +565,19 @@ export function GoogleFieldMap({
             marker's position is the fallback for a Maps version that does not
             carry one.
           */
-          if (picking?.exclusive) {
-            picking.onPick(ev?.latLng?.toJSON() ?? { lat: p.lat, lng: p.lng })
+          const at = ev?.latLng?.toJSON() ?? { lat: p.lat, lng: p.lng }
+          const intent = tapIntent({
+            drawing: !!drawRefProp.current,
+            picking: !!pickRefProp.current,
+            pickExclusive: !!pickRefProp.current?.exclusive,
+            hitMarker: true,
+          })
+          if (intent === 'draw') {
+            drawRefProp.current?.onAddPoint(at)
+            return
+          }
+          if (intent === 'pick') {
+            pickRefProp.current?.onPick(at)
             return
           }
           onSelectRef.current(p.id)
@@ -488,10 +612,26 @@ export function GoogleFieldMap({
           form is open, when a tap is an answer rather than navigation.
         */
         onClusterClick: (ev, cluster, clusterMap) => {
-          const picking = pickRefProp.current
           const at = ev.latLng?.toJSON()
-          if (picking?.exclusive && at) {
-            picking.onPick(at)
+          /*
+            A cluster is a marker as far as the gesture is concerned — it is a
+            thing sitting on top of the map that a thumb can land on — so it
+            takes the same verdict. Drawing over a dense patch is exactly when
+            clusters are on screen, and a vertex swallowed by a bubble was the
+            most likely way to lose one.
+          */
+          const intent = tapIntent({
+            drawing: !!drawRefProp.current,
+            picking: !!pickRefProp.current,
+            pickExclusive: !!pickRefProp.current?.exclusive,
+            hitMarker: true,
+          })
+          if (at && intent === 'draw') {
+            drawRefProp.current?.onAddPoint(at)
+            return
+          }
+          if (at && intent === 'pick') {
+            pickRefProp.current?.onPick(at)
             return
           }
           if (cluster.bounds) clusterMap.fitBounds(cluster.bounds)
@@ -690,6 +830,84 @@ export function GoogleFieldMap({
     }
   }, [ready, path, pathKind])
 
+  /* --- the shape being drawn ---------------------------------------------- */
+  //
+  // Rebuilt from scratch on every change rather than mutated. A Google overlay
+  // has `setPath`, and using it here would save an allocation per tap and cost
+  // the one thing this has to get right: the *kind* of overlay changes at three
+  // points, from an open dashed Polyline to a filled Polygon, and a code path
+  // that sometimes swaps the object and sometimes updates it is how one of the
+  // two ends up orphaned on the map. Taps are a human-speed event.
+  /*
+    Keyed on the coordinates rather than on the prop.
+
+    Every caller builds `draw` as an object literal — `draw={draft ? {...} :
+    undefined}` — so its identity changes on every render of the screen above,
+    and an effect depending on it would tear down and rebuild a Polygon each
+    time somebody typed in the name field next to the map. The shape is exactly
+    its points, so the points are the dependency.
+  */
+  const drawKey = (draw?.points ?? []).map((pt) => `${pt.lat},${pt.lng}`).join(';')
+
+  useEffect(() => {
+    if (!ready || !mapRef.current) return
+    const map = mapRef.current
+    // Read through the ref: `drawKey` is what decides whether to run, and the
+    // points themselves come from whatever the latest render passed.
+    const points = drawRefProp.current?.points ?? []
+    if (points.length === 0) return
+
+    /*
+      What to draw is decided by `drawOverlay`, which is a pure function over the
+      points and is gated in Node — see the note on it. This file's only job is
+      to apply the answer, because everything from here down needs a real Maps
+      API and therefore a real key, and is the part no gate in this repo can run.
+    */
+    const spec = drawOverlay(points)
+    if (!spec) return
+    const coords = spec.path
+
+    drawShapeRef.current =
+      spec.kind === 'polygon'
+        ? new google.maps.Polygon({ map, paths: coords, ...spec.options })
+        : new google.maps.Polyline({ map, path: coords, ...spec.options })
+
+    let cancelled = false
+    void (async () => {
+      const { AdvancedMarkerElement } = (await google.maps.importLibrary(
+        'marker',
+      )) as google.maps.MarkerLibrary
+      if (cancelled || !mapRef.current) return
+      vertexRef.current = coords.map(
+        (at) =>
+          new AdvancedMarkerElement({
+            map: mapRef.current,
+            position: at,
+            content: vertexElement(),
+            // Never a button. A handle that opened something on tap would eat
+            // the vertex a rep was placing next to it.
+            gmpClickable: false,
+            zIndex: DRAW_Z_VERTEX,
+          }),
+      )
+    })()
+
+    return () => {
+      cancelled = true
+      /*
+        Torn down here rather than at the top of the next run, so the shape also
+        goes when the component unmounts and when the last point is undone —
+        neither of which reaches the body above, because it returns early on an
+        empty list. Leaving it to the next run is how a cancelled draft's
+        outline survives on the map after "Start over".
+      */
+      drawShapeRef.current?.setMap(null)
+      drawShapeRef.current = null
+      for (const v of vertexRef.current) v.map = null
+      vertexRef.current = []
+    }
+  }, [ready, drawKey])
+
   /* --- the imperative handle the screen uses ----------------------------- */
   const flyTo = useCallback((lat: number, lng: number, zoom?: number) => {
     const map = mapRef.current
@@ -789,7 +1007,15 @@ export function GoogleFieldMap({
       <div
         ref={boxRef}
         className="absolute inset-0"
-        aria-label="Map of your leads"
+        /*
+          The same label the self-rendered map gives, from the same function.
+          A screen-reader user is told what a tap will do, and which renderer
+          drew the map is not something they should be able to tell — the
+          console's drawing screens reach this one now, so "Map of your leads"
+          would have been wrong there in exactly the way it was never wrong
+          before.
+        */
+        aria-label={mapAriaLabel(draw)}
         role="application"
         data-tour="map-canvas"
       />

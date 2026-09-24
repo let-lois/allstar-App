@@ -1,5 +1,6 @@
 import { pointInPolygon as clientInside, polygonAreaSqMiles as clientArea } from '../src/lib/geo.ts'
-import { pointInPolygon as workerInside, polygonAreaSqMiles as workerArea, parseBoundary, territoryFor } from '../api/src/geo.ts'
+import { pointInPolygon as workerInside, polygonAreaSqMiles as workerArea, parseBoundary, territoryFor, bearing as workerBearing, distanceMeters } from '../api/src/geo.ts'
+import { bearing as clientBearing, distanceMiles } from '../packages/core/src/geo.ts'
 
 /**
  * The two copies of the territory geometry agree.
@@ -182,6 +183,68 @@ for (const [name, poly] of Object.entries(shapes)) {
     parseBoundary(JSON.stringify([...square, { lat: 0, lng: NaN }])) === null,
     'NaN survives JSON as null and is refused',
   )
+}
+
+/* --- the second pair of copies: bearing, and metres ----------------------- */
+//
+// Added for Street View, which finds the nearest panorama to a house and then
+// has to aim the camera at the house. Both functions are duplicated from
+// `packages/core/src/geo.ts` for the reason at the top of `api/src/geo.ts`, so
+// both are held here.
+//
+// Drift in these is quieter than drift in the polygon maths and costs the same
+// kind of afternoon: a bearing a few degrees out photographs the neighbour's
+// door, and a distance out by a factor points the camera from the wrong street.
+{
+  const pairs = []
+  for (const dLat of [-0.01, -0.0005, 0, 0.0005, 0.01, 2]) {
+    for (const dLng of [-0.01, -0.0005, 0, 0.0005, 0.01, 2]) {
+      if (dLat === 0 && dLng === 0) continue
+      pairs.push([
+        { lat: 30.5, lng: -97.6 },
+        { lat: 30.5 + dLat, lng: -97.6 + dLng },
+      ])
+    }
+  }
+  // Across the antimeridian and over a pole, where a flat approximation stops
+  // agreeing with itself and a spherical one keeps working.
+  pairs.push([{ lat: 10, lng: 179.9 }, { lat: 10, lng: -179.9 }])
+  pairs.push([{ lat: 89.9, lng: 0 }, { lat: 89.9, lng: 180 }])
+  pairs.push([{ lat: 14.6, lng: 120.98 }, { lat: 30.5, lng: -97.6 }])
+
+  const offBearing = pairs
+    .map(([a, b]) => Math.abs(workerBearing(a, b) - clientBearing(a, b)))
+    .reduce((m, d) => Math.max(m, d), 0)
+  ok(offBearing < 1e-9, `both copies of bearing agree over ${pairs.length} pairs`, `max Δ ${offBearing}`)
+
+  /*
+    Distance is the same great circle in different units, so this checks the
+    conversion rather than a shared implementation — the Worker needs metres
+    because that is what Street View's `radius` parameter is in, and the client
+    needs miles because that is what a rep reads.
+  */
+  const MI_PER_M = 1 / 1609.344
+  const offDist = pairs
+    .map(([a, b]) => {
+      const mi = distanceMiles(a, b)
+      const m = distanceMeters(a, b)
+      return mi === 0 ? Math.abs(m) : Math.abs((m * MI_PER_M - mi) / mi)
+    })
+    .reduce((m, d) => Math.max(m, d), 0)
+  // Loose, deliberately: the two use slightly different Earth radii (3958.8 mi
+  // and 6,371,008.8 m — the mean radius to different precisions), so they are
+  // the same sphere to about one part in ten thousand rather than exactly.
+  ok(offDist < 2e-4, 'and the metric distance is the same great circle', `max relative Δ ${offDist.toExponential(2)}`)
+
+  // A known answer, so a matched pair of wrong implementations cannot pass.
+  const due = { lat: 30.5, lng: -97.6 }
+  const north = { lat: 30.5 + 0.00027, lng: -97.6 }
+  ok(Math.abs(workerBearing(due, north)) < 0.01, 'due north is a bearing of 0')
+  ok(
+    Math.abs(workerBearing(due, { lat: 30.5, lng: -97.6 + 0.0003 }) - 90) < 0.01,
+    'due east is 90',
+  )
+  ok(Math.abs(distanceMeters(due, north) - 30) < 0.5, `and 0.00027° of latitude is 30 m (${distanceMeters(due, north).toFixed(1)})`)
 }
 
 if (fails.length) {

@@ -730,11 +730,55 @@ export function apiCreateTerritory(
  *
  * The caller owns the URL and must revoke it. See the effect in `StreetView`.
  */
+/**
+ * Why there is no photo, mirroring `api/src/streetview.ts`'s own type.
+ *
+ * Restated rather than imported: the Worker is its own package and the web
+ * bundle does not reach into it. The set is small and closed, and
+ * `verify:streetview` asserts the two lists are identical, so a code added on
+ * one side and forgotten on the other fails a gate rather than falling through
+ * to "unavailable" in a year's time.
+ */
+export type StreetViewCode =
+  | 'AVAILABLE'
+  | 'NO_COVERAGE'
+  | 'NOT_CONFIGURED'
+  | 'API_KEY_ERROR'
+  | 'API_NOT_ENABLED'
+  | 'BILLING_ERROR'
+  | 'QUOTA_ERROR'
+  | 'NETWORK_ERROR'
+  | 'UPSTREAM_ERROR'
+
 export type StreetViewShot =
-  | { kind: 'image'; url: string }
-  | { kind: 'none' }
-  | { kind: 'unconfigured' }
-  | { kind: 'error' }
+  | { kind: 'image'; url: string; code: 'AVAILABLE' }
+  | { kind: 'none'; code: 'NO_COVERAGE' }
+  | { kind: 'unconfigured'; code: 'NOT_CONFIGURED' }
+  | { kind: 'error'; code: StreetViewCode }
+
+/**
+ * The classification the Worker sent, if it sent one we recognise.
+ *
+ * Falls back rather than trusting the wire. A header is user-controllable in
+ * principle and an older Worker sends none at all, so an unrecognised value
+ * becomes the caller's own default — which is always the *coarser* answer, and
+ * therefore never turns a real failure into "no coverage".
+ */
+function codeFrom(res: Response, fallback: StreetViewCode): StreetViewCode {
+  const raw = res.headers.get('x-streetview-code')
+  const known: StreetViewCode[] = [
+    'AVAILABLE',
+    'NO_COVERAGE',
+    'NOT_CONFIGURED',
+    'API_KEY_ERROR',
+    'API_NOT_ENABLED',
+    'BILLING_ERROR',
+    'QUOTA_ERROR',
+    'NETWORK_ERROR',
+    'UPSTREAM_ERROR',
+  ]
+  return known.includes(raw as StreetViewCode) ? (raw as StreetViewCode) : fallback
+}
 
 export async function apiStreetView(
   token: string,
@@ -750,14 +794,24 @@ export async function apiStreetView(
       headers: { authorization: `Bearer ${token}` },
       signal: controller.signal,
     })
-    if (res.status === 204) return { kind: 'none' }
-    if (res.status === 501) return { kind: 'unconfigured' }
-    if (!res.ok) return { kind: 'error' }
-    return { kind: 'image', url: URL.createObjectURL(await res.blob()) }
+    /*
+      The status decides the shape; the header only refines the reason. That
+      order matters: a 204 is "no coverage" whatever a header says, so a
+      malformed or absent header can never promote a street with no imagery
+      into a configuration error the office would go chasing.
+    */
+    if (res.status === 204) return { kind: 'none', code: 'NO_COVERAGE' }
+    if (res.status === 501) return { kind: 'unconfigured', code: 'NOT_CONFIGURED' }
+    if (!res.ok) return { kind: 'error', code: codeFrom(res, 'UPSTREAM_ERROR') }
+    return { kind: 'image', url: URL.createObjectURL(await res.blob()), code: 'AVAILABLE' }
   } catch {
-    // Offline, aborted, refused. Never cached by the caller — a rep in a dead
-    // zone must not have every house marked "no photo" for the rest of the day.
-    return { kind: 'error' }
+    /*
+      Offline, aborted, refused — the request never got an answer, so this is
+      the one code the server cannot have told us. Never cached by the caller:
+      a rep in a dead zone must not have every house marked "no photo" for the
+      rest of the day.
+    */
+    return { kind: 'error', code: 'NETWORK_ERROR' }
   } finally {
     clearTimeout(timer)
   }
