@@ -208,7 +208,7 @@ try {
   }, manager)).json()
   ok(!!invite.url, 'the manager invites a rep and gets a link to hand over', invite.url ? 'link issued' : JSON.stringify(invite))
   const accept = await fetch(invite.url, {
-    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ password: REP.password }),
+    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ password: REP.password, confirm: REP.password }),
   })
   ok(accept.ok || accept.status === 302, `the rep sets a password through the invitation (${accept.status})`)
   // Inviting the same e-mail again must not make a second account. The server
