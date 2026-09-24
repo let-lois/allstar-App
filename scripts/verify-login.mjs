@@ -354,6 +354,68 @@ const jsonRoute = (status, body) => (route) =>
   await ctx.close()
 }
 
+/* ========== forgot password ============================================ */
+//
+// The button that was deliberately absent for a year. What it must do: send
+// the address from the form, say a link is on its way *if* the address has an
+// account — never more than that — and, on a deployment with no email, say so
+// instead of promising a link that cannot arrive.
+{
+  const ctx = await newContext()
+  const page = await ctx.newPage()
+  const asked = []
+  await page.route('**/api/auth/forgot', (route) => {
+    asked.push(route.request().postDataJSON())
+    return jsonRoute(200, { ok: true })(route)
+  })
+  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(800)
+  const open = page.getByTestId('forgot-open')
+  ok((await open.count()) === 1 && /Forgot password\?/.test(await open.innerText()), 'the sign-in screen offers Forgot password?')
+  await open.click()
+  await page.getByTestId('forgot-submit').click()
+  await page.waitForTimeout(300)
+  ok((await page.getByTestId('forgot-error').count()) === 1 && asked.length === 0, 'with no email typed it asks for one and sends nothing')
+  await page.locator('input[type="email"]').fill('rep@ridgeline.test')
+  await page.getByTestId('forgot-submit').click()
+  await page.waitForTimeout(800)
+  ok(asked.length === 1 && asked[0]?.email === 'rep@ridgeline.test', 'the address from the sign-in form is what is sent', JSON.stringify(asked[0]))
+  const sent = page.getByTestId('forgot-sent')
+  const sentText = (await sent.count()) ? await sent.innerText() : '(nothing)'
+  ok(/rep@ridgeline\.test/.test(sentText) && /^If /.test(sentText.trim()), 'and the screen says a link is on its way — if that address has an account', sentText.slice(0, 60))
+  ok(!/no account|not found|does not exist/i.test(sentText), 'without claiming to know whether it does')
+  ok((await page.locator('input[autocomplete="current-password"]').count()) === 1, 'the sign-in form is still there for when it arrives')
+  await ctx.close()
+}
+{
+  const ctx = await newContext()
+  const page = await ctx.newPage()
+  await page.route(
+    '**/api/auth/forgot',
+    jsonRoute(501, {
+      error: 'Email is not set up for this app, so a reset link cannot be sent from here. Ask your administrator for one — they can create it from Team → Manage.',
+      code: 'mail_not_configured',
+    }),
+  )
+  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(800)
+  await page.locator('input[type="email"]').fill('rep@ridgeline.test')
+  await page.getByTestId('forgot-open').click()
+  await page.getByTestId('forgot-submit').click()
+  await page.waitForTimeout(800)
+  const err = page.getByTestId('forgot-error')
+  ok(
+    (await err.count()) === 1 && /not set up/.test(await err.innerText()) && (await page.getByTestId('forgot-sent').count()) === 0,
+    'with no email configured the person is told to ask their admin, not that a link is coming',
+  )
+  await page.unroute('**/api/auth/forgot')
+  await page.route('**/api/auth/forgot', jsonRoute(429, { error: 'Too many requests for this address. Wait a few minutes and try again.', code: 'rate_limited' }))
+  await page.getByTestId('forgot-submit').click()
+  await page.waitForTimeout(800)
+  ok(/Too many/.test(await page.getByTestId('forgot-error').innerText()), 'and a rate limit is reported as one')
+  await ctx.close()
+}
+
 await browser.close()
 
 if (fails.length) {

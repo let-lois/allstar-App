@@ -116,3 +116,76 @@ export function inviteEmail(opts: {
 
   return { to: opts.to, subject, text, html }
 }
+
+/**
+ * The link that lets somebody choose a new password, because they asked.
+ *
+ * Shorter and plainer than the invitation on purpose. The person pressed
+ * "Forgot password?" a moment ago and is waiting for this, so there is nothing
+ * to introduce and nothing to sell — only which button to press and how long
+ * it works. It names the company, because one address can belong to accounts
+ * at more than one and each gets its own link.
+ *
+ * It never says whether anything else happened. The request that produced it
+ * answers the same way whether or not the address was known, and an email
+ * that hinted otherwise would give that away to whoever typed the address.
+ */
+export function resetEmail(opts: {
+  to: { email: string; name?: string }
+  clientName: string
+  url: string
+  expiresAt: number
+  appUrl: string
+}): MailMessage {
+  const first = opts.to.name?.split(' ')[0]
+  const greeting = first ? `Hi ${first},` : 'Hi,'
+  const expires = new Date(opts.expiresAt).toLocaleString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  })
+  const subject = `Reset your ${opts.clientName} password on Allstar`
+
+  const text = [
+    greeting,
+    '',
+    `Somebody — hopefully you — asked to reset the password for your ${opts.clientName} account on Allstar.`,
+    '',
+    'Choose a new password:',
+    opts.url,
+    '',
+    `This link works once and expires on ${expires}. Your current password keeps working until you set a new one.`,
+    '',
+    `If you didn't ask for this, you can ignore it. Nothing changes unless the link is opened, and nobody can use it without this email.`,
+    '',
+    `Allstar lives at ${opts.appUrl}.`,
+    '',
+    '— The Allstar Team',
+  ].join('\n')
+
+  const html = `<!doctype html>
+<html><body style="margin:0;padding:24px 12px;background:#f5f6f8;font:16px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111827">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#fff;border-radius:16px">
+      <tr><td style="padding:28px 24px">
+        <p style="margin:0 0 20px;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#0f766e">Allstar</p>
+        <p style="margin:0 0 14px">${escape(greeting)}</p>
+        <p style="margin:0 0 24px">Somebody &mdash; hopefully you &mdash; asked to reset the password for your <strong>${escape(opts.clientName)}</strong> account on Allstar.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px"><tr><td style="border-radius:12px;background:#0f766e">
+          <a href="${escape(opts.url)}" style="display:inline-block;min-height:48px;line-height:48px;padding:0 26px;border-radius:12px;background:#0f766e;color:#ffffff;font-size:16px;font-weight:600;text-decoration:none">Choose a new password</a>
+        </td></tr></table>
+        <p style="margin:0 0 24px;font-size:14px;color:#374151">Or open this link on your phone:<br><a href="${escape(opts.url)}" style="color:#0f766e;word-break:break-all">${escape(opts.url)}</a></p>
+        <p style="margin:0 0 20px;font-size:14px;color:#374151">This link works once and expires on <strong>${escape(expires)}</strong>. Your current password keeps working until you set a new one.</p>
+        <p style="margin:0 0 18px;font-size:13px;color:#6b7280">If you didn't ask for this, you can ignore it. Nothing changes unless the link is opened, and nobody can use it without this email.</p>
+        <p style="margin:0 0 18px;font-size:13px;color:#6b7280">Allstar lives at <a href="${escape(opts.appUrl)}" style="color:#0f766e">${escape(opts.appUrl)}</a>.</p>
+        <p style="margin:0;font-size:13px;color:#6b7280">&mdash; The Allstar Team</p>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`
+
+  return { to: opts.to, subject, text, html }
+}

@@ -1,7 +1,8 @@
 import { hashPassword, randomId } from './auth'
 import { record } from './audit'
 import { mailConfigured, sendMail } from './mail'
-import { inviteEmail } from './mailTemplates'
+import { inviteEmail, resetEmail } from './mailTemplates'
+import { checkLoginRate, recordFailure } from './ratelimit'
 import { displayName, ONBOARDING_VERSION } from './onboarding'
 import type { Env, Role, SessionUser } from './types'
 
@@ -447,6 +448,12 @@ export interface InviteView {
   name: string
   clientName: string
   /**
+   * What the link is for. The same table and the same form serve both, and
+   * the page needs to know which sentence to put over it: "Welcome" to a
+   * person who has never signed in, "Reset your password" to one who has.
+   */
+  kind: 'invite' | 'reset'
+  /**
    * An *invitation* link for an account that already has a password — the
    * person signed in another way first, or set it through an earlier link.
    * The page shows them the door to the app instead of a password form.
@@ -478,6 +485,7 @@ export async function readInvite(env: Env, token: string): Promise<InviteView | 
     email: row.email,
     name: row.name,
     clientName: row.client_name,
+    kind: row.kind === 'reset' ? 'reset' : 'invite',
     alreadyActive: row.kind === 'invite' && !!row.password_hash,
   }
 }
@@ -535,4 +543,116 @@ export async function acceptInvite(
   ])
 
   return { ok: true }
+}
+
+/**
+ * Why two typed passwords do not make one — or null when they do.
+ *
+ * Checked on the server, not only by the form: the form is plain HTML served
+ * to whatever browser opened the email, and a browser that skips `minlength`
+ * or a request built by hand must get the same answer. Length first, because
+ * "they don't match" about two passwords that are both too short sends the
+ * person to fix the wrong thing.
+ */
+export function passwordPairError(password: string, confirm: string): string | null {
+  if (password.length < MIN_PASSWORD) return `Password must be at least ${MIN_PASSWORD} characters.`
+  if (password !== confirm) return 'The two passwords do not match. Type the same one in both boxes.'
+  return null
+}
+
+const RESET_DAYS = 2
+
+/**
+ * "Forgot password?" — mint a reset link for every account at this address
+ * and email it, saying nothing about whether there was one.
+ *
+ * ## Why it never says
+ *
+ * An address is unique per company, not across them, and the sign-in screen
+ * is reachable by anyone. Answering "no account" to a stranger is a way to
+ * check who is a customer, one address at a time; answering "sent" to a
+ * real one and something else to a fake one is the same thing with more
+ * steps. So the reply is identical either way, and the only failures it
+ * reports are about the request itself — nothing typed, too many tries, or a
+ * deployment with no email set up, where the honest answer is that a link
+ * cannot arrive by this route at all.
+ *
+ * ## Why it spends a sign-in attempt
+ *
+ * Every request records a failure on the same buckets a wrong password
+ * would, before anything is looked up. That is what keeps this from being a
+ * way to fill someone's inbox: after the sign-in limit it answers 429, and
+ * the limit it shares is the one that already protects the account.
+ *
+ * ## One link per account, two days
+ *
+ * The same row an admin's reset link makes (`users.createResetLink`): a
+ * single-use 'reset' invite, replacing any live one, so a person who presses
+ * the button twice holds one working link, not two. `created_by` is the
+ * account itself — nobody else asked.
+ */
+export async function requestPasswordReset(
+  env: Env,
+  emailRaw: unknown,
+  origin: string,
+  appUrl: string,
+  ip: string | null,
+): Promise<{ status: number; body: Record<string, unknown>; retryAfter?: number }> {
+  const email = typeof emailRaw === 'string' ? emailRaw.trim() : ''
+  if (!email.includes('@')) return { status: 400, body: { error: 'Enter the email you sign in with.' } }
+  if (!mailConfigured(env)) {
+    return {
+      status: 501,
+      body: {
+        error:
+          'Email is not set up for this app, so a reset link cannot be sent from here. Ask your administrator for one — they can create it from Team → Manage.',
+        code: 'mail_not_configured',
+      },
+    }
+  }
+  const limit = await checkLoginRate(env, email, ip)
+  if (!limit.allowed) {
+    return {
+      status: 429,
+      body: { error: 'Too many requests for this address. Wait a few minutes and try again.', code: 'rate_limited' },
+      retryAfter: limit.retryAfter,
+    }
+  }
+  await recordFailure(env, email, ip)
+
+  const rows = await env.DB.prepare(
+    `SELECT u.id, u.email, u.name, c.name AS client_name
+       FROM users u JOIN clients c ON c.id = u.client_id
+      WHERE lower(u.email) = lower(?1) AND u.active = 1 AND u.password_hash IS NOT NULL`,
+  )
+    .bind(email)
+    .all<{ id: string; email: string; name: string; client_name: string }>()
+
+  for (const row of rows.results ?? []) {
+    const token = randomId(24)
+    const now = Date.now()
+    const expiresAt = now + RESET_DAYS * 86_400_000
+    await revokeLiveInvites(env, row.id, 'reset')
+    await env.DB.prepare(
+      `INSERT INTO invites (token_hash, user_id, created_by, created_at, expires_at, kind)
+       VALUES (?1, ?2, ?3, ?4, ?5, 'reset')`,
+    )
+      .bind(await sha256(token), row.id, row.id, now, expiresAt)
+      .run()
+    const sent = await sendMail(
+      env,
+      resetEmail({
+        to: { email: row.email, name: row.name || undefined },
+        clientName: row.client_name,
+        url: `${origin}/invite/${token}`,
+        expiresAt,
+        appUrl,
+      }),
+    )
+    // The person is told the same thing either way; the failure goes where
+    // somebody who can fix the mail provider will read it.
+    if (!sent.sent) console.error(`password reset mail failed for user ${row.id}: ${sent.error}`)
+  }
+
+  return { status: 200, body: { ok: true } }
 }

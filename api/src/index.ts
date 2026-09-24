@@ -10,7 +10,9 @@ import {
   acceptInvite,
   canInvite,
   createInvite,
+  passwordPairError,
   readInvite,
+  requestPasswordReset,
   resendInvite,
   revokeInvite,
   runSetup,
@@ -448,10 +450,14 @@ export default {
         }
         if (req.method === 'POST') {
           const form = await req.formData()
-          const result = await acceptInvite(env, token, String(form.get('password') ?? ''))
-          if (result.ok) return invitePage({ token, appUrl, done: true })
-          const invite = await readInvite(env, token)
-          return invitePage({ token, invite: invite ?? undefined, error: result.error, appUrl })
+          const password = String(form.get('password') ?? '')
+          // Read before accepting: accepting consumes the token, and the
+          // "done" page still needs to know whether it was a reset.
+          const before = await readInvite(env, token)
+          const pair = passwordPairError(password, String(form.get('confirm') ?? ''))
+          const result = pair ? { ok: false as const, error: pair } : await acceptInvite(env, token, password)
+          if (result.ok) return invitePage({ token, appUrl, done: true, kind: before?.kind })
+          return invitePage({ token, invite: before ?? undefined, error: result.error, appUrl })
         }
       }
 
@@ -719,6 +725,16 @@ export default {
       //
       // Public and rate-limited like /api/join, for the same reason: no login
       // exists for the person asking, and a miss costs an attempt.
+      //
+      // "Forgot password?". Public by necessity and answered the same way
+      // whether or not the address is anyone's — see `requestPasswordReset`
+      // for why, and for the sign-in buckets it spends an attempt on.
+      if (path === '/api/auth/forgot' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await requestPasswordReset(env, body.email, url.origin, appUrl, req.headers.get('cf-connecting-ip'))
+        const headers = result.retryAfter ? { ...cors, 'retry-after': String(result.retryAfter) } : cors
+        return json(result.body, result.status, headers)
+      }
       if (path === '/api/verify' && req.method === 'GET') {
         const result = await verifyBadge(env, url.searchParams.get('badge'), req.headers.get('cf-connecting-ip'))
         if ('error' in result) {
