@@ -92,6 +92,7 @@
     "leads:sample": "node scripts/make-test-leads.mjs",
     "verify:inspectable": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-inspectable.mjs",
     "verify:reset": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-reset.mjs",
+    "verify:reset-e2e": "node scripts/verify-reset-e2e.mjs",
     "verify:invite": "node scripts/verify-invite.mjs",
     "verify:avatar": "node scripts/verify-avatar.mjs",
     "verify:tour": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-tour.mjs",
