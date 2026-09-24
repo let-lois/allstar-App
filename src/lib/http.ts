@@ -374,6 +374,8 @@ export interface PhotoDTO {
   propertyId: string
   visitId?: string
   category: string
+  /** What an `other` photo is of; absent for every named category. */
+  type?: string
   width?: number
   height?: number
   bytes?: number

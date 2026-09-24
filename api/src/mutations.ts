@@ -48,6 +48,14 @@ function obj(payload: unknown): Record<string, unknown> {
 }
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+/**
+ * The type a photo carries, which is only ever the one typed for "other".
+ * Decided here rather than trusted from the phone, so a type left behind by an
+ * older bundle — or a hand-made request — cannot attach itself to a named
+ * category. Trimmed and bounded: it is a label, not a note.
+ */
+const photoType = (category: string, v: unknown): string | null =>
+  category === 'other' && typeof v === 'string' && v.trim() ? v.trim().slice(0, 60) : null
 
 export async function applyMutations(
   env: Env,
@@ -325,18 +333,20 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
       const propertyId = str(p.propertyId)
       if (!id || !propertyId) throw new Error('photo.create: missing fields')
       await assertPropertyInTenant(env, user, propertyId)
+      const category = str(p.category) ?? 'property'
       await env.DB.prepare(
         `INSERT OR REPLACE INTO photos
-           (id, client_id, property_id, visit_id, category, r2_key,
+           (id, client_id, property_id, visit_id, category, type, r2_key,
             width, height, bytes, captured_lat, captured_lng, created_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)`,
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)`,
       )
         .bind(
           id,
           user.clientId,
           propertyId,
           str(p.visitId),
-          str(p.category) ?? 'property',
+          category,
+          photoType(category, p.type),
           `${user.clientId}/${propertyId}/${id}.jpg`,
           num(p.width),
           num(p.height),
@@ -345,6 +355,22 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
           num(obj(p.capturedAt).lng),
           num(p.createdAt) ?? Date.now(),
         )
+        .run()
+      return
+    }
+    case 'photo.update': {
+      // Refiling, after the fact: a different category, a different type, or
+      // both. Only these two columns — the bytes and where they were taken
+      // are facts about the photo, not opinions about it.
+      const id = str(p.id)
+      const category = str(p.category)
+      if (!id || !category) throw new Error('photo.update: missing fields')
+      const owned = await env.DB.prepare('SELECT 1 AS ok FROM photos WHERE id = ?1 AND client_id = ?2')
+        .bind(id, user.clientId)
+        .first()
+      if (!owned) throw new Error('photo.update: unknown photo')
+      await env.DB.prepare('UPDATE photos SET category = ?2, type = ?3 WHERE id = ?1 AND client_id = ?4')
+        .bind(id, category, photoType(category, p.type), user.clientId)
         .run()
       return
     }

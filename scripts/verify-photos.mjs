@@ -470,6 +470,119 @@ const tally = (page) => page.locator('p', { hasText: /^\d+ photos? · / }).first
   await ctx.close()
 }
 
+/* ========== Other → Type ================================================ */
+//
+// "Other" is the one category that asks a question. What must hold: the
+// question only appears for Other and goes away for any named category; an
+// Other cannot be filed without an answer; the answer is stored with the
+// photo, sent to the office with it, shown on the thumbnail, survives a
+// reload, comes back when the photo is refiled — and is dropped, on the
+// phone and on the wire, the moment the photo stops being an Other.
+{
+  const { ctx, page } = await signIn(json(200, { ok: true, key: 'k' }))
+  const sent = []
+  await page.route('**/api/mutations', async (route) => {
+    const body = JSON.parse(route.request().postData() || '{}')
+    for (const m of body.mutations ?? []) sent.push({ kind: m.kind, ...m.payload })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ results: (body.mutations ?? []).map((m) => ({ id: m.id, status: 'applied' })), serverTime: Date.now() }),
+    })
+  })
+  const readPhoto = () =>
+    page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const req = indexedDB.open('allstar-field')
+          req.onsuccess = () => {
+            const all = req.result.transaction('photos', 'readonly').objectStore('photos').getAll()
+            all.onsuccess = () => resolve(all.result[all.result.length - 1] ?? null)
+            all.onerror = () => resolve(null)
+          }
+          req.onerror = () => resolve(null)
+        }),
+    )
+  const takeOne = async () => {
+    const chooser = page.waitForEvent('filechooser')
+    await page.getByRole('button', { name: 'Take photo' }).click()
+    await (await chooser).setFiles({ name: 'thing.jpg', mimeType: 'image/jpeg', buffer: JPEG })
+    await page.waitForTimeout(1200)
+  }
+
+  await page.goto(`${BASE}/property/${PROPERTY.id}`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(900)
+  const photosSection = page.getByRole('button', { name: /^Photos/ })
+  if ((await photosSection.count()) > 0 && (await photosSection.first().getAttribute('aria-expanded')) === 'false') {
+    await photosSection.first().click()
+    await page.waitForTimeout(400)
+  }
+  await takeOne()
+  ok((await page.getByTestId('photo-category-other').count()) === 1, 'the categorize sheet offers Other')
+  ok((await page.getByTestId('photo-type-form').count()) === 0, 'and asks nothing until it is chosen')
+  await page.getByTestId('photo-category-other').click()
+  await page.waitForTimeout(300)
+  const typeField = page.getByTestId('photo-type')
+  ok((await typeField.count()) === 1 && (await page.getByTestId('photo-category-other').getAttribute('aria-pressed')) === 'true', 'choosing Other shows a Type field and marks Other as the choice')
+  ok(!(await page.getByTestId('photo-type-save').isEnabled()), 'and nothing can be saved until it is answered')
+  // A named category, chosen after Other: the field is gone and the photo is
+  // filed at once, with no type.
+  await page.getByTestId('photo-category-roof').click()
+  await page.waitForTimeout(1200)
+  ok((await page.getByTestId('photo-type-form').count()) === 0 && (await page.getByTestId('categorize-sheet').count()) === 0, 'choosing a named category instead hides the field and files the photo')
+  const roof = sent.find((m) => m.kind === 'photo.create')
+  ok(roof?.category === 'roof' && roof?.type === null, 'as that category, with no type on the wire', JSON.stringify({ category: roof?.category, type: roof?.type }))
+
+  // Now an Other, answered.
+  await takeOne()
+  await page.getByTestId('photo-category-other').click()
+  await page.getByTestId('photo-type').fill('  Skylight ')
+  ok(await page.getByTestId('photo-type-save').isEnabled(), 'an answer enables Save')
+  await page.getByTestId('photo-type-save').click()
+  await page.waitForTimeout(1500)
+  const other = sent.filter((m) => m.kind === 'photo.create').at(-1)
+  ok(other?.category === 'other' && other?.type === 'Skylight', 'the Other is sent with its type, trimmed', JSON.stringify({ category: other?.category, type: other?.type }))
+  const stored = await readPhoto()
+  ok(stored?.category === 'other' && stored?.type === 'Skylight', 'and stored on the phone with it', JSON.stringify({ category: stored?.category, type: stored?.type }))
+  const labels = () => page.getByTestId('photo-label').allInnerTexts()
+  ok((await labels()).some((l) => /^Other · Skylight$/.test(l.trim())), 'the thumbnail reads "Other · Skylight"', (await labels()).join(' | '))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1500)
+  if ((await photosSection.count()) > 0 && (await photosSection.first().getAttribute('aria-expanded')) === 'false') {
+    await photosSection.first().click()
+    await page.waitForTimeout(400)
+  }
+  ok((await labels()).some((l) => /^Other · Skylight$/.test(l.trim())), 'and still does after a reload')
+
+  // Refiling: the answer comes back, and leaving Other drops it.
+  const thumb = page.locator('button', { has: page.getByTestId('photo-label').filter({ hasText: 'Skylight' }) }).first()
+  await thumb.click()
+  await page.waitForTimeout(500)
+  ok(/Other · Skylight/.test(await page.getByTestId('viewer-label').innerText()), 'the viewer names the type too')
+  await page.getByTestId('photo-refile').click()
+  await page.waitForTimeout(500)
+  ok((await page.getByTestId('categorize-sheet').getAttribute('data-mode')) === 'edit', 'Change opens the same sheet for that photo')
+  ok((await page.getByTestId('photo-type').inputValue()) === 'Skylight' && (await page.getByTestId('photo-category-other').getAttribute('aria-pressed')) === 'true', 'with Other chosen and the type already typed')
+  await page.getByTestId('photo-type').fill('Gutter')
+  await page.getByTestId('photo-type-save').click()
+  await page.waitForTimeout(1200)
+  const retyped = sent.filter((m) => m.kind === 'photo.update').at(-1)
+  ok(retyped?.category === 'other' && retyped?.type === 'Gutter', 'a new type is sent as an update', JSON.stringify(retyped))
+  ok((await labels()).some((l) => /^Other · Gutter$/.test(l.trim())), 'and shown')
+  await page.locator('button', { has: page.getByTestId('photo-label').filter({ hasText: 'Gutter' }) }).first().click()
+  await page.waitForTimeout(500)
+  await page.getByTestId('photo-refile').click()
+  await page.waitForTimeout(400)
+  await page.getByTestId('photo-category-roof').click()
+  await page.waitForTimeout(1200)
+  const refiled = sent.filter((m) => m.kind === 'photo.update').at(-1)
+  ok(refiled?.category === 'roof' && refiled?.type === null, 'moving it to a named category sends no type', JSON.stringify(refiled))
+  const after = await readPhoto()
+  ok(after?.category === 'roof' && after?.type === undefined, 'and the phone forgets the old one', JSON.stringify({ category: after?.category, type: after?.type }))
+  ok(!(await labels()).some((l) => /Gutter|Skylight/.test(l)), 'so no thumbnail still says it')
+  await ctx.close()
+}
+
 ok(errors.length === 0, `no page errors${errors.length ? ` — ${errors[0]}` : ''}`)
 
 await browser.close()
