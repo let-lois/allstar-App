@@ -34,6 +34,15 @@
         "simulator": false
       }
     },
+    "testflight-preview": {
+      "distribution": "store",
+      "channel": "preview",
+      "environment": "preview",
+      "autoIncrement": true,
+      "ios": {
+        "image": "latest"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "android": {
@@ -52,6 +61,11 @@
       },
       "android": {
         "track": "internal"
+      }
+    },
+    "testflight-preview": {
+      "ios": {
+        "ascAppId": "6813645551"
       }
     }
   }

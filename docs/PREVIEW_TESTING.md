@@ -450,6 +450,124 @@ on `channel: preview`, so an already-installed preview APK takes the update.
 
 ---
 
+## 5b. iPhone through TestFlight — the `testflight-preview` profile
+
+The ad hoc path in §5.3 needs device registration and interactive Apple
+credentials. There is a second way onto a real iPhone that needs neither and
+still never touches production: **a store build that listens to the `preview`
+channel**, uploaded to App Store Connect and installed through TestFlight's
+*internal* testing. That is what the `testflight-preview` profile in
+`apps/mobile/eas.json` is.
+
+```json
+"testflight-preview": {
+  "distribution": "store",
+  "channel": "preview",
+  "environment": "preview",
+  "autoIncrement": true,
+  "ios": { "image": "latest" }
+}
+```
+
+Why each line is what keeps it safe:
+
+| Field | Effect |
+| --- | --- |
+| `distribution: store` | Produces an App Store-signed `.ipa` that App Store Connect accepts. Distribution is about *signing and where the file can go*; it says nothing about which updates the app fetches |
+| `channel: preview` | Baked into the binary's `Expo.plist` as `expo-channel-name`. Every update request this build ever makes asks for `preview`; the server only answers with updates on the branch mapped to that channel. A production OTA is unreachable by construction |
+| `environment: preview` | Written, not inferred: EAS Build compiles the **preview** environment's `EXPO_PUBLIC_*` values into the embedded bundle. The production key never enters it |
+| `autoIncrement: true` | Takes the next build number from EAS's remote counter, shared per bundle identifier — so it cannot collide with production build 3 |
+| no `extends` | A later change to `production` cannot leak in |
+
+`verify:easprofiles` pins all of this and asserts `production` is unchanged as an
+exact object, so a "tidy both" edit fails before it builds.
+
+**Uploading to TestFlight is not a release.** `eas submit` uploads the build to
+App Store Connect, where it appears under TestFlight. An App Store release
+happens only when somebody creates a version in App Store Connect and clicks
+*Submit for Review*. **Internal** TestFlight testing (App Store Connect team
+members, up to 100) needs no Apple review at all; *external* testing does, and
+is not part of this.
+
+**Same bundle identifier.** TestFlight shows all builds for the one app record;
+you pick which to install. iOS keeps one app per bundle identifier per phone, so
+installing the preview build **replaces** production build 3 on that phone.
+Build 3 itself is untouched in App Store Connect and can be reinstalled from
+TestFlight at any time. Nothing about the production channel, its OTAs or its
+variables changes.
+
+### Build
+
+```
+cd apps/mobile
+eas build --platform ios --profile testflight-preview --clear-cache \
+  --message "Google Maps TestFlight preview"
+```
+
+Interactive is fine here — it reuses the existing App Store distribution
+certificate and provisioning profile that production builds 2 and 3 already
+used, so there is nothing new to create with Apple.
+
+Before building, confirm the preview environment holds the two Google variables
+and production does not (names only are printed by default):
+
+```
+eas env:list preview
+eas env:list production
+```
+
+### Upload — this build, by ID, not "latest"
+
+```
+eas build:list --platform ios --build-profile testflight-preview --limit 1   # copy the build ID
+eas submit --platform ios --profile testflight-preview --id <BUILD_ID> \
+  --what-to-test "PREVIEW channel — Google Maps test build. Not for release."
+```
+
+`--id` rather than `--latest`: "latest" is whichever iOS build finished most
+recently, and if a production build were ever queued alongside, that is the one
+you would upload. The `--what-to-test` text appears in the TestFlight app next
+to the build, which is the first identity check a tester sees.
+
+### Internal testing, then install
+
+1. App Store Connect → the app → **TestFlight** tab. The build appears under
+   **iOS builds** with status *Processing*; wait for *Ready to Test* (usually
+   minutes, occasionally an hour).
+2. If asked about export compliance, the answer is already in `app.json`
+   (`ITSAppUsesNonExemptEncryption: false`), so no prompt should appear.
+3. **Internal Testing** in the left column → an existing group, or **+** to
+   create one (e.g. *Google Maps preview*) → add yourself → **Builds** → **+**
+   → select the new build number.
+4. On the iPhone: open **TestFlight** → All-Star → the new build is listed with
+   its number and the *What to Test* text → **Install** (it replaces build 3).
+
+### Prove which build you are holding
+
+- **On screen:** a small strip in the top-right corner reading
+  `BUILD: PREVIEW (not production) · CHANNEL: preview · RUNTIME: exposdk:57.0.0
+  · UPDATE: <8 chars or none> · EMBEDDED: yes/no`. It is rendered only when the
+  channel is one this project recognises as internal (the same rule that opens
+  the Web Inspector); **production build 3 shows nothing**. Its absence is
+  itself the answer.
+- **TestFlight app:** build number 4+ (production is 3) and the *What to Test*
+  text.
+- **From a Mac:** `eas build:view <BUILD_ID>` → distribution `STORE`, channel
+  `preview`, runtime `exposdk:57.0.0`, profile `testflight-preview`;
+  `eas submit:status --platform ios` → the TestFlight builds Apple knows about.
+- **Safari Web Inspector** attaches (Develop → *iPhone* → All-Star) — it cannot
+  on build 3.
+
+### Preview OTA to the TestFlight build
+
+Same command as §5.1 — `--branch preview --environment preview --clear-cache`.
+The build's channel is `preview`, runtime `exposdk:57.0.0`, platform iOS: a
+preview update matches all three and is downloaded on launch, applied on the
+next. The strip's `UPDATE:` changes from `none`/`EMBEDDED: yes` to the first
+eight characters of the group's update ID and `EMBEDDED: no`; match it against
+`eas update:list --branch preview`. `eas update:insights <GROUP_ID>` shows the
+launch from the server side.
+
 ## 6. Device test order
 
 Run them in this order. Each stage catches things that would waste your time in
