@@ -88,8 +88,8 @@ anyone who downloads it. Never put a private secret behind that prefix.
 | `EXPO_PUBLIC_ORIGIN` | The QR code on every team member badge. Without it the code is built from the webview's local origin — a URL no homeowner's camera can open, and nothing on screen looks wrong | ✅ set in all three |
 | ~~`EXPO_PUBLIC_MAPTILER_KEY`~~ | **Retired.** Tiles come from the Worker's `/api/tiles` on the server-side `MAPTILER_API_KEY`; the app reads `/api/health` → `config.tiles` at launch | remove it from the EAS environments |
 | `EXPO_PUBLIC_API_URL` | Points the app at a different API | Leave unset. Unset falls back to the deployed Worker, which is what a shipping build wants |
-| `EXPO_PUBLIC_GOOGLE_MAPS_KEY` | The Google basemap and Places autocomplete. **Not** Street View any more — that goes through `/api/streetview`, so the phone has it without a key | ❌ unset, and **cannot work in the shell** — see step 5 |
-| `EXPO_PUBLIC_GOOGLE_MAP_ID` | Advanced markers, required with the key above | ❌ unset; all-or-nothing with it |
+| `EXPO_PUBLIC_GOOGLE_MAPS_KEY` | The Google basemap and Places autocomplete. **Not** Street View any more — that goes through `/api/streetview`, so the phone has it without a key | Set it on `preview` first. It **cannot be restricted** in the shell; a quota cap is what bounds it — see step 5 |
+| `EXPO_PUBLIC_GOOGLE_MAP_ID` | Advanced markers, required with the key above | All-or-nothing with it: one without the other is treated as unconfigured |
 
 ---
 
@@ -100,7 +100,7 @@ Unchanged by any of this, listed so the three sets can be compared.
 | Name | Needed for | State |
 | --- | --- | --- |
 | ~~`VITE_MAPTILER_KEY`~~ | **Retired.** The web app reads tiles from `/api/tiles` like the phone; nothing loads from MapTiler directly | remove it from Pages and delete the browser key at MapTiler |
-| `VITE_GOOGLE_MAPS_KEY` | Google basemap, Places, Street View. Referrer-restricted browser key — restrict to **Maps JavaScript API**, **Places API (New)**, **Street View Static API** and nothing else | Optional |
+| `VITE_GOOGLE_MAPS_KEY` | Google basemap, Places, Street View. Referrer-restricted browser key — restrict to **Maps JavaScript API**, **Places API (New)**, **Street View Static API** and nothing else. A **different key** from the shell's, which cannot be referrer-restricted | Optional, and it now switches the **office console's** maps too, not only the field map |
 | `VITE_GOOGLE_MAP_ID` | Required whenever the key above is set | Optional |
 | `VITE_PUBLIC_ORIGIN` | Leave empty for web — the running origin is correct | — |
 | `VITE_API_URL` | Leave unset in production | — |
@@ -196,27 +196,49 @@ asks for, the edge cache absorbs repeats, and MapTiler's free tier is a hard cap
 with no overage billing — so the worst case is a blank map until the month rolls
 over, an outage rather than an invoice. `smoke:tiles` drives all of it.
 
-### Step 5 — Decide about the Google basemap *(a decision, not a task)*
+### Step 5 — The Google basemap on the phone *(decided; the risk is unchanged)*
 
-`EXPO_PUBLIC_GOOGLE_MAPS_KEY` cannot be secured in the shell. A referrer
+**This step used to recommend against it. The decision has been reversed by the
+business — MapTiler is to be removed — so what follows is what the reversal
+costs and how it is bounded, not an argument.**
+
+The technical objection stands exactly as it did, and nothing in the app fixes
+it: `EXPO_PUBLIC_GOOGLE_MAPS_KEY` **cannot be secured in the shell.** A referrer
 restriction does not match a request with no referrer, and a bundle-ID
-restriction does not apply to a webview.
+restriction applies to Google's native SDKs, not to a `fetch()` from a webview.
+A key in the shell is therefore unrestricted by construction, sitting in a
+downloadable APK, spendable by anyone who unzips it.
 
-My recommendation: **leave the Google basemap to the web and let the phone use
-its own renderer plus MapTiler.** The parts reps actually need already run on
-the Worker — reverse geocoding, and now Street View — so the phone loses only
-the satellite basemap, and gains not shipping a spendable key.
+What changes is the consequence, and it is worse than the MapTiler version of
+this mistake (LAUNCH.md item 4): MapTiler's free tier is a hard cap, so abuse
+produced a blank map. Google Maps Platform is metered with no ceiling by
+default, so abuse produces an invoice.
 
-That is the pattern for anything else Google is wanted for here, and it is the
-only one that works: the key stays a server secret and the app deals in
-coordinates and results. `/api/streetview` is the worked example — the app
-sends a point, the Worker reads the company's encrypted key, checks the free
-metadata endpoint, and returns bytes. See `api/src/streetview.ts`.
+So the mitigation is not optional and it is not in this repo — it is in the
+Cloud console:
 
-If the Google basemap is genuinely wanted on the phone, it belongs with the
-first **native** map screen (`react-native-maps` and the real iOS/Android Maps
-SDK, which bundle-ID restriction does protect), not with the webview shell.
-That is on the migration plan in `MIGRATION_PROGRESS.md`.
+1. **Two keys, not one.** The web build gets an HTTP-referrer-restricted key
+   (`allstar.letlois.com`, `allstar-app.pages.dev`, localhost). Only the shell
+   build gets the unrestricted one.
+2. **API restrictions on both**, to Maps JavaScript API, Places API (New) and
+   Street View Static API, and nothing else.
+3. **A per-API daily quota cap** on the unrestricted key. This is what replaces
+   the hard stop MapTiler gave for free: it converts a leaked key from an
+   invoice into an outage.
+4. **A billing budget alert** on the project.
+
+Nothing else moves. The server-side `GOOGLE_MAPS_API_KEY` stays a Worker secret
+and stays separate — reverse geocoding, routes and Street View continue to run
+there, and the app continues to deal in coordinates and results rather than in
+keys. `/api/streetview` is the worked example: the app sends a point, the Worker
+reads the company's encrypted key, checks the free metadata endpoint, and
+returns bytes. See `api/src/streetview.ts`.
+
+The *right* long-term answer is still the one this step gave: the Google basemap
+belongs with the first **native** map screen (`react-native-maps` and the real
+iOS/Android Maps SDK, which bundle-ID restriction does protect), where the key
+can actually be restricted. That is on the migration plan in
+`MIGRATION_PROGRESS.md` and is unaffected by any of the above.
 
 ### Step 6 — Unblock end-to-end testing from a Claude session *(optional, 2 minutes)*
 

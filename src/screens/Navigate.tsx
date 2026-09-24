@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
-import { GoogleFieldMap } from '../components/map/GoogleFieldMap'
-import { FieldMap } from '../components/map/FieldMap'
+import { AllStarMap } from '../components/map/AllStarMap'
 import { useAppStore } from '../store/useAppStore'
 import { gmapsConfigured, loadGmaps } from '../lib/gmaps'
 import { apiDirections } from '../lib/http'
@@ -115,14 +114,6 @@ export function Navigate() {
   const property = useAppStore((s) => (id ? s.properties[id] : undefined))
   const position = useAppStore((s) => s.position)
   const [line, setLine] = useState<Line>({ state: 'idle' })
-  /*
-    Only the map failing. Kept apart from `line` on purpose: a route we cannot
-    compute and a map we cannot draw are different problems with different
-    answers, and collapsing them is what took the world map away from the one
-    case that needs it most.
-  */
-  const [mapDead, setMapDead] = useState(false)
-
   const direct = useMemo(
     () => (position && property ? distanceMiles(position, property) : null),
     [position, property],
@@ -251,8 +242,6 @@ export function Navigate() {
     a dead zone too, which is where a rep most needs to see which way the door
     is.
   */
-  const useGoogle = gmapsConfigured() && !mapDead
-
   /*
     The line, and which of the two maps draws it — either, now. The self-rendered
     map could not zoom out past a neighbourhood, which is why this case used to be
@@ -300,33 +289,32 @@ export function Navigate() {
         back
       />
 
-      {useGoogle ? (
-        <GoogleFieldMap
-          {...mapProps}
-          {...drawn}
-          onUnavailable={() => {
-            setMapDead(true)
-            /*
-              Never over the top of an answer we already have. A map that
-              cannot draw says nothing about why there is no route, and writing
-              'offline' here unconditionally put "No signal" back on the screen
-              for the rep in another state and the demo account — the exact
-              wrong-reason bug this screen was fixed for once already. Caught by
-              the gate written for it, which is the whole argument for having
-              written it. `direct` is protected for the same reason: the line is
-              already computed and drawn, and the map falling back to the
-              self-rendered one changes nothing about it.
-            */
-            setLine((l) =>
-              l.state === 'failed' || l.state === 'direct'
-                ? l
-                : { state: 'failed', why: 'offline' },
-            )
-          }}
-        />
-      ) : (
-        <FieldMap {...mapProps} {...drawn} />
-      )}
+      <AllStarMap
+        {...mapProps}
+        {...drawn}
+        onUnavailable={() => {
+          /*
+            The fallback has already happened — `AllStarMap` owns that. What is
+            left here is this screen's own business: not claiming a walking
+            route it can no longer draw.
+
+            Never over the top of an answer we already have. A map that cannot
+            draw says nothing about why there is no route, and writing
+            'offline' here unconditionally put "No signal" back on the screen
+            for the rep in another state and the demo account — the exact
+            wrong-reason bug this screen was fixed for once already. Caught by
+            the gate written for it, which is the whole argument for having
+            written it. `direct` is protected for the same reason: the line is
+            already computed and drawn, and the map falling back to the
+            self-rendered one changes nothing about it.
+          */
+          setLine((l) =>
+            l.state === 'failed' || l.state === 'direct'
+              ? l
+              : { state: 'failed', why: 'offline' },
+          )
+        }}
+      />
 
       <div
         className="shrink-0 bg-surface px-4 pt-3 shadow-nav"

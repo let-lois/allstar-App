@@ -127,8 +127,10 @@ if (!html) {
 }
 
 const fails = []
-const ok = (cond, msg) => {
-  console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}`)
+/** `measured` is optional and prints in brackets — the convention the other
+ *  gates here use, so a failure says what it actually saw. */
+const ok = (cond, msg, measured) => {
+  console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}${measured ? `  (${measured})` : ''}`)
   if (!cond) fails.push(msg)
 }
 
@@ -249,14 +251,49 @@ page.on('requestfailed', (r) => {
 await page.addInitScript(nativeSide, { hostOs: HOST_OS, actions: ACTIONS })
 await page.goto(`file://${resolve(BUNDLE, html)}`, { waitUntil: 'load' })
 
-// The app boots asynchronously — the store reads storage before it renders.
-await page.waitForFunction(() => document.body.innerText.length > 0, null, { timeout: 20_000 })
+/*
+  The app boots asynchronously — the store reads IndexedDB before it renders —
+  so this waits for it to have *finished*, not merely to have painted.
+
+  It used to wait for `innerText.length > 0`, which is satisfied by the splash:
+  `App.tsx` renders "Loading your territory…" while the store hydrates. So on a
+  loaded machine the gate sampled the splash, asserted `/Sign in/` against it,
+  and failed — intermittently, about one run in three, on code that boots
+  perfectly. Measured on unmodified `main`: pass, fail, pass.
+
+  That is the worst kind of red. A gate whose failures are not about the code
+  teaches everyone to re-run it, and the day it goes red for a real reason
+  nobody believes it.
+
+  Waiting for the splash to *clear* rather than for the sign-in screen itself
+  keeps the assertion honest: if the app boots to something that is neither —
+  an error screen, a blank shell — the wait still completes and the assertion
+  below fails with the actual text in hand, which is the diagnostic that
+  matters. The timeout is unchanged, so an app that never boots still fails,
+  and it is swallowed rather than thrown for the same reason: a timeout should
+  report what *was* on screen, not a stack trace about waiting for it.
+*/
+const SPLASH = /Loading your territory/i
+await page
+  .waitForFunction(
+    (splash) => {
+      const t = document.body.innerText
+      return t.length > 0 && !new RegExp(splash, 'i').test(t)
+    },
+    SPLASH.source,
+    { timeout: 20_000 },
+  )
+  .catch(() => {})
 
 console.log(`\n--- ${HOST_OS} host, file:// origin ---`)
 
 /* 1. It boots at all, and lands on the one screen a signed-out rep should see. */
 const text = await page.evaluate(() => document.body.innerText)
-ok(/Sign in/i.test(text), 'the app boots and renders the sign-in screen')
+ok(
+  /Sign in/i.test(text),
+  'the app boots and renders the sign-in screen',
+  text.replace(/\s+/g, ' ').trim().slice(0, 60) || '(nothing rendered)',
+)
 
 /* 2. Every image the bundle asked for actually decoded.
       Asked of the DOM rather than of the network, because `requestfailed` is a

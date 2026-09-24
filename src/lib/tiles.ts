@@ -32,7 +32,17 @@ import { API_URL } from './api-url'
  */
 export const TILE_HOST = API_URL
 
-export type LayerId = 'streets' | 'satellite'
+/*
+  The layer id and the rep's stored choice moved to `lib/map-layer.ts`.
+
+  Both renderers need them and only one of them draws tiles — see that file.
+  Re-exported here so every existing `from '../lib/tiles'` keeps resolving, and
+  so that removing this module later takes the MapTiler-specific half with it
+  and leaves the preference behind.
+*/
+import type { LayerId } from './map-layer'
+export { loadLayer, saveLayer } from './map-layer'
+export type { LayerId }
 
 interface Layer {
   id: LayerId
@@ -215,29 +225,6 @@ export function visibleTiles(opts: {
     }
   }
   return out
-}
-
-const STORED_LAYER = 'allstar.map.layer'
-
-/**
- * A rep's choice of basemap sticks. Someone assessing roofs works in satellite
- * all day and should not have to re-pick it on every screen.
- */
-export function loadLayer(): LayerId {
-  try {
-    const v = localStorage.getItem(STORED_LAYER)
-    return v === 'satellite' ? 'satellite' : 'streets'
-  } catch {
-    return 'streets'
-  }
-}
-
-export function saveLayer(id: LayerId) {
-  try {
-    localStorage.setItem(STORED_LAYER, id)
-  } catch {
-    /* private mode — the default is fine */
-  }
 }
 
 /* --- offline prefetch ------------------------------------------------------

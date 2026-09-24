@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AdminPage } from './AdminLayout'
-import { FieldMap, fitZoom } from '../components/map/FieldMap'
+import { fitZoom } from '../components/map/FieldMap'
+import { AllStarMap } from '../components/map/AllStarMap'
 import { useAppStore } from '../store/useAppStore'
 import { UNASSIGNED_TERRITORY, inTerritory, useTerritories } from './useAdminData'
 import { DataList } from './DataList'
@@ -673,7 +674,7 @@ export function AdminTerritories() {
               nothing to place on a map.
             </p>
           )}
-          <FieldMap
+          <AllStarMap
             className="h-[520px]"
             /*
               Every lead while drawing, not just the selected territory's — the

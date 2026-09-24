@@ -2,11 +2,11 @@ import { IconFilter } from '../components/nav/icons'
 import { IconBack } from '../components/nav/icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { FieldMap, type MapHandle } from '../components/map/FieldMap'
+import { type MapHandle } from '../components/map/FieldMap'
+import { AllStarMap } from '../components/map/AllStarMap'
 import { RouteList } from '../components/map/RouteList'
-import { GoogleFieldMap } from '../components/map/GoogleFieldMap'
 import { MapSearch } from '../components/map/MapSearch'
-import { gmapsConfigured, type GmapsError } from '../lib/gmaps'
+import { type GmapsError } from '../lib/gmaps'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { PropertyPeek } from '../components/property/PropertyPeek'
 import { DetectedProperty } from '../components/property/DetectedProperty'
@@ -134,7 +134,6 @@ export function MapScreen() {
     — which is precisely the condition this screen exists for.
   */
   const [mapError, setMapError] = useState<GmapsError | null>(null)
-  const googleMap = gmapsConfigured()
   const mapHandle = useRef<MapHandle | null>(null)
 
   const isWide = useIsWide()
@@ -535,11 +534,11 @@ export function MapScreen() {
 
     So the order is now imagery first. Google draws while it can; when it cannot,
     `FieldMap` takes over with whatever tiles are already on the device and its
-    own drawn basemap underneath them. The list remains a choice rather than a
+    own drawn basemap underneath them — a hand-off `AllStarMap` now owns for
+    every screen rather than this one. The list remains a choice rather than a
     consolation.
   */
   const showList = view === 'list'
-  const useGoogle = googleMap && !mapError
 
   /*
     One prop bundle for both renderers. They are not variants of one map — they
@@ -843,11 +842,13 @@ export function MapScreen() {
       )}
 
       {!showList ? (
-        useGoogle ? (
-          <GoogleFieldMap {...mapProps} onUnavailable={setMapError} />
-        ) : (
-          <FieldMap {...mapProps} />
-        )
+        /*
+          One component, which picks the renderer and falls back on its own —
+          see `AllStarMap`. This screen keeps only the part that is its own
+          business: saying *why*, in the banner below, which is the one place
+          a rejected key becomes readable to whoever deployed it.
+        */
+        <AllStarMap {...mapProps} onUnavailable={setMapError} />
       ) : (
         /*
           A real screen rather than a degraded map, so it gets a solid header

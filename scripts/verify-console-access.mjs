@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright'
 import { chromiumPath } from './lib/browser.mjs'
 import { dismissTour } from './lib/tour.mjs'
@@ -205,6 +206,55 @@ for (const width of [390, 412]) {
     'rep: console is role-gated even by direct URL',
   )
   await ctx.close()
+}
+
+/* --- the rail does not offer a console the shell does not contain --------- */
+//
+// Metro swaps `src/adminRoutes.tsx` for a stub when it bundles the DOM shell
+// (see `apps/mobile/metro.config.js`), so inside the native app `/admin` is not
+// a route at all and `App`'s catch-all sends it to `/today`.
+//
+// `More` was fixed for this and the side rail was not, because the report came
+// from a phone and the rail is `hidden md:flex`. Every wider surface the shell
+// runs on — an Android tablet, a large display mode — still drew a Console link
+// for a manager that silently dropped them on the rep's Today screen.
+//
+// 1024px, where the rail is not only visible but labelled, and driven twice:
+// once as a browser, once with what a webview shell puts on `window` before any
+// of the app's own code runs. The difference between the two runs is the assertion.
+{
+  const shellState = async (native) => {
+    const ctx = await browser.newContext({ viewport: { width: 1024, height: 900 } })
+    if (native) {
+      const page0 = await ctx.newPage()
+      await page0.close()
+      await ctx.addInitScript(() => {
+        // What a webview shell exposes. `isNativeShell()` reads
+        // `process.env.EXPO_DOM_HOST_OS` first, which Vite folds to `undefined`
+        // on the web, and falls through to exactly this.
+        window.Capacitor = { platform: 'ios' }
+      })
+    }
+    const page = await signIn(ctx, /Ray Okafor/)
+    const link = await page.evaluate(() => !!document.querySelector('a[href="/admin"]'))
+    await ctx.close()
+    return link
+  }
+
+  const onWeb = await shellState(false)
+  const inShell = await shellState(true)
+  ok(onWeb, 'manager on the web: the rail offers the console')
+  ok(!inShell, 'manager in the native shell: it does not, because there is none to open')
+  ok(onWeb !== inShell, 'and the shell is the only difference between those two runs')
+
+  // The source half, for the reason the rest of this file measures rather than
+  // greps: the rail is one `hidden md:flex` away from being invisible to every
+  // check above, and this is the guard that would go missing silently.
+  const src = readFileSync(new URL('../src/components/nav/BottomNav.tsx', import.meta.url), 'utf8')
+  ok(
+    /role !== 'field_rep' && !isNativeShell\(\)/.test(src),
+    'the rail gates the console on the shell as well as the role',
+  )
 }
 
 /* --- a manager sees fewer sections than an admin -------------------------- */

@@ -130,11 +130,16 @@ try {
       And the frame where a photo of the house would be is present and honest.
 
       The demo has no company and therefore no stored key, so the truthful
-      answer here is "no photo" — the *missing key* case belongs to a signed-in
-      account and is covered against a real 501 in `verify:streetview`. What
-      matters on this screen is that the frame exists at all: it is what stops
-      the address jumping up the sheet when a photo arrives a second later, and
-      it is where a rep looks to recognise the house they tapped.
+      answer here is that Street View is not switched on — not that the street
+      has no imagery. Those were the same sentence until `StreetView` learned to
+      tell four kinds of nothing apart; the signed-in versions of each are
+      driven against real status codes in `verify:streetview`.
+
+      What matters on *this* screen is that the frame exists at all and says
+      something: it is what stops the address jumping up the sheet when a photo
+      arrives a second later, and it is where a rep looks to recognise the house
+      they tapped. Which sentence is not this gate's business, which is why it
+      asserts length rather than wording.
     */
     const frame = page.getByTestId('property-image').first()
     ok((await frame.count()) > 0, 'the sheet keeps a frame where the photo of the house goes')
