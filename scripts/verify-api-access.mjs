@@ -54,6 +54,10 @@ const ROUTES = {
   // Redeeming a company join code: the code is the credential, and guessing
   // one is bounded on the same buckets as guessing a password.
   "/api/join|POST": { how: 'ratelimited', fn: 'joinWithCode', file: 'join.ts' },
+  // "Forgot password?": no login exists for the person asking, the answer is
+  // the same whether or not the address is anyone's, and every request spends
+  // a sign-in attempt on the same buckets so it cannot fill an inbox.
+  "/api/auth/forgot|POST": { how: 'ratelimited', fn: 'requestPasswordReset', file: 'invites.ts' },
   // A homeowner checking the badge they were shown. No login exists for them.
   "/api/verify|GET": { how: 'ratelimited', fn: 'verifyBadge', file: 'verify.ts' },
   // The code itself is a credential for making accounts; reading it is

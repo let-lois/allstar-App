@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
-import { TeamBadge } from '../components/badge/TeamBadge'
+import { BADGE_STATUS_LABEL, TeamBadge, badgeTarget } from '../components/badge/TeamBadge'
+import { badgePng, deliverBadge } from '../lib/badge-image'
 import { ApiError, apiConfirmBadge, apiMintBadge, apiRenewOwnBadge } from '../lib/http'
 import { ROLE_LABEL } from '../lib/roles'
 import { liveToken } from '../lib/session'
@@ -24,9 +25,46 @@ export function MyBadge() {
   const user = useAppStore((s) => s.user)
   const mode = useAppStore((s) => s.mode)
   const refreshMe = useAppStore((s) => s.refreshMe)
-  const [busy, setBusy] = useState<'mint' | 'confirm' | 'renew' | null>(null)
+  const [busy, setBusy] = useState<'mint' | 'confirm' | 'renew' | 'download' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [needsName, setNeedsName] = useState(false)
+  const [delivered, setDelivered] = useState<'shared' | 'downloaded' | null>(null)
+
+  /*
+    The badge as a file — drawn at card size, not captured off the screen.
+    See `lib/badge-image.ts` for why that matters to the code on it. Offered
+    for any badge that exists: an unconfirmed one prints "Awaiting
+    confirmation" on the card, which is the truth, and a rep who wants it on
+    a lanyard before the office confirms it is not doing anything wrong.
+  */
+  async function download() {
+    if (!user?.badge) return
+    setBusy('download')
+    setError(null)
+    setDelivered(null)
+    try {
+      const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.name
+      const company = user.company ?? { name: user.clientName, timezone: undefined }
+      const blob = await badgePng({
+        badge: user.badge,
+        name,
+        title: user.jobTitle || ROLE_LABEL[user.role],
+        company,
+        avatarUrl: user.avatarUrl,
+        avatarInitials: user.avatarInitials,
+        target: badgeTarget(user.badge, company)?.target,
+        statusLabel: BADGE_STATUS_LABEL[user.badge.status],
+      })
+      const file = `allstar-badge-${user.badge.id}.png`
+      setDelivered(await deliverBadge(blob, file))
+    } catch (err) {
+      // A cancelled share sheet is not a failure and is not reported.
+      if (err instanceof Error && err.name === 'AbortError') return
+      setError('The badge image could not be made just now. Try again.')
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function act(kind: 'mint' | 'confirm' | 'renew') {
     const token = liveToken()
@@ -118,6 +156,28 @@ export function MyBadge() {
                 <p className="mt-5 text-[14px] leading-relaxed text-ink-mute" data-testid="badge-active-copy">
                   Show this at the door. Homeowners can scan the code to see that this badge is real and still good.
                 </p>
+              )}
+
+              {badge && (
+                <div className="mt-4">
+                  <Button
+                    size="lg"
+                    full
+                    variant="secondary"
+                    disabled={busy !== null}
+                    onClick={() => void download()}
+                    data-testid="badge-download"
+                  >
+                    {busy === 'download' ? 'Making the image…' : 'Download badge'}
+                  </Button>
+                  <p className="mt-2 text-[12.5px] leading-relaxed text-ink-mute" data-testid="badge-download-note">
+                    {delivered === 'shared'
+                      ? 'Sent to the share sheet — choose Save Image to keep it in Photos.'
+                      : delivered === 'downloaded'
+                        ? 'Saved. It is a standard ID-card size (3.375 × 2.125 in) at print quality, and the code on it scans.'
+                        : 'A print-quality image at standard ID-card size (3.375 × 2.125 in), with the same scannable code.'}
+                  </p>
+                </div>
               )}
 
               <p className="mt-6 text-[13px] leading-relaxed text-ink-mute">

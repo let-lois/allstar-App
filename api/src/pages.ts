@@ -112,11 +112,18 @@ export function setupPage(opts: { error?: string; done?: boolean; appUrl: string
 
 export function invitePage(opts: {
   token: string
-  invite?: { email: string; name: string; clientName: string; alreadyActive?: boolean }
+  invite?: { email: string; name: string; clientName: string; alreadyActive?: boolean; kind?: 'invite' | 'reset' }
   error?: string
   done?: boolean
+  /**
+   * For the "done" page, which has no invite left to read it from — the
+   * token was consumed by the same request. A reset says "changed"; an
+   * invitation says "set". Defaults to the invitation wording.
+   */
+  kind?: 'invite' | 'reset'
   appUrl: string
 }): Response {
+  const reset = (opts.kind ?? opts.invite?.kind) === 'reset'
   /*
     An invitation link for somebody who already has a password — they joined
     with the company code, or set it through an earlier link. No form: a form
@@ -135,11 +142,13 @@ export function invitePage(opts: {
 
   if (opts.done) {
     return shell(
-      'Password set',
+      reset ? 'Password changed' : 'Password set',
       `<div class="mark">A</div>
-       <h1>You're in</h1>
-       <div class="ok">Your password is set.</div>
-       <p class="sub">Open <a href="${escapeHtml(opts.appUrl)}">${escapeHtml(opts.appUrl)}</a> and sign in.</p>
+       <h1>${reset ? 'Password changed' : "You're in"}</h1>
+       <div class="ok" data-state="done">${
+         reset ? 'Your new password is set. The old one no longer works.' : 'Your password is set.'
+       }</div>
+       <p class="sub">Open <a href="${escapeHtml(opts.appUrl)}">${escapeHtml(opts.appUrl)}</a> and sign in${reset ? ' with it' : ''}.</p>
        <p class="hint">On a phone, use your browser's "Add to Home Screen" so Allstar opens
        full-screen and works without signal.</p>`,
     )
@@ -147,28 +156,44 @@ export function invitePage(opts: {
 
   if (!opts.invite) {
     return shell(
-      'Invite unavailable',
+      'Link unavailable',
       `<div class="mark">A</div>
        <h1>This link has expired</h1>
-       <p class="sub">Invites are single-use, last seven days, and stop working when a newer one is sent.</p>
-       <p class="hint">Already set a password? Just open <a href="${escapeHtml(opts.appUrl)}">${escapeHtml(opts.appUrl)}</a>
-       and sign in. Otherwise, ask your administrator to send a new link.</p>`,
+       <p class="sub">Links here work once. A password reset lasts two days and an invitation seven,
+       and either stops working the moment a newer one is made.</p>
+       <p class="hint">Already have a password? Just open <a href="${escapeHtml(opts.appUrl)}">${escapeHtml(opts.appUrl)}</a>
+       and sign in. Forgotten it? Press <strong>Forgot password?</strong> on the sign-in screen for a fresh link,
+       or ask your administrator for one.</p>`,
     )
   }
 
+  /*
+    Two passwords, compared on the server as well as by the browser — see
+    `passwordPairError`. A typo in a password nobody can see is otherwise the
+    first thing a person discovers at the next sign-in, and for a reset that
+    is the sign-in they were already locked out of.
+  */
+  const first = escapeHtml(opts.invite.name.split(' ')[0] ?? '')
   return shell(
-    'Set your password',
+    reset ? 'Reset your password' : 'Set your password',
     `<div class="mark">A</div>
-     <h1>Welcome, ${escapeHtml(opts.invite.name.split(' ')[0] ?? '')}</h1>
-     <p class="sub">Set a password for your ${escapeHtml(opts.invite.clientName)} account.</p>
-     ${opts.error ? `<div class="err">${escapeHtml(opts.error)}</div>` : ''}
-     <form method="POST" action="/invite/${escapeHtml(opts.token)}">
+     <h1>${reset ? 'Reset your password' : `Welcome, ${first}`}</h1>
+     <p class="sub">${
+       reset
+         ? `Choose a new password for your ${escapeHtml(opts.invite.clientName)} account.`
+         : `Set a password for your ${escapeHtml(opts.invite.clientName)} account.`
+     }</p>
+     ${opts.error ? `<div class="err" role="alert">${escapeHtml(opts.error)}</div>` : ''}
+     <form method="POST" action="/invite/${escapeHtml(opts.token)}" data-kind="${reset ? 'reset' : 'invite'}">
        <label><span>Email</span>
          <input value="${escapeHtml(opts.invite.email)}" readonly autocomplete="username"></label>
-       <label><span>Choose a password</span>
+       <label><span>${reset ? 'New password' : 'Choose a password'}</span>
          <input name="password" type="password" required autocomplete="new-password"
                 minlength="10" autofocus placeholder="At least 10 characters"></label>
-       <button type="submit">Set password</button>
+       <label><span>Type it again</span>
+         <input name="confirm" type="password" required autocomplete="new-password"
+                minlength="10" placeholder="The same password"></label>
+       <button type="submit">${reset ? 'Change password' : 'Set password'}</button>
      </form>
      <p class="hint">Only you will know this password. Nobody at your company can see it.</p>`,
   )

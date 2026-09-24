@@ -11,7 +11,7 @@ import { STATUS } from './charts/tokens'
 import { AddMemberDialog } from './AddMemberDialog'
 import { DataList } from './DataList'
 import { ManageUser } from './ManageUser'
-import { ROLE_LABEL } from '../lib/roles'
+import { ROLE_LABEL, grantableRoles } from '../lib/roles'
 import type { Role, TeamMember } from '../types'
 import { BADGE_LABEL, INVITATION_LABEL, ONBOARDING_LABEL } from './statusLabels'
 
@@ -236,9 +236,17 @@ export function AdminTeam() {
       title="Team"
       description={`${team.length} ${team.length === 1 ? 'person' : 'people'} · ${team.filter((m) => m.role === 'field_rep').length} in the field`}
       actions={
-        <Button size="sm" onClick={() => setInviting(true)}>
-          Add team member
-        </Button>
+        /*
+          Only for people the server will let add somebody. A manager sees
+          the roster but cannot create access to it (`canInvite` on the
+          Worker), and the old button taught them that with a "Not permitted"
+          after they had filled in five fields.
+        */
+        grantableRoles(signedInUser).length > 0 ? (
+          <Button size="sm" onClick={() => setInviting(true)} data-testid="team-add-member">
+            Add team member
+          </Button>
+        ) : undefined
       }
     >
       {/*

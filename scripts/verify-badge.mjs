@@ -424,6 +424,137 @@ const readyForBadge = (over = {}) =>
   await ctx.close()
 }
 
+/* ========== the badge as a card, and as a file ============================ */
+//
+// A badge is a CR80 card — 2.125 by 3.375 inches, the plastic every ID
+// printer is built for — and the screen and the download are the same card
+// at different sizes. The preview is measured for its ratio and for the code
+// being between three-quarters of an inch and an inch of it; the file is
+// captured on its way to the download, decoded, measured at 300 dpi, and its
+// code is found where the drawing put it, on whole pixels, with the three
+// finder patterns a scanner locks onto.
+{
+  const s = makeState({
+    firstName: 'Marcus', lastName: 'Vance', hasPhoto: true, completedAt: Date.now() - 30 * DAY, version: 1, step: null, started: true,
+    badge: { id: '32143567', issuedAt: Date.now() - 30 * DAY, expiresAt: Date.now() + 335 * DAY, confirmedAt: Date.now() - 30 * DAY },
+  })
+  const ctx = await phone()
+  const page = await ctx.newPage()
+  const errors = errorsOf(page)
+  await mockApi(page, s)
+  await signIn(page, s.email)
+  await dismissTour(page)
+  await page.goto(`${BASE}/badge`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1200)
+
+  const card = await page.getByTestId('team-badge').boundingBox()
+  const ratio = card ? card.height / card.width : 0
+  ok(Math.abs(ratio - 3.375 / 2.125) < 0.02, 'the preview is a CR80 card — 2.125 by 3.375, portrait', ratio.toFixed(3))
+  const qrBox = await page.getByTestId('badge-qr').boundingBox()
+  const qrIn = card && qrBox ? (qrBox.width / card.width) * 2.125 : 0
+  ok(qrIn >= 0.75 && qrIn <= 1.0, 'the code is between three-quarters of an inch and an inch of the card', `${qrIn.toFixed(2)}in of 2.125`)
+  ok(!!qrBox && Math.abs(qrBox.width - qrBox.height) < 1, 'and square', qrBox ? `${Math.round(qrBox.width)}×${Math.round(qrBox.height)}` : 'none')
+
+  // Catch the file on its way out: the blob at createObjectURL, the name at
+  // the anchor's click, and no real download in a headless browser.
+  await page.evaluate(() => {
+    const orig = URL.createObjectURL.bind(URL)
+    URL.createObjectURL = (b) => {
+      window.__badgeBlob = b
+      return orig(b)
+    }
+    HTMLAnchorElement.prototype.click = function () {
+      window.__badgeName = this.download
+    }
+  })
+  const dl = page.getByTestId('badge-download')
+  ok((await dl.count()) === 1 && /Download badge/.test(await dl.innerText()), 'Download badge is offered')
+  await dl.click()
+  await page.waitForFunction(() => !!window.__badgeName, null, { timeout: 15_000 }).catch(() => {})
+
+  const VERIFY = `${BASE}/verify/32143567`
+  const qr = qrcode(0, 'M')
+  qr.addData(VERIFY)
+  qr.make()
+  const n = qr.getModuleCount()
+  const cell = Math.floor(300 / (n + 8))
+  const size = cell * (n + 8)
+  const geometry = { n, cell, size, qx: 638 - 45 - size, qy: 1013 - 45 - size, origin: 4 * cell }
+  const png = await page.evaluate(async (g) => {
+    const b = window.__badgeBlob
+    if (!b) return null
+    const bmp = await createImageBitmap(b)
+    const c = document.createElement('canvas')
+    c.width = bmp.width
+    c.height = bmp.height
+    const ctx2 = c.getContext('2d')
+    ctx2.drawImage(bmp, 0, 0)
+    const at = (x, y) => ctx2.getImageData(Math.round(x), Math.round(y), 1, 1).data
+    const dark = (x, y) => {
+      const d = at(x, y)
+      return d[0] < 90 && d[1] < 90 && d[2] < 90
+    }
+    const white = (x, y) => {
+      const d = at(x, y)
+      return d[0] > 230 && d[1] > 230 && d[2] > 230
+    }
+    const m = (col, row) => [g.qx + g.origin + (col + 0.5) * g.cell, g.qy + g.origin + (row + 0.5) * g.cell]
+    const last = g.n - 1
+    return {
+      type: b.type,
+      w: bmp.width,
+      h: bmp.height,
+      name: window.__badgeName,
+      cornerClear: at(0, 0)[3] === 0,
+      quiet: white(g.qx + g.cell / 2, g.qy + g.cell / 2) && white(g.qx + g.size - g.cell / 2, g.qy + g.size - g.cell / 2),
+      finders: dark(...m(0, 0)) && dark(...m(last, 0)) && dark(...m(0, last)),
+      rings: white(...m(1, 1)) && white(...m(last - 1, 1)) && white(...m(1, last - 1)),
+      centres: dark(...m(3, 3)) && dark(...m(last - 3, 3)) && dark(...m(3, last - 3)),
+      band: (() => {
+        const d = at(60, 40) // left of the slot pill, which is white
+        return d[0] < 60 && d[1] < 140 && d[2] > 180
+      })(),
+    }
+  }, geometry)
+  ok(png?.type === 'image/png' && /^allstar-badge-32143567\.png$/.test(png?.name ?? ''), 'a PNG, named after the badge', png?.name)
+  ok(png?.w === 638 && png?.h === 1013, 'at CR80 size — 2.125 by 3.375 inches at 300 dpi', `${png?.w}×${png?.h}`)
+  ok(!!png?.cornerClear, 'with the corners cut, so it prints as a card and not a rectangle')
+  ok(!!png?.band, 'the blue band is across the top')
+  ok(size / 300 >= 0.75 && size / 300 <= 1.0, 'the code on the file is between three-quarters of an inch and an inch', `${(size / 300).toFixed(2)}in, ${cell}px cells`)
+  ok(!!png?.quiet, 'with a white quiet zone around it')
+  ok(!!png?.finders && !!png?.rings && !!png?.centres, 'and all three finder patterns where a scanner looks for them', JSON.stringify({ finders: png?.finders, rings: png?.rings, centres: png?.centres }))
+  ok(errors.length === 0, 'no page errors making the file', errors.join(' | '))
+  await ctx.close()
+}
+{
+  // No photo yet: the placeholder's initials sit in a true circle, on the
+  // screen at any width. A stretched circle is the first thing a stretched
+  // card gives away.
+  const s = makeState({
+    firstName: 'Marcus', lastName: 'Vance', hasPhoto: false, completedAt: Date.now() - 30 * DAY, version: 1, step: null, started: true,
+    badge: { id: '32143567', issuedAt: Date.now() - 30 * DAY, expiresAt: Date.now() + 335 * DAY },
+  })
+  for (const width of [320, 390, 430]) {
+    const ctx = await phone({ viewport: { width, height: 844 } })
+    const page = await ctx.newPage()
+    await mockApi(page, s)
+    await signIn(page, s.email)
+    await dismissTour(page)
+    await page.goto(`${BASE}/badge`, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(1000)
+    const circle = await page.getByTestId('badge-initials').boundingBox()
+    const card = await page.getByTestId('team-badge').boundingBox()
+    ok(
+      !!circle && Math.abs(circle.width - circle.height) < 1 && !!card && Math.abs(card.height / card.width - 3.375 / 2.125) < 0.02,
+      `at ${width}px the initials are a circle and the card is still a card`,
+      circle ? `${Math.round(circle.width)}×${Math.round(circle.height)}, ratio ${(card.height / card.width).toFixed(3)}` : 'no circle',
+    )
+    const qrBox = await page.getByTestId('badge-qr').boundingBox()
+    ok(!!qrBox && qrBox.width >= 44, `and the code stays tappable and scannable at ${width}px`, qrBox ? `${Math.round(qrBox.width)}px` : 'none')
+    await ctx.close()
+  }
+}
+
 await browser.close()
 if (fails.length) {
   console.log(`\n${fails.length} FAILED`)

@@ -217,6 +217,62 @@ async function signIn(page) {
   await ctx.close()
 }
 
+/* ========== save for later ============================================= */
+//
+// A form put aside is not a lead: nothing in `properties`, nothing queued,
+// and everything typed back in the boxes when the screen is opened again —
+// after leaving it, and after the app has been killed, which a full reload
+// with IndexedDB as the only memory stands in for.
+{
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    permissions: ['geolocation'],
+    geolocation: { latitude: 32.7767, longitude: -96.797 },
+    serviceWorkers: 'block',
+  })
+  const page = await ctx.newPage()
+  await page.route('**://places.googleapis.com/**', (r) => r.abort())
+  await page.route('**://maps.googleapis.com/**', (r) => r.abort())
+  await signIn(page)
+  const before = await newestProperty(page)
+  await page.goto(`${BASE}/lead/new`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1500)
+  const later = page.getByTestId('lead-save-later')
+  ok((await later.count()) === 1 && !(await later.isEnabled()), 'Save for later is offered, and dead while the form is empty')
+  await page.getByLabel(/Address/i).fill('77 Draft Lane')
+  await page.locator('input[autocomplete="name"]').fill('Pat Draft')
+  await page.waitForTimeout(300)
+  ok(await later.isEnabled(), 'and live once something is typed')
+  await later.click()
+  await page.waitForTimeout(900)
+  ok(!/\/lead\/new$/.test(page.url()), 'putting it aside leaves the screen', page.url())
+  const after = await newestProperty(page)
+  ok((after?.id ?? null) === (before?.id ?? null), 'and no lead was written — a draft is not a house')
+  await page.goto(`${BASE}/lead/new`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1500)
+  ok((await page.getByTestId('lead-draft-restored').count()) === 1, 'coming back restores the draft and says so')
+  ok(
+    (await page.getByLabel(/Address/i).inputValue()) === '77 Draft Lane' &&
+      (await page.locator('input[autocomplete="name"]').inputValue()) === 'Pat Draft',
+    'with the address and name as typed',
+  )
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(2000)
+  ok((await page.getByLabel(/Address/i).inputValue()) === '77 Draft Lane', 'and it survives the app being killed and reopened')
+  await page.getByTestId('lead-draft-discard').click()
+  await page.waitForTimeout(500)
+  ok(
+    (await page.getByLabel(/Address/i).inputValue()) === '' && (await page.getByTestId('lead-draft-restored').count()) === 0,
+    'Discard empties the form and forgets the draft',
+  )
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1800)
+  ok((await page.getByTestId('lead-draft-restored').count()) === 0 && (await page.getByLabel(/Address/i).inputValue()) === '', 'for good')
+  await ctx.close()
+}
+
 await browser.close()
 console.log(fails.length ? `\n${fails.length} FAILED` : '\n=== add lead OK ===')
 process.exit(fails.length ? 1 : 0)

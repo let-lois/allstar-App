@@ -485,6 +485,19 @@ export function apiSetPassword(token: string, userId: string, password: string) 
   })
 }
 
+/**
+ * "Forgot password?" — asks the server to email a reset link.
+ *
+ * Deliberately learns nothing about whether the address exists: a 200 means
+ * "if that address has an account, a link is on its way", and a stranger
+ * typing someone else's address is told exactly the same. The failures it
+ * does surface are about the request — nothing typed, too many tries, or a
+ * deployment with no email set up — which are the person's to act on.
+ */
+export function apiForgotPassword(email: string) {
+  return request<{ ok: true }>('/api/auth/forgot', { method: 'POST', body: { email }, timeoutMs: 30_000 })
+}
+
 export function apiResetLink(token: string, userId: string) {
   return request<{ url: string; email: string; expiresAt: number }>(
     `/api/users/${userId}/reset-link`,

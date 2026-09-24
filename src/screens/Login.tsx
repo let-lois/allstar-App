@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { DEMO_USERS } from '../data/seed'
 import type { Role } from '../types'
-import { ApiError, NetworkError } from '../lib/http'
+import { ApiError, NetworkError, apiForgotPassword } from '../lib/http'
 import { InAppBrowserNotice } from '../components/system/InAppBrowserNotice'
 import { Wordmark } from '../components/ui/Wordmark'
 
@@ -96,6 +96,45 @@ export function Login() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showDemo, setShowDemo] = useState(false)
+
+  /*
+    Forgot password?, on the screen where people discover they have.
+
+    For a long time this screen said, on purpose, that there was no such
+    button: an address is unique per company rather than across them, and the
+    admin could always make a link from the console. Both are still true and
+    neither was a reason. The server now sends a link to every account at the
+    address — one email per company, each with its own — and says the same
+    thing whether or not there was one, so the button gives nothing away that
+    the sign-in form did not already.
+
+    The email field is shared with the form above: the person has usually
+    typed their address before remembering they cannot finish.
+  */
+  const [showForgot, setShowForgot] = useState(false)
+  const [forgotBusy, setForgotBusy] = useState(false)
+  const [forgotSent, setForgotSent] = useState<string | null>(null)
+  const [forgotError, setForgotError] = useState<string | null>(null)
+
+  async function forgot(e: React.FormEvent) {
+    e.preventDefault()
+    if (forgotBusy) return
+    const address = email.trim()
+    if (!address.includes('@')) {
+      setForgotError('Enter the email you sign in with.')
+      return
+    }
+    setForgotBusy(true)
+    setForgotError(null)
+    try {
+      await apiForgotPassword(address)
+      setForgotSent(address)
+    } catch (err) {
+      setForgotError(messageFor(err))
+    } finally {
+      setForgotBusy(false)
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -279,6 +318,59 @@ export function Login() {
               {busy ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+
+          {/* --- forgot password ------------------------------------------- */}
+          {!showForgot ? (
+            <button
+              type="button"
+              onClick={() => {
+                setShowForgot(true)
+                setForgotError(null)
+              }}
+              className="focusable mt-3 grid min-h-[44px] w-full place-items-center rounded-field text-[14px] font-medium text-ink-mute"
+              data-testid="forgot-open"
+            >
+              Forgot password?
+            </button>
+          ) : forgotSent ? (
+            <p
+              role="status"
+              className="mt-4 rounded-field bg-surface-tint px-3 py-2.5 text-[13.5px] leading-relaxed text-ink"
+              data-testid="forgot-sent"
+            >
+              If <strong>{forgotSent}</strong> has an account, a reset link is on its way. It works once and
+              lasts two days — open it on this phone, choose a new password, then sign in here.
+            </p>
+          ) : (
+            <form onSubmit={forgot} noValidate className="mt-4 rounded-field bg-surface-tint px-3 py-3" data-testid="forgot-form">
+              <p className="text-[13.5px] leading-relaxed text-ink-mute">
+                Enter the email you sign in with above and we&rsquo;ll email you a link to choose a new
+                password.
+              </p>
+              {forgotError && (
+                <p role="alert" className="mt-2 text-sm font-medium text-[#FCA5A5]" data-testid="forgot-error">
+                  {forgotError}
+                </p>
+              )}
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="submit"
+                  disabled={forgotBusy}
+                  className="metal metal-dark press focusable grid h-12 flex-1 place-items-center rounded-field text-[15px] font-semibold disabled:opacity-60"
+                  data-testid="forgot-submit"
+                >
+                  {forgotBusy ? 'Sending…' : 'Email me a reset link'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(false)}
+                  className="focusable grid h-12 w-[84px] place-items-center rounded-field text-[14px] font-medium text-ink-mute"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
 
           {/* --- create an account, with the company's code ----------------- */}
           {!showJoin ? (
