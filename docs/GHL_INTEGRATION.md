@@ -1,5 +1,22 @@
 # GoHighLevel integration — what exists, what is missing, what to build
 
+> **Status: parked. Phase 2 at the earliest, and possibly never.**
+>
+> Nothing here is scheduled and nothing has been built from it. It is kept so
+> that if the GHL integration is ever picked up, the research does not have to
+> happen twice — the codebase survey, the two credential diagnoses and the
+> ordering are all still good, and the first two were established by asking the
+> live services rather than by reading code.
+>
+> Written 2026-09-24 against `main` at `521a4d6`. If that has moved a long way,
+> re-check §3 before trusting the "already built" column.
+>
+> **One item should not be parked with the rest.** §2b found that the Cloudflare
+> API token in this environment authenticates as a former collaborator and has
+> no Workers, D1, R2 or Pages permission at all — so it cannot deploy this app.
+> That is true today and has nothing to do with GoHighLevel. It is written up
+> here only because this is the session that found it.
+
 Written after reading the CRM code that is already on `main`. The short version:
 **most of the infrastructure is built.** The outbox, the encrypted credential
 store, the id-link table, the cron drain, the retry classification, the console
