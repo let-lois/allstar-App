@@ -251,7 +251,7 @@ try {
     await ctx.close()
   }
 
-  /* ===== 3. the admin console is not offered where it does not exist ===== */
+  /* ===== 3. the admin console is offered to office roles, everywhere ===== */
   {
     const { ctx, page } = await phone()
     // A manager, who is the only role offered the console at all.
@@ -307,16 +307,12 @@ try {
   )
 
   const src = readFileSync(new URL('../src/screens/More.tsx', import.meta.url), 'utf8')
+  const code = src.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
   ok(
-    /!isNativeShell\(\)\s*&&\s*\(\s*<MoreLink label="Admin console"/.test(
-      src.replace(/\{\/\*[\s\S]*?\*\/\}/g, ''),
-    ),
-    'and the native shell is not offered a console its bundle does not contain',
+    /user\?\.role !== 'field_rep' && \(\s*<>[\s\S]*?<MoreLink label="Admin console"/.test(code) && !/isNativeShell/.test(code),
+    'and the native shell is offered the console too — by role alone, now that its bundle carries it',
   )
-  ok(
-    /isNativeShell\(\)\s*&&\s*\(/.test(src) && /admin console is desktop software/i.test(src),
-    'and is told where to find it instead of being left with a dead row',
-  )
+  ok(!/admin console is desktop software/i.test(code), 'with no leftover sentence sending the manager to a computer')
 }
 
 console.log('')
@@ -325,4 +321,4 @@ if (fails.length) {
   fails.forEach((f) => console.log(`  - ${f}`))
   process.exit(1)
 }
-console.log('=== the phone gestures, the sheet heights, and the shell’s missing console ===')
+console.log('=== the phone gestures, the sheet heights, and the console in the shell ===')

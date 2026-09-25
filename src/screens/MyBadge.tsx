@@ -4,6 +4,7 @@ import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
 import { BADGE_STATUS_LABEL, TeamBadge, badgeTarget } from '../components/badge/TeamBadge'
 import { badgePng, deliverBadge } from '../lib/badge-image'
+import { FileSaveUnsupported } from '../lib/download'
 import { ApiError, apiConfirmBadge, apiMintBadge, apiRenewOwnBadge } from '../lib/http'
 import { ROLE_LABEL } from '../lib/roles'
 import { liveToken } from '../lib/session'
@@ -60,7 +61,7 @@ export function MyBadge() {
     } catch (err) {
       // A cancelled share sheet is not a failure and is not reported.
       if (err instanceof Error && err.name === 'AbortError') return
-      setError('The badge image could not be made just now. Try again.')
+      setError(err instanceof FileSaveUnsupported ? err.message : 'The badge image could not be made just now. Try again.')
     } finally {
       setBusy(null)
     }

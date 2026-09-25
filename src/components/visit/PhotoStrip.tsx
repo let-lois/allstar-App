@@ -478,8 +478,20 @@ function PhotoViewer({
             <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
           </svg>
         </button>
-        <span className="nums min-w-0 truncate px-2 text-sm font-semibold" data-testid="viewer-label">
-          {index + 1} / {photos.length} · {photoLabel(cat?.label, photo)}
+        <span className="min-w-0 px-2 text-center">
+          <span className="nums block truncate text-sm font-semibold" data-testid="viewer-label">
+            {index + 1} / {photos.length} · {photoLabel(cat?.label, photo)}
+          </span>
+          {/* When it was taken — stored on every photo and never shown until now. */}
+          <span className="nums block truncate text-[11.5px] text-white/70" data-testid="viewer-date">
+            {new Date(photo.createdAt).toLocaleString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            })}
+          </span>
         </span>
         <button
           onClick={() => onRefile(photo)}

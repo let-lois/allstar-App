@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Collapsible } from '../ui/Collapsible'
 import { Button } from '../ui/Button'
 import { Glyph } from '../ui/Glyph'
@@ -8,6 +8,7 @@ import { useAppStore, useListsContaining } from '../../store/useAppStore'
 import { outcomeByCode } from '../../data/outcomes'
 import { relative, time } from '../../lib/format'
 import { dayKeyIn, dayLabel } from '../../lib/day'
+import { syncPropertyPhotos } from '../../lib/photos'
 
 /**
  * Everything below the fold about a lead, as one grouped list.
@@ -55,6 +56,24 @@ export function LeadSections({
     [allVisits, propertyId],
   )
   const timeline = useMemo(() => activity.filter((a) => a.propertyId === propertyId).slice(0, 20), [activity, propertyId])
+
+  /*
+    Ask the server what photos it holds for this lead, whenever its Photos
+    section is on screen.
+
+    It used to be asked by the lead's own screen only, which left the map's
+    sheet — the same sections, dragged up — showing just the photos this phone
+    took. The ones a device did not take are the whole point: a rep's own are
+    already here, and a manager has none of their own at all. Metadata only;
+    the bytes come down per thumbnail, and only for the ones actually drawn.
+
+    Failures are deliberately silent. Not reaching the server means the strip
+    shows what this device has, which is exactly what it showed before.
+  */
+  const photosShown = !hide.includes('photos')
+  useEffect(() => {
+    if (photosShown) void syncPropertyPhotos(propertyId)
+  }, [propertyId, photosShown])
 
   if (!property) return null
   const show = (s: LeadSection) => !hide.includes(s)

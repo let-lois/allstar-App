@@ -10,7 +10,6 @@ import {
   IconToday,
 } from './icons'
 import { Wordmark } from '../ui/Wordmark'
-import { isNativeShell } from '../../lib/webview'
 // Imported, not `/icon-192.png`: see the note in ui/Wordmark.tsx.
 import appIconUrl from '../../assets/icon-192.png'
 
@@ -132,26 +131,17 @@ export function BottomNav({ role }: { role: Role }) {
 export function SideRail({ role }: { role: Role }) {
   const items = navItemsForRole(role)
   /*
-    Office roles only, and only where the console exists.
+    Office roles only — on every surface, the phone app included.
 
-    The role half has always been right. The second half was missing, and it is
-    the same bug `More` was fixed for — fixed there and nowhere else, because
-    that is where somebody reported it from.
-
-    Metro swaps `src/adminRoutes.tsx` for a stub in the native bundle (see
-    `apps/mobile/metro.config.js`), so inside the shell `/admin` is not a route:
-    `App`'s catch-all quietly sends it to `/today`. This rail is `hidden md:flex`,
-    which kept the dead link off a phone and left it on every wider screen the
-    shell can run on — an Android tablet, or a device in a large display mode. A
-    manager taps Console and lands on the rep's own Today screen with nothing
-    saying why, which is worse than a control that is simply not there.
-
-    Hidden rather than disabled, for the reason `More` gives: a greyed-out row
-    invites the same tap and answers nothing. `More` carries the sentence about
-    where the console actually is, and it is on the same screen in the same
-    shell, so it is not repeated here.
+    For a while this was also hidden inside the native shell, where Metro
+    swapped `src/adminRoutes.tsx` for a stub and `/admin` was not a route: a
+    manager on an Android tablet tapped Console and landed on Today. The phone
+    bundle carries the console now (`apps/mobile/src/admin-routes-native.tsx`),
+    so the rail links to it wherever the rail is shown. `AdminLayout` still
+    refuses a field rep who reaches `/admin` another way, and the Worker
+    refuses them again on every call.
   */
-  const showConsole = role !== 'field_rep' && !isNativeShell()
+  const showConsole = role !== 'field_rep'
   return (
     <nav
       className="nav-rail hidden w-[76px] shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-4 md:flex lg:w-56 lg:items-stretch lg:px-3"

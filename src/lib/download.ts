@@ -1,34 +1,56 @@
+import { isNativeShell } from './webview'
+
 /**
- * Hand a blob to the browser as a download.
+ * The device has no way to take a file from inside the app.
  *
- * Three copies of this existed, and they were not equivalent. The one on the
- * reports screen neither put the anchor in the document nor waited before
- * revoking the object URL — and Safari starts the download *after* `click()`
- * returns, so it was handed a URL that no longer existed. The other two were
- * right, one of them carrying the comment explaining exactly that, which is
- * the shape of a lesson learned in one place and not the others.
+ * Thrown only in the phone app, where `<a download>` does nothing and the
+ * share sheet is the one road out — and only when that sheet cannot carry a
+ * file either (an older WebView, or one that has no Web Share at all). The
+ * callers turn it into a sentence; it is never swallowed, because the failure
+ * it replaces was silence: a button that did nothing.
+ */
+export class FileSaveUnsupported extends Error {
+  constructor() {
+    super('This phone cannot save files from inside the app yet. Open the console on a computer to download it.')
+    this.name = 'FileSaveUnsupported'
+  }
+}
+
+/**
+ * Hand a blob to the person — as a download in a browser, through the share
+ * sheet in the phone app.
  *
+ * Three copies of the download half existed, and they were not equivalent.
+ * The one on the reports screen neither put the anchor in the document nor
+ * waited before revoking the object URL — and Safari starts the download
+ * *after* `click()` returns, so it was handed a URL that no longer existed.
  * So: in the document, clicked, removed, and the URL revoked on a later tick.
  *
  * `<a download>` with a `blob:` URL is unreliable to non-functional inside a
  * WebView — Android needs the host to implement a download listener and does
  * not hand it blob URLs at all, and iOS ignores the attribute in most
  * configurations. The failure is silent: no file, no error, nothing to catch.
+ * That did not matter while every caller was a console screen the phone did
+ * not bundle. It does now that the console is in the phone app, so inside the
+ * shell the file goes to the share sheet instead — on iOS that is where Save
+ * to Files and Save Image live — and where the sheet cannot take a file this
+ * says so rather than doing nothing.
  *
- * There is a native shell now, and it deliberately changes nothing here,
- * because every caller is a screen the shell does not bundle. All three —
- * `AdminLeads`, `AdminLists`, `AdminReports` — are behind `adminRoutes.tsx`,
- * which `apps/mobile/metro.config.js` swaps for a stub: the phone bundle
- * contains no reference to any of them. Exporting is an office job done on a
- * desktop, and a rep has no screen that reaches this.
- *
- * So the native path is a real piece of work — a save action over the bridge
- * into `expo-file-system` and a share sheet — for a button that is not there.
- * It belongs with the first mobile screen that actually needs to hand a file
- * to the OS, and not before. Checked rather than assumed: `grep saveFile src/`
- * and `grep -c Admin apps/mobile/dist/www.bundle/*.js`.
+ * A dismissed share sheet is the person changing their mind, not an error; it
+ * resolves as shared and the caller says nothing.
  */
-export function saveFile(blob: Blob, filename: string): void {
+export async function saveFile(blob: Blob, filename: string): Promise<'shared' | 'downloaded'> {
+  if (isNativeShell()) {
+    const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' })
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean }
+    if (typeof nav.share !== 'function' || !nav.canShare?.({ files: [file] })) throw new FileSaveUnsupported()
+    try {
+      await nav.share({ files: [file], title: filename })
+    } catch (err) {
+      if (!(err instanceof Error && err.name === 'AbortError')) throw err
+    }
+    return 'shared'
+  }
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -38,4 +60,5 @@ export function saveFile(blob: Blob, filename: string): void {
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return 'downloaded'
 }

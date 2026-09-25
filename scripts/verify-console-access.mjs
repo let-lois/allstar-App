@@ -244,17 +244,45 @@ for (const width of [390, 412]) {
   const onWeb = await shellState(false)
   const inShell = await shellState(true)
   ok(onWeb, 'manager on the web: the rail offers the console')
-  ok(!inShell, 'manager in the native shell: it does not, because there is none to open')
-  ok(onWeb !== inShell, 'and the shell is the only difference between those two runs')
+  ok(inShell, 'manager in the native shell: so does the phone app, which carries the console now')
 
   // The source half, for the reason the rest of this file measures rather than
   // greps: the rail is one `hidden md:flex` away from being invisible to every
-  // check above, and this is the guard that would go missing silently.
+  // check above. The role is the only gate; the shell is no longer one.
   const src = readFileSync(new URL('../src/components/nav/BottomNav.tsx', import.meta.url), 'utf8')
   ok(
-    /role !== 'field_rep' && !isNativeShell\(\)/.test(src),
-    'the rail gates the console on the shell as well as the role',
+    /const showConsole = role !== 'field_rep'\s*$/m.test(src) && !/isNativeShell/.test(src),
+    'the rail gates the console on the role alone',
   )
+}
+
+/* --- the phone app carries the same console, not a second one -------------- */
+//
+// The console reaches the native bundle through a module Metro swaps in for
+// `src/adminRoutes.tsx`. What has to stay true, and would fail silently if it
+// did not: that module loads every screen statically — one dynamic `import()`
+// and `expo export` breaks on the chunk, which is why the console was stubbed
+// out for so long — and it builds its routes from the same table the browser
+// does, so a section added to one cannot be missing from the other.
+{
+  const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8')
+  const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+  const native = strip(read('../apps/mobile/src/admin-routes-native.tsx'))
+  const web = strip(read('../src/adminRoutes.tsx'))
+  const tree = read('../src/admin/routeTree.tsx')
+  const metro = strip(read('../apps/mobile/metro.config.js'))
+  const screens = [...tree.matchAll(/^\s{2}(Admin[A-Za-z]+): ComponentType$/gm)].map((m) => m[1])
+  ok(screens.length === 11, 'the shared route table names eleven console screens', screens.join(', '))
+  ok(!/import\(/.test(native), 'the phone module has no dynamic import for Metro to split into a chunk')
+  ok(/adminRouteTree\(screens\)/.test(native) && /adminRouteTree\(screens\)/.test(web), 'browser and phone both build their routes from adminRouteTree')
+  const missing = screens.filter((n) => !new RegExp(`import (\\{ ${n} \\}|${n}) from '@web/admin/${n}'`).test(native))
+  ok(missing.length === 0, 'and the phone imports every one of those screens', missing.join(', ') || 'all eleven')
+  ok(
+    /path\.join\(WEB_SRC, 'adminRoutes\.tsx'\), path\.join\(SELF_SRC, 'admin-routes-native\.tsx'\)/.test(metro) && !/admin-routes-stub/.test(metro),
+    'Metro swaps the lazy routes for the static ones — and no longer for a stub',
+  )
+  const layout = read('../src/admin/AdminLayout.tsx')
+  ok(/if \(!ADMIN_ROLES\.includes\(user\.role\)\)/.test(layout), 'the role gate is still inside AdminLayout, which every console route renders through')
 }
 
 /* --- a manager sees fewer sections than an admin -------------------------- */
@@ -355,6 +383,27 @@ for (const width of [390, 412]) {
   )
   ok(links.includes('Clients'), 'super admin: Clients section present')
   ok(links.includes('Settings'), 'super admin: Settings section present')
+  await ctx.close()
+}
+
+/* --- a lead in the console opens the lead, photos and all ------------------ */
+//
+// The console's lead list had no way into a single lead, so a manager checking
+// the photos a rep filed had to find the house on the field side. The address
+// is a link now, to the same profile a rep opens — which is where every rep's
+// photos are listed, fetched from the server.
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+  const page = await signIn(ctx, /Ray Okafor/, `${BASE}/admin/leads`)
+  const open = page.getByTestId('admin-lead-open').first()
+  ok((await open.count()) === 1, 'phone: each lead in the console links to the lead')
+  const address = (await open.innerText()).trim()
+  await open.click()
+  await page.waitForTimeout(1200)
+  ok(/\/property\/[^/]+$/.test(page.url()), 'phone: which opens the lead profile', page.url())
+  const body = await page.evaluate(() => document.body.innerText)
+  ok(body.includes(address), 'phone: of that same house', address)
+  ok((await page.getByRole('button', { name: /^Photos/ }).count()) > 0, 'phone: with its Photos section, where categorized photos are listed')
   await ctx.close()
 }
 

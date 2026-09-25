@@ -10,8 +10,6 @@ import { OfflineMaps } from '../components/map/OfflineMaps'
 import { useAppStore } from '../store/useAppStore'
 import { estimateStorage, storageIsPersisted } from '../lib/db'
 import { isForcedOffline, setForcedOffline } from '../lib/api'
-import { isNativeShell } from '../lib/webview'
-import { publicOrigin } from '../lib/badge'
 import { drain, listOutbox, retryFailed } from '../lib/sync'
 import { drainPhotos, retryFailedPhotos } from '../lib/photos'
 import { relative } from '../lib/format'
@@ -410,32 +408,18 @@ export function More() {
                 <>
                   <MoreLink label="Team activity" onClick={() => nav('/team')} />
                   {/*
-                    Not in the native app, where the console does not exist.
+                    On every surface now, the phone app included.
 
-                    `apps/mobile/src/admin-routes-stub.tsx` is swapped in for
-                    `adminRoutes` when Metro bundles the DOM shell — the console
-                    is 8,575 lines of wide tables, a territory lasso and a CSV
-                    importer, and it is deliberately left out of the phone
-                    bundle. But this link stayed, so a manager on a phone tapped
-                    Admin console and the catch-all route sent them to Today: a
-                    control that silently does the wrong thing, which is worse
-                    than one that is not there.
-
-                    Hidden rather than disabled, and followed by a line saying
-                    where it actually is — a greyed-out row invites the same tap
-                    and answers nothing.
+                    For a while this was hidden in the native app, because
+                    `apps/mobile` swapped the console's routes for a stub and
+                    the catch-all sent a tapping manager to Today. The console
+                    is in the phone bundle now (`admin-routes-native.tsx`), so
+                    the link goes where it says. Reps never see it — and a rep
+                    who reaches /admin anyway gets `AdminLayout`'s refusal, with
+                    every API behind it refused on the Worker too.
                   */}
-                  {!isNativeShell() && (
-                    <MoreLink label="Admin console" onClick={() => nav('/admin')} />
-                  )}
+                  <MoreLink label="Admin console" onClick={() => nav('/admin')} />
                 </>
-              )}
-              {user?.role !== 'field_rep' && isNativeShell() && (
-                <p className="px-4 py-3 text-[13px] leading-relaxed text-ink-mute">
-                  The admin console is desktop software — wide tables, the
-                  territory map, the importer. Open {publicOrigin().replace(/^https?:\/\//, '')} on
-                  a computer to reach it.
-                </p>
               )}
             </nav>
           </section>
