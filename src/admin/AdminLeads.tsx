@@ -956,7 +956,7 @@ export default function AdminLeads() {
               <>
                 <Link
                   to={`/property/${p.id}`}
-                  className="focusable font-medium text-accent underline-offset-2 hover:underline"
+                  className="focusable inline-flex min-h-tap items-center font-medium text-accent underline-offset-2 hover:underline"
                   data-testid="admin-lead-open"
                 >
                   {p.address1}
