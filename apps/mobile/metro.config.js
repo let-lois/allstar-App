@@ -1,6 +1,6 @@
 /**
- * Metro, with two changes: the admin console is stubbed out, and the web app's
- * images are inlined.
+ * Metro, with two changes: the admin console is loaded statically, and the web
+ * app's images are inlined.
  *
  * There is deliberately no `watchFolders`, `resolver.nodeModulesPaths`,
  * `resolver.extraNodeModules` or `resolver.disableHierarchicalLookup` here.
@@ -9,11 +9,15 @@
  * setting them back is how a project acquires a config nobody can explain.
  *
  * What this does add is a resolver swap. The DOM shell imports the whole
- * All-Star web app, and that app's `src/adminRoutes.tsx` lazy-loads ten
- * desktop-only console screens. Metro follows a dynamic `import()` into a
- * chunk rather than leaving it on a server, so without this the phone bundle
- * would carry the entire office console — and `expo export` failed outright on
- * the shared chunk that produced.
+ * All-Star web app, and that app's `src/adminRoutes.tsx` lazy-loads the office
+ * console's eleven screens. Metro follows a dynamic `import()` into a chunk
+ * rather than leaving it on a server, and `expo export` failed outright on the
+ * shared chunk those produced. So the phone gets
+ * `src/admin-routes-native.tsx` instead: the same screens and the same route
+ * table (`src/admin/routeTree.tsx` in the web app), imported statically, which
+ * leaves Metro one module graph and no chunks. The console used to be stubbed
+ * out here entirely; it is on the phone now because the people who run a crew
+ * test it from theirs.
  *
  * The second swap is the web app's two images. Metro emits a bare relative URL
  * for an imported asset, so the file has to sit next to the DOM component's
@@ -45,7 +49,7 @@ const SELF_SRC = path.resolve(__dirname, 'src')
  * `npm run verify:shell-assets` fails if one drifts from its PNG.
  */
 const SWAPS = new Map([
-  [path.join(WEB_SRC, 'adminRoutes.tsx'), path.join(SELF_SRC, 'admin-routes-stub.tsx')],
+  [path.join(WEB_SRC, 'adminRoutes.tsx'), path.join(SELF_SRC, 'admin-routes-native.tsx')],
   [path.join(WEB_SRC, 'assets/logo.png'), path.join(SELF_SRC, 'assets/logo.png.ts')],
   [path.join(WEB_SRC, 'assets/icon-192.png'), path.join(SELF_SRC, 'assets/icon-192.png.ts')],
 ])

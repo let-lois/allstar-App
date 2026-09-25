@@ -8,7 +8,7 @@ import { Field, TextArea } from '../components/ui/Input'
 import { useAppStore } from '../store/useAppStore'
 import { ApiError, NetworkError, apiExportLeadsCsv } from '../lib/http'
 import { liveToken } from '../lib/session'
-import { saveFile } from '../lib/download'
+import { FileSaveUnsupported, saveFile } from '../lib/download'
 import { pointInPolygon, polygonAreaSqMiles } from '../lib/geo'
 import { canManageLists, tallyStatuses } from '../lib/leadLists'
 import { STATUS_COLOR, STATUS_LABEL } from '../data/outcomes'
@@ -207,10 +207,10 @@ export function AdminLists() {
     setNotice(null)
     try {
       const { blob, filename } = await apiExportLeadsCsv(token, { list: current.id, listName: current.name })
-      saveFile(blob, filename)
+      await saveFile(blob, filename)
       setNotice(`Exported ${current.name}.`)
     } catch (err) {
-      setNotice(explain(err, 'The export could not be produced.'))
+      setNotice(err instanceof FileSaveUnsupported ? err.message : explain(err, 'The export could not be produced.'))
     } finally {
       setExporting(false)
     }

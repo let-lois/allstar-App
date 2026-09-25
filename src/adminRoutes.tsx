@@ -1,87 +1,37 @@
 /**
- * The office console's routes, in their own module so a phone never carries them.
+ * The office console's routes, lazy-loaded — the browser's half.
  *
- * These were eleven `lazy()` calls and a `<Route>` tree inside `App.tsx`, and
- * lazy-loading was enough while there was one bundler. There are two now: the
- * native app wraps this same web app in a DOM component, and Metro follows a
- * dynamic `import()` into the bundle instead of leaving it on a server to be
- * fetched on demand. A phone would carry all 8,575 lines of desktop console —
- * wide tables, the territory lasso, the CSV importer — inside an app with no
- * route to reach them by.
+ * Each screen is its own chunk, fetched the first time somebody opens the
+ * console, so a rep's browser never downloads 8,575 lines of desktop tables,
+ * the territory lasso and the CSV importer it has no route to.
  *
- * So the seam is a module boundary now rather than a call. `apps/mobile`
- * replaces this file with a stub that renders nothing, which is also what
- * removes the last of the dynamic imports from the DOM bundle; see
- * `apps/mobile/metro.config.js`.
+ * The phone app cannot load them this way. Metro follows a dynamic `import()`
+ * into a chunk instead of leaving it on a server, and `expo export` failed on
+ * the shared chunk these eleven produced. So `apps/mobile/metro.config.js`
+ * swaps this file for `apps/mobile/src/admin-routes-native.tsx`, which imports
+ * the same screens statically. The route table itself is shared — see
+ * `admin/routeTree.tsx` — so the two cannot drift.
  *
- * On the web nothing changes: same components, same `lazy()`, same chunks, and
- * the console is still role-gated inside `AdminLayout` rather than here.
+ * The console is role-gated inside `AdminLayout`, and every API it calls is
+ * gated again on the Worker.
  */
-import { Suspense, lazy } from 'react'
-import { Route } from 'react-router-dom'
+import { lazy } from 'react'
+import { adminRouteTree } from './admin/routeTree'
 
-const AdminLayout = lazy(() =>
-  import('./admin/AdminLayout').then((m) => ({ default: m.AdminLayout })),
-)
-const AdminDashboard = lazy(() =>
-  import('./admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard })),
-)
-const AdminReports = lazy(() =>
-  import('./admin/AdminReports').then((m) => ({ default: m.AdminReports })),
-)
-const AdminTeam = lazy(() => import('./admin/AdminTeam').then((m) => ({ default: m.AdminTeam })))
-const AdminTerritories = lazy(() =>
-  import('./admin/AdminTerritories').then((m) => ({ default: m.AdminTerritories })),
-)
-const AdminLists = lazy(() => import('./admin/AdminLists').then((m) => ({ default: m.AdminLists })))
-const AdminImport = lazy(() => import('./admin/AdminImport'))
-const AdminAudit = lazy(() => import('./admin/AdminAudit'))
-const AdminLeads = lazy(() => import('./admin/AdminLeads'))
-const AdminSettings = lazy(() =>
-  import('./admin/AdminSettings').then((m) => ({ default: m.AdminSettings })),
-)
-const AdminClients = lazy(() =>
-  import('./admin/AdminClients').then((m) => ({ default: m.AdminClients })),
-)
-
-function ConsoleLoading() {
-  return (
-    <div className="grid flex-1 place-items-center p-10 text-sm text-ink-mute">
-      Loading console…
-    </div>
-  )
+const screens = {
+  AdminLayout: lazy(() => import('./admin/AdminLayout').then((m) => ({ default: m.AdminLayout }))),
+  AdminDashboard: lazy(() => import('./admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))),
+  AdminReports: lazy(() => import('./admin/AdminReports').then((m) => ({ default: m.AdminReports }))),
+  AdminTeam: lazy(() => import('./admin/AdminTeam').then((m) => ({ default: m.AdminTeam }))),
+  AdminTerritories: lazy(() => import('./admin/AdminTerritories').then((m) => ({ default: m.AdminTerritories }))),
+  AdminLists: lazy(() => import('./admin/AdminLists').then((m) => ({ default: m.AdminLists }))),
+  AdminImport: lazy(() => import('./admin/AdminImport')),
+  AdminAudit: lazy(() => import('./admin/AdminAudit')),
+  AdminLeads: lazy(() => import('./admin/AdminLeads')),
+  AdminSettings: lazy(() => import('./admin/AdminSettings').then((m) => ({ default: m.AdminSettings }))),
+  AdminClients: lazy(() => import('./admin/AdminClients').then((m) => ({ default: m.AdminClients }))),
 }
 
-/**
- * A fragment of `<Route>` elements, returned rather than rendered.
- *
- * `<Routes>` reads its children as configuration, so a component wrapping
- * these would be invisible to the router and the routes would simply not
- * exist. Calling a function that returns them keeps them direct children.
- */
 export function adminRoutes() {
-  return (
-    <>
-            {/* Office console — desktop-first, role-gated inside the layout. */}
-            <Route
-              path="/admin"
-              element={
-                <Suspense fallback={<ConsoleLoading />}>
-                  <AdminLayout />
-                </Suspense>
-              }
-            >
-              <Route index element={<AdminDashboard />} />
-              <Route path="reports" element={<AdminReports />} />
-              <Route path="team" element={<AdminTeam />} />
-              <Route path="leads" element={<AdminLeads />} />
-              <Route path="territories" element={<AdminTerritories />} />
-              <Route path="lists" element={<AdminLists />} />
-              <Route path="import" element={<AdminImport />} />
-              <Route path="audit" element={<AdminAudit />} />
-              <Route path="settings" element={<AdminSettings />} />
-              <Route path="clients" element={<AdminClients />} />
-            </Route>
-    </>
-  )
+  return adminRouteTree(screens)
 }

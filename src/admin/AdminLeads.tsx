@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { AdminPage, FilterBar } from './AdminLayout'
 import { Chip } from '../components/ui/Chip'
 import { Button } from '../components/ui/Button'
@@ -8,7 +8,7 @@ import { ApiError, NetworkError, apiAssignProperties, apiEraseLeads, apiExportLe
 import { Field } from '../components/ui/Input'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { liveToken } from '../lib/session'
-import { saveFile } from '../lib/download'
+import { FileSaveUnsupported, saveFile } from '../lib/download'
 import { PIPELINE_STAGES, STATUS_COLOR, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
 import { money, relative } from '../lib/format'
 import type { LeadStatus } from '../types'
@@ -301,9 +301,13 @@ export default function AdminLeads() {
         rep: repFilter === 'all' ? null : repFilter,
         status: status === 'all' ? null : status,
       })
-      saveFile(blob, filename)
+      await saveFile(blob, filename)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The export could not be produced. Try again.')
+      setError(
+        err instanceof ApiError || err instanceof FileSaveUnsupported
+          ? err.message
+          : 'The export could not be produced. Try again.',
+      )
     } finally {
       setExporting(false)
     }
@@ -939,9 +943,24 @@ export default function AdminLeads() {
           {
             header: 'Address',
             phone: 'title',
+            /*
+              The address opens the lead — the same profile a rep opens, with
+              its notes, visits and every rep's photos. This list had no way
+              into a single lead at all, so a manager checking the roof shots
+              a rep filed had to go and find the house on the field side.
+              A link rather than a clickable row: the row already holds the
+              selection checkbox, and a checkbox inside a button is two
+              controls answering one tap.
+            */
             cell: (p) => (
               <>
-                <span className="font-medium">{p.address1}</span>
+                <Link
+                  to={`/property/${p.id}`}
+                  className="focusable font-medium text-accent underline-offset-2 hover:underline"
+                  data-testid="admin-lead-open"
+                >
+                  {p.address1}
+                </Link>
                 <span className="block text-xs text-ink-mute">
                   {[p.city, p.state, p.zip].filter(Boolean).join(', ')}
                 </span>

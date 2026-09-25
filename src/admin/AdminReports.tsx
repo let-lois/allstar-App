@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { saveFile } from '../lib/download'
+import { FileSaveUnsupported, saveFile } from '../lib/download'
 import { AdminPage, FilterBar } from './AdminLayout'
 import { DataList } from './DataList'
 import { TrendChart } from './charts/TrendChart'
@@ -93,8 +93,16 @@ export function AdminReports() {
     return [header, ...lines].join('\n')
   }, [stats, scopedRep])
 
-  const download = () => {
-    saveFile(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `allstar-report-${range}.csv`)
+  // Said, not swallowed: in the phone app a device with no file sharing is
+  // told so here instead of getting a button that does nothing.
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const download = async () => {
+    setSaveError(null)
+    try {
+      await saveFile(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `allstar-report-${range}.csv`)
+    } catch (err) {
+      setSaveError(err instanceof FileSaveUnsupported ? err.message : 'The report could not be saved. Try again.')
+    }
   }
 
   return (
@@ -102,11 +110,16 @@ export function AdminReports() {
       title="Reports"
       description={`Performance over the last ${rangeLabel.toLowerCase()}`}
       actions={
-        <Button size="sm" variant="secondary" onClick={download}>
+        <Button size="sm" variant="secondary" onClick={() => void download()}>
           Export CSV
         </Button>
       }
     >
+      {saveError && (
+        <p role="alert" className="mb-3 rounded-field bg-bad-bg px-3 py-2.5 text-[13.5px] font-medium text-bad">
+          {saveError}
+        </p>
+      )}
       <FilterBar>
         {RANGES.map((r) => (
           <Chip key={r.key} size="sm" selected={range === r.key} onClick={() => setRange(r.key)}>

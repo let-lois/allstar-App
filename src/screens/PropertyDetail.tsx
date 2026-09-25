@@ -8,7 +8,6 @@ import { Button } from '../components/ui/Button'
 import { Field } from '../components/ui/Input'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { NoteComposer } from '../components/visit/NoteComposer'
-import { syncPropertyPhotos } from '../lib/photos'
 import { CommActions } from '../components/property/CommActions'
 import { StreetView } from '../components/property/StreetView'
 import { OutcomePill, ScoreBar, StatusPill } from '../components/ui/StatusPill'
@@ -51,23 +50,6 @@ export function PropertyDetail() {
   const [noteTags, setNoteTags] = useState<NoteTag[]>([])
   const starting = useRef(false)
 
-
-  /*
-    Ask the server what photos it holds for this property.
-
-    Here rather than in bootstrap because this is the only screen that shows
-    them, and because the photos a device did not take are the whole point: a
-    rep's own are already on their phone. Metadata only — the bytes come down
-    per thumbnail, and only for the ones actually drawn.
-
-    Failures are deliberately silent. Not being able to reach the server means
-    the strip shows what this device has, which is exactly what it showed
-    before this existed.
-  */
-  useEffect(() => {
-    if (!propertyId) return
-    void syncPropertyPhotos(propertyId)
-  }, [propertyId])
 
   // `?start=1` deep-links straight into Visit Mode — the map sheet, the Today
   // card and the swipe action all route through here so there's one code path.

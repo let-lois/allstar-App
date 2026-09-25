@@ -559,6 +559,7 @@ const tally = (page) => page.locator('p', { hasText: /^\d+ photos? · / }).first
   await thumb.click()
   await page.waitForTimeout(500)
   ok(/Other · Skylight/.test(await page.getByTestId('viewer-label').innerText()), 'the viewer names the type too')
+  ok(/\b20\d\d\b/.test(await page.getByTestId('viewer-date').innerText()), 'and when the photo was taken', await page.getByTestId('viewer-date').innerText())
   await page.getByTestId('photo-refile').click()
   await page.waitForTimeout(500)
   ok((await page.getByTestId('categorize-sheet').getAttribute('data-mode')) === 'edit', 'Change opens the same sheet for that photo')

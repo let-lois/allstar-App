@@ -1,6 +1,5 @@
 import { qrModules } from './qr'
 import { saveFile } from './download'
-import { isNativeShell } from './webview'
 import type { BadgeInfo } from '../types'
 
 /**
@@ -298,21 +297,11 @@ export async function badgePng(spec: BadgeImageSpec): Promise<Blob> {
 }
 
 /**
- * Hand the file to the person.
- *
- * On the web that is a download. Inside the phone app the WebView has no
- * download behaviour to speak of — see `download.ts` — but it does have the
- * share sheet, which on iOS is where "Save Image" lives and on Android is
- * where Photos is. So the shell shares, and a browser that also knows how to
- * share files is left alone: a download there is what people expect.
+ * Hand the file to the person: the share sheet in the phone app (where Save
+ * Image lives), a download in a browser. The same road every file in the app
+ * takes now — see `saveFile` — so a device that cannot share a file is told so
+ * rather than handed a button that does nothing.
  */
 export async function deliverBadge(blob: Blob, filename: string): Promise<'shared' | 'downloaded'> {
-  const file = new File([blob], filename, { type: 'image/png' })
-  const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean }
-  if (isNativeShell() && typeof nav.share === 'function' && nav.canShare?.({ files: [file] })) {
-    await nav.share({ files: [file], title: 'Team member badge' })
-    return 'shared'
-  }
-  saveFile(blob, filename)
-  return 'downloaded'
+  return saveFile(new Blob([blob], { type: 'image/png' }), filename)
 }
