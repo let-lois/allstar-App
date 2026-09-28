@@ -159,8 +159,10 @@ directly. The Worker's key must be origin-free (a Worker sends no Origin), which
 is exactly why it is a secret and never in a bundle.
 
 Then confirm with `/api/selftest/geocode` — `attempts` should name `google`
-and/or `census` and never MapTiler. `MAPTILER_API_KEY` on the Worker is unused
-now; deleting that secret is safe.
+and/or `census` and never MapTiler. **Do not delete `MAPTILER_API_KEY` from the
+Worker:** geocoding no longer uses it, but `/api/tiles` does — it is what draws
+basemap imagery and offline maps in `FieldMap` on both products. Deleting it
+blanks that imagery everywhere at once.
 
 What it is worth until then: the free tier is a hard 100k/month cap with no
 overage billing, so the worst case is a blank map until the month rolls over — an
