@@ -55,8 +55,18 @@ export function App() {
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
-    const apply = () =>
-      document.documentElement.style.setProperty('--app-h', `${vv.height}px`)
+    const apply = () => {
+      const root = document.documentElement
+      root.style.setProperty('--app-h', `${vv.height}px`)
+      /*
+        The software keyboard, inferred: iOS shrinks the visual viewport and
+        leaves the layout viewport alone. Pinch zoom shrinks it too, hence the
+        scale check; Android resizes both, so this stays off there as before.
+      */
+      const keyboard = Math.abs(vv.scale - 1) < 0.01 && window.innerHeight - vv.height > 150
+      if (keyboard) root.dataset.kb = ''
+      else delete root.dataset.kb
+    }
     apply()
     vv.addEventListener('resize', apply)
     return () => vv.removeEventListener('resize', apply)

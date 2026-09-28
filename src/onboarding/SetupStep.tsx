@@ -3,6 +3,7 @@ import { Button } from '../components/ui/Button'
 import { IconBell, IconCamera, IconCheck, IconDevice, IconLocate } from '../components/nav/icons'
 import { getPosition, locationPermission } from '../lib/geo'
 import { installState, onInstallChange, promptInstall, type InstallState } from '../lib/install'
+import { isNativeShell } from '../lib/webview'
 import type { StepProps } from './steps'
 
 /**
@@ -170,9 +171,11 @@ export function SetupStep({ view, busy, error, post }: StepProps) {
             )}
             {notif === 'unsupported' && (
               <p className="mt-0.5 text-[13.5px] leading-snug text-ink-mute">
-                {install === 'ios'
-                  ? 'On iPhone, notifications become available once Allstar is on your home screen — add it below first, then open it from there.'
-                  : 'This browser does not offer notifications to the app.'}
+                {isNativeShell()
+                  ? 'Not available in this version of the app yet. Reminders will arrive here in a later update.'
+                  : install === 'ios'
+                    ? 'On iPhone, notifications become available once Allstar is on your home screen — add it below first, then open it from there.'
+                    : 'This browser does not offer notifications to the app.'}
               </p>
             )}
           </div>
@@ -188,7 +191,9 @@ export function SetupStep({ view, busy, error, post }: StepProps) {
           <div className="min-w-0 flex-1">
             <p className="text-[15px] font-semibold">Add to your home screen</p>
             {install === 'installed' && (
-              <p className="mt-0.5 text-[13.5px] leading-snug text-ink-mute">Done. You are running Allstar from your home screen.</p>
+              <p className="mt-0.5 text-[13.5px] leading-snug text-ink-mute">
+                {isNativeShell() ? 'Done. You are using the Allstar app.' : 'Done. You are running Allstar from your home screen.'}
+              </p>
             )}
             {install === 'promptable' && (
               <>

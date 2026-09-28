@@ -265,6 +265,11 @@ export function PropertyDetail() {
         onClose={() => setEditOpen(false)}
         title="Edit details"
         detents={[0.85, 0.95]}
+        footer={
+          <Button size="lg" full disabled={editBusy || !edit.address1.trim()} onClick={() => void saveEdit()} data-testid="lead-edit-save">
+            {editBusy ? 'Saving…' : 'Save details'}
+          </Button>
+        }
       >
         <div className="space-y-4 pt-1" data-testid="lead-edit">
           <Field
@@ -274,7 +279,7 @@ export function PropertyDetail() {
             autoComplete="street-address"
             disabled={editBusy}
           />
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_6rem] gap-3">
             <Field label="City" value={edit.city} onChange={(e) => setEdit((d) => ({ ...d, city: e.target.value }))} disabled={editBusy} />
             <Field label="State" value={edit.state} onChange={(e) => setEdit((d) => ({ ...d, state: e.target.value }))} disabled={editBusy} />
             <Field label="ZIP" value={edit.zip} onChange={(e) => setEdit((d) => ({ ...d, zip: e.target.value }))} inputMode="numeric" disabled={editBusy} />
@@ -310,9 +315,6 @@ export function PropertyDetail() {
               {editError}
             </p>
           )}
-          <Button size="lg" full disabled={editBusy || !edit.address1.trim()} onClick={() => void saveEdit()} data-testid="lead-edit-save">
-            {editBusy ? 'Saving…' : 'Save details'}
-          </Button>
         </div>
       </BottomSheet>
 

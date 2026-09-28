@@ -183,8 +183,13 @@ export function Login() {
         <InAppBrowserNotice tone="dark" />
       </div>
 
-      <div className="scroll-pane flex flex-col justify-center px-6 py-8">
-        <div className="mx-auto w-full max-w-sm">
+      {/*
+        Centred with auto margins, not `justify-center`: when the keyboard shrinks
+        the pane below the form's height, centring overflows *upward*, past the
+        scroll origin, and the top of the form cannot be scrolled back to.
+      */}
+      <div className="scroll-pane flex flex-col px-6 py-8">
+        <div className="mx-auto my-auto w-full max-w-sm">
           <div className="mb-7">
             {/*
               The real artwork on its own light tile, not a knockout of it.

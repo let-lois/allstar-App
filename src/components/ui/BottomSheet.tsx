@@ -156,7 +156,9 @@ export function BottomSheet({
           height: `${heightPct}%`,
           transform: dragY ? `translateY(${Math.max(dragY, -40)}px)` : undefined,
           transition: dragging.current ? 'none' : 'height 180ms ease, transform 180ms ease',
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          // The footer clears the home indicator itself; padding here as well
+          // left a second, empty inset under every primary action.
+          paddingBottom: footer ? undefined : 'env(safe-area-inset-bottom, 0px)',
         }}
       >
         {/* Grab area is deliberately tall — a 4px handle is not a touch target. */}

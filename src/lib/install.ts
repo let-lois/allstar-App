@@ -24,6 +24,8 @@
  * nobody was listening for is an install prompt that never appears.
  */
 
+import { isNativeShell } from './webview'
+
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
@@ -87,7 +89,10 @@ export function onInstallChange(fn: () => void): () => void {
 export type InstallState = 'installed' | 'promptable' | 'ios' | 'manual'
 
 export function installState(): InstallState {
-  if (isStandalone()) return 'installed'
+  // The store app is installed by definition. Without this the shell — which
+  // is neither `display-mode: standalone` nor `navigator.standalone` — told
+  // iPhone users to add it to their home screen from Safari.
+  if (isNativeShell() || isStandalone()) return 'installed'
   if (canPromptInstall()) return 'promptable'
   if (isIOS()) return 'ios'
   return 'manual'

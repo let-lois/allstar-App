@@ -675,7 +675,7 @@ export function AdminTerritories() {
             </p>
           )}
           <AllStarMap
-            className="h-[520px]"
+            className="h-[min(520px,60svh)] md:h-[520px]"
             /*
               Every lead while drawing, not just the selected territory's — the
               point of the exercise is to see what falls inside the shape, and
