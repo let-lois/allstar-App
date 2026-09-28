@@ -3,7 +3,7 @@ import { erasedAmong } from './erase'
 import { propertyIdOf } from './mutation-target'
 import { queueForCrm } from './integrations'
 import { noteIfStale, snapshotUpdatedAt } from './stale'
-import { createList, setReps, updateList, updateMembers } from './lists'
+import { createList, repScopeSql, setReps, updateList, updateMembers } from './lists'
 import type { Env, Mutation, MutationResult, SessionUser } from './types'
 
 /**
@@ -743,14 +743,11 @@ async function upsertContacts(env: Env, propertyId: string, raw: unknown): Promi
 async function assertMayEditProperty(env: Env, user: SessionUser, propertyId: string): Promise<void> {
   await assertPropertyInTenant(env, user, propertyId)
   if (user.role !== 'field_rep') return
+  // The same predicate bootstrap uses, so what a rep may edit is exactly
+  // what their phone shows — one definition, not two that can drift.
   const row = await env.DB.prepare(
     `SELECT 1 AS ok FROM properties p
-      WHERE p.id = ?1 AND p.client_id = ?2
-        AND (p.assigned_rep_id = ?3
-             OR p.id IN (SELECT m.property_id FROM lead_list_members m
-                           JOIN lead_list_reps r ON r.list_id = m.list_id
-                           JOIN lead_lists l ON l.id = m.list_id
-                          WHERE r.user_id = ?3 AND l.archived = 0))`,
+      WHERE p.id = ?1 AND p.client_id = ?2 AND ${repScopeSql('p', '?3')}`,
   )
     .bind(propertyId, user.clientId, user.id)
     .first<{ ok: number }>()

@@ -11,6 +11,7 @@ import { moneyFull } from '../lib/format'
 import { pointInPolygon, polygonAreaSqMiles } from '../lib/geo'
 import { Button } from '../components/ui/Button'
 import { Field } from '../components/ui/Input'
+import { IconClose } from '../components/nav/icons'
 
 /**
  * Territory management.
@@ -37,7 +38,7 @@ export function AdminTerritories() {
   const createTerritory = useAppStore((s) => s.createTerritory)
   const [draft, setDraft] = useState<{ points: { lat: number; lng: number }[] } | null>(null)
   const [draftName, setDraftName] = useState('')
-  const [draftRep, setDraftRep] = useState('')
+  const [draftReps, setDraftReps] = useState<string[]>([])
   const [saving2, setSaving2] = useState(false)
   const [drawError, setDrawError] = useState<string | null>(null)
   const [drawDone, setDrawDone] = useState<string | null>(null)
@@ -73,7 +74,8 @@ export function AdminTerritories() {
     try {
       const res = await createTerritory({
         name,
-        repId: draftRep || null,
+        repId: draftReps[0] ?? null,
+        repIds: draftReps,
         boundary: draft.points,
       })
       setDrawDone(
@@ -88,7 +90,7 @@ export function AdminTerritories() {
       setSelected(res.id)
       setDraft(null)
       setDraftName('')
-      setDraftRep('')
+      setDraftReps([])
     } catch (err) {
       setDrawError(
         err instanceof ApiError ? err.message : 'Could not create the territory. Try again.',
@@ -149,7 +151,12 @@ export function AdminTerritories() {
   const [assignError, setAssignError] = useState<string | null>(null)
   const [assigned, setAssigned] = useState<string | null>(null)
 
-  async function assign(territoryId: string, repId: string) {
+  /*
+    A territory holds any number of reps. `add` puts one on the patch beside
+    whoever is already there; `remove` takes one off. The unassigned bucket is
+    houses, not a patch, so there `add` still means "hand all of these over".
+  */
+  async function assign(territoryId: string, repId: string, action: 'add' | 'remove' = 'add') {
     const token = liveToken()
     if (!token) {
       setAssignError('Assigning leads needs a live account. The demo has no real team.')
@@ -164,15 +171,23 @@ export function AdminTerritories() {
         // wire — the server has no row for "no territory".
         territoryId: territoryId === UNASSIGNED_TERRITORY ? null : territoryId,
         repId: repId || null,
+        action,
       })
       // Re-read rather than patching state: this changes which properties a rep
       // can see, and guessing at the result is how a console drifts from the
       // database it is supposed to be showing.
       await refreshFromServer()
+      const who = repOptions.find((r) => r.id === repId)?.name ?? 'the rep'
       setAssigned(
-        repId
-          ? `${res.assigned} lead${res.assigned === 1 ? '' : 's'} assigned.`
-          : `${res.assigned} lead${res.assigned === 1 ? '' : 's'} unassigned.`,
+        action === 'remove'
+          ? `${who} taken off ${label(territoryId)}. Houses they were working stay theirs.`
+          : !repId
+            ? `${res.assigned} lead${res.assigned === 1 ? '' : 's'} unassigned.`
+            : territoryId === UNASSIGNED_TERRITORY
+              ? `${res.assigned} lead${res.assigned === 1 ? '' : 's'} assigned.`
+              : res.assigned > 0
+                ? `${who} added to ${label(territoryId)} and handed ${res.assigned} unclaimed lead${res.assigned === 1 ? '' : 's'}.`
+                : `${who} added to ${label(territoryId)} — ${res.repIds?.length ?? 0} rep${(res.repIds?.length ?? 0) === 1 ? '' : 's'} share it now.`,
       )
     } catch (err) {
       setAssignError(
@@ -363,26 +378,39 @@ export function AdminTerritories() {
               cell: (t) => label(t.id),
             },
             {
-              header: 'Assigned rep',
-              cell: (t) => (
-                <select
-                  value={t.repId ?? ''}
-                  disabled={mode !== 'live' || saving !== null}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => void assign(t.id, e.target.value)}
-                  /* 44px on a phone: this is the one control in the console a
-                     manager reaches for one-handed, reassigning a patch because
-                     somebody called in sick. */
-                  className="focusable min-h-[44px] w-full rounded-lg border border-line bg-surface px-2 text-[13px] disabled:opacity-60 lg:min-h-[36px] lg:w-auto lg:text-xs"
-                >
-                  <option value="">{t.mixed ? 'Mixed — pick one' : 'Unassigned'}</option>
-                  {repOptions.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              ),
+              header: 'Reps',
+              cell: (t) =>
+                t.id === UNASSIGNED_TERRITORY ? (
+                  /*
+                    The unassigned bucket is houses with no patch, so it keeps
+                    the one-shot control: pick a person and every lead in it is
+                    theirs. That is the post-import move, and it is a hand-over
+                    rather than a membership.
+                  */
+                  <select
+                    value=""
+                    disabled={mode !== 'live' || saving !== null}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => void assign(t.id, e.target.value)}
+                    aria-label="Hand every unassigned lead to"
+                    className="focusable min-h-[44px] w-full rounded-lg border border-line bg-surface px-2 text-[13px] disabled:opacity-60 lg:min-h-[36px] lg:w-auto lg:text-xs"
+                  >
+                    <option value="">{t.mixed ? 'Mixed — hand all to…' : 'Hand all to…'}</option>
+                    {repOptions.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <RepChips
+                    repIds={territories[t.id]?.repIds ?? (territories[t.id]?.repId ? [territories[t.id]!.repId!] : [])}
+                    options={repOptions}
+                    disabled={mode !== 'live' || saving !== null}
+                    onAdd={(repId) => void assign(t.id, repId, 'add')}
+                    onRemove={(repId) => void assign(t.id, repId, 'remove')}
+                  />
+                ),
             },
             { header: 'Properties', align: 'right', cell: (t) => t.properties },
             {
@@ -618,23 +646,50 @@ export function AdminTerritories() {
                   onChange={(e) => setDraftName(e.target.value)}
                   placeholder="e.g. Cypress Ridge & Marigold"
                 />
-                <label className="block">
-                  <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">
+                <fieldset>
+                  <legend className="mb-1.5 block text-[13px] font-medium text-ink-soft">
                     Assign to
-                  </span>
-                  <select
-                    value={draftRep}
-                    onChange={(e) => setDraftRep(e.target.value)}
-                    className="field h-[52px]"
-                  >
-                    <option value="">Nobody yet</option>
-                    {repOptions.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  </legend>
+                  {/*
+                    Any number of people. One rep also gets the unclaimed houses
+                    inside; two or more share the patch and claim doors as they
+                    knock them. Said on screen, because the difference decides
+                    what lands on whose phone.
+                  */}
+                  <div className="max-h-[220px] overflow-y-auto rounded-field border border-line bg-surface">
+                    {repOptions.length === 0 && (
+                      <p className="px-3 py-3 text-[13px] text-ink-mute">Nobody on the team yet.</p>
+                    )}
+                    {repOptions.map((r) => {
+                      const on = draftReps.includes(r.id)
+                      return (
+                        <label
+                          key={r.id}
+                          className="flex min-h-[44px] cursor-pointer items-center gap-3 border-b border-line-soft px-3 last:border-b-0"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() =>
+                              setDraftReps((cur) =>
+                                on ? cur.filter((id) => id !== r.id) : [...cur, r.id],
+                              )
+                            }
+                            className="h-5 w-5 accent-brand-500"
+                          />
+                          <span className="text-[14px]">{r.name}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-1.5 text-[12.5px] leading-snug text-ink-mute">
+                    {draftReps.length === 0
+                      ? 'Nobody yet — the leads inside keep whoever has them.'
+                      : draftReps.length === 1
+                        ? 'One rep: they also get every lead inside that nobody is working.'
+                        : `${draftReps.length} reps share it: all of them see every lead inside.`}
+                  </p>
+                </fieldset>
               </div>
 
               {/* Reserved, for the same reason: an error appearing must not push
@@ -720,5 +775,68 @@ export function AdminTerritories() {
         </div>
       </div>
     </AdminPage>
+  )
+}
+
+
+/**
+ * The reps on a patch, as chips, with a way to add one and a way to take one
+ * off. Each × is a 44px target on a phone: this is the control a manager
+ * reaches for one-handed when somebody calls in sick.
+ */
+function RepChips({
+  repIds,
+  options,
+  disabled,
+  onAdd,
+  onRemove,
+}: {
+  repIds: string[]
+  options: { id: string; name: string }[]
+  disabled: boolean
+  onAdd: (repId: string) => void
+  onRemove: (repId: string) => void
+}) {
+  const nameOf = (id: string) => options.find((r) => r.id === id)?.name ?? 'Former team member'
+  const free = options.filter((r) => !repIds.includes(r.id))
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+      {repIds.length === 0 && <span className="text-[13px] text-ink-mute">Nobody yet</span>}
+      {repIds.map((id) => (
+        <span
+          key={id}
+          className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-sunk pl-2.5 text-[13px] font-medium"
+        >
+          {nameOf(id)}
+          <button
+            type="button"
+            disabled={disabled}
+            aria-label={`Take ${nameOf(id)} off this territory`}
+            onClick={() => onRemove(id)}
+            className="focusable grid h-11 w-9 place-items-center rounded-r-full text-ink-mute disabled:opacity-60 lg:h-8 lg:w-7"
+          >
+            <span className="scale-75">
+              <IconClose />
+            </span>
+          </button>
+        </span>
+      ))}
+      {free.length > 0 && (
+        <select
+          value=""
+          disabled={disabled}
+          onChange={(e) => e.target.value && onAdd(e.target.value)}
+          aria-label="Add a rep to this territory"
+          className="focusable min-h-[44px] rounded-lg border border-dashed border-line bg-surface px-2 text-[13px] text-ink-soft disabled:opacity-60 lg:min-h-[36px] lg:text-xs"
+        >
+          <option value="">+ Add rep</option>
+          {free.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
   )
 }

@@ -1,4 +1,4 @@
-import type { LeadList, Property, User } from './types'
+import type { LeadList, Property, Territory, User } from './types'
 
 /**
  * Lead lists on the phone: who can see what, kept in step with the server.
@@ -56,15 +56,34 @@ export function leadIdsViaLists(user: Pick<User, 'id' | 'role'>, lists: LeadList
   return out
 }
 
-/** The server's scope, on the phone. */
+/** The territories this person is on, by id. */
+export function territoryIdsFor(
+  user: Pick<User, 'id'>,
+  territories: Pick<Territory, 'id' | 'repIds'>[],
+): Set<string> {
+  const out = new Set<string>()
+  for (const t of territories) if (t.repIds?.includes(user.id)) out.add(t.id)
+  return out
+}
+
+/**
+ * The server's scope, on the phone.
+ *
+ * Three ways in, the same three as `repScopeSql` on the Worker: the house is
+ * assigned to them, it is on a live list handed to them, or it sits in a
+ * territory they are on. `viaTerritories` is optional so a caller with no
+ * territories to hand keeps the two-way answer it always had.
+ */
 export function canSee(
-  property: Pick<Property, 'id' | 'assignedRepId'>,
+  property: Pick<Property, 'id' | 'assignedRepId' | 'territoryId'>,
   user: Pick<User, 'id' | 'role'> | null | undefined,
   viaLists: Set<string>,
+  viaTerritories?: Set<string>,
 ): boolean {
   if (!user) return false
   if (!isRep(user)) return true
-  return property.assignedRepId === user.id || viaLists.has(property.id)
+  if (property.assignedRepId === user.id || viaLists.has(property.id)) return true
+  return !!property.territoryId && !!viaTerritories?.has(property.territoryId)
 }
 
 /** The lists a given lead is on, for the peek and the profile. */

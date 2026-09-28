@@ -684,13 +684,15 @@ export function apiInvite(
  *
  * `territoryId: null` addresses the leads that aren't in a territory yet — after
  * a plain import that's all of them, so without it a first import would be
- * unassignable. `repId: null` un-assigns.
+ * unassignable. `repId: null` un-assigns. On a territory, `action: 'add'` (the
+ * default) puts a rep on the patch alongside whoever is there; `'remove'` takes
+ * one off. Neither touches a house somebody else is working.
  */
 export function apiAssignTerritory(
   token: string,
-  input: { territoryId: string | null; repId: string | null },
+  input: { territoryId: string | null; repId: string | null; action?: 'add' | 'remove' },
 ) {
-  return request<{ assigned: number }>('/api/territories/assign', {
+  return request<{ assigned: number; repIds?: string[] }>('/api/territories/assign', {
     method: 'POST',
     body: input,
     token,
@@ -709,9 +711,14 @@ export function apiAssignTerritory(
  */
 export function apiCreateTerritory(
   token: string,
-  input: { name: string; repId: string | null; boundary: { lat: number; lng: number }[] },
+  input: {
+    name: string
+    repId: string | null
+    repIds?: string[]
+    boundary: { lat: number; lng: number }[]
+  },
 ) {
-  return request<{ territory: { id: string; name: string }; assigned: number }>(
+  return request<{ territory: { id: string; name: string; repIds?: string[] }; assigned: number }>(
     '/api/territories',
     { method: 'POST', body: input, token, timeoutMs: 30_000 },
   )

@@ -54,15 +54,19 @@ const isRep = (u: SessionUser) => u.role === 'field_rep'
  * The SQL that says whether a rep may see a property.
  *
  * `alias` is the properties table's alias in the enclosing query; `param` is the
- * placeholder holding the rep's id. Archived lists confer nothing — a list a
- * manager has put away must not keep leads on a phone.
+ * placeholder holding the rep's id. Three ways in: the house is assigned to
+ * them, it is on a live list handed to them, or it sits in a territory they are
+ * on (`territory_reps`). Archived lists confer nothing — a list a manager has
+ * put away must not keep leads on a phone.
  */
 export function repScopeSql(alias: string, param: string): string {
   return `(${alias}.assigned_rep_id = ${param} OR ${alias}.id IN (
     SELECT m.property_id FROM lead_list_members m
       JOIN lead_list_reps r ON r.list_id = m.list_id
       JOIN lead_lists l ON l.id = m.list_id
-     WHERE r.user_id = ${param} AND l.archived = 0))`
+     WHERE r.user_id = ${param} AND l.archived = 0)
+   OR ${alias}.territory_id IN (
+    SELECT tr.territory_id FROM territory_reps tr WHERE tr.user_id = ${param}))`
 }
 
 export interface LeadListDTO {

@@ -3,6 +3,7 @@ import { dayKeyIn } from './day'
 import { readMe } from './me'
 import type { Env, SessionUser } from './types'
 import { parseBoundary } from './territories'
+import { territoryRepsFor } from './territory-reps'
 import { listsFor, repScopeSql } from './lists'
 
 /**
@@ -319,18 +320,7 @@ export async function bootstrap(env: Env, user: SessionUser) {
       milliseconds either way.
     */
     leadLists: await listsFor(env, user),
-    territories: (territories.results as Record<string, unknown>[]).map((t) => ({
-      id: t.id,
-      name: t.name,
-      repId: t.rep_id ?? undefined,
-      /*
-        Parsed defensively. This column arrived by migration, so old rows hold
-        null and — if anything ever wrote to it by hand — it could hold anything.
-        A territory with an unreadable outline is still a perfectly good
-        territory, so a parse failure drops the shape rather than the row.
-      */
-      boundary: parseBoundary(t.boundary),
-    })),
+    territories: await territoriesWithReps(env, user.clientId, territories.results as Record<string, unknown>[]),
     team: (roster.results as Record<string, unknown>[]).map((u) => ({
       id: u.id,
       name: u.name,
@@ -378,3 +368,30 @@ export async function bootstrap(env: Env, user: SessionUser) {
   }
 }
 
+
+/**
+ * Territories as the phone and the console read them, with their reps.
+ *
+ * `repIds` comes from `territory_reps`, oldest assignment first; `repId` is
+ * its first entry, kept for callers that still read one rep. One query for the
+ * whole tenant rather than one per territory.
+ */
+async function territoriesWithReps(env: Env, clientId: string, rows: Record<string, unknown>[]) {
+  const reps = await territoryRepsFor(env, clientId)
+  return rows.map((t) => {
+    const repIds = reps.get(String(t.id)) ?? []
+    return {
+      id: t.id,
+      name: t.name,
+      repId: repIds[0] ?? (t.rep_id ?? undefined),
+      repIds,
+      /*
+        Parsed defensively. This column arrived by migration, so old rows hold
+        null and — if anything ever wrote to it by hand — it could hold anything.
+        A territory with an unreadable outline is still a perfectly good
+        territory, so a parse failure drops the shape rather than the row.
+      */
+      boundary: parseBoundary(t.boundary),
+    }
+  })
+}

@@ -320,7 +320,10 @@ export interface TeamMember {
 export interface Territory {
   id: string
   name: string
+  /** The first rep on the patch, for callers that read one. `repIds` is the list. */
   repId?: string
+  /** Everyone who walks this patch, oldest assignment first. */
+  repIds?: string[]
   /**
    * The outline a manager drew, if this territory was drawn rather than named by
    * an import.

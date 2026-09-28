@@ -1785,6 +1785,8 @@ export default {
         const result = await assignTerritory(env, user, {
           territoryId: typeof body.territoryId === 'string' ? body.territoryId : null,
           repId: typeof body.repId === 'string' && body.repId ? body.repId : null,
+          // `remove` takes one rep off a patch; anything else adds.
+          action: body.action === 'remove' ? 'remove' : 'add',
         })
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 200, cors)
@@ -1798,6 +1800,7 @@ export default {
         const result = await createTerritory(env, user, {
           name: body.name,
           repId: body.repId,
+          repIds: body.repIds,
           boundary: body.boundary,
         })
         if ('error' in result) return json({ error: result.error }, result.status, cors)

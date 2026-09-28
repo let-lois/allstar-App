@@ -42,7 +42,7 @@ import {
   apiMe,
   type SessionUserDTO,
 } from '../lib/http'
-import { canSee, leadIdsViaLists, listsContaining, listsFor, withMembers } from '../lib/leadLists'
+import { canSee, leadIdsViaLists, listsContaining, listsFor, withMembers, territoryIdsFor } from '../lib/leadLists'
 import { applyBootstrap, leadListFromDTO, outboxPending, wipeCachedData } from '../lib/hydrate'
 import {
   clearSession,
@@ -191,6 +191,8 @@ interface AppState {
   createTerritory: (input: {
     name: string
     repId: string | null
+    /** Everyone to put on the patch; `repId` is folded in for older callers. */
+    repIds?: string[]
     boundary: { lat: number; lng: number }[]
   }) => Promise<{ id: string; assigned: number }>
   /**
@@ -778,12 +780,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().loadLocal(current, 'demo')
   },
 
-  async createTerritory({ name, repId, boundary }) {
+  async createTerritory({ name, repId, repIds: wanted, boundary }) {
     if (boundary.length < 3) throw new Error('An area needs at least three points.')
     const token = liveToken()
+    const repIds = [...new Set([...(repId ? [repId] : []), ...(wanted ?? [])])]
 
     if (token) {
-      const res = await apiCreateTerritory(token, { name, repId, boundary })
+      const res = await apiCreateTerritory(token, { name, repId, repIds, boundary })
       // The server has moved rows; pull its view back rather than patching a
       // guess into local state and hoping the two agree.
       await get().refreshFromServer()
@@ -796,14 +799,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       so it survives a reload.
     */
     const id = `t_drawn_${Date.now().toString(36)}`
-    const territory: Territory = { id, name, repId: repId ?? undefined, boundary }
+    const territory: Territory = { id, name, repId: repIds[0], repIds, boundary }
     const inside = Object.values(get().properties).filter(
       (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && pointInPolygon(p, boundary),
     )
+    // Same rule as the Worker: unclaimed houses go to a sole rep, and a shared
+    // patch leaves them for the field.
+    const claimFor = repIds.length === 1 ? repIds[0] : undefined
     const moved = inside.map((p) => ({
       ...p,
       territoryId: id,
-      assignedRepId: repId ?? p.assignedRepId,
+      assignedRepId: claimFor ?? p.assignedRepId,
       updatedAt: Date.now(),
     }))
 
@@ -1594,11 +1600,14 @@ function isRep(user: User | null): boolean {
  * server applies, so a house that gets onto a list here is a house the server
  * will accept.
  */
-function useScopedIds(state: Pick<AppState, 'properties' | 'leadLists' | 'user'>): string[] {
+function useScopedIds(
+  state: Pick<AppState, 'properties' | 'leadLists' | 'territories' | 'user'>,
+): string[] {
   const all = Object.values(state.properties)
   if (!isRep(state.user)) return all.map((p) => p.id)
   const via = leadIdsViaLists(state.user!, Object.values(state.leadLists))
-  return all.filter((p) => canSee(p, state.user, via)).map((p) => p.id)
+  const patches = territoryIdsFor(state.user!, Object.values(state.territories))
+  return all.filter((p) => canSee(p, state.user, via, patches)).map((p) => p.id)
 }
 
 /**
@@ -1610,13 +1619,15 @@ function useScopedIds(state: Pick<AppState, 'properties' | 'leadLists' | 'user'>
 export function useScopedProperties(): Property[] {
   const properties = useAppStore((s) => s.properties)
   const leadLists = useAppStore((s) => s.leadLists)
+  const territories = useAppStore((s) => s.territories)
   const user = useAppStore((s) => s.user)
   return useMemo(() => {
     const all = Object.values(properties)
     if (!isRep(user)) return all
     const via = leadIdsViaLists(user!, Object.values(leadLists))
-    return all.filter((p) => canSee(p, user, via))
-  }, [properties, leadLists, user])
+    const patches = territoryIdsFor(user!, Object.values(territories))
+    return all.filter((p) => canSee(p, user, via, patches))
+  }, [properties, leadLists, territories, user])
 }
 
 /**

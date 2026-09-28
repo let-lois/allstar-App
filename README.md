@@ -276,7 +276,9 @@ whole file. Everything else arrived unowned, and somebody assigned it by hand â€
 which for a 500-row list is most of a morning.
 
 Now each lead's coordinates are matched against the drawn boundaries, and the
-patch's rep comes with it. The rules, in order:
+patch's first rep comes with it (a territory can have several reps â€” all of
+them see every lead in it; the first one listed is the one an import hands the
+house to). The rules, in order:
 
 1. A territory named on the import screen wins for every row. An explicit choice
    is an explicit choice; matching is skipped entirely rather than competing
