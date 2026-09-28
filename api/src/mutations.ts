@@ -413,6 +413,31 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
       )
         .bind(id, p.done ? 1 : 0, user.clientId)
         .run()
+      /*
+        A Send-quote to-do ticked off is the only record that a quote went
+        out. It used to vanish from Today and leave nothing behind, so nobody
+        could tell a quoted lead from one still waiting on its quote. Now it
+        is a line in the lead's history, at the time the rep ticked it (sent
+        by the phone, so a day offline keeps its real time). One row per task,
+        so a retried write is the same row, and unticking takes it back.
+      */
+      const task = await env.DB.prepare('SELECT property_id, kind FROM tasks WHERE id = ?1 AND client_id = ?2')
+        .bind(id, user.clientId)
+        .first<{ property_id: string | null; kind: string }>()
+      if (task?.kind === 'quote' && task.property_id) {
+        const eventId = `quote:${id}`
+        if (p.done) {
+          await env.DB.prepare(
+            `INSERT OR REPLACE INTO activity
+               (id, client_id, property_id, rep_id, type, summary, at)
+             VALUES (?1,?2,?3,?4,'quote','Quote sent',?5)`,
+          )
+            .bind(eventId, user.clientId, task.property_id, user.id, num(p.at) ?? Date.now())
+            .run()
+        } else {
+          await env.DB.prepare('DELETE FROM activity WHERE id = ?1 AND client_id = ?2').bind(eventId, user.clientId).run()
+        }
+      }
       return
     }
 

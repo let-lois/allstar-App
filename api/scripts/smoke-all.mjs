@@ -123,6 +123,7 @@ const TESTS = [
   { script: 'smoke:territory-reps', kind: 'hosted', port: 8852 },
   { script: 'smoke:territory-leads', kind: 'hosted', port: 8853 },
   { script: 'smoke:lead-edit', kind: 'hosted', port: 8855 },
+  { script: 'smoke:quote-sent', kind: 'hosted', port: 8856 },
   { script: 'smoke:onboarding-schema', kind: 'hosted', port: 8861 },
   { script: 'smoke:onboarding-flow', kind: 'hosted', port: 8871 },
   { script: 'smoke:mail', kind: 'hosted', port: 8881 },

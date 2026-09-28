@@ -110,6 +110,7 @@
     "verify:location": "node scripts/verify-location.mjs",
     "verify:keyboard": "node scripts/verify-keyboard.mjs",
     "verify:appointments": "node scripts/verify-appointments.mjs",
+    "verify:quote": "node scripts/verify-quote.mjs",
     "verify:overview": "node scripts/verify-overview.mjs"
   },
   "dependencies": {

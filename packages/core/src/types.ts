@@ -393,7 +393,8 @@ export interface ActivityEvent {
   id: string
   propertyId?: string
   repId: string
-  type: 'visit' | 'note' | 'photo' | 'call' | 'sms' | 'appointment' | 'status'
+  /** `quote` is a Send-quote to-do ticked off: the record that a quote went out. */
+  type: 'visit' | 'note' | 'photo' | 'call' | 'sms' | 'appointment' | 'status' | 'quote'
   summary: string
   at: number
   outcome?: OutcomeCode

@@ -7,7 +7,7 @@ import { SwipeRow } from '../ui/SwipeRow'
 import { distanceMiles, formatDistance, type Position } from '../../lib/geo'
 import { money, relative } from '../../lib/format'
 import { homeownerContact } from '../../lib/contact'
-import { useAppStore } from '../../store/useAppStore'
+import { useAppStore, useQuoteSentAt } from '../../store/useAppStore'
 
 /**
  * Dense list row, ~84px tall.
@@ -36,6 +36,7 @@ export function PropertyRow({
 }) {
   const nav = useNavigate()
   const logComm = useAppStore((s) => s.logComm)
+  const quoteSentAt = useQuoteSentAt(property.id)
   const dist = position ? distanceMiles(position, property) : null
   /*
     Through `homeownerContact` rather than `telHref`, so the swipe obeys Do Not
@@ -126,6 +127,12 @@ export function PropertyRow({
             <OutcomePill code={property.lastOutcome} />
             {property.lastVisitAt && (
               <span className="text-[11.5px] text-ink-mute">{relative(property.lastVisitAt)}</span>
+            )}
+            {/* The one fact a status pill cannot carry: a quoted lead whose quote has actually gone out. */}
+            {quoteSentAt !== undefined && (
+              <span className="text-[11.5px] font-medium text-ink-soft" data-testid="lead-quote-sent">
+                Quote sent {relative(quoteSentAt)}
+              </span>
             )}
           </span>
         </span>

@@ -1504,10 +1504,32 @@ export const useAppStore = create<AppState>((set, get) => ({
   async toggleTask(taskId) {
     const task = get().tasks[taskId]
     if (!task) return
+    const at = Date.now()
     const updated = { ...task, done: !task.done, pending: true }
     await db.put('tasks', updated)
     set((s) => ({ tasks: { ...s.tasks, [taskId]: updated } }))
-    await enqueue('task.complete', { id: taskId, done: updated.done })
+    // A Send-quote to-do ticked off is the record that a quote went out —
+    // the same line in the lead's history the server writes, one per task,
+    // so the phone reads the way the office does and unticking takes it back.
+    if (task.kind === 'quote' && task.propertyId) {
+      const eventId = `quote:${taskId}`
+      if (updated.done) {
+        const event: ActivityEvent = {
+          id: eventId,
+          propertyId: task.propertyId,
+          repId: get().user?.id ?? '',
+          type: 'quote',
+          summary: 'Quote sent',
+          at,
+        }
+        await db.put('activity', event)
+        set((s) => ({ activity: [event, ...s.activity.filter((e) => e.id !== eventId)] }))
+      } else {
+        await db.del('activity', eventId)
+        set((s) => ({ activity: s.activity.filter((e) => e.id !== eventId) }))
+      }
+    }
+    await enqueue('task.complete', { id: taskId, done: updated.done, at })
   },
 
   async createTask(input) {
@@ -1731,6 +1753,18 @@ export function useListsContaining(propertyId: string | undefined): LeadList[] {
     () => (propertyId ? listsContaining(propertyId, Object.values(leadLists)) : []),
     [leadLists, propertyId],
   )
+}
+
+/** When a quote last went out to this lead, from the ticked-off Send-quote to-do; undefined if none has. */
+export function useQuoteSentAt(propertyId: string | undefined): number | undefined {
+  return useAppStore((s) => {
+    if (!propertyId) return undefined
+    let latest: number | undefined
+    for (const e of s.activity) {
+      if (e.type === 'quote' && e.propertyId === propertyId && (latest === undefined || e.at > latest)) latest = e.at
+    }
+    return latest
+  })
 }
 
 export function useMyTasks(): Task[] {

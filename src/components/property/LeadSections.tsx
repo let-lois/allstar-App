@@ -23,7 +23,7 @@ import { syncPropertyPhotos } from '../../lib/photos'
  * a compact list control above this) and what "Add note" should do.
  */
 
-export type LeadSection = 'appointments' | 'notes' | 'lists' | 'photos' | 'visits' | 'activity' | 'details'
+export type LeadSection = 'appointments' | 'todo' | 'notes' | 'lists' | 'photos' | 'visits' | 'activity' | 'details'
 
 export function LeadSections({
   propertyId,
@@ -41,6 +41,14 @@ export function LeadSections({
   const allVisits = useAppStore((s) => s.visits)
   const activity = useAppStore((s) => s.activity)
   const allAppointments = useAppStore((s) => s.appointments)
+  const allTasks = useAppStore((s) => s.tasks)
+  // What is still owed on this door — a quote to send, a call to make. These
+  // lived only on Today, so a rep reading the lead could not tell a quote was
+  // waiting to go out; and the day it was ticked off is in Activity below.
+  const todo = useMemo(
+    () => Object.values(allTasks).filter((t) => t.propertyId === propertyId && !t.done).sort((a, b) => a.dueAt - b.dueAt),
+    [allTasks, propertyId],
+  )
   const tz = useAppStore((s) => s.timezone)
   // Coming ones first, soonest at the top; then the ones that have happened.
   const appointments = useMemo(() => {
@@ -109,6 +117,28 @@ export function LeadSections({
                     <span className="block text-[12.5px] text-ink-mute">
                       {relative(a.startsAt)}
                       {a.durationMin ? ` · ${a.durationMin} min` : ''}
+                    </span>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </Collapsible>
+      )}
+
+      {show('todo') && todo.length > 0 && (
+        <Collapsible flat title="To do" count={todo.length} defaultOpen>
+          <ul className="space-y-3" data-testid="lead-todo">
+            {todo.map((t) => {
+              const overdue = t.dueAt < Date.now()
+              return (
+                <li key={t.id} className="flex items-start gap-3">
+                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-ink/15" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[14.5px] text-ink-soft">{t.title}</span>
+                    <span className={`mt-0.5 block text-[12.5px] ${overdue ? 'font-semibold text-warn' : 'text-ink-mute'}`}>
+                      {overdue ? 'Overdue · ' : ''}
+                      {relative(t.dueAt)}
                     </span>
                   </span>
                 </li>
