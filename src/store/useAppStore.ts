@@ -19,6 +19,7 @@ import type {
   Visit,
   LeadList,
   Contact,
+  LeadStatus,
 } from '../types'
 import * as db from '../lib/db'
 import { purgeErased } from '../lib/erase-local'
@@ -56,7 +57,7 @@ import {
   saveSession,
   userFromDTO,
 } from '../lib/session'
-import { OUTCOME_TO_STATUS } from '../data/outcomes'
+import { OUTCOME_TO_STATUS, STATUS_LABEL } from '../data/outcomes'
 import { dayKey } from '../lib/format'
 import { pointInPolygon } from '../lib/geo'
 import { getPosition, type Position } from '../lib/geo'
@@ -268,6 +269,14 @@ interface AppState {
       state?: string
       zip?: string
       contact?: { name: string; phone?: string; email?: string }
+      /** The lead's own tags; an empty list clears them. */
+      tags?: string[]
+      /**
+       * A status set by hand — the wrong door marked Not interested, fixed
+       * without a visit that never happened. Queued as its own write, with
+       * its own rules on the server (a Do Not Contact needs the office).
+       */
+      status?: LeadStatus
     },
   ) => Promise<void>
   addNote: (
@@ -1184,12 +1193,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
 
+    const statusChange = patch.status && patch.status !== current.status ? patch.status : undefined
     const next: Property = {
       ...current,
       ...(address1 !== undefined ? { address1 } : {}),
       ...(patch.city !== undefined ? { city: patch.city.trim() } : {}),
       ...(patch.state !== undefined ? { state: patch.state.trim() } : {}),
       ...(patch.zip !== undefined ? { zip: patch.zip.trim() } : {}),
+      ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
+      ...(statusChange ? { status: statusChange } : {}),
       contacts,
     }
     await db.put('properties', next)
@@ -1200,6 +1212,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       city: next.city,
       state: next.state,
       zip: next.zip,
+      ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
       contacts: next.contacts.map((c) => ({
         id: c.id,
         name: c.name,
@@ -1208,6 +1221,21 @@ export const useAppStore = create<AppState>((set, get) => ({
         isPrimary: !!c.isPrimary,
       })),
     })
+    if (statusChange) {
+      // Its own write, and its own line in the lead's history — the same row
+      // the server writes, so the phone reads the way the office does.
+      const event: ActivityEvent = {
+        id: uid('ev'),
+        propertyId,
+        repId: get().user?.id ?? '',
+        type: 'status',
+        summary: `Status set to ${STATUS_LABEL[statusChange]} (was ${STATUS_LABEL[current.status]})`,
+        at: Date.now(),
+      }
+      await db.put('activity', event)
+      set((s) => ({ activity: [event, ...s.activity] }))
+      await enqueue('property.status', { id: propertyId, status: statusChange })
+    }
   },
 
   async addNote(propertyId, body, tags, visitId) {

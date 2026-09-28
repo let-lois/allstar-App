@@ -4,6 +4,14 @@ import { propertyIdOf } from './mutation-target'
 import { queueForCrm } from './integrations'
 import { noteIfStale, snapshotUpdatedAt } from './stale'
 import { createList, repScopeSql, setReps, updateList, updateMembers } from './lists'
+import { canImport } from './import'
+
+/** The statuses a person may set by hand; the same list the office's bulk change allows. */
+const SETTABLE_STATUSES = new Set(['new', 'contacted', 'follow_up', 'working', 'appointment', 'quoted', 'won', 'lost', 'dnc'])
+const STATUS_WORDS: Record<string, string> = {
+  new: 'New', contacted: 'Contacted', follow_up: 'Follow-up', working: 'Working', appointment: 'Appointment',
+  quoted: 'Quoted', won: 'Won', lost: 'Lost', dnc: 'Do Not Contact',
+}
 import type { Env, Mutation, MutationResult, SessionUser } from './types'
 
 /**
@@ -602,13 +610,49 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
         await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
         return
       }
+      /*
+        A status set by hand, from the phone or the console.
+
+        A rep who marked the wrong door Not interested, or Lost, fixes it here
+        without inventing a visit that never happened. Three rules, and an
+        activity row so a manager can see the correction for what it is:
+
+        - only a lead they may see (`assertMayEditProperty`) — this branch used
+          to check the tenant alone, so a rep's session could set any status
+          on any lead in the company;
+        - only a real status;
+        - a Do Not Contact stays one unless the office lifts it. A homeowner
+          who asked not to be knocked is protected from an accidental edit,
+          which is the same guard the office's bulk change carries.
+      */
+      const status = str(p.status) ?? ''
+      if (!SETTABLE_STATUSES.has(status)) throw new Error('property.status: not a lead status')
+      await assertMayEditProperty(env, user, id)
+      const before = await env.DB.prepare(
+        'SELECT status FROM properties WHERE id = ?1 AND client_id = ?2',
+      )
+        .bind(id, user.clientId)
+        .first<{ status: string }>()
+      if (!before) throw new Error('property not found in this account')
+      if (before.status === 'dnc' && status !== 'dnc' && !canImport(user)) {
+        throw new Error('This lead is marked Do Not Contact. Ask the office to lift that.')
+      }
+      if (before.status === status) return
+      const at = Date.now()
       await env.DB.prepare(
         'UPDATE properties SET status = ?2, updated_at = ?3 WHERE id = ?1 AND client_id = ?4',
       )
-        .bind(id, str(p.status) ?? 'new', Date.now(), user.clientId)
+        .bind(id, status, at, user.clientId)
         .run()
-      // A status changed from the console reaches the CRM the same way a rep's
-      // outcome does — including a manual Do Not Contact.
+      await env.DB.prepare(
+        `INSERT OR REPLACE INTO activity
+           (id, client_id, property_id, rep_id, type, summary, at)
+         VALUES (?1,?2,?3,?4,'status',?5,?6)`,
+      )
+        .bind(m.id, user.clientId, id, user.id, `Status set to ${STATUS_WORDS[status] ?? status} (was ${STATUS_WORDS[before.status] ?? before.status})`, at)
+        .run()
+      // A status changed by hand reaches the CRM the same way a rep's outcome
+      // does — including a manual Do Not Contact.
       await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
       return
     }
@@ -616,26 +660,35 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
     /*
       The details a rep learns at the door, after the lead exists.
 
-      Address as read off the house, the homeowner's name, a number, an email —
-      any of them may be wrong or missing when the lead is made and right five
-      minutes later. Reps may only edit what they can see: their own leads, or
-      a house on a list handed to them. The office may edit anything in the
-      tenant. Status is deliberately not here — it follows from a visit.
+      Address as read off the house, the homeowner's name, a number, an email,
+      the lead's own tags — any of them may be wrong or missing when the lead
+      is made and right five minutes later. Reps may only edit what they can
+      see: their own leads, a house on a list handed to them, a territory they
+      are on. The office may edit anything in the tenant. Status is not here;
+      it has its own mutation above, with its own rules.
     */
     case 'property.update': {
       const id = str(p.id)
       if (!id) throw new Error('property.update: missing id')
       await assertMayEditProperty(env, user, id)
+      // Tags the rep put on the lead itself — a bounded list of short words.
+      // Absent means untouched; an empty list clears them.
+      const tags = Array.isArray(p.tags)
+        ? JSON.stringify(
+            [...new Set(p.tags.filter((t): t is string => typeof t === 'string').map((t) => t.trim().slice(0, 40)).filter(Boolean))].slice(0, 12),
+          )
+        : null
       await env.DB.prepare(
         `UPDATE properties
             SET address1 = COALESCE(?2, address1),
                 city = COALESCE(?3, city),
                 state = COALESCE(?4, state),
                 zip = COALESCE(?5, zip),
+                tags = COALESCE(?8, tags),
                 updated_at = ?6
           WHERE id = ?1 AND client_id = ?7`,
       )
-        .bind(id, str(p.address1)?.trim() || null, str(p.city), str(p.state), str(p.zip), Date.now(), user.clientId)
+        .bind(id, str(p.address1)?.trim() || null, str(p.city), str(p.state), str(p.zip), Date.now(), user.clientId, tags)
         .run()
       await upsertContacts(env, id, p.contacts)
       await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)

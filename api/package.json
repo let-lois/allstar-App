@@ -54,7 +54,8 @@
     "smoke:tiles": "node scripts/smoke-tiles.mjs",
     "addresses:build": "node scripts/addresses-build.mjs",
     "verify:addresses": "node scripts/verify-addresses.mjs",
-    "smoke:territory-leads": "node scripts/smoke-territory-leads.mjs"
+    "smoke:territory-leads": "node scripts/smoke-territory-leads.mjs",
+    "smoke:lead-edit": "node scripts/smoke-lead-edit.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",

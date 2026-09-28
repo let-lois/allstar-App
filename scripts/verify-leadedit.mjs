@@ -104,6 +104,50 @@ await page.reload({ waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(2200)
 ok((await text(page)).includes(ADDR) && /Priya Natarajan/.test(await page.getByTestId('lead-contact').innerText()), 'the correction survives a reload')
 
+/* --- a wrong outcome is fixed without a visit that never happened ----------- */
+//
+// The two corrections reps actually make: the door marked Not interested by
+// mistake, and the tag they forgot. Both from the same sheet, both queued as
+// writes the server applies with its own rules — status as its own mutation,
+// so a manager can see the correction for what it is.
+await page.getByTestId('lead-edit-open').click()
+await page.waitForTimeout(500)
+const statusBefore = await page.getByTestId('lead-edit-status').inputValue()
+await page.getByTestId('lead-edit-status').selectOption('follow_up')
+await page.getByTestId('lead-edit-tag').filter({ hasText: 'Dog' }).click()
+await ctx.setOffline(true)
+await page.getByTestId('lead-edit-save').click()
+await page.waitForTimeout(900)
+ok((await page.getByTestId('lead-edit').count()) === 0, 'Save closes the sheet after a status and tag change')
+ok(/Follow-up/.test(await text(page)), 'the lead now reads Follow-up', statusBefore)
+ok((await page.getByTestId('lead-tag').filter({ hasText: 'Dog' }).count()) === 1, 'and wears the Dog tag')
+const queued = await page.evaluate(
+  (id) =>
+    new Promise((resolve) => {
+      const req = indexedDB.open('allstar-field')
+      req.onsuccess = () => {
+        const tx = req.result.transaction(['outbox', 'activity'], 'readonly')
+        const o = tx.objectStore('outbox').getAll()
+        const a = tx.objectStore('activity').getAll()
+        // Both reads finish before the transaction completes; resolve there,
+        // so neither list is read while the other is still empty.
+        tx.oncomplete = () => resolve({
+          statuses: o.result.filter((m) => m.kind === 'property.status' && m.payload?.id === id).map((m) => m.payload),
+          updates: o.result.filter((m) => m.kind === 'property.update' && m.payload?.id === id).map((m) => m.payload),
+          acts: a.result.filter((e) => e.propertyId === id && e.type === 'status'),
+        })
+        tx.onerror = () => resolve(null)
+      }
+      req.onerror = () => resolve(null)
+    }),
+  propertyId,
+)
+ok(queued?.statuses?.length === 1 && queued.statuses[0].status === 'follow_up', 'the status is queued as its own write', JSON.stringify(queued?.statuses))
+const lastUpdate = queued?.updates?.[queued.updates.length - 1]
+ok(Array.isArray(lastUpdate?.tags) && lastUpdate.tags.includes('dog'), 'the tag rides the details write', JSON.stringify(lastUpdate?.tags))
+ok(queued?.acts?.length === 1 && /Follow-up/.test(queued.acts[0].summary) , 'and the lead’s history says the status was set by hand', queued?.acts?.[0]?.summary)
+await ctx.setOffline(false)
+
 /* --- a cleared name removes the contact rather than keeping a nameless one -- */
 await page.getByTestId('lead-edit-open').click()
 await page.waitForTimeout(500)
