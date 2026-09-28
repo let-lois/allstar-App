@@ -269,6 +269,16 @@ To check an address resolves before uploading a list without coordinates:
 /api/selftest/geocode?address=700+W+41st+St&city=Austin&state=TX&zip=78751
 ```
 
+### The houses inside a territory
+
+Drawing a territory finds every address inside it and makes each one a lead,
+from Overture Maps' open address data kept as tiles in R2 — no key, no per-call
+bill. Houses that are already leads are left as they are, erased homeowners
+stay erased, and a territory with one rep hands them the houses while a shared
+one leaves them for whoever knocks. Setup and the rules are in
+[docs/ADDRESSES.md](docs/ADDRESSES.md); until the bucket exists the console
+says the look-up is not set up and drawing claims existing leads as before.
+
 ### Which territory a lead lands in
 
 An import used to assign a territory only if the operator typed one for the

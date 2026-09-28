@@ -39,6 +39,13 @@ export function AdminTerritories() {
   const [draft, setDraft] = useState<{ points: { lat: number; lng: number }[] } | null>(null)
   const [draftName, setDraftName] = useState('')
   const [draftReps, setDraftReps] = useState<string[]>([])
+  /*
+    On by default: the whole point of drawing round a block is the houses on
+    it. A deployment with no address data says so in the result and the
+    territory is created regardless, so the default costs nothing when it
+    cannot deliver.
+  */
+  const [draftGenerate, setDraftGenerate] = useState(true)
   const [saving2, setSaving2] = useState(false)
   const [drawError, setDrawError] = useState<string | null>(null)
   const [drawDone, setDrawDone] = useState<string | null>(null)
@@ -77,9 +84,11 @@ export function AdminTerritories() {
         repId: draftReps[0] ?? null,
         repIds: draftReps,
         boundary: draft.points,
+        generate: draftGenerate && mode === 'live',
       })
       setDrawDone(
-        `Created ${name} with ${res.assigned.toLocaleString()} lead${res.assigned === 1 ? '' : 's'}.`,
+        `Created ${name} with ${res.assigned.toLocaleString()} lead${res.assigned === 1 ? '' : 's'}.` +
+          (res.generated ? ` ${describeGenerated(res.generated)}` : ''),
       )
       /*
         Select what was just made. Without this the map left drawing mode with
@@ -261,6 +270,25 @@ export function AdminTerritories() {
     } catch (err) {
       setManageError(
         err instanceof ApiError ? err.message : 'Could not rename that. Nothing was changed.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const generateTerritoryLeads = useAppStore((s) => s.generateTerritoryLeads)
+  async function findAddresses() {
+    if (!selected || selected === UNASSIGNED_TERRITORY) return
+    setBusy(true)
+    setManageError(null)
+    setManaged(null)
+    try {
+      const res = await generateTerritoryLeads(selected)
+      setManaged(describeGenerated(res))
+      setRemovedNote(null)
+    } catch (err) {
+      setManageError(
+        err instanceof ApiError ? err.message : 'Could not look up the houses. Nothing was changed.',
       )
     } finally {
       setBusy(false)
@@ -534,7 +562,17 @@ export function AdminTerritories() {
                   </div>
                 </div>
               ) : (
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {/*
+                    The houses inside, for a territory drawn before the look-up
+                    existed, or one whose street has grown. Same rule as the
+                    checkbox when drawing: what is already a lead stays one.
+                  */}
+                  {mode === 'live' && !!territories[selected!]?.boundary && (
+                    <Button size="sm" disabled={busy} onClick={() => void findAddresses()}>
+                      {busy ? 'Looking…' : 'Find addresses'}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="secondary"
@@ -690,6 +728,23 @@ export function AdminTerritories() {
                         : `${draftReps.length} reps share it: all of them see every lead inside.`}
                   </p>
                 </fieldset>
+                {mode === 'live' && (
+                  <label className="flex min-h-[44px] cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={draftGenerate}
+                      onChange={(e) => setDraftGenerate(e.target.checked)}
+                      className="mt-1 h-5 w-5 accent-brand-500"
+                      data-testid="territory-generate"
+                    />
+                    <span className="text-[13px] leading-snug">
+                      <span className="font-medium">Find the houses inside and add them as leads</span>
+                      <span className="block text-ink-mute">
+                        From open address data. Houses that are already leads are left as they are.
+                      </span>
+                    </span>
+                  </label>
+                )}
               </div>
 
               {/* Reserved, for the same reason: an error appearing must not push
@@ -839,4 +894,14 @@ function RepChips({
       )}
     </div>
   )
+}
+
+/** The look-up's counts as one sentence, or its refusal as the server put it. */
+function describeGenerated(g: { error: string; code?: string } | { found: number; created: number; existed: number; erased: number; skipped: number }): string {
+  if ('error' in g) return g.error
+  const parts = [`${g.found.toLocaleString()} address${g.found === 1 ? '' : 'es'} found`, `${g.created.toLocaleString()} new lead${g.created === 1 ? '' : 's'}`]
+  if (g.existed) parts.push(`${g.existed.toLocaleString()} already there`)
+  if (g.erased) parts.push(`${g.erased.toLocaleString()} erased before and left that way`)
+  if (g.skipped) parts.push(`${g.skipped.toLocaleString()} past the limit — draw a smaller area for the rest`)
+  return parts.join(', ') + '.'
 }

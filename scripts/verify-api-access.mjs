@@ -268,6 +268,15 @@ const REGEX_ROUTES = {
     — the same shape as teams above, and for the same reason: an id is a guess
     anybody can make, so existence must not be answerable across a tenant line.
   */
+  /*
+    The houses inside one territory, made into leads. Delegates to addresses.ts,
+    which refuses a field rep the same way territories.ts does.
+  */
+  '/^\\/api\\/territories\\/([A-Za-z0-9_-]{1,40})\\/leads$/': {
+    match: "/^\\/api\\/territories\\/([A-Za-z0-9_-]{1,40})\\/leads$/.exec(path)",
+    delegates: ['generateLeadsForTerritory'],
+    file: 'addresses.ts',
+  },
   '/^\\/api\\/territories\\/([A-Za-z0-9_-]{1,40})$/': {
     match: "/^\\/api\\/territories\\/([A-Za-z0-9_-]{1,40})$/.exec(path)",
     delegates: ['renameTerritory', 'deleteTerritory'],

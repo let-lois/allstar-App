@@ -716,9 +716,15 @@ export function apiCreateTerritory(
     repId: string | null
     repIds?: string[]
     boundary: { lat: number; lng: number }[]
+    /** Also look up the houses inside and make each one a lead. */
+    generate?: boolean
   },
 ) {
-  return request<{ territory: { id: string; name: string; repIds?: string[] }; assigned: number }>(
+  return request<{
+    territory: { id: string; name: string; repIds?: string[] }
+    assigned: number
+    generated?: GeneratedLeads | { error: string; code?: string }
+  }>(
     '/api/territories',
     { method: 'POST', body: input, token, timeoutMs: 30_000 },
   )
@@ -844,6 +850,31 @@ export function apiRenameTerritory(token: string, id: string, name: string) {
     `/api/territories/${encodeURIComponent(id)}`,
     { method: 'PATCH', body: { name }, token },
   )
+}
+
+/** What looking up the houses inside a territory did. */
+export interface GeneratedLeads {
+  found: number
+  created: number
+  existed: number
+  erased: number
+  skipped: number
+  tiles: number
+}
+
+/**
+ * Find the houses inside a territory and make each one a lead.
+ *
+ * Office-only and live-only: the Worker reads the address tiles and writes the
+ * rows. Safe to press twice — every address that is already a lead counts as
+ * "existed". A deployment with no address data answers 501 and says so.
+ */
+export function apiGenerateTerritoryLeads(token: string, id: string) {
+  return request<GeneratedLeads>(`/api/territories/${encodeURIComponent(id)}/leads`, {
+    method: 'POST',
+    token,
+    timeoutMs: 60_000,
+  })
 }
 
 export function apiDeleteTerritory(token: string, id: string) {

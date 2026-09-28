@@ -41,6 +41,8 @@ import {
   apiJoin,
   apiMe,
   type SessionUserDTO,
+  apiGenerateTerritoryLeads,
+  type GeneratedLeads,
 } from '../lib/http'
 import { canSee, leadIdsViaLists, listsContaining, listsFor, withMembers, territoryIdsFor } from '../lib/leadLists'
 import { applyBootstrap, leadListFromDTO, outboxPending, wipeCachedData } from '../lib/hydrate'
@@ -194,7 +196,15 @@ interface AppState {
     /** Everyone to put on the patch; `repId` is folded in for older callers. */
     repIds?: string[]
     boundary: { lat: number; lng: number }[]
-  }) => Promise<{ id: string; assigned: number }>
+    /** Also look up the houses inside and make each one a lead. Live only. */
+    generate?: boolean
+  }) => Promise<{
+    id: string
+    assigned: number
+    generated?: GeneratedLeads | { error: string; code?: string }
+  }>
+  /** Find the houses inside an existing territory and make each one a lead. Live only. */
+  generateTerritoryLeads: (id: string) => Promise<GeneratedLeads>
   /**
    * Rename a territory, and delete one.
    *
@@ -780,17 +790,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().loadLocal(current, 'demo')
   },
 
-  async createTerritory({ name, repId, repIds: wanted, boundary }) {
+  async createTerritory({ name, repId, repIds: wanted, boundary, generate }) {
     if (boundary.length < 3) throw new Error('An area needs at least three points.')
     const token = liveToken()
     const repIds = [...new Set([...(repId ? [repId] : []), ...(wanted ?? [])])]
 
     if (token) {
-      const res = await apiCreateTerritory(token, { name, repId, repIds, boundary })
+      const res = await apiCreateTerritory(token, { name, repId, repIds, boundary, generate })
       // The server has moved rows; pull its view back rather than patching a
       // guess into local state and hoping the two agree.
       await get().refreshFromServer()
-      return { id: res.territory.id, assigned: res.assigned }
+      return { id: res.territory.id, assigned: res.assigned, generated: res.generated }
     }
 
     /*
@@ -857,6 +867,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     const territory: Territory = { ...existing, name: trimmed }
     await db.put('territories', territory)
     set((state) => ({ territories: { ...state.territories, [id]: territory } }))
+  },
+
+  async generateTerritoryLeads(id) {
+    const token = liveToken()
+    if (!token) throw new Error('Looking up the houses in a territory needs a live account.')
+    const res = await apiGenerateTerritoryLeads(token, id)
+    // New rows on the server; read them back rather than inventing them here.
+    await get().refreshFromServer()
+    return res
   },
 
   async deleteTerritory(id) {

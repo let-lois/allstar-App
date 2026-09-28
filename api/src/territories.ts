@@ -1,4 +1,5 @@
 import { record } from './audit'
+import { generateLeadsForTerritory, type Generated } from './addresses'
 import { activeTeamMembers, cleanRepIds, clearTerritoryReps, writeTerritoryReps } from './territory-reps'
 import type { Env, SessionUser } from './types'
 
@@ -54,7 +55,13 @@ export function inside(point: { lat: number; lng: number }, poly: { lat: number;
 const MIN_POINTS = 3
 const MAX_POINTS = 200
 
-type Created = { territory: { id: string; name: string; repIds: string[] }; assigned: number }
+type Created = {
+  territory: { id: string; name: string; repIds: string[] }
+  /** Leads that already existed inside and joined the patch. */
+  assigned: number
+  /** What the address look-up did, when it was asked for. */
+  generated?: Generated | { error: string; code?: string }
+}
 
 /**
  * A polygon from a browser, checked before it is stored or run against a tenant.
@@ -89,7 +96,7 @@ export function parsePolygon(
 export async function createTerritory(
   env: Env,
   actor: SessionUser,
-  input: { name?: unknown; repId?: unknown; repIds?: unknown; boundary?: unknown },
+  input: { name?: unknown; repId?: unknown; repIds?: unknown; boundary?: unknown; generate?: boolean },
 ): Promise<Created | { error: string; status: number }> {
   if (actor.role === 'field_rep') return { error: 'Not permitted.', status: 403 }
 
@@ -177,7 +184,19 @@ export async function createTerritory(
     detail: { points: boundary.length, leads: assigned, repId, reps: repIds.length },
   })
 
-  return { territory: { id, name, repIds }, assigned }
+  /*
+    The houses on the ground, when asked. After the claim above, so an address
+    that is already a lead is counted as one rather than made twice; and a
+    refusal here — no address data on this deployment, a shape too big — is
+    returned in words beside the territory, which exists either way.
+  */
+  let generated: Created['generated']
+  if (input.generate) {
+    const g = await generateLeadsForTerritory(env, actor, id)
+    generated = 'error' in g ? { error: g.error, code: g.code } : g
+  }
+
+  return { territory: { id, name, repIds }, assigned, generated }
 }
 
 /**
