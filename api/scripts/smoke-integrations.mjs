@@ -393,7 +393,7 @@ try {
     await fetch(invite.url, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ password: 'rep-password-1' }),
+      body: new URLSearchParams({ password: 'rep-password-1', confirm: 'rep-password-1' }),
     })
     const repSession = (
       await (
