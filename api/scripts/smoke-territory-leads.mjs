@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const api = resolve(here, '..')
-const PORT = Number(process.env.PORT || 8853)
+const PORT = Number(process.env.PORT || 8854)
 const BASE = `http://127.0.0.1:${PORT}`
 const SETUP_TOKEN = 'local-setup-token'
 const STATE = resolve(api, '.wrangler/territory-leads-state')

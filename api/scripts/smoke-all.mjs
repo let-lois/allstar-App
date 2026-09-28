@@ -121,7 +121,7 @@ const TESTS = [
   { script: 'smoke:deadkey', kind: 'hosted', port: 8841 },
   { script: 'smoke:lists', kind: 'hosted', port: 8851 },
   { script: 'smoke:territory-reps', kind: 'hosted', port: 8852 },
-  { script: 'smoke:territory-leads', kind: 'hosted', port: 8853 },
+  { script: 'smoke:territory-leads', kind: 'hosted', port: 8854 },
   { script: 'smoke:lead-edit', kind: 'hosted', port: 8855 },
   { script: 'smoke:quote-sent', kind: 'hosted', port: 8856 },
   { script: 'smoke:onboarding-schema', kind: 'hosted', port: 8861 },
