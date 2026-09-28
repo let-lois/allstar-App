@@ -25,7 +25,7 @@ import { DEFAULT_ROUTE_SIZE, routableLeads } from '../lib/route'
 import { IconCalendar, IconChevron, IconNavigate } from '../components/nav/icons'
 import { useTeamStats } from '../store/teamStats'
 import { standings } from '../data/leaderboard'
-import { dayKeyIn, dayRangeIn, startOfToday, todayLabel } from '../lib/day'
+import { dayKeyIn, dayLabel, dayRangeIn, startOfToday, todayLabel } from '../lib/day'
 
 /**
  * The Today screen — the rep's operational home.
@@ -76,6 +76,17 @@ export function Today() {
   const todaysAppointments = useMemo(() => {
     const [from, to] = dayRangeIn(dayKeyIn(Date.now(), tz), tz)
     return appointments.filter((a) => a.startsAt >= from && a.startsAt < to)
+  }, [appointments, tz])
+
+  /*
+    Appointments after today. Until now the only place a rep's appointment
+    appeared was this screen on the day itself, so one set for Thursday was
+    invisible until Thursday morning. The next few, soonest first, with the
+    day on them.
+  */
+  const upcomingAppointments = useMemo(() => {
+    const [, to] = dayRangeIn(dayKeyIn(Date.now(), tz), tz)
+    return appointments.filter((a) => a.startsAt >= to).sort((a, b) => a.startsAt - b.startsAt).slice(0, 5)
   }, [appointments, tz])
 
   const openTasks = useMemo(
@@ -299,6 +310,39 @@ export function Today() {
                           </span>
                           <span className="block truncate text-[13px] text-ink-mute">
                             {p?.address1 ?? 'Property'}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-ink-faint">
+                          <IconChevron />
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </Section>
+          )}
+
+          {/* --- upcoming appointments ------------------------------------- */}
+          {upcomingAppointments.length > 0 && (
+            <Section title="Upcoming" count={upcomingAppointments.length} tour="appointments">
+              <ul className="row-group" data-testid="upcoming-appointments">
+                {upcomingAppointments.map((a) => {
+                  const p = properties[a.propertyId]
+                  return (
+                    <li key={a.id}>
+                      <button
+                        onClick={() => p && nav(`/property/${p.id}`)}
+                        className="flex min-h-[68px] w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-field"
+                      >
+                        <span className="nums w-[58px] shrink-0 rounded-field bg-info-bg px-1 py-1.5 text-center text-[12px] font-semibold leading-tight text-info">
+                          {dayLabel(dayKeyIn(a.startsAt, tz), { weekday: 'short' })}
+                          <span className="block">{time(a.startsAt)}</span>
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[15px] font-semibold">{a.title}</span>
+                          <span className="block truncate text-[13px] text-ink-mute">
+                            {p?.address1 ?? 'Property'} · {relativeLower(a.startsAt)}
                           </span>
                         </span>
                         <span className="shrink-0 text-ink-faint">

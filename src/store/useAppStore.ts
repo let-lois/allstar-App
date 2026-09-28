@@ -1402,27 +1402,48 @@ export const useAppStore = create<AppState>((set, get) => ({
       await db.put('properties', updatedProp)
     }
 
-    // A scheduled next action becomes a real task so it shows up on Today.
+    /*
+      An appointment set at the door is an appointment, not a to-do.
+
+      It used to become a task titled "Appointment — …" and nothing else, so it
+      never reached the Appointments list on Today, the Upcoming list on the
+      office's Overview, the lead's own Appointments, or the CRM calendar — the
+      places anybody looks for one. "I set appointments but don't see them."
+      Now it is the same row `/schedule/new` writes, through the same action,
+      so there is one kind of appointment wherever it was made. One per lead
+      per start time: a replayed visit does not book the door twice.
+    */
+    if (visit.nextActionType === 'appointment' && visit.nextActionAt) {
+      const startsAt = visit.nextActionAt
+      const booked = Object.values(get().appointments).some(
+        (a) => a.propertyId === visit.propertyId && a.startsAt === startsAt,
+      )
+      if (!booked) {
+        await get().createAppointment({
+          propertyId: visit.propertyId,
+          startsAt,
+          durationMin: 45,
+          title: 'Appointment',
+          contactId: prop?.contacts.find((c) => c.isPrimary)?.id ?? prop?.contacts[0]?.id,
+        })
+      }
+    }
+
+    // A follow-up or a quote to send becomes a task so it shows up on Today.
+    // An appointment is booked above instead, so it is not also a to-do.
     let newTask: Task | undefined
-    if (visit.nextActionAt && visit.nextActionType && visit.nextActionType !== 'none') {
+    if (visit.nextActionAt && visit.nextActionType && visit.nextActionType !== 'none' && visit.nextActionType !== 'appointment') {
       newTask = {
         id: uid('t'),
         repId: visit.repId,
         propertyId: visit.propertyId,
         title:
-          visit.nextActionType === 'appointment'
-            ? `Appointment — ${prop?.address1 ?? 'property'}`
-            : visit.nextActionType === 'quote'
-              ? `Send quote — ${prop?.address1 ?? 'property'}`
-              : `Follow up — ${prop?.address1 ?? 'property'}`,
+          visit.nextActionType === 'quote'
+            ? `Send quote — ${prop?.address1 ?? 'property'}`
+            : `Follow up — ${prop?.address1 ?? 'property'}`,
         dueAt: visit.nextActionAt,
         done: false,
-        kind:
-          visit.nextActionType === 'quote'
-            ? 'quote'
-            : visit.nextActionType === 'appointment'
-              ? 'follow_up'
-              : 'follow_up',
+        kind: visit.nextActionType === 'quote' ? 'quote' : 'follow_up',
         pending: true,
       }
       await db.put('tasks', newTask)

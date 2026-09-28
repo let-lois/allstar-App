@@ -109,6 +109,7 @@
     "verify:periods": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-periods.mjs",
     "verify:location": "node scripts/verify-location.mjs",
     "verify:keyboard": "node scripts/verify-keyboard.mjs",
+    "verify:appointments": "node scripts/verify-appointments.mjs",
     "verify:overview": "node scripts/verify-overview.mjs"
   },
   "dependencies": {

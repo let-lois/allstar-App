@@ -1,5 +1,5 @@
 import { Glyph } from '../components/ui/Glyph'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { SyncBadge } from '../components/sync/SyncBadge'
@@ -80,14 +80,17 @@ export function Overview({ role }: { role: Role }) {
     [stageCounts],
   )
 
-  const upcoming = useMemo(
+  // Every appointment still ahead, soonest first. Four are shown until the
+  // manager asks for the rest — the fifth used to be nowhere at all.
+  const allUpcoming = useMemo(
     () =>
       Object.values(appointments)
         .filter((a) => a.startsAt >= Date.now())
-        .sort((a, b) => a.startsAt - b.startsAt)
-        .slice(0, 4),
+        .sort((a, b) => a.startsAt - b.startsAt),
     [appointments],
   )
+  const [showAllUpcoming, setShowAllUpcoming] = useState(false)
+  const upcoming = showAllUpcoming ? allUpcoming : allUpcoming.slice(0, 4)
 
   const isSuper = role === 'super_admin'
 
@@ -331,8 +334,8 @@ export function Overview({ role }: { role: Role }) {
           {/* --- upcoming ------------------------------------------------- */}
           {upcoming.length > 0 && (
             <section className="section">
-              <SectionHeader title="Upcoming" count={upcoming.length} standalone />
-              <ul className="panel row-group">
+              <SectionHeader title="Upcoming" count={allUpcoming.length} standalone />
+              <ul className="panel row-group" data-testid="overview-upcoming">
                 {upcoming.map((a) => {
                   const p = properties[a.propertyId]
                   return (
@@ -357,6 +360,16 @@ export function Overview({ role }: { role: Role }) {
                   )
                 })}
               </ul>
+              {allUpcoming.length > 4 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllUpcoming((v) => !v)}
+                  className="focusable mt-2 min-h-[44px] w-full rounded-field text-[13.5px] font-semibold text-accent"
+                  data-testid="overview-upcoming-toggle"
+                >
+                  {showAllUpcoming ? 'Show fewer' : `Show all ${allUpcoming.length}`}
+                </button>
+              )}
             </section>
           )}
 
