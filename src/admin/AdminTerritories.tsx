@@ -461,10 +461,12 @@ export function AdminTerritories() {
               Last, not second.
 
               Column order is not cosmetic here: a whole-row click selects the
-              territory, and the rep `<select>` calls `stopPropagation` so its own
-              clicks do not. With Open value in position two the select sat in the
-              middle of the row — which is where a click on a table row lands —
-              so selecting a territory on a desktop silently stopped working.
+              territory, and the unassigned bucket's `<select>` calls
+              `stopPropagation` so its own clicks do not. With Open value in
+              position two the select sat in the middle of the row — which is
+              where a click on a table row lands — so selecting a territory on a
+              desktop silently stopped working. The rep chips let their clicks
+              through for the same reason (see RepChips).
             */
             {
               header: 'Open value',
@@ -855,7 +857,12 @@ function RepChips({
   const nameOf = (id: string) => options.find((r) => r.id === id)?.name ?? 'Former team member'
   const free = options.filter((r) => !repIds.includes(r.id))
   return (
-    <div className="flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+    // Nothing here stops the click: using a territory's rep controls also
+    // selects that territory, so the map shows the patch being edited. The
+    // old single `<select>` swallowed its clicks, and once these chips grew
+    // wide enough to sit under the middle of the row — where a click on a
+    // table row lands — selecting a territory silently stopped working.
+    <div className="flex flex-wrap items-center gap-1.5">
       {repIds.length === 0 && <span className="text-[13px] text-ink-mute">Nobody yet</span>}
       {repIds.map((id) => (
         <span
