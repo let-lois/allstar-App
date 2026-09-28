@@ -6,7 +6,7 @@ import { bearing } from '../../lib/geo'
 import type { Position } from '../../lib/geo'
 import { STATUS_COLOR } from '../../data/outcomes'
 import { locationPinElement } from './LocationPin'
-import { GmapsError, gmapId, loadGmaps } from '../../lib/gmaps'
+import { GmapsError, gmapId, loadGmaps, onGmapsRejected } from '../../lib/gmaps'
 import { basemapWarning } from '../../lib/basemap'
 import { loadLayer, saveLayer } from '../../lib/map-layer'
 import {
@@ -342,6 +342,10 @@ export function GoogleFieldMap({
   /* --- create the map once ------------------------------------------------ */
   useEffect(() => {
     let cancelled = false
+    // A key Google rejects once the map exists — see `onGmapsRejected`.
+    const offRejected = onGmapsRejected((err) => {
+      if (!cancelled) onUnavailableRef.current?.(err)
+    })
     loadGmaps()
       .then(async () => {
         if (cancelled || !boxRef.current) return
@@ -496,6 +500,7 @@ export function GoogleFieldMap({
       })
     return () => {
       cancelled = true
+      offRejected()
     }
     // Intentionally once: re-creating a Map on prop changes throws away the
     // rep's pan and zoom, which is the most annoying possible bug on this screen.
