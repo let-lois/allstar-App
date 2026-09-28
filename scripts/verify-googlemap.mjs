@@ -175,6 +175,47 @@ async function toMap(page) {
   await ctx.close()
 }
 
+/* --- the key is rejected after the API has loaded ------------------------- */
+//
+// The order Google actually uses: the bootstrap callback fires, the map is
+// created, and only then does the key check fail. The loader's promise has
+// already resolved by then, so this path has to reach the map some other way —
+// and when it did not, the rep watched grey for ten seconds and was then told
+// their device could not draw.
+{
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    serviceWorkers: 'block',
+  })
+  const page = await ctx.newPage()
+  await page.route('**://maps.googleapis.com/**', (r) =>
+    r.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      // A loaded API whose library import never settles, then the rejection.
+      body: [
+        'window.google = { maps: { importLibrary: () => new Promise(() => {}) } };',
+        'setTimeout(() => window.__allstarGmapsReady && window.__allstarGmapsReady(), 0);',
+        'setTimeout(() => window.gm_authFailure && window.gm_authFailure(), 600);',
+      ].join('\n'),
+    }),
+  )
+  await toMap(page)
+
+  const note = page.getByRole('status').filter({ hasText: /Live map unavailable/ })
+  // Well inside the 10s paint watchdog, so a pass cannot be the watchdog.
+  await note.waitFor({ timeout: 6_000 }).catch(() => {})
+  ok(await note.isVisible(), 'a key rejected after the API loaded is surfaced, not left grey')
+  const text = (await note.isVisible()) ? await note.innerText() : ''
+  ok(
+    /website restrictions/i.test(text) && !/could not draw/i.test(text),
+    `and it is named as the key, not blamed on the device (${text.replace(/\s+/g, ' ').slice(0, 80)})`,
+  )
+  await ctx.close()
+}
+
 /* --- a failure must not be permanent ------------------------------------- */
 //
 // A load that failed in a lift must not poison the screen for the rest of the

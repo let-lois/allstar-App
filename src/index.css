@@ -802,6 +802,16 @@
     box-shadow: var(--shadow-card);
   }
 
+  /*
+    Out of the way while the software keyboard is up (`data-kb`, set in App).
+    The shell follows the visible viewport, so the dock rode up onto the
+    keyboard and took about a third of what was left on a small iPhone — on
+    Add lead, space for roughly one field.
+  */
+  html[data-kb] .nav-dock {
+    display: none;
+  }
+
 
   /* A resting orb: round, ringed, and otherwise unlit. */
   .nav-rail .nav-pill {

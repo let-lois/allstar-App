@@ -10,9 +10,10 @@ it was before.
 
 **Two things to know before you start, both measured on this branch:**
 
-1. **A real iPhone cannot receive a `preview` update today.** See §5.3 — the
-   `preview` build profile is iOS-simulator-only, and the TestFlight build
-   listens to the `production` channel, which is out of scope here.
+1. **A real iPhone receives `preview` updates only through the
+   `testflight-preview` build** (§5b, TestFlight build 4 and later). The plain
+   `preview` profile is iOS-simulator-only (§5.3), and production TestFlight
+   builds 2 and 3 listen to the `production` channel.
 2. **Metro's transform cache will silently bake stale values into the bundle.**
    See §3. This is the single most likely way to spend an afternoon on "I set
    the variables and nothing happened".
@@ -664,31 +665,16 @@ Android-specific section, plus:
 
 ## 7. The Admin Console on a phone
 
-Worth stating plainly, because "Admin Console can't be reached in app" has been
-reported as a bug and is not one.
-
-**The console is deliberately absent from the native bundle.**
+**Superseded by PR #163 (`835de0a`).** The console is in the phone bundle now:
 `apps/mobile/metro.config.js` swaps `src/adminRoutes.tsx` for
-`apps/mobile/src/admin-routes-stub.tsx`, which returns `null`, so inside the
-shell the `/admin/*` routes do not exist and `App`'s catch-all sends `/admin` to
-`/today`.
+`apps/mobile/src/admin-routes-native.tsx`, which imports the same screens
+statically through the shared `src/admin/routeTree.tsx`. More → **Admin
+console** is shown to every non-rep role on every surface; `AdminLayout` still
+refuses a field rep, and the Worker refuses them again on every call.
 
-It is not a role check, not a responsive breakpoint, and not `Platform.OS`. The
-console screens are mobile-first and are gated at 390px and 412px by
-`verify:console`; they render fine on a phone **on the web**.
-
-What was fixed alongside this work is the navigation half: `More` already hid
-the dead link inside the shell, and the **side rail did not** — so on any native
-surface wide enough for the rail (an Android tablet, a large display mode) a
-manager was offered a Console link that silently dropped them on the rep's Today
-screen. That link is now hidden in the shell too.
-
-**Putting the console in the phone bundle is a separate decision that has not
-been made.** It means removing the Metro swap and converting
-`src/adminRoutes.tsx`'s eleven `lazy()` imports to static ones — the dynamic
-imports are why the swap exists, because `expo export` could not serialise the
-shared chunk they produced — and adding ~9,300 lines of desktop-first console to
-every rep's download.
+It reaches a phone only with a bundle built from `835de0a` or later — today the
+`preview` update on TestFlight build 4. Production builds 2 and 3 were built
+before it and have no production update, so they still have no console.
 
 ---
 

@@ -101,6 +101,19 @@ let pending: Promise<void> | null = null
  * get a map when they revisit the screen, not a permanent error from a load that
  * happened in a lift.
  */
+const lateRejection = new Set<(err: GmapsError) => void>()
+
+/**
+ * Hear a key rejection that arrives after `loadGmaps()` has resolved.
+ * Returns the unsubscribe.
+ */
+export function onGmapsRejected(fn: (err: GmapsError) => void): () => void {
+  lateRejection.add(fn)
+  return () => {
+    lateRejection.delete(fn)
+  }
+}
+
 export function loadGmaps(): Promise<void> {
   // The key is the only hard requirement to load the API. Whether the *map*
   // can render is `gmapsConfigured()`, and its callers check that themselves.
@@ -141,13 +154,21 @@ export function loadGmaps(): Promise<void> {
       map. This is the single most likely thing to go wrong on a new deployment,
       and it is the one Google gives you no return value for.
     */
-    window.gm_authFailure = () =>
-      done(
-        new GmapsError(
-          'rejected',
-          'Google rejected the map key for this site. Check the key’s website restrictions.',
-        ),
+    window.gm_authFailure = () => {
+      const err = new GmapsError(
+        'rejected',
+        'Google rejected the map key for this site. Check the key’s website restrictions.',
       )
+      /*
+        Google usually calls this *after* the bootstrap callback — the key is
+        checked when a map is created, not when the script loads — by which time
+        this promise has settled and `done` ignores it. Without the second path
+        the rejection was swallowed and the rep waited out the paint watchdog,
+        which then blamed the device. Maps already on screen hear it here.
+      */
+      if (settled) lateRejection.forEach((fn) => fn(err))
+      else done(err)
+    }
 
     const cb = '__allstarGmapsReady'
     ;(window as unknown as Record<string, unknown>)[cb] = () => done()

@@ -874,7 +874,7 @@ export default function AdminLeads() {
             the map to draw round them should not be handed the whole company.
           */}
           <AllStarMap
-            className="h-[520px] rounded-card"
+            className="h-[min(520px,60svh)] rounded-card md:h-[520px]"
             properties={rows}
             draw={
               lasso

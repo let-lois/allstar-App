@@ -108,6 +108,7 @@
     "verify:basemap": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-basemap.mjs",
     "verify:periods": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-periods.mjs",
     "verify:location": "node scripts/verify-location.mjs",
+    "verify:keyboard": "node scripts/verify-keyboard.mjs",
     "verify:overview": "node scripts/verify-overview.mjs"
   },
   "dependencies": {

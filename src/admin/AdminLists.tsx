@@ -709,7 +709,7 @@ export function AdminLists() {
           )}
 
           <AllStarMap
-            className="h-[520px]"
+            className="h-[min(520px,60svh)] md:h-[520px]"
             properties={draft ? allProperties : shown}
             draw={
               draft
