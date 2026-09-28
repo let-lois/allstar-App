@@ -119,8 +119,8 @@ const repsOn = (w) => [...w.reps].map((k) => k.split(':')[1]).sort()
 /* --- the first rep on an empty patch is handed the unclaimed houses -------- */
 {
   const w = world({ onPatch: [] })
-  const res = await assignTerritory(w.env, MANAGER, { territoryId: 't_a', repId: 'u_matthew' })
-  ok(repsOn(w).join() === 'u_matthew', 'Matthew goes on the empty patch (no action given means add)')
+  const res = await assignTerritory(w.env, MANAGER, { territoryId: 't_a', repId: 'u_matthew', action: 'add' })
+  ok(repsOn(w).join() === 'u_matthew', 'Matthew goes on the empty patch')
   ok(res.assigned === 1 && w.houses.get('h4').rep === 'u_matthew', 'as its only rep he is handed the unclaimed house', `${res.assigned}`)
   ok(w.houses.get('h1').rep === 'u_curtis', 'and not a house somebody else is working — that was the old overwrite')
   ok(w.primary() === 'u_matthew', 'rep_id follows')
@@ -129,8 +129,18 @@ const repsOn = (w) => [...w.reps].map((k) => k.split(':')[1]).sort()
 /* --- adding the same person twice is one row --------------------------------- */
 {
   const w = world()
-  await assignTerritory(w.env, MANAGER, { territoryId: 't_a', repId: 'u_curtis' })
-  ok(repsOn(w).join() === 'u_curtis', 'adding a rep already on the patch changes nothing')
+  const res = await assignTerritory(w.env, MANAGER, { territoryId: 't_a', repId: 'u_curtis', action: 'add' })
+  ok(repsOn(w).join() === 'u_curtis', 'adding a rep already on the patch is still one membership')
+  ok(w.log.some((q) => /INSERT OR IGNORE INTO territory_reps/.test(q)), 'the join write tolerates a row that is already there')
+  ok(res.assigned === 1 && w.houses.get('h4').rep === 'u_curtis' && w.houses.get('h1').rep === 'u_curtis', 'and, as sole rep, he is handed the unclaimed house — nothing is taken from anyone', `${res.assigned}`)
+}
+
+/* --- an older console's one dropdown ----------------------------------------- */
+{
+  const w = world({ onPatch: ['u_curtis', 'u_matthew'] })
+  const res = await assignTerritory(w.env, MANAGER, { territoryId: 't_a', repId: 'u_matthew', action: 'set' })
+  ok(repsOn(w).join() === 'u_matthew', '`set` makes that rep the territory’s only rep — what the old dropdown meant')
+  ok(w.houses.get('h1').rep === 'u_curtis' && res.assigned === 1 && w.houses.get('h4').rep === 'u_matthew', 'handing over only the unclaimed house', `${res.assigned}`)
 }
 
 /* --- taking a rep off leaves their houses with them --------------------------- */
@@ -176,6 +186,7 @@ const repsOn = (w) => [...w.reps].map((k) => k.split(':')[1]).sort()
 {
   const sql = repScopeSql('p', '?2')
   ok(/territory_reps/.test(sql) && /p\.territory_id IN/.test(sql), 'a rep’s scope includes every lead in a territory they are on')
+  ok(/FROM territory_reps tr WHERE tr\.user_id = \?2\)/.test(sql), 'and only the territories that rep is on', sql.replace(/\s+/g, ' ').slice(0, 200))
   ok(/assigned_rep_id = \?2/.test(sql) && /lead_list_reps/.test(sql), 'without losing the two ways in it always had')
 }
 

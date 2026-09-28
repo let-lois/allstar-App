@@ -139,7 +139,7 @@ try {
   })
   const { token: manager } = await (await call('/api/auth/login', { method: 'POST', body: JSON.stringify(OWNER) })).json()
   ok(!!manager, 'a manager is signed in')
-  const curtis = await mintRep(manager, 'Curtis')
+  const [curtis, matthew] = await Promise.all([mintRep(manager, 'Curtis'), mintRep(manager, 'Matthew')])
   const imported = await (await call('/api/import/properties', { method: 'POST', body: JSON.stringify({ rows: ROWS }) }, manager)).json()
   ok(imported.created === 1, 'a lead is imported')
   const [lead] = imported.ids
@@ -202,6 +202,22 @@ try {
     ok(l.status === 'applied' && n(await query(`SELECT COUNT(*) FROM activity WHERE id='quote:${looseId}'`)) === 0, 'a quote to-do with no lead is ticked off and writes nothing')
     const missing = await mutate(curtis.token, 'task.complete', { id: 't_never_made', done: true })
     ok(missing.status === 'applied', 'a to-do the server never had is still a harmless write', JSON.stringify(missing))
+  }
+
+  /* ===== 6. only on a lead the rep can see ==================================== */
+  {
+    const theirsId = `t_${stamp}_theirs`
+    const made = await mutate(matthew.token, 'task.create', { id: theirsId, propertyId: lead, title: 'Send quote — 10 Quote St', dueAt: stamp + 86_400_000, done: false, kind: 'quote' })
+    ok(made.status === 'applied', 'Matthew can keep a to-do about a house in the company')
+    const tick = await mutate(matthew.token, 'task.complete', { id: theirsId, done: true, at: stamp })
+    ok(tick.status === 'rejected' && /not your lead/.test(tick.error ?? ''), 'but cannot stamp Quote sent on Curtis’s lead, which he cannot see', JSON.stringify(tick))
+    ok(n(await query(`SELECT COUNT(*) FROM activity WHERE id='quote:${theirsId}'`)) === 0, 'and nothing was written')
+    ok(n(await query(`SELECT done FROM tasks WHERE id='${theirsId}'`)) === 0, 'not even the tick — a refused write changes nothing')
+    const nowhere = await mutate(matthew.token, 'task.create', { id: `t_${stamp}_nowhere`, propertyId: 'p_not_in_this_company', title: 'Send quote', dueAt: stamp, done: false, kind: 'quote' })
+    ok(nowhere.status === 'rejected', 'a to-do about a lead outside the company is refused', JSON.stringify(nowhere))
+    const office = await mutate(manager, 'task.create', { id: `t_${stamp}_office`, propertyId: lead, title: 'Send quote', dueAt: stamp, done: false, kind: 'quote' })
+    const officeTick = await mutate(manager, 'task.complete', { id: `t_${stamp}_office`, done: true, at: stamp })
+    ok(office.status === 'applied' && officeTick.status === 'applied', 'the office may tick one off on any lead')
   }
 } finally {
   await stop().catch(() => {})

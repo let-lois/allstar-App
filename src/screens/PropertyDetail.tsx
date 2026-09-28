@@ -330,7 +330,7 @@ export function PropertyDetail() {
                     disabled={editBusy}
                     onClick={() => setEditTags((cur) => (on ? cur.filter((t) => t !== tag) : [...cur, tag]))}
                     className={`focusable min-h-[44px] rounded-full border px-3.5 text-[13px] font-medium ${
-                      on ? 'border-brand-500 bg-brand-500 text-white' : 'border-line bg-surface text-ink-soft'
+                      on ? 'border-brand-600 bg-brand-600 text-white' : 'border-line bg-surface text-ink-soft'
                     }`}
                     data-testid="lead-edit-tag"
                   >

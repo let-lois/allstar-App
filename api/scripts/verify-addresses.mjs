@@ -2,7 +2,7 @@ import { build } from 'esbuild'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Tiler, groupOverlaps, parseBbox, tileFor as tilerTileFor, toTileRow } from './lib/address-tiles.mjs'
+import { Tiler, groupOverlaps, parseBbox, snapBoxToTiles, tileBounds, tileFor as tilerTileFor, toTileRow } from './lib/address-tiles.mjs'
 
 /**
  * The houses inside a territory, made into leads — without a bucket or a database.
@@ -38,6 +38,15 @@ const ok = (cond, msg, extra = '') => {
   const t = worker.tileFor(-97.68, 30.51)
   ok(t.x === 3746 && t.y === 6732, 'and it is the Web-Mercator z14 tile a map would name', `${t.x}/${t.y}`)
   ok(worker.tileKey(t.x, t.y) === 'v1/14/3746/6732.json', 'named the way the bucket is laid out')
+  const b = tileBounds(t.x, t.y)
+  ok(b.xmin <= -97.68 && -97.68 < b.xmax && b.ymin <= 30.51 && 30.51 < b.ymax, 'tileBounds is the inverse of tileFor: the point lies in its tile’s box', JSON.stringify(b))
+  const nw0 = tilerTileFor(b.xmin + 1e-9, b.ymax - 1e-9), se0 = tilerTileFor(b.xmax - 1e-9, b.ymin + 1e-9)
+  ok(nw0.x === t.x && nw0.y === t.y && se0.x === t.x && se0.y === t.y, 'and the corners of that box are still the same tile')
+  const asked = parseBbox('-97.69,30.505,-97.67,30.515')
+  const snapped = snapBoxToTiles(asked)
+  ok(snapped.xmin <= asked.xmin && snapped.ymin <= asked.ymin && snapped.xmax >= asked.xmax && snapped.ymax >= asked.ymax, 'a build box is widened to the whole tiles it touches, never narrowed')
+  const nw = tilerTileFor(snapped.xmin + 1e-9, snapped.ymax - 1e-9), se = tilerTileFor(snapped.xmax - 1e-9, snapped.ymin + 1e-9)
+  ok(nw.x === snapped.tiles.x0 && nw.y === snapped.tiles.y0 && se.x === snapped.tiles.x1 && se.y === snapped.tiles.y1, 'and its edges are tile edges, so a neighbouring build rewrites a shared tile whole')
   const cover = worker.tilesCovering([{ lat: 30.50, lng: -97.70 }, { lat: 30.53, lng: -97.70 }, { lat: 30.53, lng: -97.66 }, { lat: 30.50, lng: -97.66 }])
   ok(cover.length >= 4 && cover.length <= 9 && cover.some((c) => c.x === 3746 && c.y === 6732), 'a small box touches a handful of tiles, including the one its houses are in', `${cover.length}`)
 }
@@ -103,7 +112,7 @@ function fakeDb({ existing = [], erased = [], reps = ['u_curtis'], boundary = BO
   const statement = (sql, args = []) => ({
     bind(...a) { return statement(sql, a) },
     async first() {
-      if (/FROM territories/.test(sql)) return args[0] === 't_a' ? { id: 't_a', name: 'Territory A', boundary: boundary ? JSON.stringify(boundary) : null } : null
+      if (/FROM territories/.test(sql)) return args[0] === 't_a' && args[1] === 'c_1' ? { id: 't_a', name: 'Territory A', boundary: boundary ? JSON.stringify(boundary) : null } : null
       return null
     },
     async all() {
@@ -151,16 +160,39 @@ const REP = { id: 'u_curtis', clientId: 'c_1', role: 'field_rep', name: 'Curtis'
 }
 
 {
-  // 12 Inside St is already a lead under a different spelling and a slightly
-  // different pin; 14 Inside St is a lead by its exact key.
+  // 14 Inside St is a lead by its exact key. 12 Inside St is one under a
+  // spelling the key does not fold ("Insde") and a pin a few metres off, so
+  // only the same-door rule can find it. 10 Inside St has a lead with the
+  // same number forty metres away — a different house, still made.
   const existing = [
-    { id: 'p_old12', address1: '12 Inside Street', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.51004, lng: -97.67005 },
+    { id: 'p_old12', address1: '12 Insde St', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.51004, lng: -97.67005 },
     { id: 'p_old14', address1: '14 Inside St', city: 'Round Rock', state: 'TX', zip: '78664', lat: 0, lng: 0 },
+    { id: 'p_far10', address1: '10 Insde St', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.50536, lng: -97.675 },
   ]
   const w = fakeDb({ existing })
   const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
   ok(res.found === 4 && res.created === 2 && res.existed === 2, 'a house that is already a lead — by key, or the same door a few metres off — is counted, not created twice', JSON.stringify(res))
   ok(!w.inserted.some((r) => r.address1.startsWith('12 ') || r.address1.startsWith('14 ')), 'and neither of them was written')
+  ok(w.inserted.some((r) => r.address1 === '10 Inside St'), 'the same number forty metres off is another house, and is made')
+}
+
+{
+  // The building at 16 is a lead; its unit B is its own door. 12 Elm St and
+  // 12 Inside Dr sit where 12 Inside St is — other streets, so other houses.
+  const existing = [
+    { id: 'p_old16', address1: '16 Inside St', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.518, lng: -97.662 },
+    { id: 'p_elm12', address1: '12 Elm St', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.510, lng: -97.670 },
+    { id: 'p_dr12', address1: '12 Inside Dr', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.51002, lng: -97.67002 },
+  ]
+  const w = fakeDb({ existing })
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  ok(res.created === 4 && res.existed === 0, 'a unit at a building that is a lead, and the same number on another street (Elm St, Inside Dr) a few metres off, are still made', JSON.stringify(res))
+  ok(w.inserted.some((r) => r.address1 === '16 Inside St B') && w.inserted.some((r) => r.address1 === '12 Inside St'), 'both of them')
+}
+
+{
+  const other = await worker.generateLeadsForTerritory(fakeDb().env, { ...MANAGER, clientId: 'c_2' }, 't_a')
+  ok(other.status === 404, 'another company’s manager is told there is no such territory', `${other.status}`)
 }
 
 {

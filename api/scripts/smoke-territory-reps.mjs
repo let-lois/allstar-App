@@ -209,13 +209,13 @@ try {
       body: JSON.stringify({ mutations: [{ id: `m_${stamp}_1`, kind: 'property.update', at: Date.now(), payload: { id: insideIds[0], city: 'Round Rock' } }] }),
     }, matthew.token))
     const applied = (r.body.results ?? r.body.applied ?? []).find?.((x) => x.id === `m_${stamp}_1`)
-    ok(r.status === 200 && (applied ? applied.status === 'applied' : true), 'Matthew may edit a house in the shared patch that Curtis is working', `${r.status} ${JSON.stringify(r.body).slice(0, 120)}`)
+    ok(r.status === 200 && applied?.status === 'applied', 'Matthew may edit a house in the shared patch that Curtis is working', `${r.status} ${JSON.stringify(r.body).slice(0, 120)}`)
     const s = await j(await call('/api/mutations', {
       method: 'POST',
       body: JSON.stringify({ mutations: [{ id: `m_${stamp}_2`, kind: 'property.update', at: Date.now(), payload: { id: insideIds[0], city: 'Round Rock' } }] }),
     }, sarah.token))
     const refused = (s.body.results ?? s.body.applied ?? []).find?.((x) => x.id === `m_${stamp}_2`)
-    ok(refused ? refused.status !== 'applied' : s.status !== 200, 'Sarah, off the patch, may not', `${s.status} ${JSON.stringify(refused ?? s.body).slice(0, 120)}`)
+    ok(refused?.status === 'rejected' && /not your lead/.test(refused?.error ?? ''), 'Sarah, off the patch, may not', `${s.status} ${JSON.stringify(refused ?? s.body).slice(0, 120)}`)
   }
 
   /* ===== 4. Curtis comes off; his houses stay his ========================== */
@@ -234,7 +234,7 @@ try {
     const B = BOX.map((p) => ({ lat: p.lat + 0.1, lng: p.lng }))
     const r = await j(await call('/api/territories', { method: 'POST', body: JSON.stringify({ name: 'Territory B', repIds: [curtis.id, matthew.id], boundary: B }) }, manager))
     ok(r.status === 201 && r.body.territory?.repIds?.length === 2, 'Territory B is drawn with both of them on it', `${r.status}`)
-    const a = await j(await call('/api/territories/assign', { method: 'POST', body: JSON.stringify({ territoryId: T.id, repId: curtis.id }) }, manager))
+    const a = await j(await call('/api/territories/assign', { method: 'POST', body: JSON.stringify({ territoryId: T.id, repId: curtis.id, action: 'add' }) }, manager))
     ok(a.status === 200 && a.body.repIds?.length === 2, 'and Curtis goes back on A — one rep, two territories', `${a.status}`)
     ok(n(await query(`SELECT COUNT(*) FROM territory_reps WHERE user_id='${curtis.id}'`)) === 2, 'the join table holds both of his patches')
   }
@@ -257,6 +257,90 @@ try {
     ok(before === 2 && after === 0, 'and its rep rows go with it', `${before} → ${after}`)
     const un = n(await query("SELECT COUNT(*) FROM audit_log WHERE action='territory.unassigned'"))
     ok(un >= 1, 'the audit log records who took a rep off a patch', `${un}`)
+  }
+
+  /* ===== 8. an older console's one dropdown still means what it meant ====== */
+  {
+    // Territory A has no reps and four unclaimed houses after step 6.
+    const a = await j(await call('/api/territories/assign', { method: 'POST', body: JSON.stringify({ territoryId: T.id, repId: sarah.id }) }, manager))
+    ok(a.status === 200 && a.body.repIds?.length === 1 && a.body.repIds[0] === sarah.id && a.body.assigned === 4, 'a body with no action makes that rep the territory’s rep and hands over the unclaimed houses', `${a.status} ${JSON.stringify(a.body)}`)
+    const b = await j(await call('/api/territories/assign', { method: 'POST', body: JSON.stringify({ territoryId: T.id, repId: matthew.id }) }, manager))
+    ok(b.status === 200 && b.body.repIds?.length === 1 && b.body.repIds[0] === matthew.id, 'picking another name in that dropdown replaces the rep rather than adding one', `${JSON.stringify(b.body.repIds)}`)
+    const own = await owners(manager)
+    ok(insideIds.every((id) => own[id] === sarah.id) && b.body.assigned === 0, 'but the houses Sarah was handed stay hers — nothing is taken away')
+    const bad = await j(await call('/api/territories/assign', { method: 'POST', body: JSON.stringify({ territoryId: null, repId: matthew.id, action: 'remove' }) }, manager))
+    ok(bad.status === 400, 'taking a rep off the unassigned bucket is refused rather than read as a hand-over', `${bad.status}`)
+  }
+
+  /* ===== 9. drawing round houses someone works does not take them ========== */
+  {
+    const [out1, out2] = [byRef.out1, byRef.out2]
+    const hand = await j(await call('/api/territories/assign', { method: 'POST', body: JSON.stringify({ territoryId: null, repId: curtis.id }) }, manager))
+    ok(hand.status === 200 && hand.body.assigned === 2, 'the two houses outside every patch are handed to Curtis', `${JSON.stringify(hand.body)}`)
+    const C = [
+      { lat: 30.590, lng: -97.610 },
+      { lat: 30.610, lng: -97.610 },
+      { lat: 30.610, lng: -97.590 },
+      { lat: 30.590, lng: -97.590 },
+    ]
+    const r = await j(await call('/api/territories', { method: 'POST', body: JSON.stringify({ name: 'Territory C', repIds: [sarah.id], boundary: C }) }, manager))
+    ok(r.status === 201 && r.body.territory?.repIds?.[0] === sarah.id, 'Sarah alone draws Territory C round one of them', `${r.status}`)
+    const own = await owners(manager)
+    ok(own[out1] === curtis.id && own[out2] === curtis.id, 'the house inside is now in her territory but still Curtis’s to work — a sole rep is handed only what nobody has')
+    const tid = (await query(`SELECT territory_id AS t FROM properties WHERE id='${out1}'`))[0]?.t
+    ok(tid === r.body.territory.id, 'and it did join the territory', `${tid}`)
+  }
+
+  /* ===== 10. a rep who has left can still be taken off a patch ============= */
+  {
+    const off = await j(await call(`/api/users/${sarah.id}/active`, { method: 'POST', body: JSON.stringify({ active: false }) }, manager))
+    ok(off.status === 200, 'Sarah is deactivated', `${off.status}`)
+    const add = await j(await call('/api/territories/assign', { method: 'POST', body: JSON.stringify({ territoryId: T.id, repId: sarah.id, action: 'add' }) }, manager))
+    ok(add.status === 400, 'she cannot be put on a patch now', `${add.status}`)
+    const cId = (await query("SELECT id FROM territories WHERE name='Territory C'"))[0]?.id
+    const rm = await j(await call('/api/territories/assign', { method: 'POST', body: JSON.stringify({ territoryId: cId, repId: sarah.id, action: 'remove' }) }, manager))
+    ok(rm.status === 200 && (rm.body.repIds ?? []).length === 0, 'but she can be taken off the one she was on', `${rm.status} ${JSON.stringify(rm.body)}`)
+  }
+
+  /* ===== 11. the import writes the join table too ========================== */
+  {
+    const imp = await (await call('/api/import/properties', { method: 'POST', body: JSON.stringify({
+      rows: [{ ref: 'north1', address1: '20 North St', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.700, lng: -97.500 }],
+      territoryName: 'North', assignRepId: matthew.id,
+    }) }, manager)).json()
+    ok(imp.created === 1, 'a CSV names a territory and a rep')
+    const northId = (await query("SELECT id FROM territories WHERE name='North'"))[0]?.id
+    const reps = await query(`SELECT user_id FROM territory_reps WHERE territory_id='${northId}'`)
+    ok(reps.length === 1 && reps[0].user_id === matthew.id, 'the territory it made carries the rep in territory_reps, not only in rep_id', JSON.stringify(reps))
+    const m = await phone(matthew.token)
+    ok(m.leads.has(imp.ids[0]), 'so Matthew’s phone shows the house')
+  }
+
+  /* ===== 12. deleting a rep re-points the mirror at who is left ============ */
+  {
+    const add = await j(await call('/api/territories/assign', { method: 'POST', body: JSON.stringify({ territoryId: T.id, repId: curtis.id, action: 'add' }) }, manager))
+    ok(add.status === 200 && add.body.repIds?.length === 2, 'Territory A has Matthew and Curtis', JSON.stringify(add.body.repIds))
+    const before = (await query(`SELECT rep_id FROM territories WHERE id='${T.id}'`))[0]?.rep_id
+    ok(before === matthew.id, 'rep_id mirrors the first of them')
+    const del = await j(await call(`/api/users/${matthew.id}`, { method: 'DELETE' }, manager))
+    ok(del.status === 200, 'Matthew is deleted', `${del.status} ${JSON.stringify(del.body).slice(0, 80)}`)
+    const after = (await query(`SELECT rep_id FROM territories WHERE id='${T.id}'`))[0]?.rep_id
+    ok(after === curtis.id, 'and rep_id now names Curtis, who is still on the patch', `${after}`)
+  }
+
+  /* ===== 13. the migration keeps every assignment made before it ran ======== */
+  {
+    // A database from before territory_reps: the territory names its rep only
+    // in rep_id. Take the join row away, forget the migration ran, restart.
+    await query(`DELETE FROM territory_reps WHERE territory_id='${T.id}'`)
+    await query("DELETE FROM schema_migrations WHERE id='024-territory-reps'")
+    ok((await query(`SELECT rep_id FROM territories WHERE id='${T.id}'`))[0]?.rep_id === curtis.id, 'a territory whose rep is only in rep_id, as before the upgrade')
+    await stop()
+    await start(config)
+    const c = await phone(curtis.token)
+    ok(n(await query("SELECT COUNT(*) FROM schema_migrations WHERE id='024-territory-reps'")) === 1, 'the first request after the deploy runs the migration')
+    ok(n(await query(`SELECT COUNT(*) FROM territory_reps WHERE territory_id='${T.id}' AND user_id='${curtis.id}'`)) === 1, 'and its backfill puts him on the patch from rep_id')
+    ok(c.leads.size >= 4, 'so his phone shows the territory’s houses, as it did before', `${c.leads.size}`)
   }
 } finally {
   await stop().catch(() => {})

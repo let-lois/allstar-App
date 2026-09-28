@@ -1790,8 +1790,10 @@ export default {
         const result = await assignTerritory(env, user, {
           territoryId: typeof body.territoryId === 'string' ? body.territoryId : null,
           repId: typeof body.repId === 'string' && body.repId ? body.repId : null,
-          // `remove` takes one rep off a patch; anything else adds.
-          action: body.action === 'remove' ? 'remove' : 'add',
+          // `remove` takes one rep off a patch, `add` puts one on beside the
+          // others. A body with neither is an older console's single dropdown,
+          // whose choice means "this is the territory's rep" — see assign.ts.
+          action: body.action === 'remove' ? 'remove' : body.action === 'add' ? 'add' : 'set',
         })
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 200, cors)

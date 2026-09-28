@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
 import { compressors } from 'hyparquet-compressors'
-import { Tiler, groupOverlaps, parseBbox, toTileRow } from './lib/address-tiles.mjs'
+import { Tiler, groupOverlaps, parseBbox, snapBoxToTiles, toTileRow } from './lib/address-tiles.mjs'
 
 /**
  * Build the address tiles the Worker reads when a territory is drawn.
@@ -42,7 +42,10 @@ if (flag('help') || !opt('bbox')) {
   process.exit(opt('bbox') ? 0 : 1)
 }
 
-const box = parseBbox(opt('bbox'))
+// Widened to whole tiles, so every tile written is complete and a neighbouring
+// build over the next box reproduces the shared ones rather than halving them.
+const asked = parseBbox(opt('bbox'))
+const box = snapBoxToTiles(asked)
 const out = resolve(opt('out', './addr-tiles'))
 const bucket = opt('bucket', 'allstar-addresses')
 const parallel = Math.max(1, Number(opt('parallel', 8)) || 8)
@@ -75,7 +78,7 @@ async function listKeys() {
 
 const started = Date.now()
 const keys = await listKeys()
-console.log(`release ${release}: ${keys.length} files; box ${JSON.stringify(box)}`)
+console.log(`release ${release}: ${keys.length} files; box ${JSON.stringify(asked)} widened to tiles ${box.tiles.x0}-${box.tiles.x1}/${box.tiles.y0}-${box.tiles.y1}`)
 
 /* --- footers first, then only the groups that overlap ----------------------- */
 const wanted = []
@@ -134,7 +137,7 @@ for (const t of tiler.entries()) {
   files++
 }
 const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-const manifest = { release, bbox: box, tiles: files, addresses: kept, rowsRead: read, droppedNoStreetOrNumber: dropped, builtAt: new Date().toISOString() }
+const manifest = { release, bbox: asked, tileBox: box, tiles: files, addresses: kept, rowsRead: read, droppedNoStreetOrNumber: dropped, builtAt: new Date().toISOString() }
 const manifestKey = `v1/manifests/${stamp}.json`
 mkdirSync(resolve(out, 'v1/manifests'), { recursive: true })
 writeFileSync(resolve(out, manifestKey), JSON.stringify(manifest, null, 2))

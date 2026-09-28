@@ -102,9 +102,19 @@ export async function bootstrap(env: Env, user: SessionUser) {
 
       // Capped: the feed is a recent-activity view, not an audit log, and an
       // unbounded scan is the query that gets slow first as a tenant grows.
+      // Plus every "Quote sent" line, however old: the lead's card and sheet
+      // say "Quote sent <when>" from these, and a busy phone's 300 newest
+      // lines are a few days of knocking. One row per quote to-do, so it is a
+      // small set; bounded all the same.
       env.DB.prepare(
-        `SELECT * FROM activity WHERE client_id = ?1
-          ${isRep(user) ? 'AND rep_id = ?2' : ''} ORDER BY at DESC LIMIT 300`,
+        `SELECT * FROM (
+           SELECT * FROM activity WHERE client_id = ?1
+             ${isRep(user) ? 'AND rep_id = ?2' : ''} ORDER BY at DESC LIMIT 300)
+         UNION
+         SELECT * FROM (
+           SELECT * FROM activity WHERE client_id = ?1 AND type = 'quote'
+             ${isRep(user) ? 'AND rep_id = ?2' : ''} ORDER BY at DESC LIMIT 2000)
+         ORDER BY at DESC`,
       )
         .bind(...bind([user.clientId]))
         .all(),

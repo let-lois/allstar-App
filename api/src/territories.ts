@@ -167,7 +167,7 @@ export async function createTerritory(
     const res = await env.DB.prepare(
       `UPDATE properties
           SET territory_id = ?1,
-              assigned_rep_id = COALESCE(?2, assigned_rep_id),
+              assigned_rep_id = COALESCE(assigned_rep_id, ?2),
               updated_at = ?3
         WHERE client_id = ?4 AND id IN (${holes})`,
     )

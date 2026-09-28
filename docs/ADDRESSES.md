@@ -31,10 +31,14 @@ corner shop becomes a lead too — a rep marks it Not interested and moves on.
 
 - An address that is already a lead in this company, by the same normalised key
   the CSV import uses, or one within about 12 m of an existing lead with the
-  same house number — two spellings of one door.
+  same house number on what reads as the same street — two spellings of one
+  door ("12 Insde St" is "12 Inside St"). A unit (apartment, suite) is never
+  folded into the building or another unit, and a different suffix is a
+  different street: "12 Oak Ct" is not "12 Oak Dr".
 - A homeowner who was erased. A redraw does not resurrect them.
 - Anything past 5,000 new leads in one call. The call still succeeds and says
-  how many it skipped; draw the rest as a second territory.
+  how many it skipped; press **Find addresses** again, or draw the rest as a
+  second territory.
 - A territory that covers more than 96 cells (roughly a county). Draw two.
 
 Pressing **Find addresses** twice is safe: every house it already made a lead
@@ -74,9 +78,10 @@ Once per deployment, from `api/`:
        npm run addresses:build -- --bbox -98.10,30.05,-97.45,30.65 --upload
 
    That reads about forty row groups, takes a few minutes, and uploads a few
-   thousand tiles. Repeat for each market. Re-running over the same box
-   rewrites the same tiles; a neighbouring box adds more. Tiles never merge
-   across runs, so build each box whole rather than in strips.
+   thousand tiles. Repeat for each market. The box is widened to the whole
+   tiles it touches, so every tile written is complete: re-running over the
+   same box rewrites the same tiles, and a neighbouring box rewrites the
+   shared edge tiles identically and adds the rest.
 
    `--upload` needs `wrangler login` or `CLOUDFLARE_API_TOKEN` with R2 write
    access. Without `--upload` the tiles are written to `./addr-tiles` for a

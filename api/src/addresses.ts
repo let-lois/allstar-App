@@ -60,6 +60,8 @@ export interface FoundAddress {
   zip: string
   lat: number
   lng: number
+  /** The row named a unit (apartment, suite): one door of several at a point. */
+  unit: boolean
 }
 
 /* --- tiles --------------------------------------------------------------- */
@@ -157,6 +159,7 @@ export function toAddress(r: TileRow, lat: number, lng: number): FoundAddress | 
     zip: String(r[5] ?? '').trim(),
     lat,
     lng,
+    unit: !!unit,
   }
 }
 
@@ -184,6 +187,55 @@ function metresBetween(a: LatLng, b: LatLng): number {
   const meanLat = ((a.lat + b.lat) / 2) * (Math.PI / 180)
   const x = dLng * Math.cos(meanLat), y = dLat
   return Math.sqrt(x * x + y * y) * 6_371_000
+}
+
+/** Street suffixes, spelt one way: "Street" and "St" are one suffix, "Ct" and "Dr" are two. */
+const SUFFIX: Record<string, string> = {
+  street: 'st', str: 'st', st: 'st', avenue: 'av', ave: 'av', av: 'av', drive: 'dr', dr: 'dr',
+  road: 'rd', rd: 'rd', lane: 'ln', ln: 'ln', court: 'ct', ct: 'ct', circle: 'cir', cir: 'cir',
+  boulevard: 'blvd', blvd: 'blvd', place: 'pl', pl: 'pl', way: 'way', trail: 'trl', trl: 'trl',
+  parkway: 'pkwy', pkwy: 'pkwy', cove: 'cv', cv: 'cv', loop: 'loop', terrace: 'ter', ter: 'ter',
+}
+
+/** A street as its name and its suffix, without the house number: "12 Oak Ct" is { name: 'oak', suffix: 'ct' }. */
+function streetParts(address1: string): { name: string; suffix: string } {
+  const words = String(address1 ?? '')
+    .toLowerCase()
+    .replace(/[.,#]/g, ' ')
+    .replace(/^\s*\d+[a-z]?\s+/, '')
+    .split(/\s+/)
+    .filter(Boolean)
+  const last = words[words.length - 1] ?? ''
+  const suffix = SUFFIX[last] ?? ''
+  return { name: (suffix ? words.slice(0, -1) : words).join(' '), suffix }
+}
+
+/** Edit distance, bounded: only "is it within two" is ever asked. */
+function within(a: string, b: string, max: number): boolean {
+  if (Math.abs(a.length - b.length) > max) return false
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i]
+    let best = i
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1))
+      best = Math.min(best, cur[j]!)
+    }
+    if (best > max) return false
+    prev = cur
+  }
+  return prev[b.length]! <= max
+}
+
+/**
+ * Do two addresses name the same street? A typo in the name is allowed —
+ * "Insde St" is "Inside St", which is the case the same-door rule exists for
+ * — but two different suffixes are two streets: "12 Oak Ct" is not "12 Oak Dr".
+ */
+function sameStreet(a: { name: string; suffix: string }, b: { name: string; suffix: string }): boolean {
+  if (a.suffix && b.suffix && a.suffix !== b.suffix) return false
+  if (!a.name || !b.name) return false
+  return within(a.name, b.name, Math.min(a.name.length, b.name.length) >= 5 ? 2 : 1)
 }
 
 /**
@@ -228,30 +280,44 @@ export async function generateLeadsForTerritory(
     .all<{ id: string; address1: string; city: string | null; state: string | null; zip: string | null; lat: number; lng: number }>()
   const existingKeys = new Set<string>()
   const existingIds = new Set<string>()
-  const nearby: { lat: number; lng: number; number: string | null }[] = []
+  const nearby: { lat: number; lng: number; number: string | null; street: { name: string; suffix: string } }[] = []
   for (const p of existingRows.results) {
     existingIds.add(p.id)
     existingKeys.add(addressKey({ ref: '', address1: p.address1, city: p.city ?? undefined, state: p.state ?? undefined, zip: p.zip ?? undefined }))
     if (Number.isFinite(p.lat) && Number.isFinite(p.lng) && pointInPolygon(p, boundary)) {
-      nearby.push({ lat: p.lat, lng: p.lng, number: houseNumber(p.address1) })
+      nearby.push({ lat: p.lat, lng: p.lng, number: houseNumber(p.address1), street: streetParts(p.address1) })
     }
   }
 
+  /*
+    The same door under two spellings: the same house number, on what reads
+    as the same street (a typo in the name allowed, a different suffix not),
+    within a few metres. Not a unit — a building lists each flat at one
+    point, and the first of them to become a lead must not swallow the rest
+    — and not "12 Oak Ct" beside "12 Oak Dr".
+
+    The cap is applied here, before the hashing and the erasure check, so a
+    dense patch of many tiles costs one bounded pass and a bounded number of
+    queries rather than failing outright; what lies past the cap is counted
+    as skipped and said so.
+  */
   const candidates: { a: FoundAddress; id: string }[] = []
   let existed = 0
+  let skipped = 0
   for (const a of inside.addresses) {
-    const id = await propertyIdFor(actor.clientId, { ref: '', ...a })
-    if (existingIds.has(id) || existingKeys.has(addressKey({ ref: '', ...a }))) { existed++; continue }
+    if (existingKeys.has(addressKey({ ref: '', ...a }))) { existed++; continue }
     const n = houseNumber(a.address1)
-    if (n && nearby.some((e) => e.number === n && metresBetween(e, a) <= SAME_DOOR_METRES)) { existed++; continue }
+    const street = streetParts(a.address1)
+    if (n && !a.unit && nearby.some((e) => e.number === n && sameStreet(e.street, street) && metresBetween(e, a) <= SAME_DOOR_METRES)) { existed++; continue }
+    if (candidates.length >= MAX_NEW_LEADS) { skipped++; continue }
+    const id = await propertyIdFor(actor.clientId, { ref: '', ...a })
+    if (existingIds.has(id)) { existed++; continue }
     candidates.push({ a, id })
   }
 
   const erasedIds = await erasedAmong(env, actor.clientId, candidates.map((c) => c.id))
-  const fresh = candidates.filter((c) => !erasedIds.has(c.id))
-  const erased = candidates.length - fresh.length
-  const toWrite = fresh.slice(0, MAX_NEW_LEADS)
-  const skipped = fresh.length - toWrite.length
+  const toWrite = candidates.filter((c) => !erasedIds.has(c.id))
+  const erased = candidates.length - toWrite.length
 
   const now = Date.now()
   let created = 0
@@ -268,6 +334,10 @@ export async function generateLeadsForTerritory(
     const results = await env.DB.batch(batch)
     for (const r of results) created += r.meta.changes ?? 0
   }
+  // Two presses at once: the ids are deterministic and the insert ignores a
+  // row that is already there, so the one that lost the race wrote nothing —
+  // those houses are "already there", not nowhere.
+  existed += toWrite.length - created
 
   await record(env, actor, {
     action: 'territory.generated',

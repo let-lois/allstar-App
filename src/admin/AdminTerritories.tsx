@@ -407,6 +407,11 @@ export function AdminTerritories() {
             },
             {
               header: 'Reps',
+              // Not in the phone card: the card is one button, and controls
+              // inside a button are neither valid nor reachable by a screen
+              // reader, and the card's meta cell truncates. On a phone the
+              // same controls sit in the panel for the selected territory.
+              phone: 'off',
               cell: (t) =>
                 t.id === UNASSIGNED_TERRITORY ? (
                   /*
@@ -564,6 +569,43 @@ export function AdminTerritories() {
                   </div>
                 </div>
               ) : (
+                <>
+                  {/*
+                    On a phone the table is cards, and a card is one button, so
+                    the rep controls live here for whichever territory is
+                    picked. The desktop table keeps them in its Reps column.
+                  */}
+                  {selected && (
+                    <div className="mb-3 lg:hidden" data-testid="territory-reps-panel">
+                      <p className="mb-1.5 text-[13px] font-medium text-ink-soft">
+                        {selected === UNASSIGNED_TERRITORY ? 'Hand every unassigned lead to' : 'Reps on this territory'}
+                      </p>
+                      {selected === UNASSIGNED_TERRITORY ? (
+                        <select
+                          value=""
+                          disabled={mode !== 'live' || saving !== null}
+                          onChange={(e) => void assign(selected, e.target.value)}
+                          aria-label="Hand every unassigned lead to"
+                          className="focusable min-h-[44px] w-full rounded-lg border border-line bg-surface px-2 text-[13px] disabled:opacity-60"
+                        >
+                          <option value="">Hand all to…</option>
+                          {repOptions.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <RepChips
+                          repIds={territories[selected]?.repIds ?? (territories[selected]?.repId ? [territories[selected]!.repId!] : [])}
+                          options={repOptions}
+                          disabled={mode !== 'live' || saving !== null}
+                          onAdd={(repId) => void assign(selected, repId, 'add')}
+                          onRemove={(repId) => void assign(selected, repId, 'remove')}
+                        />
+                      )}
+                    </div>
+                  )}
                 <div className="flex flex-wrap gap-2">
                   {/*
                     The houses inside, for a territory drawn before the look-up
@@ -597,6 +639,7 @@ export function AdminTerritories() {
                     Delete
                   </Button>
                 </div>
+                </>
               )}
 
               {manageError && (
@@ -875,7 +918,7 @@ function RepChips({
             disabled={disabled}
             aria-label={`Take ${nameOf(id)} off this territory`}
             onClick={() => onRemove(id)}
-            className="focusable grid h-11 w-9 place-items-center rounded-r-full text-ink-mute disabled:opacity-60 lg:h-8 lg:w-7"
+            className="focusable grid h-11 w-11 place-items-center rounded-r-full text-ink-mute disabled:opacity-60 lg:h-8 lg:w-7"
           >
             <span className="scale-75">
               <IconClose />

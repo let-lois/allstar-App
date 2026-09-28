@@ -161,6 +161,41 @@ await page.getByTestId('lead-edit-open').click()
 await page.waitForTimeout(500)
 await page.getByTestId('lead-edit').getByLabel('Address', { exact: true }).fill('   ')
 ok(await page.getByTestId('lead-edit-save').isDisabled(), 'a blank address cannot be saved')
+await page.reload({ waitUntil: 'domcontentloaded' })
+await page.waitForTimeout(1500)
+
+/* --- Do Not Contact is the homeowner's word, and only the office lifts it -- */
+await page.getByTestId('lead-edit-open').click()
+await page.waitForTimeout(500)
+await page.getByTestId('lead-edit-status').selectOption('dnc')
+await page.getByTestId('lead-edit-save').click()
+await page.waitForTimeout(900)
+ok(/Do Not Contact/.test(await text(page)), 'a rep can mark a lead Do Not Contact — the homeowner asked')
+await page.getByTestId('lead-edit-open').click()
+await page.waitForTimeout(500)
+ok(await page.getByTestId('lead-edit-status').isDisabled(), 'after which the status is locked for them')
+ok(/Only the office can lift that/.test(await page.getByTestId('lead-edit').innerText()), 'and the sheet says who can lift it')
+await ctx.setOffline(true)
+await page.getByTestId('lead-edit').getByLabel('Contact name').fill('Priya N.')
+await page.getByTestId('lead-edit-save').click()
+await page.waitForTimeout(900)
+const lifts = await page.evaluate(
+  (id) =>
+    new Promise((resolve) => {
+      const req = indexedDB.open('allstar-field')
+      req.onsuccess = () => {
+        const tx = req.result.transaction(['outbox'], 'readonly')
+        const o = tx.objectStore('outbox').getAll()
+        tx.oncomplete = () => resolve(o.result.filter((m) => m.kind === 'property.status' && m.payload?.id === id && m.payload.status !== 'dnc').length)
+        tx.onerror = () => resolve(-1)
+      }
+      req.onerror = () => resolve(-1)
+    }),
+  propertyId,
+)
+ok(lifts === 0, 'and saving other details from the locked sheet queues no status change', `${lifts}`)
+ok(/Do Not Contact/.test(await text(page)), 'the lead is still Do Not Contact')
+await ctx.setOffline(false)
 
 ok(errors.length === 0, `no page errors${errors.length ? ': ' + errors[0] : ''}`)
 await browser.close()

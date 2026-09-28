@@ -206,6 +206,20 @@ try {
     const cleared = await mutate(curtis.token, 'property.update', { id: mine, tags: [] })
     ok(cleared.status === 'applied' && ((await leadOf(curtis.token, mine))?.tags ?? []).length === 0, 'and an empty list clears them')
   }
+
+  /* ===== 5. a colliding id cannot replace another line of history =========== */
+  {
+    const visitId = `v_${stamp}_coll`
+    const v = await mutate(curtis.token, 'visit.complete', { id: visitId, propertyId: mine, outcome: 'interested', endedAt: Date.now() })
+    ok(v.status === 'applied' && n(await query(`SELECT COUNT(*) FROM activity WHERE id='ev_${visitId}' AND type='visit'`)) === 1, 'a visit writes its own line')
+    // The phone chooses mutation ids; the status line is keyed by them.
+    const r = await j(await call('/api/mutations', { method: 'POST', body: JSON.stringify({ mutations: [{ id: `ev_${visitId}`, kind: 'property.status', at: Date.now(), payload: { id: mine, status: 'follow_up' } }] }) }, curtis.token))
+    const res = (r.body.results ?? []).find((x) => x.id === `ev_${visitId}`) ?? {}
+    ok(r.status === 200 && res.status === 'applied', 'a status write whose id happens to be that line’s id is accepted', JSON.stringify(res))
+    const row = (await query(`SELECT type FROM activity WHERE id='ev_${visitId}'`))[0]
+    ok(row?.type === 'visit', 'and the visit line is still the visit — never replaced', row?.type)
+    ok((await leadOf(curtis.token, mine))?.status === 'follow_up', 'while the status itself changed')
+  }
 } finally {
   await stop().catch(() => {})
 }

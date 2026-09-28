@@ -828,7 +828,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const moved = inside.map((p) => ({
       ...p,
       territoryId: id,
-      assignedRepId: claimFor ?? p.assignedRepId,
+      assignedRepId: p.assignedRepId ?? claimFor,
       updatedAt: Date.now(),
     }))
 
@@ -1223,9 +1223,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
     if (statusChange) {
       // Its own write, and its own line in the lead's history — the same row
-      // the server writes, so the phone reads the way the office does.
+      // the server writes, under the same id (the server keys it by the
+      // mutation id), so a bootstrap that merges rather than replaces does
+      // not show the change twice.
+      const mutationId = await enqueue('property.status', { id: propertyId, status: statusChange })
       const event: ActivityEvent = {
-        id: uid('ev'),
+        id: mutationId,
         propertyId,
         repId: get().user?.id ?? '',
         type: 'status',
@@ -1234,7 +1237,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       await db.put('activity', event)
       set((s) => ({ activity: [event, ...s.activity] }))
-      await enqueue('property.status', { id: propertyId, status: statusChange })
     }
   },
 
@@ -1369,7 +1371,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async completeVisit(visitId) {
     const visit = get().visits[visitId]
-    if (!visit) return
+    // Once: a second tap on "Complete visit" while the first is still saving
+    // would write the visit again, book the appointment again and step the
+    // route twice. Nothing sets endedAt before completion.
+    if (!visit || visit.endedAt) return
     const endedAt = Date.now()
     const finished: Visit = {
       ...visit,

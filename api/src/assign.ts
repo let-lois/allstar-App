@@ -112,13 +112,16 @@ export async function assignProperties(
 export async function assignTerritory(
   env: Env,
   actor: SessionUser,
-  input: { territoryId: string | null; repId: string | null; action?: 'add' | 'remove' },
+  input: { territoryId: string | null; repId: string | null; action?: 'add' | 'remove' | 'set' },
 ): Promise<AssignResult | { error: string; status: number }> {
   if (!canImport(actor)) return { error: 'Not permitted.', status: 403 }
 
   if (input.repId) {
+    // Taking someone off a patch must work after they have left the team —
+    // a deactivated rep is exactly who an office wants off. Putting someone
+    // on still needs a current member.
     const rep = await env.DB.prepare(
-      'SELECT id FROM users WHERE id = ?1 AND client_id = ?2 AND active = 1',
+      `SELECT id FROM users WHERE id = ?1 AND client_id = ?2 ${input.action === 'remove' ? '' : 'AND active = 1'}`,
     )
       .bind(input.repId, actor.clientId)
       .first<{ id: string }>()
@@ -129,6 +132,9 @@ export async function assignTerritory(
 
   /* --- the unassigned bucket: houses only ---------------------------------- */
   if (!input.territoryId) {
+    // There is nobody to take off a bucket of houses; without this, a
+    // `remove` here would read as "hand every unassigned lead to this rep".
+    if (input.action === 'remove') return { error: 'The unassigned bucket has no reps to take off.', status: 400 }
     const result = await env.DB.prepare(
       `UPDATE properties SET assigned_rep_id = ?1, updated_at = ?2
         WHERE client_id = ?3 AND territory_id IS NULL`,
@@ -153,7 +159,14 @@ export async function assignTerritory(
   if (!territory) return { error: 'No such territory.', status: 404 }
 
   let assigned = 0
-  const action = input.repId ? (input.action === 'remove' ? 'remove' : 'add') : 'clear'
+  /*
+    `set` is what a console built before territories held several reps means
+    by its one dropdown: "this person is the territory's rep". It becomes
+    the sole rep — the others come off the patch — and is handed the houses
+    nobody is working, never one somebody is. Consoles that know about
+    several reps always say `add` or `remove`.
+  */
+  const action = input.repId ? (input.action === 'remove' ? 'remove' : input.action === 'set' ? 'set' : 'add') : 'clear'
 
   if (action === 'clear') {
     await clearTerritoryReps(env, input.territoryId)
@@ -167,6 +180,7 @@ export async function assignTerritory(
   } else if (action === 'remove') {
     await removeTerritoryRep(env, input.territoryId, input.repId!)
   } else {
+    if (action === 'set') await clearTerritoryReps(env, input.territoryId)
     await writeTerritoryReps(env, actor, input.territoryId, [input.repId!], now)
     const reps = await repsOf(env, input.territoryId)
     if (reps.length === 1) {

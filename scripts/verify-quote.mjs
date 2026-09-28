@@ -99,6 +99,10 @@ ok(sent.length === 1 && sent[0].summary === 'Quote sent' && sent[0].id === `quot
 const outbox = await rows('outbox')
 const queued = outbox.find((m) => m.kind === 'task.complete' && m.payload?.id === task.id)
 ok(!!queued && queued.payload.done === true && typeof queued.payload.at === 'number', 'and queues the tick for the server, with the time it happened', JSON.stringify(queued?.payload))
+// Today drops a to-do from its list once it is ticked, so there is no box on
+// the phone to untick it; the store's untick path and the server's are pinned
+// by smoke:quote-sent instead. What is pinned here is that the tick sticks.
+ok((await page.getByRole('button', { name: new RegExp(`^Mark ${task.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} complete$`) }).count()) === 0, 'and the ticked to-do leaves Today')
 await ctx.setOffline(false)
 
 /* --- and everywhere a person then looks -------------------------------------- */
@@ -113,8 +117,10 @@ ok(/Quote sent/.test(sheet), 'its history says Quote sent')
 await page.goto(`${BASE}/leads`, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1500)
 await dismissTour(page)
-const card = page.getByTestId('lead-quote-sent')
-ok((await card.count()) >= 1 && /Quote sent/.test(await card.first().innerText()), 'and the lead’s card in the list carries it', (await card.first().innerText().catch(() => '')))
+const row = page.getByTestId('lead-row').filter({ has: page.getByTestId('lead-quote-sent') })
+const card = row.first().getByTestId('lead-quote-sent')
+ok((await row.count()) === 1 && /Quote sent/.test(await card.innerText()), 'and that lead’s card in the list carries it — no other row does', (await card.innerText().catch(() => '')))
+ok(new RegExp(task.title.replace(/^Send quote — /, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(await row.first().innerText()), 'the row with the stamp is the door that was quoted')
 
 /* --- the phone fits it --------------------------------------------------------- */
 const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)

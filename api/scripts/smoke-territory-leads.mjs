@@ -201,7 +201,7 @@ try {
 
   // One house is a lead already, under a different spelling — a rep added it.
   const imported = await (await call('/api/import/properties', { method: 'POST', body: JSON.stringify({ rows: [
-    { ref: 'old', address1: '12 Inside Street', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.51003, lng: -97.67004 },
+    { ref: 'old', address1: '12 Insde St', city: 'Round Rock', state: 'TX', zip: '78664', lat: 30.51003, lng: -97.67004 },
   ] }) }, manager)).json()
   ok(imported.created === 1, 'one of the houses is already a lead, spelt differently and pinned a few metres off')
 

@@ -386,6 +386,10 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
     case 'task.create': {
       const id = str(p.id)
       if (!id) throw new Error('task.create: missing id')
+      // A to-do may point at a lead, and only at one of this company's: the
+      // lead's history is written from it when a quote to-do is ticked off.
+      const taskProperty = str(p.propertyId)
+      if (taskProperty) await assertPropertyInTenant(env, user, taskProperty)
       await env.DB.prepare(
         `INSERT OR REPLACE INTO tasks
            (id, client_id, rep_id, property_id, title, due_at, done, kind)
@@ -408,11 +412,6 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
     case 'task.complete': {
       const id = str(p.id)
       if (!id) throw new Error('task.complete: missing id')
-      await env.DB.prepare(
-        'UPDATE tasks SET done = ?2 WHERE id = ?1 AND client_id = ?3',
-      )
-        .bind(id, p.done ? 1 : 0, user.clientId)
-        .run()
       /*
         A Send-quote to-do ticked off is the only record that a quote went
         out. It used to vanish from Today and leave nothing behind, so nobody
@@ -420,19 +419,36 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
         is a line in the lead's history, at the time the rep ticked it (sent
         by the phone, so a day offline keeps its real time). One row per task,
         so a retried write is the same row, and unticking takes it back.
+
+        Writing a lead's history is editing the lead: the same rule as a
+        status set by hand, so a rep cannot stamp "Quote sent" on a door they
+        cannot see — checked before anything is written, so a refused write
+        changes nothing, not even the tick.
       */
       const task = await env.DB.prepare('SELECT property_id, kind FROM tasks WHERE id = ?1 AND client_id = ?2')
         .bind(id, user.clientId)
         .first<{ property_id: string | null; kind: string }>()
-      if (task?.kind === 'quote' && task.property_id) {
+      const stamps = task?.kind === 'quote' && !!task.property_id
+      if (stamps) await assertMayEditProperty(env, user, task!.property_id!)
+      await env.DB.prepare(
+        'UPDATE tasks SET done = ?2 WHERE id = ?1 AND client_id = ?3',
+      )
+        .bind(id, p.done ? 1 : 0, user.clientId)
+        .run()
+      if (stamps) {
         const eventId = `quote:${id}`
         if (p.done) {
+          // One row per to-do, so a retried tick is the same line. The
+          // conflict clause is tenant-guarded: task ids are chosen by phones,
+          // and a colliding id must never overwrite another company's row.
           await env.DB.prepare(
-            `INSERT OR REPLACE INTO activity
+            `INSERT INTO activity
                (id, client_id, property_id, rep_id, type, summary, at)
-             VALUES (?1,?2,?3,?4,'quote','Quote sent',?5)`,
+             VALUES (?1,?2,?3,?4,'quote','Quote sent',?5)
+             ON CONFLICT(id) DO UPDATE SET at = excluded.at, rep_id = excluded.rep_id
+               WHERE activity.client_id = excluded.client_id`,
           )
-            .bind(eventId, user.clientId, task.property_id, user.id, num(p.at) ?? Date.now())
+            .bind(eventId, user.clientId, task!.property_id, user.id, num(p.at) ?? Date.now())
             .run()
         } else {
           await env.DB.prepare('DELETE FROM activity WHERE id = ?1 AND client_id = ?2').bind(eventId, user.clientId).run()
@@ -669,8 +685,13 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
       )
         .bind(id, status, at, user.clientId)
         .run()
+      // OR IGNORE, not OR REPLACE: the row's id is the mutation id the phone
+      // chose, and `activity.id` is a global key. A replace would let a
+      // colliding id delete whatever row already held it — another tenant's
+      // visit included. A retry of this mutation never reaches here (the
+      // ledger above answers it), so nothing legitimate is ever ignored.
       await env.DB.prepare(
-        `INSERT OR REPLACE INTO activity
+        `INSERT OR IGNORE INTO activity
            (id, client_id, property_id, rep_id, type, summary, at)
          VALUES (?1,?2,?3,?4,'status',?5,?6)`,
       )

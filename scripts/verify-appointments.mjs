@@ -150,14 +150,14 @@ const list = desk.getByTestId('overview-upcoming')
 const toggle = desk.getByTestId('overview-upcoming-toggle')
 const deskNow = await desk.evaluate(() => Date.now())
 const total = (await rows('appointments', desk)).filter((a) => a.startsAt >= deskNow).length
-if (total > 4) {
-  ok((await toggle.count()) === 1 && (await list.locator('li').count()) === 4, `the office sees four of ${total} and a way to the rest`)
-  await toggle.click()
-  await desk.waitForTimeout(300)
-  ok((await list.locator('li').count()) === total, 'Show all shows all of them', `${await list.locator('li').count()}`)
-} else {
-  ok((await toggle.count()) === 0, `with ${total} ahead there is nothing to expand`)
-}
+ok(total > 4, 'the office has more than four ahead — otherwise Show all would never be walked', `${total}`)
+ok((await toggle.count()) === 1 && (await list.locator('li').count()) === 4, `the office sees four of ${total} and a way to the rest`)
+await toggle.click()
+await desk.waitForTimeout(300)
+ok((await list.locator('li').count()) === total, 'Show all shows all of them', `${await list.locator('li').count()}`)
+await toggle.click()
+await desk.waitForTimeout(300)
+ok((await list.locator('li').count()) === 4, 'and Show fewer folds it back')
 
 ok(errors.length === 0, `no page errors${errors.length ? ': ' + errors[0] : ''}`)
 await browser.close()

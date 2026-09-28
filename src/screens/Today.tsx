@@ -84,10 +84,14 @@ export function Today() {
     invisible until Thursday morning. The next few, soonest first, with the
     day on them.
   */
-  const upcomingAppointments = useMemo(() => {
+  const allUpcoming = useMemo(() => {
     const [, to] = dayRangeIn(dayKeyIn(Date.now(), tz), tz)
-    return appointments.filter((a) => a.startsAt >= to).sort((a, b) => a.startsAt - b.startsAt).slice(0, 5)
+    return appointments.filter((a) => a.startsAt >= to).sort((a, b) => a.startsAt - b.startsAt)
   }, [appointments, tz])
+  // Five until asked for the rest — the same shape as the office Overview,
+  // and the count on the heading is the whole number, not the five.
+  const [showAllUpcoming, setShowAllUpcoming] = useState(false)
+  const upcomingAppointments = showAllUpcoming ? allUpcoming : allUpcoming.slice(0, 5)
 
   const openTasks = useMemo(
     () => tasks.filter((t) => !t.done),
@@ -324,8 +328,8 @@ export function Today() {
           )}
 
           {/* --- upcoming appointments ------------------------------------- */}
-          {upcomingAppointments.length > 0 && (
-            <Section title="Upcoming" count={upcomingAppointments.length} tour="appointments">
+          {allUpcoming.length > 0 && (
+            <Section title="Upcoming" count={allUpcoming.length}>
               <ul className="row-group" data-testid="upcoming-appointments">
                 {upcomingAppointments.map((a) => {
                   const p = properties[a.propertyId]
@@ -353,6 +357,16 @@ export function Today() {
                   )
                 })}
               </ul>
+              {allUpcoming.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllUpcoming((v) => !v)}
+                  className="focusable min-h-[44px] w-full px-4 text-[13.5px] font-semibold text-accent"
+                  data-testid="upcoming-toggle"
+                >
+                  {showAllUpcoming ? 'Show fewer' : `Show all ${allUpcoming.length}`}
+                </button>
+              )}
             </Section>
           )}
 

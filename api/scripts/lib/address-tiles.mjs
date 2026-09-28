@@ -24,6 +24,28 @@ export function tileFor(lng, lat, z = TILE_ZOOM) {
 
 export const tileKey = (x, y, z = TILE_ZOOM) => `v1/${z}/${x}/${y}.json`
 
+/** The lng/lat box one tile covers — the inverse of tileFor. */
+export function tileBounds(x, y, z = TILE_ZOOM) {
+  const n = 2 ** z
+  const lng = (i) => (i / n) * 360 - 180
+  const lat = (j) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * j) / n))) * 180) / Math.PI
+  return { xmin: lng(x), xmax: lng(x + 1), ymin: lat(y + 1), ymax: lat(y) }
+}
+
+/**
+ * Widen a box to the whole tiles it touches. A build keeps every row inside
+ * this, not the box as typed: a tile written from a box that cut through it
+ * would hold half its houses, and the next build over the neighbouring box
+ * would overwrite it with the other half.
+ */
+export function snapBoxToTiles(box, z = TILE_ZOOM) {
+  const nw = tileFor(box.xmin, box.ymax, z)
+  const se = tileFor(box.xmax, box.ymin, z)
+  const a = tileBounds(nw.x, nw.y, z)
+  const b = tileBounds(se.x, se.y, z)
+  return { xmin: a.xmin, ymin: b.ymin, xmax: b.xmax, ymax: a.ymax, tiles: { x0: nw.x, y0: nw.y, x1: se.x, y1: se.y } }
+}
+
 /**
  * An Overture address row as a tile row, or null when it has no street or
  * number. `address_levels` is `[{ value: 'TX' }, ...]` — the state first.

@@ -518,6 +518,20 @@ export async function deleteUser(a: Actorable): Promise<{ ok: true } | Failure> 
     .run()
   if (!done.meta.changes) return fail(LAST_ADMIN_MESSAGE, 400)
 
+  // Their territory memberships cascaded and `territories.rep_id` was set to
+  // null where it named them; re-point that mirror at whoever is still on
+  // each patch, so the import's drawn-shape path and older phones do not
+  // read a shared territory as unowned.
+  await a.env.DB.prepare(
+    `UPDATE territories
+        SET rep_id = (SELECT r.user_id FROM territory_reps r
+                       WHERE r.territory_id = territories.id
+                       ORDER BY r.assigned_at, r.user_id LIMIT 1)
+      WHERE client_id = ?1 AND rep_id IS NULL`,
+  )
+    .bind(a.actor.clientId)
+    .run()
+
   // Recorded after the fact and by name, because the row this points at no
   // longer exists — which is exactly why the label was copied rather than
   // joined.

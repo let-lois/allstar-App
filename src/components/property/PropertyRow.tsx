@@ -121,18 +121,23 @@ export function PropertyRow({
                 {money(property.opportunityValue)}
               </span>
             )}
+            {/*
+              The one fact a status pill cannot carry: a quoted lead whose
+              quote has actually gone out. On this line, not the pills row —
+              this line never wraps (the name truncates instead), and the list
+              draws each row in a fixed-height slot, so a row must not grow.
+            */}
+            {quoteSentAt !== undefined && (
+              <span className="shrink-0 text-[12px] font-medium text-ink-soft" data-testid="lead-quote-sent">
+                Quote sent {relative(quoteSentAt)}
+              </span>
+            )}
           </span>
           <span className="mt-1.5 flex flex-wrap items-center gap-2">
             <StatusPill status={property.status} size="sm" />
             <OutcomePill code={property.lastOutcome} />
             {property.lastVisitAt && (
               <span className="text-[11.5px] text-ink-mute">{relative(property.lastVisitAt)}</span>
-            )}
-            {/* The one fact a status pill cannot carry: a quoted lead whose quote has actually gone out. */}
-            {quoteSentAt !== undefined && (
-              <span className="text-[11.5px] font-medium text-ink-soft" data-testid="lead-quote-sent">
-                Quote sent {relative(quoteSentAt)}
-              </span>
             )}
           </span>
         </span>
