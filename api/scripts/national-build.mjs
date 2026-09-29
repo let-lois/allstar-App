@@ -97,26 +97,27 @@ if (theme === 'tiger' && !readComplete) {
   const todo = zips.filter((z) => !doneGroups.has(z)).slice(0, maxGroups)
   console.log(`TIGER ADDRFEAT at ${root}: ${zips.length} county files; ${todo.length} to read (${secs()})`)
   let segs = 0, finished = 0
-  const out = new Map()
-  const flushAll = () => {
+  // Rows are held per county and written only once that county is fully
+  // read, so a crash never leaves half a county on disk to be read again.
+  const flushAll = (out) => {
     for (const [cell, lines] of out) if (lines.length) appendFileSync(resolve(work, 'cells', `${cell}.ndjson`), lines.join('\n') + '\n')
-    out.clear()
   }
   async function readCounty(zip) {
+    const out = new Map()
     const fips = /tl_\d{4}_(\d{5})_/.exec(zip)[1]
-    let buf
+    let files
     for (let attempt = 1; ; attempt++) {
       try {
         const r = await fetch(root + zip)
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        buf = new Uint8Array(await r.arrayBuffer())
+        // A cut-off or garbled download fails here too, so it is retried.
+        files = unzipSync(new Uint8Array(await r.arrayBuffer()))
         break
       } catch (err) {
-        if (attempt >= 4) throw new Error(`${zip}: ${err.message}`)
+        if (attempt >= 6) throw new Error(`${zip}: ${err.message}`)
         await new Promise((res) => setTimeout(res, 1000 * 2 ** attempt))
       }
     }
-    const files = unzipSync(buf)
     const shp = Object.keys(files).find((f) => f.endsWith('.shp'))
     const dbf = Object.keys(files).find((f) => f.endsWith('.dbf'))
     if (!shp || !dbf) throw new Error(`${zip}: no .shp/.dbf inside`)
@@ -135,7 +136,7 @@ if (theme === 'tiger' && !readComplete) {
         a.push(JSON.stringify([`${t.x}/${t.y}`, row]))
       }
     }
-    flushAll()
+    flushAll(out)
     appendFileSync(readDone, zip + '\n')
     finished++
     if (finished % 50 === 0 || finished === todo.length) console.log(`  read ${finished}/${todo.length} counties · ${segs.toLocaleString()} ranged segments (${secs()})`)
@@ -267,7 +268,11 @@ for (const cell of cells) {
   const entries = []
   if (theme === 'tiger') {
     const by = new Map()
+    const seen = new Set()
     for (const l of lines) {
+      // A county re-read after an interrupted run repeats its lines exactly.
+      if (seen.has(l)) continue
+      seen.add(l)
       const [xy, row] = JSON.parse(l)
       let a = by.get(xy)
       if (!a) { a = []; by.set(xy, a) }
