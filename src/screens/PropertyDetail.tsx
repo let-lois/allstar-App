@@ -13,7 +13,8 @@ import { StreetView } from '../components/property/StreetView'
 import { OutcomePill, ScoreBar, StatusPill } from '../components/ui/StatusPill'
 import { distanceMiles, formatDistance, walkMinutes } from '../lib/geo'
 import { cityLine, moneyFull, relativeLower } from '../lib/format'
-import type { NoteTag } from '../types'
+import type { LeadStatus, NoteTag } from '../types'
+import { NOTE_TAGS, STATUS_LABEL } from '../data/outcomes'
 
 /**
  * Lead / property profile.
@@ -42,6 +43,16 @@ export function PropertyDetail() {
   */
   const [editOpen, setEditOpen] = useState(false)
   const [edit, setEdit] = useState({ address1: '', city: '', state: '', zip: '', name: '', phone: '', email: '' })
+  /*
+    Status and tags, in the same sheet since a wrong Not interested and a
+    forgotten tag are the two corrections reps actually make. A status set
+    here is its own write with its own rules on the server; a Do Not Contact
+    is shown locked for a rep, because lifting one is the office's call.
+  */
+  const [editStatus, setEditStatus] = useState<LeadStatus>('new')
+  const [editTags, setEditTags] = useState<string[]>([])
+  const user = useAppStore((s) => s.user)
+  const dncLocked = property?.status === 'dnc' && user?.role === 'field_rep'
   const [editBusy, setEditBusy] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
 
@@ -85,6 +96,8 @@ export function PropertyDetail() {
       phone: contact?.phone ?? '',
       email: contact?.email ?? '',
     })
+    setEditStatus(property.status)
+    setEditTags(property.tags ?? [])
     setEditError(null)
     setEditOpen(true)
   }
@@ -98,6 +111,8 @@ export function PropertyDetail() {
         state: edit.state,
         zip: edit.zip,
         contact: { name: edit.name, phone: edit.phone, email: edit.email },
+        tags: editTags,
+        ...(dncLocked ? {} : { status: editStatus }),
       })
       setEditOpen(false)
     } catch (err) {
@@ -177,6 +192,15 @@ export function PropertyDetail() {
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
             <StatusPill status={property.status} />
             <OutcomePill code={property.lastOutcome} />
+            {(property.tags ?? []).map((t) => (
+              <span
+                key={t}
+                className="rounded-full border border-line bg-surface-sunk px-2.5 py-1 text-[11.5px] font-semibold text-ink-soft"
+                data-testid="lead-tag"
+              >
+                {NOTE_TAGS.find((n) => n.tag === t)?.label ?? t}
+              </span>
+            ))}
             {property.opportunityValue != null && (
               <span className="nums rounded-full bg-good-bg px-2.5 py-1 text-[11.5px] font-bold text-good">
                 {moneyFull(property.opportunityValue)}
@@ -272,6 +296,50 @@ export function PropertyDetail() {
         }
       >
         <div className="space-y-4 pt-1" data-testid="lead-edit">
+          <label className="block">
+            <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">Status</span>
+            <select
+              value={editStatus}
+              onChange={(e) => setEditStatus(e.target.value as LeadStatus)}
+              disabled={editBusy || dncLocked}
+              className="field h-[52px]"
+              data-testid="lead-edit-status"
+            >
+              {(Object.keys(STATUS_LABEL) as LeadStatus[]).map((st) => (
+                <option key={st} value={st}>
+                  {STATUS_LABEL[st]}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-[12.5px] leading-snug text-ink-mute">
+              {dncLocked
+                ? 'Marked Do Not Contact. Only the office can lift that.'
+                : 'For fixing a wrong outcome. What happened at the door still goes through Start visit.'}
+            </span>
+          </label>
+          <fieldset>
+            <legend className="mb-1.5 block text-[13px] font-medium text-ink-soft">Tags</legend>
+            <div className="flex flex-wrap gap-2">
+              {NOTE_TAGS.map(({ tag, label }) => {
+                const on = editTags.includes(tag)
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    aria-pressed={on}
+                    disabled={editBusy}
+                    onClick={() => setEditTags((cur) => (on ? cur.filter((t) => t !== tag) : [...cur, tag]))}
+                    className={`focusable min-h-[44px] rounded-full border px-3.5 text-[13px] font-medium ${
+                      on ? 'border-brand-600 bg-brand-600 text-white' : 'border-line bg-surface text-ink-soft'
+                    }`}
+                    data-testid="lead-edit-tag"
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </fieldset>
           <Field
             label="Address"
             value={edit.address1}

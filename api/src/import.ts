@@ -2,6 +2,7 @@ import { record } from './audit'
 import { parseBoundary, polygonAreaSqMiles, territoryFor, type TerritoryShape } from './geo'
 import { erasedAmong } from './erase'
 import type { Env, Role, SessionUser } from './types'
+import { writeTerritoryReps } from './territory-reps'
 
 /**
  * Lead import.
@@ -184,11 +185,17 @@ export async function importProperties(
       territoryId = existing.id
     } else {
       territoryId = `terr_${(await sha256Hex(`${user.clientId}:${name.toLowerCase()}`)).slice(0, 16)}`
-      await env.DB.prepare(
+      const made = await env.DB.prepare(
         `INSERT OR IGNORE INTO territories (id, client_id, name, rep_id) VALUES (?1,?2,?3,?4)`,
       )
         .bind(territoryId, user.clientId, name, assignRepId)
         .run()
+      // `rep_id` is a mirror; who is on a territory lives in territory_reps,
+      // which is what decides whose phone sees its houses. Written together,
+      // the way drawing a territory writes them.
+      if (assignRepId && made.meta.changes) {
+        await writeTerritoryReps(env, user, territoryId, [assignRepId], Date.now())
+      }
     }
   }
 

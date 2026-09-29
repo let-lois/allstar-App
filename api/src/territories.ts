@@ -1,4 +1,6 @@
 import { record } from './audit'
+import { generateLeadsForTerritory, type Generated } from './addresses'
+import { activeTeamMembers, cleanRepIds, clearTerritoryReps, writeTerritoryReps } from './territory-reps'
 import type { Env, SessionUser } from './types'
 
 /**
@@ -11,10 +13,13 @@ import type { Env, SessionUser } from './types'
  * versus "the leads that are there", and after a fresh import those are not the
  * same number.
  *
- * Every lead inside joins the territory. If a rep was chosen they get the leads
- * too — assigning ground and assigning the person who walks it are one action to
- * whoever is drawing, and splitting them leaves a patch belonging to nobody,
- * which is the state the unassigned bucket already exists to describe.
+ * Every lead inside joins the territory. The reps chosen go on the patch
+ * (`territory_reps`), which is what lets them see every lead in it. When exactly
+ * one rep was chosen, the leads inside that nobody is working yet are handed to
+ * them as well — assigning ground and assigning the person who walks it are one
+ * action to whoever is drawing. With two or more reps the houses stay unclaimed:
+ * the patch is shared, and who works which door is decided in the field or by
+ * the per-lead control in the console.
  */
 
 /**
@@ -50,7 +55,13 @@ export function inside(point: { lat: number; lng: number }, poly: { lat: number;
 const MIN_POINTS = 3
 const MAX_POINTS = 200
 
-type Created = { territory: { id: string; name: string }; assigned: number }
+type Created = {
+  territory: { id: string; name: string; repIds: string[] }
+  /** Leads that already existed inside and joined the patch. */
+  assigned: number
+  /** What the address look-up did, when it was asked for. */
+  generated?: Generated | { error: string; code?: string }
+}
 
 /**
  * A polygon from a browser, checked before it is stored or run against a tenant.
@@ -85,7 +96,7 @@ export function parsePolygon(
 export async function createTerritory(
   env: Env,
   actor: SessionUser,
-  input: { name?: unknown; repId?: unknown; boundary?: unknown },
+  input: { name?: unknown; repId?: unknown; repIds?: unknown; boundary?: unknown; generate?: boolean },
 ): Promise<Created | { error: string; status: number }> {
   if (actor.role === 'field_rep') return { error: 'Not permitted.', status: 403 }
 
@@ -97,16 +108,22 @@ export async function createTerritory(
   if ('error' in parsed) return parsed
   const { boundary } = parsed
 
-  // A rep from another tenant would silently receive this company's leads.
-  const repId = typeof input.repId === 'string' && input.repId ? input.repId : null
-  if (repId) {
-    const rep = await env.DB.prepare(
-      'SELECT id FROM users WHERE id = ?1 AND client_id = ?2 AND active = 1',
-    )
-      .bind(repId, actor.clientId)
-      .first<{ id: string }>()
-    if (!rep) return { error: 'That person is not on this team.', status: 400 }
+  // `repIds` is the list; `repId` is what older callers send, folded in.
+  const repIds = cleanRepIds(input.repIds)
+  if (typeof input.repId === 'string' && input.repId && !repIds.includes(input.repId)) {
+    repIds.unshift(input.repId)
   }
+  // A rep from another tenant would silently receive this company's leads.
+  if (repIds.length) {
+    const team = await activeTeamMembers(env, actor.clientId, repIds)
+    if (repIds.some((r) => !team.has(r))) {
+      return { error: 'That person is not on this team.', status: 400 }
+    }
+  }
+  const repId = repIds[0] ?? null
+  // Houses nobody is working yet are handed over only when the patch has one
+  // rep; a shared patch leaves them for the field to claim.
+  const claimFor = repIds.length === 1 ? repId : null
 
   const clash = await env.DB.prepare(
     'SELECT id FROM territories WHERE client_id = ?1 AND lower(name) = lower(?2)',
@@ -121,6 +138,8 @@ export async function createTerritory(
   )
     .bind(id, actor.clientId, name, repId, JSON.stringify(boundary))
     .run()
+  const createdAt = Date.now()
+  if (repIds.length) await writeTerritoryReps(env, actor, id, repIds, createdAt)
 
   /*
     Matched in the Worker rather than in SQL. SQLite has no point-in-polygon, and
@@ -148,11 +167,11 @@ export async function createTerritory(
     const res = await env.DB.prepare(
       `UPDATE properties
           SET territory_id = ?1,
-              assigned_rep_id = COALESCE(?2, assigned_rep_id),
+              assigned_rep_id = COALESCE(assigned_rep_id, ?2),
               updated_at = ?3
         WHERE client_id = ?4 AND id IN (${holes})`,
     )
-      .bind(id, repId, now, actor.clientId, ...chunk)
+      .bind(id, claimFor, now, actor.clientId, ...chunk)
       .run()
     assigned += res.meta.changes ?? 0
   }
@@ -162,10 +181,22 @@ export async function createTerritory(
     targetType: 'territory',
     targetId: id,
     targetLabel: name,
-    detail: { points: boundary.length, leads: assigned, repId },
+    detail: { points: boundary.length, leads: assigned, repId, reps: repIds.length },
   })
 
-  return { territory: { id, name }, assigned }
+  /*
+    The houses on the ground, when asked. After the claim above, so an address
+    that is already a lead is counted as one rather than made twice; and a
+    refusal here — no address data on this deployment, a shape too big — is
+    returned in words beside the territory, which exists either way.
+  */
+  let generated: Created['generated']
+  if (input.generate) {
+    const g = await generateLeadsForTerritory(env, actor, id)
+    generated = 'error' in g ? { error: g.error, code: g.code } : g
+  }
+
+  return { territory: { id, name, repIds }, assigned, generated }
 }
 
 /**
@@ -289,6 +320,9 @@ export async function deleteTerritory(
     .run()
   const released = res.meta.changes ?? 0
 
+  // Explicit rather than trusting ON DELETE CASCADE, which D1 honours but a
+  // hand-built local database might not.
+  await clearTerritoryReps(env, id)
   await env.DB.prepare('DELETE FROM territories WHERE id = ?1 AND client_id = ?2')
     .bind(id, actor.clientId)
     .run()

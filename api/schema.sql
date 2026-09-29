@@ -57,8 +57,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS clients_join_code ON clients(join_code);
 -- A team or office within a company: "Austin", "North crew". Its own table
 -- rather than free text on the user, because a badge and a roster filter both
 -- read it and "Austin" and "austin " must be one team. Deliberately tiny — a
--- name and nothing else. It is not a territory, which is geographic and has one
--- rep; a team is people.
+-- name and nothing else. It is not a territory, which is geographic and has
+-- reps assigned to it; a team is people.
 CREATE TABLE IF NOT EXISTS teams (
   id          TEXT PRIMARY KEY,
   client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
@@ -132,11 +132,32 @@ CREATE TABLE IF NOT EXISTS territories (
   id         TEXT PRIMARY KEY,
   client_id  TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   name       TEXT NOT NULL,
+  /* The first rep on the patch, mirrored from `territory_reps` below. Kept
+     because an import inherits it for the leads it drops into a drawn shape,
+     and because older clients read it. `territory_reps` is the truth. */
   rep_id     TEXT REFERENCES users(id) ON DELETE SET NULL,
   /* The drawn outline, as a JSON array of {lat,lng}. Null for the territories
      that came from an import, which is all of them until somebody draws one. */
   boundary   TEXT
 );
+
+/* Who walks a territory — any number of reps per patch, any number of patches
+   per rep. The same shape as `lead_list_reps`, for the same reason: a join
+   table is N:N without a JSON column anybody has to keep in step by hand.
+
+   A rep on a territory sees every lead in it (see `repScopeSql`). Each lead
+   still carries one `assigned_rep_id`, which says who is *working* that house;
+   the two are separate facts, and adding a second rep to a patch does not
+   take a single house away from the first. Migration 024 seeds one row per
+   existing `rep_id`, so nothing that was assigned before it ran is lost. */
+CREATE TABLE IF NOT EXISTS territory_reps (
+  territory_id TEXT NOT NULL REFERENCES territories(id) ON DELETE CASCADE,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  assigned_at  INTEGER NOT NULL,
+  assigned_by  TEXT REFERENCES users(id) ON DELETE SET NULL,
+  PRIMARY KEY (territory_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS territory_reps_by_user ON territory_reps(user_id);
 
 CREATE TABLE IF NOT EXISTS properties (
   id                 TEXT PRIMARY KEY,
@@ -596,8 +617,8 @@ CREATE INDEX IF NOT EXISTS sync_conflicts_open
 
    A list is a working set: "Monday Route", "Follow Ups", "Northwest Territory
    – Sept 10". It is deliberately not a territory. A territory answers *whose
-   ground is this* — one rep, one patch, and it drives where an import lands and
-   what the coverage figures count. A list answers *what are we working on* —
+   ground is this* — a patch and the reps who walk it (`territory_reps`), and
+   it drives where an import lands and what the coverage figures count. A list answers *what are we working on* —
    many leads, many reps, and a lead can be on several at once. Folding the
    second into the first would have meant changing the cardinality of a working,
    gated pipeline to get a feature it was never shaped for.

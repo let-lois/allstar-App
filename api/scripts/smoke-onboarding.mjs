@@ -137,7 +137,7 @@ ok(
   ok(html.includes(REP.email), 'the invite page shows the invited email')
 }
 {
-  const res = await form({ url: `${BASE}/invite/${token}`, body: { password: REP.password } })
+  const res = await form({ url: `${BASE}/invite/${token}`, body: { password: REP.password, confirm: REP.password } })
   ok(/You're in|You&#39;re in/.test(await res.text()), 'the rep sets their own password')
 }
 
@@ -148,7 +148,7 @@ ok(
 // lock the real owner out of their own account.
 {
   const HIJACK = 'a-different-one-entirely'
-  const res = await form({ url: `${BASE}/invite/${token}`, body: { password: HIJACK } })
+  const res = await form({ url: `${BASE}/invite/${token}`, body: { password: HIJACK, confirm: HIJACK } })
   const html = await res.text()
   ok(!/You're in|You&#39;re in/.test(html), 'reusing the invite does not report success')
 

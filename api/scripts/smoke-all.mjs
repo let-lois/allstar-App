@@ -94,6 +94,8 @@ const TESTS = [
   { script: 'verify:geocode:fallback', kind: 'pure' },
   { script: 'verify:directions', kind: 'pure' },
   { script: 'verify:territories', kind: 'pure' },
+  { script: 'verify:territory-reps', kind: 'pure' },
+  { script: 'verify:addresses', kind: 'pure' },
   { script: 'verify:onboarding-status', kind: 'pure' },
 
   // --- shared: one Worker on 8787, and order matters --------------------
@@ -118,6 +120,10 @@ const TESTS = [
   { script: 'smoke:backup', kind: 'hosted', port: 8817 },
   { script: 'smoke:deadkey', kind: 'hosted', port: 8841 },
   { script: 'smoke:lists', kind: 'hosted', port: 8851 },
+  { script: 'smoke:territory-reps', kind: 'hosted', port: 8852 },
+  { script: 'smoke:territory-leads', kind: 'hosted', port: 8854 },
+  { script: 'smoke:lead-edit', kind: 'hosted', port: 8855 },
+  { script: 'smoke:quote-sent', kind: 'hosted', port: 8856 },
   { script: 'smoke:onboarding-schema', kind: 'hosted', port: 8861 },
   { script: 'smoke:onboarding-flow', kind: 'hosted', port: 8871 },
   { script: 'smoke:mail', kind: 'hosted', port: 8881 },

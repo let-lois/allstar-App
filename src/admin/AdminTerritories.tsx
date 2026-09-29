@@ -11,6 +11,7 @@ import { moneyFull } from '../lib/format'
 import { pointInPolygon, polygonAreaSqMiles } from '../lib/geo'
 import { Button } from '../components/ui/Button'
 import { Field } from '../components/ui/Input'
+import { IconClose } from '../components/nav/icons'
 
 /**
  * Territory management.
@@ -37,7 +38,14 @@ export function AdminTerritories() {
   const createTerritory = useAppStore((s) => s.createTerritory)
   const [draft, setDraft] = useState<{ points: { lat: number; lng: number }[] } | null>(null)
   const [draftName, setDraftName] = useState('')
-  const [draftRep, setDraftRep] = useState('')
+  const [draftReps, setDraftReps] = useState<string[]>([])
+  /*
+    On by default: the whole point of drawing round a block is the houses on
+    it. A deployment with no address data says so in the result and the
+    territory is created regardless, so the default costs nothing when it
+    cannot deliver.
+  */
+  const [draftGenerate, setDraftGenerate] = useState(true)
   const [saving2, setSaving2] = useState(false)
   const [drawError, setDrawError] = useState<string | null>(null)
   const [drawDone, setDrawDone] = useState<string | null>(null)
@@ -73,11 +81,14 @@ export function AdminTerritories() {
     try {
       const res = await createTerritory({
         name,
-        repId: draftRep || null,
+        repId: draftReps[0] ?? null,
+        repIds: draftReps,
         boundary: draft.points,
+        generate: draftGenerate && mode === 'live',
       })
       setDrawDone(
-        `Created ${name} with ${res.assigned.toLocaleString()} lead${res.assigned === 1 ? '' : 's'}.`,
+        `Created ${name} with ${res.assigned.toLocaleString()} lead${res.assigned === 1 ? '' : 's'}.` +
+          (res.generated ? ` ${describeGenerated(res.generated)}` : ''),
       )
       /*
         Select what was just made. Without this the map left drawing mode with
@@ -88,7 +99,7 @@ export function AdminTerritories() {
       setSelected(res.id)
       setDraft(null)
       setDraftName('')
-      setDraftRep('')
+      setDraftReps([])
     } catch (err) {
       setDrawError(
         err instanceof ApiError ? err.message : 'Could not create the territory. Try again.',
@@ -149,7 +160,12 @@ export function AdminTerritories() {
   const [assignError, setAssignError] = useState<string | null>(null)
   const [assigned, setAssigned] = useState<string | null>(null)
 
-  async function assign(territoryId: string, repId: string) {
+  /*
+    A territory holds any number of reps. `add` puts one on the patch beside
+    whoever is already there; `remove` takes one off. The unassigned bucket is
+    houses, not a patch, so there `add` still means "hand all of these over".
+  */
+  async function assign(territoryId: string, repId: string, action: 'add' | 'remove' = 'add') {
     const token = liveToken()
     if (!token) {
       setAssignError('Assigning leads needs a live account. The demo has no real team.')
@@ -164,15 +180,23 @@ export function AdminTerritories() {
         // wire — the server has no row for "no territory".
         territoryId: territoryId === UNASSIGNED_TERRITORY ? null : territoryId,
         repId: repId || null,
+        action,
       })
       // Re-read rather than patching state: this changes which properties a rep
       // can see, and guessing at the result is how a console drifts from the
       // database it is supposed to be showing.
       await refreshFromServer()
+      const who = repOptions.find((r) => r.id === repId)?.name ?? 'the rep'
       setAssigned(
-        repId
-          ? `${res.assigned} lead${res.assigned === 1 ? '' : 's'} assigned.`
-          : `${res.assigned} lead${res.assigned === 1 ? '' : 's'} unassigned.`,
+        action === 'remove'
+          ? `${who} taken off ${label(territoryId)}. Houses they were working stay theirs.`
+          : !repId
+            ? `${res.assigned} lead${res.assigned === 1 ? '' : 's'} unassigned.`
+            : territoryId === UNASSIGNED_TERRITORY
+              ? `${res.assigned} lead${res.assigned === 1 ? '' : 's'} assigned.`
+              : res.assigned > 0
+                ? `${who} added to ${label(territoryId)} and handed ${res.assigned} unclaimed lead${res.assigned === 1 ? '' : 's'}.`
+                : `${who} added to ${label(territoryId)} — ${res.repIds?.length ?? 0} rep${(res.repIds?.length ?? 0) === 1 ? '' : 's'} share it now.`,
       )
     } catch (err) {
       setAssignError(
@@ -246,6 +270,25 @@ export function AdminTerritories() {
     } catch (err) {
       setManageError(
         err instanceof ApiError ? err.message : 'Could not rename that. Nothing was changed.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const generateTerritoryLeads = useAppStore((s) => s.generateTerritoryLeads)
+  async function findAddresses() {
+    if (!selected || selected === UNASSIGNED_TERRITORY) return
+    setBusy(true)
+    setManageError(null)
+    setManaged(null)
+    try {
+      const res = await generateTerritoryLeads(selected)
+      setManaged(describeGenerated(res))
+      setRemovedNote(null)
+    } catch (err) {
+      setManageError(
+        err instanceof ApiError ? err.message : 'Could not look up the houses. Nothing was changed.',
       )
     } finally {
       setBusy(false)
@@ -363,26 +406,44 @@ export function AdminTerritories() {
               cell: (t) => label(t.id),
             },
             {
-              header: 'Assigned rep',
-              cell: (t) => (
-                <select
-                  value={t.repId ?? ''}
-                  disabled={mode !== 'live' || saving !== null}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => void assign(t.id, e.target.value)}
-                  /* 44px on a phone: this is the one control in the console a
-                     manager reaches for one-handed, reassigning a patch because
-                     somebody called in sick. */
-                  className="focusable min-h-[44px] w-full rounded-lg border border-line bg-surface px-2 text-[13px] disabled:opacity-60 lg:min-h-[36px] lg:w-auto lg:text-xs"
-                >
-                  <option value="">{t.mixed ? 'Mixed — pick one' : 'Unassigned'}</option>
-                  {repOptions.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              ),
+              header: 'Reps',
+              // Not in the phone card: the card is one button, and controls
+              // inside a button are neither valid nor reachable by a screen
+              // reader, and the card's meta cell truncates. On a phone the
+              // same controls sit in the panel for the selected territory.
+              phone: 'off',
+              cell: (t) =>
+                t.id === UNASSIGNED_TERRITORY ? (
+                  /*
+                    The unassigned bucket is houses with no patch, so it keeps
+                    the one-shot control: pick a person and every lead in it is
+                    theirs. That is the post-import move, and it is a hand-over
+                    rather than a membership.
+                  */
+                  <select
+                    value=""
+                    disabled={mode !== 'live' || saving !== null}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => void assign(t.id, e.target.value)}
+                    aria-label="Hand every unassigned lead to"
+                    className="focusable min-h-[44px] w-full rounded-lg border border-line bg-surface px-2 text-[13px] disabled:opacity-60 lg:min-h-[36px] lg:w-auto lg:text-xs"
+                  >
+                    <option value="">{t.mixed ? 'Mixed — hand all to…' : 'Hand all to…'}</option>
+                    {repOptions.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <RepChips
+                    repIds={territories[t.id]?.repIds ?? (territories[t.id]?.repId ? [territories[t.id]!.repId!] : [])}
+                    options={repOptions}
+                    disabled={mode !== 'live' || saving !== null}
+                    onAdd={(repId) => void assign(t.id, repId, 'add')}
+                    onRemove={(repId) => void assign(t.id, repId, 'remove')}
+                  />
+                ),
             },
             { header: 'Properties', align: 'right', cell: (t) => t.properties },
             {
@@ -405,10 +466,12 @@ export function AdminTerritories() {
               Last, not second.
 
               Column order is not cosmetic here: a whole-row click selects the
-              territory, and the rep `<select>` calls `stopPropagation` so its own
-              clicks do not. With Open value in position two the select sat in the
-              middle of the row — which is where a click on a table row lands —
-              so selecting a territory on a desktop silently stopped working.
+              territory, and the unassigned bucket's `<select>` calls
+              `stopPropagation` so its own clicks do not. With Open value in
+              position two the select sat in the middle of the row — which is
+              where a click on a table row lands — so selecting a territory on a
+              desktop silently stopped working. The rep chips let their clicks
+              through for the same reason (see RepChips).
             */
             {
               header: 'Open value',
@@ -506,7 +569,54 @@ export function AdminTerritories() {
                   </div>
                 </div>
               ) : (
-                <div className="flex gap-2">
+                <>
+                  {/*
+                    On a phone the table is cards, and a card is one button, so
+                    the rep controls live here for whichever territory is
+                    picked. The desktop table keeps them in its Reps column.
+                  */}
+                  {selected && (
+                    <div className="mb-3 lg:hidden" data-testid="territory-reps-panel">
+                      <p className="mb-1.5 text-[13px] font-medium text-ink-soft">
+                        {selected === UNASSIGNED_TERRITORY ? 'Hand every unassigned lead to' : 'Reps on this territory'}
+                      </p>
+                      {selected === UNASSIGNED_TERRITORY ? (
+                        <select
+                          value=""
+                          disabled={mode !== 'live' || saving !== null}
+                          onChange={(e) => void assign(selected, e.target.value)}
+                          aria-label="Hand every unassigned lead to"
+                          className="focusable min-h-[44px] w-full rounded-lg border border-line bg-surface px-2 text-[13px] disabled:opacity-60"
+                        >
+                          <option value="">Hand all to…</option>
+                          {repOptions.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <RepChips
+                          repIds={territories[selected]?.repIds ?? (territories[selected]?.repId ? [territories[selected]!.repId!] : [])}
+                          options={repOptions}
+                          disabled={mode !== 'live' || saving !== null}
+                          onAdd={(repId) => void assign(selected, repId, 'add')}
+                          onRemove={(repId) => void assign(selected, repId, 'remove')}
+                        />
+                      )}
+                    </div>
+                  )}
+                <div className="flex flex-wrap gap-2">
+                  {/*
+                    The houses inside, for a territory drawn before the look-up
+                    existed, or one whose street has grown. Same rule as the
+                    checkbox when drawing: what is already a lead stays one.
+                  */}
+                  {mode === 'live' && !!territories[selected!]?.boundary && (
+                    <Button size="sm" disabled={busy} onClick={() => void findAddresses()}>
+                      {busy ? 'Looking…' : 'Find addresses'}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="secondary"
@@ -529,6 +639,7 @@ export function AdminTerritories() {
                     Delete
                   </Button>
                 </div>
+                </>
               )}
 
               {manageError && (
@@ -618,23 +729,67 @@ export function AdminTerritories() {
                   onChange={(e) => setDraftName(e.target.value)}
                   placeholder="e.g. Cypress Ridge & Marigold"
                 />
-                <label className="block">
-                  <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">
+                <fieldset>
+                  <legend className="mb-1.5 block text-[13px] font-medium text-ink-soft">
                     Assign to
-                  </span>
-                  <select
-                    value={draftRep}
-                    onChange={(e) => setDraftRep(e.target.value)}
-                    className="field h-[52px]"
-                  >
-                    <option value="">Nobody yet</option>
-                    {repOptions.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  </legend>
+                  {/*
+                    Any number of people. One rep also gets the unclaimed houses
+                    inside; two or more share the patch and claim doors as they
+                    knock them. Said on screen, because the difference decides
+                    what lands on whose phone.
+                  */}
+                  <div className="max-h-[220px] overflow-y-auto rounded-field border border-line bg-surface">
+                    {repOptions.length === 0 && (
+                      <p className="px-3 py-3 text-[13px] text-ink-mute">Nobody on the team yet.</p>
+                    )}
+                    {repOptions.map((r) => {
+                      const on = draftReps.includes(r.id)
+                      return (
+                        <label
+                          key={r.id}
+                          className="flex min-h-[44px] cursor-pointer items-center gap-3 border-b border-line-soft px-3 last:border-b-0"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() =>
+                              setDraftReps((cur) =>
+                                on ? cur.filter((id) => id !== r.id) : [...cur, r.id],
+                              )
+                            }
+                            className="h-5 w-5 accent-brand-500"
+                          />
+                          <span className="text-[14px]">{r.name}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-1.5 text-[12.5px] leading-snug text-ink-mute">
+                    {draftReps.length === 0
+                      ? 'Nobody yet — the leads inside keep whoever has them.'
+                      : draftReps.length === 1
+                        ? 'One rep: they also get every lead inside that nobody is working.'
+                        : `${draftReps.length} reps share it: all of them see every lead inside.`}
+                  </p>
+                </fieldset>
+                {mode === 'live' && (
+                  <label className="flex min-h-[44px] cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={draftGenerate}
+                      onChange={(e) => setDraftGenerate(e.target.checked)}
+                      className="mt-1 h-5 w-5 accent-brand-500"
+                      data-testid="territory-generate"
+                    />
+                    <span className="text-[13px] leading-snug">
+                      <span className="font-medium">Find the houses inside and add them as leads</span>
+                      <span className="block text-ink-mute">
+                        From open address data. Houses that are already leads are left as they are.
+                      </span>
+                    </span>
+                  </label>
+                )}
               </div>
 
               {/* Reserved, for the same reason: an error appearing must not push
@@ -721,4 +876,82 @@ export function AdminTerritories() {
       </div>
     </AdminPage>
   )
+}
+
+
+/**
+ * The reps on a patch, as chips, with a way to add one and a way to take one
+ * off. Each × is a 44px target on a phone: this is the control a manager
+ * reaches for one-handed when somebody calls in sick.
+ */
+function RepChips({
+  repIds,
+  options,
+  disabled,
+  onAdd,
+  onRemove,
+}: {
+  repIds: string[]
+  options: { id: string; name: string }[]
+  disabled: boolean
+  onAdd: (repId: string) => void
+  onRemove: (repId: string) => void
+}) {
+  const nameOf = (id: string) => options.find((r) => r.id === id)?.name ?? 'Former team member'
+  const free = options.filter((r) => !repIds.includes(r.id))
+  return (
+    // Nothing here stops the click: using a territory's rep controls also
+    // selects that territory, so the map shows the patch being edited. The
+    // old single `<select>` swallowed its clicks, and once these chips grew
+    // wide enough to sit under the middle of the row — where a click on a
+    // table row lands — selecting a territory silently stopped working.
+    <div className="flex flex-wrap items-center gap-1.5">
+      {repIds.length === 0 && <span className="text-[13px] text-ink-mute">Nobody yet</span>}
+      {repIds.map((id) => (
+        <span
+          key={id}
+          className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-sunk pl-2.5 text-[13px] font-medium"
+        >
+          {nameOf(id)}
+          <button
+            type="button"
+            disabled={disabled}
+            aria-label={`Take ${nameOf(id)} off this territory`}
+            onClick={() => onRemove(id)}
+            className="focusable grid h-11 w-11 place-items-center rounded-r-full text-ink-mute disabled:opacity-60 lg:h-8 lg:w-7"
+          >
+            <span className="scale-75">
+              <IconClose />
+            </span>
+          </button>
+        </span>
+      ))}
+      {free.length > 0 && (
+        <select
+          value=""
+          disabled={disabled}
+          onChange={(e) => e.target.value && onAdd(e.target.value)}
+          aria-label="Add a rep to this territory"
+          className="focusable min-h-[44px] rounded-lg border border-dashed border-line bg-surface px-2 text-[13px] text-ink-soft disabled:opacity-60 lg:min-h-[36px] lg:text-xs"
+        >
+          <option value="">+ Add rep</option>
+          {free.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  )
+}
+
+/** The look-up's counts as one sentence, or its refusal as the server put it. */
+function describeGenerated(g: { error: string; code?: string } | { found: number; created: number; existed: number; erased: number; skipped: number }): string {
+  if ('error' in g) return g.error
+  const parts = [`${g.found.toLocaleString()} address${g.found === 1 ? '' : 'es'} found`, `${g.created.toLocaleString()} new lead${g.created === 1 ? '' : 's'}`]
+  if (g.existed) parts.push(`${g.existed.toLocaleString()} already there`)
+  if (g.erased) parts.push(`${g.erased.toLocaleString()} erased before and left that way`)
+  if (g.skipped) parts.push(`${g.skipped.toLocaleString()} past the limit — draw a smaller area for the rest`)
+  return parts.join(', ') + '.'
 }

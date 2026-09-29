@@ -172,10 +172,10 @@ try {
 
   /* ===== 4. accept, then the earlier links ==================================== */
   const ONE_PW = 'sams-own-password-123'
-  ok(/You're in|You&#39;re in/.test(await (await form(thirdLink, { password: ONE_PW })).text()), 'the rep sets their password through the live link')
+  ok(/You're in|You&#39;re in/.test(await (await form(thirdLink, { password: ONE_PW, confirm: ONE_PW })).text()), 'the rep sets their password through the live link')
   ok((await login(ONE, ONE_PW)).ok, 'and signs in')
   ok((await rowFor(A, ONE))?.invitation === 'accepted', 'the roster reads accepted')
-  const hijack = await form(secondLink, { password: 'somebody-elses-choice-1' })
+  const hijack = await form(secondLink, { password: 'somebody-elses-choice-1', confirm: 'somebody-elses-choice-1' })
   ok(!/You're in|You&#39;re in/.test(await hijack.text()), 'a revoked link opened afterwards sets nothing')
   ok((await login(ONE, ONE_PW)).ok && !(await login(ONE, 'somebody-elses-choice-1')).ok, 'the password stays the one the rep chose')
   r = await j(await call(`/api/invites/${row.id}/resend`, { method: 'POST' }, A))
@@ -257,7 +257,7 @@ try {
     r = await j(await call('/api/invites', { method: 'POST', body: JSON.stringify({ email: FOUR, role: 'field_rep', firstName: 'Quinn' }) }, A))
     const quinnLink = r.body.url
     const quinn = await rowFor(A, FOUR)
-    r = await j(await call(`/api/users/${quinn.id}/password`, { method: 'POST', body: JSON.stringify({ password: 'set-by-the-admin-123' }) }, A))
+    r = await j(await call(`/api/users/${quinn.id}/password`, { method: 'POST', body: JSON.stringify({ password: 'set-by-the-admin-123', confirm: 'set-by-the-admin-123' }) }, A))
     ok(r.status === 200, 'an admin sets a password for someone who never opened their link', `${r.status}`)
     const live = await page(quinnLink)
     ok(/already set up|already has a password/i.test(live) && !/name="password"/.test(live), 'the still-live invitation link now says they are already set up, with no password form')
@@ -293,7 +293,7 @@ try {
   /* ===== 11. one address at two companies signs in to both ================== */
   r = await j(await call('/api/invites', { method: 'POST', body: JSON.stringify({ email: DUAL.email, role: 'field_rep' }) }, A))
   ok(r.status === 200 && r.body.alreadyMember === false, 'an address that exists at ANOTHER company is new here — email is unique per company')
-  ok(/You're in|You&#39;re in/.test(await (await form(r.body.url, { password: DUAL.herePassword })).text()), 'and they set a password here')
+  ok(/You're in|You&#39;re in/.test(await (await form(r.body.url, { password: DUAL.herePassword, confirm: DUAL.herePassword })).text()), 'and they set a password here')
   const here = await j(await login(DUAL.email, DUAL.herePassword))
   ok(here.status === 200 && here.body.user?.clientName === 'Summit Exteriors', 'signing in with this company’s password lands in this company', here.body.user?.clientName)
   const other = await j(await login(DUAL.email, DUAL.otherPassword))
@@ -307,7 +307,7 @@ try {
   r = await j(await call(`/api/users/${(await rowFor(A, ONE)).id}/reset-link`, { method: 'POST' }, A))
   ok(r.status === 200, 'an admin makes a reset link for someone with a password')
   ok(/Set your password|Welcome/.test(await page(r.body.url)), 'which opens a password form — it is a reset, not an invitation')
-  ok(/You're in|You&#39;re in/.test(await (await form(r.body.url, { password: 'sams-new-password-456' })).text()), 'and sets the new password')
+  ok(/You're in|You&#39;re in/.test(await (await form(r.body.url, { password: 'sams-new-password-456', confirm: 'sams-new-password-456' })).text()), 'and sets the new password')
   ok((await login(ONE, 'sams-new-password-456')).ok && !(await login(ONE, ONE_PW)).ok, 'which is now the one that works')
   ok((await rowFor(A, ONE))?.invitation === 'accepted', 'and the roster’s invitation status ignores reset links entirely', (await rowFor(A, ONE))?.invitation)
 

@@ -19,6 +19,7 @@ import type {
   Visit,
   LeadList,
   Contact,
+  LeadStatus,
 } from '../types'
 import * as db from '../lib/db'
 import { purgeErased } from '../lib/erase-local'
@@ -41,8 +42,10 @@ import {
   apiJoin,
   apiMe,
   type SessionUserDTO,
+  apiGenerateTerritoryLeads,
+  type GeneratedLeads,
 } from '../lib/http'
-import { canSee, leadIdsViaLists, listsContaining, listsFor, withMembers } from '../lib/leadLists'
+import { canSee, leadIdsViaLists, listsContaining, listsFor, withMembers, territoryIdsFor } from '../lib/leadLists'
 import { applyBootstrap, leadListFromDTO, outboxPending, wipeCachedData } from '../lib/hydrate'
 import {
   clearSession,
@@ -54,7 +57,7 @@ import {
   saveSession,
   userFromDTO,
 } from '../lib/session'
-import { OUTCOME_TO_STATUS } from '../data/outcomes'
+import { OUTCOME_TO_STATUS, STATUS_LABEL } from '../data/outcomes'
 import { dayKey } from '../lib/format'
 import { pointInPolygon } from '../lib/geo'
 import { getPosition, type Position } from '../lib/geo'
@@ -191,8 +194,18 @@ interface AppState {
   createTerritory: (input: {
     name: string
     repId: string | null
+    /** Everyone to put on the patch; `repId` is folded in for older callers. */
+    repIds?: string[]
     boundary: { lat: number; lng: number }[]
-  }) => Promise<{ id: string; assigned: number }>
+    /** Also look up the houses inside and make each one a lead. Live only. */
+    generate?: boolean
+  }) => Promise<{
+    id: string
+    assigned: number
+    generated?: GeneratedLeads | { error: string; code?: string }
+  }>
+  /** Find the houses inside an existing territory and make each one a lead. Live only. */
+  generateTerritoryLeads: (id: string) => Promise<GeneratedLeads>
   /**
    * Rename a territory, and delete one.
    *
@@ -256,6 +269,14 @@ interface AppState {
       state?: string
       zip?: string
       contact?: { name: string; phone?: string; email?: string }
+      /** The lead's own tags; an empty list clears them. */
+      tags?: string[]
+      /**
+       * A status set by hand — the wrong door marked Not interested, fixed
+       * without a visit that never happened. Queued as its own write, with
+       * its own rules on the server (a Do Not Contact needs the office).
+       */
+      status?: LeadStatus
     },
   ) => Promise<void>
   addNote: (
@@ -778,16 +799,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().loadLocal(current, 'demo')
   },
 
-  async createTerritory({ name, repId, boundary }) {
+  async createTerritory({ name, repId, repIds: wanted, boundary, generate }) {
     if (boundary.length < 3) throw new Error('An area needs at least three points.')
     const token = liveToken()
+    const repIds = [...new Set([...(repId ? [repId] : []), ...(wanted ?? [])])]
 
     if (token) {
-      const res = await apiCreateTerritory(token, { name, repId, boundary })
+      const res = await apiCreateTerritory(token, { name, repId, repIds, boundary, generate })
       // The server has moved rows; pull its view back rather than patching a
       // guess into local state and hoping the two agree.
       await get().refreshFromServer()
-      return { id: res.territory.id, assigned: res.assigned }
+      return { id: res.territory.id, assigned: res.assigned, generated: res.generated }
     }
 
     /*
@@ -796,14 +818,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       so it survives a reload.
     */
     const id = `t_drawn_${Date.now().toString(36)}`
-    const territory: Territory = { id, name, repId: repId ?? undefined, boundary }
+    const territory: Territory = { id, name, repId: repIds[0], repIds, boundary }
     const inside = Object.values(get().properties).filter(
       (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && pointInPolygon(p, boundary),
     )
+    // Same rule as the Worker: unclaimed houses go to a sole rep, and a shared
+    // patch leaves them for the field.
+    const claimFor = repIds.length === 1 ? repIds[0] : undefined
     const moved = inside.map((p) => ({
       ...p,
       territoryId: id,
-      assignedRepId: repId ?? p.assignedRepId,
+      assignedRepId: p.assignedRepId ?? claimFor,
       updatedAt: Date.now(),
     }))
 
@@ -851,6 +876,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     const territory: Territory = { ...existing, name: trimmed }
     await db.put('territories', territory)
     set((state) => ({ territories: { ...state.territories, [id]: territory } }))
+  },
+
+  async generateTerritoryLeads(id) {
+    const token = liveToken()
+    if (!token) throw new Error('Looking up the houses in a territory needs a live account.')
+    const res = await apiGenerateTerritoryLeads(token, id)
+    // New rows on the server; read them back rather than inventing them here.
+    await get().refreshFromServer()
+    return res
   },
 
   async deleteTerritory(id) {
@@ -1159,12 +1193,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
 
+    const statusChange = patch.status && patch.status !== current.status ? patch.status : undefined
     const next: Property = {
       ...current,
       ...(address1 !== undefined ? { address1 } : {}),
       ...(patch.city !== undefined ? { city: patch.city.trim() } : {}),
       ...(patch.state !== undefined ? { state: patch.state.trim() } : {}),
       ...(patch.zip !== undefined ? { zip: patch.zip.trim() } : {}),
+      ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
+      ...(statusChange ? { status: statusChange } : {}),
       contacts,
     }
     await db.put('properties', next)
@@ -1175,6 +1212,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       city: next.city,
       state: next.state,
       zip: next.zip,
+      ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
       contacts: next.contacts.map((c) => ({
         id: c.id,
         name: c.name,
@@ -1183,6 +1221,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         isPrimary: !!c.isPrimary,
       })),
     })
+    if (statusChange) {
+      // Its own write, and its own line in the lead's history — the same row
+      // the server writes, under the same id (the server keys it by the
+      // mutation id), so a bootstrap that merges rather than replaces does
+      // not show the change twice.
+      const mutationId = await enqueue('property.status', { id: propertyId, status: statusChange })
+      const event: ActivityEvent = {
+        id: mutationId,
+        propertyId,
+        repId: get().user?.id ?? '',
+        type: 'status',
+        summary: `Status set to ${STATUS_LABEL[statusChange]} (was ${STATUS_LABEL[current.status]})`,
+        at: Date.now(),
+      }
+      await db.put('activity', event)
+      set((s) => ({ activity: [event, ...s.activity] }))
+    }
   },
 
   async addNote(propertyId, body, tags, visitId) {
@@ -1316,7 +1371,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async completeVisit(visitId) {
     const visit = get().visits[visitId]
-    if (!visit) return
+    // Once: a second tap on "Complete visit" while the first is still saving
+    // would write the visit again, book the appointment again and step the
+    // route twice. Nothing sets endedAt before completion.
+    if (!visit || visit.endedAt) return
     const endedAt = Date.now()
     const finished: Visit = {
       ...visit,
@@ -1349,27 +1407,48 @@ export const useAppStore = create<AppState>((set, get) => ({
       await db.put('properties', updatedProp)
     }
 
-    // A scheduled next action becomes a real task so it shows up on Today.
+    /*
+      An appointment set at the door is an appointment, not a to-do.
+
+      It used to become a task titled "Appointment — …" and nothing else, so it
+      never reached the Appointments list on Today, the Upcoming list on the
+      office's Overview, the lead's own Appointments, or the CRM calendar — the
+      places anybody looks for one. "I set appointments but don't see them."
+      Now it is the same row `/schedule/new` writes, through the same action,
+      so there is one kind of appointment wherever it was made. One per lead
+      per start time: a replayed visit does not book the door twice.
+    */
+    if (visit.nextActionType === 'appointment' && visit.nextActionAt) {
+      const startsAt = visit.nextActionAt
+      const booked = Object.values(get().appointments).some(
+        (a) => a.propertyId === visit.propertyId && a.startsAt === startsAt,
+      )
+      if (!booked) {
+        await get().createAppointment({
+          propertyId: visit.propertyId,
+          startsAt,
+          durationMin: 45,
+          title: 'Appointment',
+          contactId: prop?.contacts.find((c) => c.isPrimary)?.id ?? prop?.contacts[0]?.id,
+        })
+      }
+    }
+
+    // A follow-up or a quote to send becomes a task so it shows up on Today.
+    // An appointment is booked above instead, so it is not also a to-do.
     let newTask: Task | undefined
-    if (visit.nextActionAt && visit.nextActionType && visit.nextActionType !== 'none') {
+    if (visit.nextActionAt && visit.nextActionType && visit.nextActionType !== 'none' && visit.nextActionType !== 'appointment') {
       newTask = {
         id: uid('t'),
         repId: visit.repId,
         propertyId: visit.propertyId,
         title:
-          visit.nextActionType === 'appointment'
-            ? `Appointment — ${prop?.address1 ?? 'property'}`
-            : visit.nextActionType === 'quote'
-              ? `Send quote — ${prop?.address1 ?? 'property'}`
-              : `Follow up — ${prop?.address1 ?? 'property'}`,
+          visit.nextActionType === 'quote'
+            ? `Send quote — ${prop?.address1 ?? 'property'}`
+            : `Follow up — ${prop?.address1 ?? 'property'}`,
         dueAt: visit.nextActionAt,
         done: false,
-        kind:
-          visit.nextActionType === 'quote'
-            ? 'quote'
-            : visit.nextActionType === 'appointment'
-              ? 'follow_up'
-              : 'follow_up',
+        kind: visit.nextActionType === 'quote' ? 'quote' : 'follow_up',
         pending: true,
       }
       await db.put('tasks', newTask)
@@ -1430,10 +1509,32 @@ export const useAppStore = create<AppState>((set, get) => ({
   async toggleTask(taskId) {
     const task = get().tasks[taskId]
     if (!task) return
+    const at = Date.now()
     const updated = { ...task, done: !task.done, pending: true }
     await db.put('tasks', updated)
     set((s) => ({ tasks: { ...s.tasks, [taskId]: updated } }))
-    await enqueue('task.complete', { id: taskId, done: updated.done })
+    // A Send-quote to-do ticked off is the record that a quote went out —
+    // the same line in the lead's history the server writes, one per task,
+    // so the phone reads the way the office does and unticking takes it back.
+    if (task.kind === 'quote' && task.propertyId) {
+      const eventId = `quote:${taskId}`
+      if (updated.done) {
+        const event: ActivityEvent = {
+          id: eventId,
+          propertyId: task.propertyId,
+          repId: get().user?.id ?? '',
+          type: 'quote',
+          summary: 'Quote sent',
+          at,
+        }
+        await db.put('activity', event)
+        set((s) => ({ activity: [event, ...s.activity.filter((e) => e.id !== eventId)] }))
+      } else {
+        await db.del('activity', eventId)
+        set((s) => ({ activity: s.activity.filter((e) => e.id !== eventId) }))
+      }
+    }
+    await enqueue('task.complete', { id: taskId, done: updated.done, at })
   },
 
   async createTask(input) {
@@ -1594,11 +1695,14 @@ function isRep(user: User | null): boolean {
  * server applies, so a house that gets onto a list here is a house the server
  * will accept.
  */
-function useScopedIds(state: Pick<AppState, 'properties' | 'leadLists' | 'user'>): string[] {
+function useScopedIds(
+  state: Pick<AppState, 'properties' | 'leadLists' | 'territories' | 'user'>,
+): string[] {
   const all = Object.values(state.properties)
   if (!isRep(state.user)) return all.map((p) => p.id)
   const via = leadIdsViaLists(state.user!, Object.values(state.leadLists))
-  return all.filter((p) => canSee(p, state.user, via)).map((p) => p.id)
+  const patches = territoryIdsFor(state.user!, Object.values(state.territories))
+  return all.filter((p) => canSee(p, state.user, via, patches)).map((p) => p.id)
 }
 
 /**
@@ -1610,13 +1714,15 @@ function useScopedIds(state: Pick<AppState, 'properties' | 'leadLists' | 'user'>
 export function useScopedProperties(): Property[] {
   const properties = useAppStore((s) => s.properties)
   const leadLists = useAppStore((s) => s.leadLists)
+  const territories = useAppStore((s) => s.territories)
   const user = useAppStore((s) => s.user)
   return useMemo(() => {
     const all = Object.values(properties)
     if (!isRep(user)) return all
     const via = leadIdsViaLists(user!, Object.values(leadLists))
-    return all.filter((p) => canSee(p, user, via))
-  }, [properties, leadLists, user])
+    const patches = territoryIdsFor(user!, Object.values(territories))
+    return all.filter((p) => canSee(p, user, via, patches))
+  }, [properties, leadLists, territories, user])
 }
 
 /**
@@ -1652,6 +1758,18 @@ export function useListsContaining(propertyId: string | undefined): LeadList[] {
     () => (propertyId ? listsContaining(propertyId, Object.values(leadLists)) : []),
     [leadLists, propertyId],
   )
+}
+
+/** When a quote last went out to this lead, from the ticked-off Send-quote to-do; undefined if none has. */
+export function useQuoteSentAt(propertyId: string | undefined): number | undefined {
+  return useAppStore((s) => {
+    if (!propertyId) return undefined
+    let latest: number | undefined
+    for (const e of s.activity) {
+      if (e.type === 'quote' && e.propertyId === propertyId && (latest === undefined || e.at > latest)) latest = e.at
+    }
+    return latest
+  })
 }
 
 export function useMyTasks(): Task[] {

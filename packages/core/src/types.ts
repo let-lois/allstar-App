@@ -320,7 +320,10 @@ export interface TeamMember {
 export interface Territory {
   id: string
   name: string
+  /** The first rep on the patch, for callers that read one. `repIds` is the list. */
   repId?: string
+  /** Everyone who walks this patch, oldest assignment first. */
+  repIds?: string[]
   /**
    * The outline a manager drew, if this territory was drawn rather than named by
    * an import.
@@ -390,7 +393,8 @@ export interface ActivityEvent {
   id: string
   propertyId?: string
   repId: string
-  type: 'visit' | 'note' | 'photo' | 'call' | 'sms' | 'appointment' | 'status'
+  /** `quote` is a Send-quote to-do ticked off: the record that a quote went out. */
+  type: 'visit' | 'note' | 'photo' | 'call' | 'sms' | 'appointment' | 'status' | 'quote'
   summary: string
   at: number
   outcome?: OutcomeCode

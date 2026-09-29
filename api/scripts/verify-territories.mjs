@@ -49,10 +49,12 @@ function fakeDb({ properties = [], reps = ['u_rep'], names = [] } = {}) {
   const log = []
   const updated = new Map()
   const inserted = []
+  const onPatch = []
   return {
     log,
     updated,
     inserted,
+    onPatch,
     db: {
       prepare(sql) {
         let args = []
@@ -74,11 +76,19 @@ function fakeDb({ properties = [], reps = ['u_rep'], names = [] } = {}) {
           async all() {
             log.push({ sql, args })
             if (/FROM properties/.test(sql)) return { results: properties }
+            // The team check for a list of reps: those that exist, as rows.
+            if (/FROM users/.test(sql)) {
+              return { results: args.slice(1).filter((id) => reps.includes(id)).map((id) => ({ id })) }
+            }
             return { results: [] }
           },
           async run() {
             log.push({ sql, args })
             if (/INSERT INTO territories/.test(sql)) inserted.push(args)
+            // args: territoryId, now, actorId, ...repIds
+            if (/INSERT OR IGNORE INTO territory_reps/.test(sql)) {
+              for (const id of args.slice(3)) onPatch.push({ territory: args[0], rep: id })
+            }
             if (/UPDATE properties/.test(sql)) {
               // args: territoryId, repId, now, clientId, ...ids
               for (const id of args.slice(4)) updated.set(id, { territory: args[0], rep: args[1] })
@@ -189,6 +199,43 @@ const square = [
 
   const stored = JSON.parse(f.inserted[0][4])
   ok(stored.length === 4, 'the outline is stored, so the shape can be shown again')
+}
+
+/* --- more than one rep: a shared patch ------------------------------------ */
+//
+// The territory holds any number of people. With two, every house inside is
+// visible to both (that is `territory_reps`), and nobody is handed the unclaimed
+// ones — a shared patch is worked door by door, and claiming them all for the
+// first name on the list would be a decision nobody made.
+{
+  const f = fakeDb({ reps: ['u_rep', 'u_rep2'], properties: [{ id: 'p_in', lat: 30.52, lng: -97.68 }] })
+  const res = await createTerritory({ DB: f.db }, ACTOR, {
+    name: 'Shared',
+    repIds: ['u_rep', 'u_rep2'],
+    boundary: square,
+  })
+  ok(res.territory?.repIds?.length === 2, `both reps come back on the territory (${res.territory?.repIds?.length})`)
+  ok(
+    f.onPatch.filter((r) => r.territory === res.territory.id).map((r) => r.rep).sort().join() === 'u_rep,u_rep2',
+    'and both are written to territory_reps',
+  )
+  ok(f.inserted[0][3] === 'u_rep', 'the first of them is mirrored into rep_id, for imports and older readers')
+  ok(res.assigned === 1 && f.updated.get('p_in')?.rep === null, 'the lead inside joins the patch but is handed to nobody — shared, not claimed')
+
+  const stranger = await createTerritory({ DB: fakeDb({ reps: ['u_rep'] }).db }, ACTOR, {
+    name: 'Mixed company',
+    repIds: ['u_rep', 'u_elsewhere'],
+    boundary: square,
+  })
+  ok(stranger.status === 400, 'one stranger in the list refuses the whole territory')
+
+  const folded = await createTerritory({ DB: fakeDb({ reps: ['u_rep'] }).db }, ACTOR, {
+    name: 'Old caller',
+    repId: 'u_rep',
+    repIds: ['u_rep'],
+    boundary: square,
+  })
+  ok(folded.territory?.repIds?.length === 1, 'repId and repIds naming the same person is one rep, not two')
 }
 
 /* --- concave: the case a bounding box gets wrong -------------------------- */

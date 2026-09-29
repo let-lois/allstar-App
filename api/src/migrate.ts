@@ -562,6 +562,31 @@ const MIGRATIONS: Migration[] = [
       },
     ],
   },
+  /*
+    Territories become many-to-many with reps.
+
+    Until now a territory had one `rep_id`, and assigning somebody else to the
+    patch replaced them — on the territory and on every lead in it. The join
+    table is the same shape as `lead_list_reps`. The backfill seeds one row
+    per existing `rep_id` so no assignment made before this ran is lost; it is
+    `INSERT OR IGNORE`, so re-running it changes nothing.
+  */
+  {
+    id: '024-territory-reps',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS territory_reps (
+         territory_id TEXT NOT NULL REFERENCES territories(id) ON DELETE CASCADE,
+         user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+         assigned_at  INTEGER NOT NULL,
+         assigned_by  TEXT REFERENCES users(id) ON DELETE SET NULL,
+         PRIMARY KEY (territory_id, user_id)
+       )`,
+      'CREATE INDEX IF NOT EXISTS territory_reps_by_user ON territory_reps(user_id)',
+      `INSERT OR IGNORE INTO territory_reps (territory_id, user_id, assigned_at, assigned_by)
+         SELECT id, rep_id, CAST(strftime('%s','now') AS INTEGER) * 1000, NULL
+           FROM territories WHERE rep_id IS NOT NULL`,
+    ],
+  },
 ]
 
 async function hasColumn(

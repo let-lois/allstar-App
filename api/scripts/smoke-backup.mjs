@@ -347,7 +347,7 @@ try {
     await fetch(invite.url, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ password }),
+      body: new URLSearchParams({ password, confirm: password }),
     })
     const rep = await (await call('/api/auth/login', {
       method: 'POST', body: JSON.stringify({ email, password }),

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Allstar field sales API — Cloudflare Workers + D1 + R2",
+  "description": "Allstar field sales API \u2014 Cloudflare Workers + D1 + R2",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -19,6 +19,7 @@
     "smoke:import": "node scripts/smoke-import.mjs",
     "verify:directions": "node scripts/verify-directions.mjs",
     "verify:territories": "node scripts/verify-territories.mjs",
+    "verify:territory-reps": "node scripts/verify-territory-reps.mjs",
     "verify:geocode": "node scripts/verify-geocode.mjs",
     "smoke:users": "node scripts/smoke-users.mjs",
     "smoke:migrate": "node scripts/smoke-migrate.mjs",
@@ -31,6 +32,7 @@
     "smoke:backup": "node scripts/smoke-backup.mjs",
     "smoke:deadkey": "node scripts/smoke-geocode-dead-key.mjs",
     "smoke:lists": "node scripts/smoke-lists.mjs",
+    "smoke:territory-reps": "node scripts/smoke-territory-reps.mjs",
     "smoke:onboarding-schema": "node scripts/smoke-onboarding-schema.mjs",
     "smoke:onboarding-flow": "node scripts/smoke-onboarding-flow.mjs",
     "smoke:mail": "node scripts/smoke-mail.mjs",
@@ -49,10 +51,17 @@
     "db:rebuild-closed": "node scripts/rebuild-closed-value.mjs",
     "smoke:daybreak": "node scripts/smoke-daybreak.mjs",
     "db:rebuild-stats": "node scripts/rebuild-daily-stats.mjs",
-    "smoke:tiles": "node scripts/smoke-tiles.mjs"
+    "smoke:tiles": "node scripts/smoke-tiles.mjs",
+    "addresses:build": "node scripts/addresses-build.mjs",
+    "verify:addresses": "node scripts/verify-addresses.mjs",
+    "smoke:territory-leads": "node scripts/smoke-territory-leads.mjs",
+    "smoke:lead-edit": "node scripts/smoke-lead-edit.mjs",
+    "smoke:quote-sent": "node scripts/smoke-quote-sent.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",
+    "hyparquet": "^1.31.2",
+    "hyparquet-compressors": "^1.1.2",
     "typescript": "^5.6.3",
     "wrangler": "^3.99.0"
   }

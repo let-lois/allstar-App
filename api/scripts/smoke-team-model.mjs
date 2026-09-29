@@ -75,7 +75,7 @@ const invite = await (await api('/api/invites', { method: 'POST', body: JSON.str
 await fetch(invite.url, {
   method: 'POST',
   headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams({ password: REP.password }),
+  body: new URLSearchParams({ password: REP.password, confirm: REP.password }),
 })
 ok(invite.emailed === false && !invite.mailError, 'with no mail secrets, an invitation is honestly not emailed and that is not an error')
 const rep = await (await login(REP.email, REP.password)).json()

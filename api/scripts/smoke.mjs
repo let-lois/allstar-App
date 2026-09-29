@@ -65,7 +65,7 @@ ok(!!invite.url, 'a rep can be invited for this run')
 await fetch(invite.url, {
   method: 'POST',
   headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams({ password: REP.password }),
+  body: new URLSearchParams({ password: REP.password, confirm: REP.password }),
 })
 
 /* --- auth ----------------------------------------------------------------- */

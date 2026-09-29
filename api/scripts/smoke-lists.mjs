@@ -121,7 +121,7 @@ async function mintRep(adminToken, name) {
   await fetch(invite.url, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ password }),
+    body: new URLSearchParams({ password, confirm: password }),
   })
   const session = await (await call('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })).json()
   return { id: session.user.id, token: session.token, name }

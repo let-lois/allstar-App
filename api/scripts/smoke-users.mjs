@@ -52,7 +52,7 @@ const invite = await (
 await fetch(invite.url, {
   method: 'POST',
   headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams({ password: REP.password }),
+  body: new URLSearchParams({ password: REP.password, confirm: REP.password }),
 })
 const repSession = await (await login(REP.email, REP.password)).json()
 const roster = await (await api('/api/users', {}, admin.token)).json()
@@ -65,7 +65,7 @@ const call = (path, opts = {}, token = admin.token) =>
 ok(
   (await call(`/api/users/${admin.user.id}/password`, {
     method: 'POST',
-    body: JSON.stringify({ password: 'a-rep-should-not-manage-admins' }),
+    body: JSON.stringify({ password: 'a-rep-should-not-manage-admins', confirm: 'a-rep-should-not-manage-admins' }),
   }, repSession.token)).status === 403,
   'a field rep cannot set anyone’s password',
 )
@@ -76,7 +76,7 @@ ok(
 ok(
   (await call('/api/users/u_from_another_company/password', {
     method: 'POST',
-    body: JSON.stringify({ password: 'not-my-tenant-at-all' }),
+    body: JSON.stringify({ password: 'not-my-tenant-at-all', confirm: 'not-my-tenant-at-all' }),
   })).status === 404,
   'a user in another tenant reads as not found, not as forbidden — existence is not leaked',
 )
@@ -85,7 +85,7 @@ ok(
 ok(
   (await call(`/api/users/${repId}/password`, {
     method: 'POST',
-    body: JSON.stringify({ password: 'short' }),
+    body: JSON.stringify({ password: 'short', confirm: 'short' }),
   })).status === 400,
   'a too-short password is refused',
 )
@@ -94,7 +94,7 @@ const NEW_PASSWORD = 'admin-chose-this-one'
 ok(
   (await call(`/api/users/${repId}/password`, {
     method: 'POST',
-    body: JSON.stringify({ password: NEW_PASSWORD }),
+    body: JSON.stringify({ password: NEW_PASSWORD, confirm: NEW_PASSWORD }),
   })).status === 200,
   'an admin can set a rep’s password',
 )
@@ -118,7 +118,7 @@ const CHOSEN = 'the-rep-chose-this-one'
 await fetch(linkRes.body.url, {
   method: 'POST',
   headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams({ password: CHOSEN }),
+  body: new URLSearchParams({ password: CHOSEN, confirm: CHOSEN }),
 })
 const chosen = await login(REP.email, CHOSEN)
 ok(chosen.ok, 'the rep sets their own password through the link')
@@ -169,7 +169,7 @@ const inv2 = await (
 await fetch(inv2.url, {
   method: 'POST',
   headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams({ password: second.password }),
+  body: new URLSearchParams({ password: second.password, confirm: second.password }),
 })
 const admin2 = await (await login(second.email, second.password)).json()
 const roster2 = await (await api('/api/users', {}, admin.token)).json()
@@ -273,7 +273,7 @@ ok(
   await fetch(inv.url, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ password: SELF.password }),
+    body: new URLSearchParams({ password: SELF.password, confirm: SELF.password }),
   })
   const me = await (await login(SELF.email, SELF.password)).json()
 
@@ -281,7 +281,7 @@ ok(
   ok(
     (await call(`/api/users/${me.user.id}/password`, {
       method: 'POST',
-      body: JSON.stringify({ password: CHANGED }),
+      body: JSON.stringify({ password: CHANGED, confirm: CHANGED }),
     }, me.token)).status === 200,
     'a rep can change their own password',
   )
@@ -303,7 +303,7 @@ ok(
   ok(
     (await call(`/api/users/${someoneElse}/password`, {
       method: 'POST',
-      body: JSON.stringify({ password: 'trying-to-take-over' }),
+      body: JSON.stringify({ password: 'trying-to-take-over', confirm: 'trying-to-take-over' }),
     }, me2.token)).status === 403,
     'but not anyone else’s — self-service is not a permission escalation',
   )
@@ -330,7 +330,7 @@ ok(
   await fetch(inv.url, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ password: TARGET.password }),
+    body: new URLSearchParams({ password: TARGET.password, confirm: TARGET.password }),
   })
 
   let blockedAt = null
@@ -375,7 +375,7 @@ ok(
   await fetch(inv.url, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ password: CLEAN.password }),
+    body: new URLSearchParams({ password: CLEAN.password, confirm: CLEAN.password }),
   })
 
   for (let i = 0; i < 5; i++) await login(CLEAN.email, 'nope')
@@ -400,7 +400,7 @@ ok(
   await fetch(inv.url, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ password: R.password }),
+    body: new URLSearchParams({ password: R.password, confirm: R.password }),
   })
   const theirs = await (await login(R.email, R.password)).json()
   const list = await (await api('/api/users', {}, admin.token)).json()
@@ -609,7 +609,7 @@ ok(
   await fetch(caInv.body.url, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ password: CA.password }),
+    body: new URLSearchParams({ password: CA.password, confirm: CA.password }),
   })
   const ca = await (await login(CA.email, CA.password)).json()
   ok(ca.user.role === 'client_admin', 'a client admin exists to test against')
@@ -637,7 +637,7 @@ ok(
   await fetch(saInv.body.url, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ password: SA.password }),
+    body: new URLSearchParams({ password: SA.password, confirm: SA.password }),
   })
   const sa = await (await login(SA.email, SA.password)).json()
   ok(sa.user.role === 'super_admin', 'the invited account really is a super admin')
@@ -647,7 +647,7 @@ ok(
   ok(
     (await call(`/api/users/${saId}/password`, {
       method: 'POST',
-      body: JSON.stringify({ password: 'taking-this-account-over' }),
+      body: JSON.stringify({ password: 'taking-this-account-over', confirm: 'taking-this-account-over' }),
     }, ca.token)).status === 403,
     'a client admin cannot reset a super admin’s password — that is a takeover, not administration',
   )
@@ -680,7 +680,7 @@ ok(
   await fetch(plainInv.body.url, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ password: PLAIN.password }),
+    body: new URLSearchParams({ password: PLAIN.password, confirm: PLAIN.password }),
   })
   const roster = await (await api('/api/users', {}, admin.token)).json()
   const plainId = roster.users.find((u) => u.email === PLAIN.email).id

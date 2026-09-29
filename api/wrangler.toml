@@ -47,6 +47,22 @@ bucket_name = "allstar-photos"
 binding = "BACKUPS"
 bucket_name = "allstar-backups"
 
+# The houses on the ground: Overture Maps address points, cut into map tiles by
+# `npm run addresses:build` and uploaded here. With it, drawing a territory
+# finds every address inside and makes each one a lead (docs/ADDRESSES.md).
+#
+# The bucket exists in the account this Worker deploys to (created
+# 2026-09-28, beside allstar-photos and allstar-backups). `wrangler deploy`
+# refuses a binding whose bucket does not exist, so this stays in step with
+# it: remove the bucket and this block must go too.
+#
+# A bound but empty bucket is safe: a tile nobody built reads as empty
+# ground, so a territory is created with no new leads until the tiles for
+# that area are uploaded (docs/ADDRESSES.md, step 3).
+[[r2_buckets]]
+binding = "ADDRESSES"
+bucket_name = "allstar-addresses"
+
 # ---------------------------------------------------------------------------
 # Scheduled work.
 #

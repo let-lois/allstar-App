@@ -1,6 +1,13 @@
 import type { Env, SessionUser } from './types'
 import { record } from './audit'
 import { canImport } from './import'
+import {
+  clearTerritoryReps,
+  removeTerritoryRep,
+  repsOf,
+  syncPrimaryRep,
+  writeTerritoryReps,
+} from './territory-reps'
 
 /**
  * Territory assignment.
@@ -17,6 +24,8 @@ import { canImport } from './import'
 
 export interface AssignResult {
   assigned: number
+  /** The reps on the territory after this call; absent for the unassigned bucket. */
+  repIds?: string[]
 }
 
 /**
@@ -76,67 +85,122 @@ export async function assignProperties(
   return { assigned }
 }
 
+/**
+ * Put a rep on a territory, take one off, or clear it.
+ *
+ * A territory holds any number of reps (`territory_reps`), and this never
+ * takes a house away from anybody by accident:
+ *
+ *   `add` (the default) puts `repId` on the patch alongside whoever is already
+ *   there. Leads inside that nobody is working are handed to them only when
+ *   they are now the patch's sole rep — the single-rep behaviour this call
+ *   always had. On a shared patch the houses stay unclaimed and every rep on
+ *   it can see them.
+ *
+ *   `remove` takes `repId` off the patch. Houses they were working keep their
+ *   `assigned_rep_id`: who walks a house and which patch it belongs to are two
+ *   facts, and the console has a per-lead control for the first.
+ *
+ *   `repId: null` clears the patch — every rep off it, every house in it back
+ *   to nobody. This is the "Unassigned" choice, and it is deliberate: it is the
+ *   one action here that does take houses away, and it says so.
+ *
+ * `territoryId: null` is the unassigned bucket — every lead with no territory —
+ * which has no reps to speak of, only houses, so there `repId` still means
+ * "hand all of these to this person".
+ */
 export async function assignTerritory(
   env: Env,
   actor: SessionUser,
-  input: { territoryId: string | null; repId: string | null },
+  input: { territoryId: string | null; repId: string | null; action?: 'add' | 'remove' | 'set' },
 ): Promise<AssignResult | { error: string; status: number }> {
   if (!canImport(actor)) return { error: 'Not permitted.', status: 403 }
 
-  // A rep from another tenant would silently hand this company's leads to a
-  // stranger. Every id crossing this boundary is checked against the tenant.
   if (input.repId) {
+    // Taking someone off a patch must work after they have left the team —
+    // a deactivated rep is exactly who an office wants off. Putting someone
+    // on still needs a current member.
     const rep = await env.DB.prepare(
-      'SELECT id FROM users WHERE id = ?1 AND client_id = ?2 AND active = 1',
+      `SELECT id FROM users WHERE id = ?1 AND client_id = ?2 ${input.action === 'remove' ? '' : 'AND active = 1'}`,
     )
       .bind(input.repId, actor.clientId)
       .first<{ id: string }>()
     if (!rep) return { error: 'That person is not on this team.', status: 400 }
   }
 
-  if (input.territoryId) {
-    const territory = await env.DB.prepare(
-      'SELECT id FROM territories WHERE id = ?1 AND client_id = ?2',
+  const now = Date.now()
+
+  /* --- the unassigned bucket: houses only ---------------------------------- */
+  if (!input.territoryId) {
+    // There is nobody to take off a bucket of houses; without this, a
+    // `remove` here would read as "hand every unassigned lead to this rep".
+    if (input.action === 'remove') return { error: 'The unassigned bucket has no reps to take off.', status: 400 }
+    const result = await env.DB.prepare(
+      `UPDATE properties SET assigned_rep_id = ?1, updated_at = ?2
+        WHERE client_id = ?3 AND territory_id IS NULL`,
     )
-      .bind(input.territoryId, actor.clientId)
-      .first<{ id: string }>()
-    if (!territory) return { error: 'No such territory.', status: 404 }
+      .bind(input.repId, now, actor.clientId)
+      .run()
+    const assigned = result.meta.changes ?? 0
+    await record(env, actor, {
+      action: 'territory.assigned',
+      targetType: 'territory',
+      targetLabel: 'Unassigned leads',
+      detail: { repId: input.repId, leads: assigned },
+    })
+    return { assigned }
   }
 
-  const now = Date.now()
-  const result = input.territoryId
-    ? await env.DB.prepare(
+  const territory = await env.DB.prepare(
+    'SELECT id FROM territories WHERE id = ?1 AND client_id = ?2',
+  )
+    .bind(input.territoryId, actor.clientId)
+    .first<{ id: string }>()
+  if (!territory) return { error: 'No such territory.', status: 404 }
+
+  let assigned = 0
+  /*
+    `set` is what a console built before territories held several reps means
+    by its one dropdown: "this person is the territory's rep". It becomes
+    the sole rep — the others come off the patch — and is handed the houses
+    nobody is working, never one somebody is. Consoles that know about
+    several reps always say `add` or `remove`.
+  */
+  const action = input.repId ? (input.action === 'remove' ? 'remove' : input.action === 'set' ? 'set' : 'add') : 'clear'
+
+  if (action === 'clear') {
+    await clearTerritoryReps(env, input.territoryId)
+    const result = await env.DB.prepare(
+      `UPDATE properties SET assigned_rep_id = NULL, updated_at = ?1
+        WHERE client_id = ?2 AND territory_id = ?3`,
+    )
+      .bind(now, actor.clientId, input.territoryId)
+      .run()
+    assigned = result.meta.changes ?? 0
+  } else if (action === 'remove') {
+    await removeTerritoryRep(env, input.territoryId, input.repId!)
+  } else {
+    if (action === 'set') await clearTerritoryReps(env, input.territoryId)
+    await writeTerritoryReps(env, actor, input.territoryId, [input.repId!], now)
+    const reps = await repsOf(env, input.territoryId)
+    if (reps.length === 1) {
+      const result = await env.DB.prepare(
         `UPDATE properties SET assigned_rep_id = ?1, updated_at = ?2
-          WHERE client_id = ?3 AND territory_id = ?4`,
+          WHERE client_id = ?3 AND territory_id = ?4 AND assigned_rep_id IS NULL`,
       )
         .bind(input.repId, now, actor.clientId, input.territoryId)
         .run()
-    : await env.DB.prepare(
-        `UPDATE properties SET assigned_rep_id = ?1, updated_at = ?2
-          WHERE client_id = ?3 AND territory_id IS NULL`,
-      )
-        .bind(input.repId, now, actor.clientId)
-        .run()
-
-  // Keep the territory's own owner in step, so the next import into it inherits
-  // the same rep rather than quietly reverting to whoever created it.
-  if (input.territoryId) {
-    await env.DB.prepare('UPDATE territories SET rep_id = ?1 WHERE id = ?2 AND client_id = ?3')
-      .bind(input.repId, input.territoryId, actor.clientId)
-      .run()
+      assigned = result.meta.changes ?? 0
+    }
   }
 
-  const assigned = result.meta.changes ?? 0
+  const repIds = await syncPrimaryRep(env, actor.clientId, input.territoryId)
 
-  // Who now owns which doors is the second question any commission dispute
-  // asks, right after who recorded the sale.
   await record(env, actor, {
-    action: 'territory.assigned',
+    action: action === 'remove' ? 'territory.unassigned' : 'territory.assigned',
     targetType: 'territory',
-    targetId: input.territoryId ?? undefined,
-    targetLabel: input.territoryId ? undefined : 'Unassigned leads',
-    detail: { repId: input.repId, leads: assigned },
+    targetId: input.territoryId,
+    detail: { repId: input.repId, leads: assigned, reps: repIds.length, action },
   })
-
-  return { assigned }
+  return { assigned, repIds }
 }

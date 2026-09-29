@@ -23,7 +23,7 @@ import { syncPropertyPhotos } from '../../lib/photos'
  * a compact list control above this) and what "Add note" should do.
  */
 
-export type LeadSection = 'notes' | 'lists' | 'photos' | 'visits' | 'activity' | 'details'
+export type LeadSection = 'appointments' | 'todo' | 'notes' | 'lists' | 'photos' | 'visits' | 'activity' | 'details'
 
 export function LeadSections({
   propertyId,
@@ -40,7 +40,24 @@ export function LeadSections({
   const allPhotos = useAppStore((s) => s.photos)
   const allVisits = useAppStore((s) => s.visits)
   const activity = useAppStore((s) => s.activity)
+  const allAppointments = useAppStore((s) => s.appointments)
+  const allTasks = useAppStore((s) => s.tasks)
+  // What is still owed on this door — a quote to send, a call to make. These
+  // lived only on Today, so a rep reading the lead could not tell a quote was
+  // waiting to go out; and the day it was ticked off is in Activity below.
+  const todo = useMemo(
+    () => Object.values(allTasks).filter((t) => t.propertyId === propertyId && !t.done).sort((a, b) => a.dueAt - b.dueAt),
+    [allTasks, propertyId],
+  )
   const tz = useAppStore((s) => s.timezone)
+  // Coming ones first, soonest at the top; then the ones that have happened.
+  const appointments = useMemo(() => {
+    const now = Date.now()
+    const mine = Object.values(allAppointments).filter((a) => a.propertyId === propertyId)
+    const ahead = mine.filter((a) => a.startsAt >= now).sort((a, b) => a.startsAt - b.startsAt)
+    const past = mine.filter((a) => a.startsAt < now).sort((a, b) => b.startsAt - a.startsAt)
+    return [...ahead, ...past]
+  }, [allAppointments, propertyId])
   const onLists = useListsContaining(propertyId)
 
   const notes = useMemo(
@@ -80,6 +97,57 @@ export function LeadSections({
 
   return (
     <div className="panel" data-testid="lead-sections">
+      {show('appointments') && appointments.length > 0 && (
+        <Collapsible flat title="Appointments" count={appointments.length} defaultOpen>
+          <ul className="space-y-3" data-testid="lead-appointments">
+            {appointments.map((a) => {
+              const past = a.startsAt < Date.now()
+              return (
+                <li key={a.id} className="flex items-start gap-3">
+                  <span
+                    className={`nums mt-0.5 w-[58px] shrink-0 rounded-field px-1 py-1.5 text-center text-[12px] font-semibold leading-tight ${
+                      past ? 'bg-surface-field text-ink-mute' : 'bg-info-bg text-info'
+                    }`}
+                  >
+                    {dayLabel(dayKeyIn(a.startsAt, tz), { month: 'short', day: 'numeric' })}
+                    <span className="block">{time(a.startsAt)}</span>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[14.5px] font-medium">{a.title}</span>
+                    <span className="block text-[12.5px] text-ink-mute">
+                      {relative(a.startsAt)}
+                      {a.durationMin ? ` · ${a.durationMin} min` : ''}
+                    </span>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </Collapsible>
+      )}
+
+      {show('todo') && todo.length > 0 && (
+        <Collapsible flat title="To do" count={todo.length} defaultOpen>
+          <ul className="space-y-3" data-testid="lead-todo">
+            {todo.map((t) => {
+              const overdue = t.dueAt < Date.now()
+              return (
+                <li key={t.id} className="flex items-start gap-3">
+                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-ink/15" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[14.5px] text-ink-soft">{t.title}</span>
+                    <span className={`mt-0.5 block text-[12.5px] ${overdue ? 'font-semibold text-warn' : 'text-ink-mute'}`}>
+                      {overdue ? 'Overdue · ' : ''}
+                      {relative(t.dueAt)}
+                    </span>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </Collapsible>
+      )}
+
       {show('notes') && (
         <Collapsible flat title="Notes" count={notes.length} defaultOpen={notes.length > 0}>
           {notes.length === 0 ? (

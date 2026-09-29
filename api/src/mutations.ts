@@ -3,7 +3,15 @@ import { erasedAmong } from './erase'
 import { propertyIdOf } from './mutation-target'
 import { queueForCrm } from './integrations'
 import { noteIfStale, snapshotUpdatedAt } from './stale'
-import { createList, setReps, updateList, updateMembers } from './lists'
+import { createList, repScopeSql, setReps, updateList, updateMembers } from './lists'
+import { canImport } from './import'
+
+/** The statuses a person may set by hand; the same list the office's bulk change allows. */
+const SETTABLE_STATUSES = new Set(['new', 'contacted', 'follow_up', 'working', 'appointment', 'quoted', 'won', 'lost', 'dnc'])
+const STATUS_WORDS: Record<string, string> = {
+  new: 'New', contacted: 'Contacted', follow_up: 'Follow-up', working: 'Working', appointment: 'Appointment',
+  quoted: 'Quoted', won: 'Won', lost: 'Lost', dnc: 'Do Not Contact',
+}
 import type { Env, Mutation, MutationResult, SessionUser } from './types'
 
 /**
@@ -378,6 +386,10 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
     case 'task.create': {
       const id = str(p.id)
       if (!id) throw new Error('task.create: missing id')
+      // A to-do may point at a lead, and only at one of this company's: the
+      // lead's history is written from it when a quote to-do is ticked off.
+      const taskProperty = str(p.propertyId)
+      if (taskProperty) await assertPropertyInTenant(env, user, taskProperty)
       await env.DB.prepare(
         `INSERT OR REPLACE INTO tasks
            (id, client_id, rep_id, property_id, title, due_at, done, kind)
@@ -400,11 +412,48 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
     case 'task.complete': {
       const id = str(p.id)
       if (!id) throw new Error('task.complete: missing id')
+      /*
+        A Send-quote to-do ticked off is the only record that a quote went
+        out. It used to vanish from Today and leave nothing behind, so nobody
+        could tell a quoted lead from one still waiting on its quote. Now it
+        is a line in the lead's history, at the time the rep ticked it (sent
+        by the phone, so a day offline keeps its real time). One row per task,
+        so a retried write is the same row, and unticking takes it back.
+
+        Writing a lead's history is editing the lead: the same rule as a
+        status set by hand, so a rep cannot stamp "Quote sent" on a door they
+        cannot see — checked before anything is written, so a refused write
+        changes nothing, not even the tick.
+      */
+      const task = await env.DB.prepare('SELECT property_id, kind FROM tasks WHERE id = ?1 AND client_id = ?2')
+        .bind(id, user.clientId)
+        .first<{ property_id: string | null; kind: string }>()
+      const stamps = task?.kind === 'quote' && !!task.property_id
+      if (stamps) await assertMayEditProperty(env, user, task!.property_id!)
       await env.DB.prepare(
         'UPDATE tasks SET done = ?2 WHERE id = ?1 AND client_id = ?3',
       )
         .bind(id, p.done ? 1 : 0, user.clientId)
         .run()
+      if (stamps) {
+        const eventId = `quote:${id}`
+        if (p.done) {
+          // One row per to-do, so a retried tick is the same line. The
+          // conflict clause is tenant-guarded: task ids are chosen by phones,
+          // and a colliding id must never overwrite another company's row.
+          await env.DB.prepare(
+            `INSERT INTO activity
+               (id, client_id, property_id, rep_id, type, summary, at)
+             VALUES (?1,?2,?3,?4,'quote','Quote sent',?5)
+             ON CONFLICT(id) DO UPDATE SET at = excluded.at, rep_id = excluded.rep_id
+               WHERE activity.client_id = excluded.client_id`,
+          )
+            .bind(eventId, user.clientId, task!.property_id, user.id, num(p.at) ?? Date.now())
+            .run()
+        } else {
+          await env.DB.prepare('DELETE FROM activity WHERE id = ?1 AND client_id = ?2').bind(eventId, user.clientId).run()
+        }
+      }
       return
     }
 
@@ -602,13 +651,54 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
         await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
         return
       }
+      /*
+        A status set by hand, from the phone or the console.
+
+        A rep who marked the wrong door Not interested, or Lost, fixes it here
+        without inventing a visit that never happened. Three rules, and an
+        activity row so a manager can see the correction for what it is:
+
+        - only a lead they may see (`assertMayEditProperty`) — this branch used
+          to check the tenant alone, so a rep's session could set any status
+          on any lead in the company;
+        - only a real status;
+        - a Do Not Contact stays one unless the office lifts it. A homeowner
+          who asked not to be knocked is protected from an accidental edit,
+          which is the same guard the office's bulk change carries.
+      */
+      const status = str(p.status) ?? ''
+      if (!SETTABLE_STATUSES.has(status)) throw new Error('property.status: not a lead status')
+      await assertMayEditProperty(env, user, id)
+      const before = await env.DB.prepare(
+        'SELECT status FROM properties WHERE id = ?1 AND client_id = ?2',
+      )
+        .bind(id, user.clientId)
+        .first<{ status: string }>()
+      if (!before) throw new Error('property not found in this account')
+      if (before.status === 'dnc' && status !== 'dnc' && !canImport(user)) {
+        throw new Error('This lead is marked Do Not Contact. Ask the office to lift that.')
+      }
+      if (before.status === status) return
+      const at = Date.now()
       await env.DB.prepare(
         'UPDATE properties SET status = ?2, updated_at = ?3 WHERE id = ?1 AND client_id = ?4',
       )
-        .bind(id, str(p.status) ?? 'new', Date.now(), user.clientId)
+        .bind(id, status, at, user.clientId)
         .run()
-      // A status changed from the console reaches the CRM the same way a rep's
-      // outcome does — including a manual Do Not Contact.
+      // OR IGNORE, not OR REPLACE: the row's id is the mutation id the phone
+      // chose, and `activity.id` is a global key. A replace would let a
+      // colliding id delete whatever row already held it — another tenant's
+      // visit included. A retry of this mutation never reaches here (the
+      // ledger above answers it), so nothing legitimate is ever ignored.
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO activity
+           (id, client_id, property_id, rep_id, type, summary, at)
+         VALUES (?1,?2,?3,?4,'status',?5,?6)`,
+      )
+        .bind(m.id, user.clientId, id, user.id, `Status set to ${STATUS_WORDS[status] ?? status} (was ${STATUS_WORDS[before.status] ?? before.status})`, at)
+        .run()
+      // A status changed by hand reaches the CRM the same way a rep's outcome
+      // does — including a manual Do Not Contact.
       await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
       return
     }
@@ -616,26 +706,35 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
     /*
       The details a rep learns at the door, after the lead exists.
 
-      Address as read off the house, the homeowner's name, a number, an email —
-      any of them may be wrong or missing when the lead is made and right five
-      minutes later. Reps may only edit what they can see: their own leads, or
-      a house on a list handed to them. The office may edit anything in the
-      tenant. Status is deliberately not here — it follows from a visit.
+      Address as read off the house, the homeowner's name, a number, an email,
+      the lead's own tags — any of them may be wrong or missing when the lead
+      is made and right five minutes later. Reps may only edit what they can
+      see: their own leads, a house on a list handed to them, a territory they
+      are on. The office may edit anything in the tenant. Status is not here;
+      it has its own mutation above, with its own rules.
     */
     case 'property.update': {
       const id = str(p.id)
       if (!id) throw new Error('property.update: missing id')
       await assertMayEditProperty(env, user, id)
+      // Tags the rep put on the lead itself — a bounded list of short words.
+      // Absent means untouched; an empty list clears them.
+      const tags = Array.isArray(p.tags)
+        ? JSON.stringify(
+            [...new Set(p.tags.filter((t): t is string => typeof t === 'string').map((t) => t.trim().slice(0, 40)).filter(Boolean))].slice(0, 12),
+          )
+        : null
       await env.DB.prepare(
         `UPDATE properties
             SET address1 = COALESCE(?2, address1),
                 city = COALESCE(?3, city),
                 state = COALESCE(?4, state),
                 zip = COALESCE(?5, zip),
+                tags = COALESCE(?8, tags),
                 updated_at = ?6
           WHERE id = ?1 AND client_id = ?7`,
       )
-        .bind(id, str(p.address1)?.trim() || null, str(p.city), str(p.state), str(p.zip), Date.now(), user.clientId)
+        .bind(id, str(p.address1)?.trim() || null, str(p.city), str(p.state), str(p.zip), Date.now(), user.clientId, tags)
         .run()
       await upsertContacts(env, id, p.contacts)
       await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
@@ -743,14 +842,11 @@ async function upsertContacts(env: Env, propertyId: string, raw: unknown): Promi
 async function assertMayEditProperty(env: Env, user: SessionUser, propertyId: string): Promise<void> {
   await assertPropertyInTenant(env, user, propertyId)
   if (user.role !== 'field_rep') return
+  // The same predicate bootstrap uses, so what a rep may edit is exactly
+  // what their phone shows — one definition, not two that can drift.
   const row = await env.DB.prepare(
     `SELECT 1 AS ok FROM properties p
-      WHERE p.id = ?1 AND p.client_id = ?2
-        AND (p.assigned_rep_id = ?3
-             OR p.id IN (SELECT m.property_id FROM lead_list_members m
-                           JOIN lead_list_reps r ON r.list_id = m.list_id
-                           JOIN lead_lists l ON l.id = m.list_id
-                          WHERE r.user_id = ?3 AND l.archived = 0))`,
+      WHERE p.id = ?1 AND p.client_id = ?2 AND ${repScopeSql('p', '?3')}`,
   )
     .bind(propertyId, user.clientId, user.id)
     .first<{ ok: number }>()

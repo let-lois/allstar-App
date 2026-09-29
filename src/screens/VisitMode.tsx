@@ -115,14 +115,23 @@ export function VisitMode() {
     }
   }
 
+  // Held while the visit is being saved, so a second tap cannot start a
+  // second save — the store guards it too; this keeps the button honest.
+  const [finishing, setFinishing] = useState(false)
   const finish = async () => {
+    if (finishing) return
+    setFinishing(true)
     haptic('confirm')
-    if (noteBody.trim() || noteTags.length) {
-      await addNote(property.id, noteBody.trim(), noteTags, visit.id)
+    try {
+      if (noteBody.trim() || noteTags.length) {
+        await addNote(property.id, noteBody.trim(), noteTags, visit.id)
+      }
+      await setNextAction(visit.id, nextType, nextType === 'none' ? undefined : nextAt)
+      await completeVisit(visit.id)
+      setStep('done')
+    } finally {
+      setFinishing(false)
     }
-    await setNextAction(visit.id, nextType, nextType === 'none' ? undefined : nextAt)
-    await completeVisit(visit.id)
-    setStep('done')
   }
 
   const cancel = async () => {
@@ -463,9 +472,9 @@ export function VisitMode() {
                 full
                 variant="success"
                 onClick={() => void finish()}
-                disabled={nextType !== 'none' && !nextAt}
+                disabled={finishing || (nextType !== 'none' && !nextAt)}
               >
-                Complete visit
+                {finishing ? 'Saving…' : 'Complete visit'}
               </Button>
             )}
           </div>

@@ -53,7 +53,7 @@ const invite = await (
 await fetch(invite.url, {
   method: 'POST',
   headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams({ password: REP.password }),
+  body: new URLSearchParams({ password: REP.password, confirm: REP.password }),
 })
 const rep = await (
   await api('/api/auth/login', { method: 'POST', body: JSON.stringify(REP) })
@@ -301,12 +301,23 @@ const assignSome = (body, token = admin.token) =>
 const moved = await assignSome({ propertyIds: pick, repId: null })
 ok(moved.body.assigned === 2, `named leads can be unassigned (${moved.body.assigned})`)
 const afterMove = await (await api('/api/bootstrap', {}, rep.token)).json()
+const onStreet = afterMove.properties.filter((p) => p.address1.includes(street))
+// The rep is still on the territory, and every rep on a territory sees every
+// lead in it: the two are unclaimed now, not gone from their phone.
 ok(
-  afterMove.properties.filter((p) => p.address1.includes(street)).length === 1,
+  onStreet.length === 3 && onStreet.filter((p) => !p.assignedRepId).length === 2,
+  `a rep on the territory still sees its leads, two of them now unclaimed (${onStreet.length})`,
+)
+// Taken off the territory, what they keep is exactly what is assigned to them.
+ok((await assign({ territoryId: first.territoryId, repId, action: 'remove' })).status === 200, 'the rep is taken off the territory')
+const offPatch = await (await api('/api/bootstrap', {}, rep.token)).json()
+ok(
+  offPatch.properties.filter((p) => p.address1.includes(street)).length === 1,
   'the rep keeps only the lead that was left with them',
 )
 
 ok((await assignSome({ propertyIds: pick, repId })).body.assigned === 2, 'and can be handed back')
+ok((await assign({ territoryId: first.territoryId, repId, action: 'add' })).status === 200, 'and put back on the territory')
 
 /* --- and the boundaries ---------------------------------------------------- */
 ok(

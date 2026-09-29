@@ -188,7 +188,7 @@ try {
   ok(typeof after?.resentAt === 'number' && after.resentAt >= rep.invitedAt, 'and it now carries when they were chased', new Date(after?.resentAt ?? 0).toISOString())
 
   /* ===== 3. an already-member invite sends nothing ============================ */
-  await form(r.body.url, { password: 'marcus-chose-this-12' })
+  await form(r.body.url, { password: 'marcus-chose-this-12', confirm: 'marcus-chose-this-12' })
   r = await j(await call('/api/invites', { method: 'POST', body: JSON.stringify({ email: REP, role: 'field_rep' }) }, A))
   ok(r.status === 200 && r.body.alreadyMember === true, 'inviting a working account reports already a member')
   ok(received.length === 2, 'and emails nobody', `${received.length} requests`)

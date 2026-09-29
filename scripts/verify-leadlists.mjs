@@ -1,4 +1,4 @@
-import { canSee, leadIdsViaLists, listsContaining, listsFor, tallyStatuses, withMembers } from '../src/lib/leadLists.ts'
+import { canSee, leadIdsViaLists, listsContaining, listsFor, tallyStatuses, territoryIdsFor, withMembers } from '../src/lib/leadLists.ts'
 
 /**
  * Who can see what, on the phone — the same answer the server gives.
@@ -42,6 +42,20 @@ const nobodys = { id: 'p_nobody', assignedRepId: undefined }
   const handed = leadIdsViaLists(rep, [list({ leadIds: ['p_theirs', 'p_nobody'], repIds: ['u_rep'] })])
   ok(canSee(theirs, rep, handed), 'a house on a list handed to them becomes visible, whoever it is assigned to')
   ok(canSee(nobodys, rep, handed), 'so does one assigned to nobody')
+
+  // The third way in: a territory they are on. Shared with another rep, and
+  // the house assigned to that other rep is still visible to this one.
+  const inPatch = { id: 'p_patch', assignedRepId: 'u_other', territoryId: 't_shared' }
+  const elsewhere = { id: 'p_elsewhere', assignedRepId: 'u_other', territoryId: 't_not_mine' }
+  const patches = territoryIdsFor(rep, [
+    { id: 't_shared', repIds: ['u_other', 'u_rep'] },
+    { id: 't_not_mine', repIds: ['u_other'] },
+    { id: 't_legacy' },
+  ])
+  ok(patches.size === 1 && patches.has('t_shared'), 'a rep is on the territories that list them, and no other')
+  ok(canSee(inPatch, rep, none, patches), 'a house in a territory they share is visible, whoever is working it')
+  ok(!canSee(elsewhere, rep, none, patches), 'a house in somebody else’s territory is not')
+  ok(!canSee(inPatch, rep, none), 'and with no territories to hand the old two-way answer stands')
 
   const archived = leadIdsViaLists(rep, [list({ leadIds: ['p_theirs'], repIds: ['u_rep'], archived: true })])
   ok(!canSee(theirs, rep, archived), 'an archived list confers nothing — the house leaves the phone')

@@ -34,7 +34,7 @@ const GROUPS = [
     label: 'People',
     actions: ['user.invited', 'user.deactivated', 'user.reactivated', 'user.deleted'],
   },
-  { key: 'leads', label: 'Leads', actions: ['territory.assigned', 'leads.imported', 'leads.exported'] },
+  { key: 'leads', label: 'Leads', actions: ['territory.assigned', 'territory.unassigned', 'territory.generated', 'leads.imported', 'leads.exported'] },
   {
     key: 'connections',
     label: 'Connections',
@@ -58,6 +58,8 @@ const WEIGHT: Record<string, 'high' | 'medium' | 'low'> = {
   'user.invited': 'low',
   'user.reactivated': 'low',
   'territory.assigned': 'low',
+  'territory.unassigned': 'low',
+  'territory.generated': 'low',
   'leads.imported': 'low',
   'leads.exported': 'medium',
   // A geocoding key is a customer's own billable credential, and switching
@@ -234,6 +236,23 @@ function describe(e: AuditRowDTO): React.ReactNode {
         <>
           {who} {d.repId ? 'assigned' : 'unassigned'} {String(d.leads ?? 0)} lead
           {d.leads === 1 ? '' : 's'} in {target}
+          {typeof d.reps === 'number' ? ` (${d.reps} rep${d.reps === 1 ? '' : 's'} on it)` : ''}
+        </>
+      )
+    case 'territory.generated':
+      return (
+        <>
+          {who} looked up the houses in {target}: {String(d.found ?? 0)} found,{' '}
+          {String(d.created ?? 0)} new lead{d.created === 1 ? '' : 's'}
+          {d.existed ? `, ${String(d.existed)} already there` : ''}
+          {d.skipped ? `, ${String(d.skipped)} past the limit` : ''}
+        </>
+      )
+    case 'territory.unassigned':
+      return (
+        <>
+          {who} took a rep off {target}
+          {typeof d.reps === 'number' ? ` (${d.reps} rep${d.reps === 1 ? '' : 's'} left on it)` : ''}
         </>
       )
     case 'geocoder.connected':

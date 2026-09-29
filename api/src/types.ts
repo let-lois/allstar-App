@@ -18,6 +18,13 @@ export interface Env {
    */
   BACKUPS?: R2Bucket
   /**
+   * The houses on the ground, as map tiles built from Overture Maps' open
+   * address data by `scripts/addresses-build.mjs`. Optional like the other
+   * buckets: absent, drawing a territory claims the leads that already exist
+   * and says the look-up is not set up. See docs/ADDRESSES.md.
+   */
+  ADDRESSES?: R2Bucket
+  /**
    * Encrypts those backups. Optional, and its absence is a refusal rather than
    * a fallback — the Worker will not write a dump in the clear.
    *

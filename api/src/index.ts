@@ -29,6 +29,7 @@ import { findProvider } from './geocode-providers'
 import { MAX_IMPORT_ROWS, canImport, importProperties, propertyIdFor, type ImportInput, type ImportRow } from './import'
 import { assignProperties, assignTerritory } from './assign'
 import { createTerritory, deleteTerritory, renameTerritory } from './territories'
+import { generateLeadsForTerritory } from './addresses'
 import { streetViewAt, useStreetViewBase } from './streetview'
 import { parseTilePath, tileFor } from './tiles'
 import { createList, deleteList, listsFor, setReps, updateList, updateMembers } from './lists'
@@ -639,6 +640,10 @@ export default {
               // the phone on one server-side key; absent means both draw the
               // app's own basemap. A name for the fact, never the key.
               tiles: !!env.MAPTILER_API_KEY,
+              // Present means drawing a territory can look up the houses inside
+              // it (Overture address tiles in R2); absent means it claims only
+              // the leads that already exist. See docs/ADDRESSES.md.
+              addresses: !!env.ADDRESSES,
               // Absent means connecting a CRM is refused rather than storing a
               // customer's token in plaintext — a deliberate refusal, but one
               // that is otherwise indistinguishable from a broken integration.
@@ -1785,6 +1790,10 @@ export default {
         const result = await assignTerritory(env, user, {
           territoryId: typeof body.territoryId === 'string' ? body.territoryId : null,
           repId: typeof body.repId === 'string' && body.repId ? body.repId : null,
+          // `remove` takes one rep off a patch, `add` puts one on beside the
+          // others. A body with neither is an older console's single dropdown,
+          // whose choice means "this is the territory's rep" — see assign.ts.
+          action: body.action === 'remove' ? 'remove' : body.action === 'add' ? 'add' : 'set',
         })
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 200, cors)
@@ -1798,7 +1807,9 @@ export default {
         const result = await createTerritory(env, user, {
           name: body.name,
           repId: body.repId,
+          repIds: body.repIds,
           boundary: body.boundary,
+          generate: body.generate === true,
         })
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 201, cors)
@@ -1810,6 +1821,20 @@ export default {
         that route is a POST and these are not, but relying on the method to
         keep them apart is the kind of thing that stops being true later.
       */
+      /*
+        The houses inside one territory, made into leads. Its own route rather
+        than a flag on rename, because it writes rows: an operator presses a
+        button that says "Find addresses", and the answer counts what it did.
+      */
+      {
+        const m = /^\/api\/territories\/([A-Za-z0-9_-]{1,40})\/leads$/.exec(path)
+        if (m && req.method === 'POST') {
+          const result = await generateLeadsForTerritory(env, user, m[1]!)
+          if ('error' in result) return json({ error: result.error, code: result.code }, result.status, cors)
+          return json(result, 200, cors)
+        }
+      }
+
       {
         const m = /^\/api\/territories\/([A-Za-z0-9_-]{1,40})$/.exec(path)
         if (m) {

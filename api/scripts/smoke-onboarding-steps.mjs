@@ -97,7 +97,7 @@ try {
   r = await j(await call('/api/invites', { method: 'POST', body: JSON.stringify({ email: REP, role: 'field_rep', firstName: 'Jordan', jobTitle: 'Sales Representative' }) }, A))
   const team = await (await call('/api/teams', { method: 'POST', body: JSON.stringify({ name: 'Austin' }) }, A)).json()
   await call(`/api/users/${r.body.userId}/team`, { method: 'POST', body: JSON.stringify({ teamId: team.id }) }, A)
-  await form(r.body.url, { password: 'jordans-password-1234' })
+  await form(r.body.url, { password: 'jordans-password-1234', confirm: 'jordans-password-1234' })
   const rep = await (await login(REP, 'jordans-password-1234')).json()
   const R = rep.token
   const repId = rep.user.id
@@ -135,7 +135,7 @@ try {
   {
     const NONAME = `noname-${Date.now()}@example.com`
     const inv = await (await call('/api/invites', { method: 'POST', body: JSON.stringify({ email: NONAME, role: 'field_rep' }) }, A)).json()
-    await form(inv.url, { password: 'noname-password-1234' })
+    await form(inv.url, { password: 'noname-password-1234', confirm: 'noname-password-1234' })
     const n = await (await login(NONAME, 'noname-password-1234')).json()
     r = await j(await call('/api/me/badge', { method: 'POST' }, n.token))
     ok(r.status === 409 && r.body.missing?.includes('firstName'), 'minting a badge with no name is refused, naming the fields', `${r.status} ${r.body.error}`)
