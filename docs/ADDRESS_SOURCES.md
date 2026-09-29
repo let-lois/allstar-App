@@ -103,6 +103,8 @@ Census TIGER range of the street each such roof faces (≤ 80 m)                
       ↓
 Only roofs with no numbered street nearby, only if a key is set: Geocodio                 → GEOCODED
       ↓
+A blank town filled from the ZIP (GeoNames postal codes, meta/zip-city.json)
+      ↓
 Normalise + deduplicate (import key; same number on the same street within 12 m;
 never merge units; erased homeowners stay erased)
       ↓
@@ -172,12 +174,27 @@ measured once TIGER is loaded; it is expected to be small.
 | Geocodio fallback (optional) | $0 under 2,500 look-ups a day; $1.00 per 1,000 beyond |
 | **Expected monthly total** | **under $1 plus the existing Workers plan** |
 
+## Towns for estimated addresses
+
+Census ranges carry the street, the side, the ZIP and the state, not the town.
+The Worker fills a blank town from a ZIP → postal-town table built from the
+[GeoNames](https://www.geonames.org/) US postal-code list, **licensed CC BY
+4.0** (attribution: "Postal code data © GeoNames, CC BY 4.0"). 41,488 ZIPs,
+about 800 KB, at `meta/zip-city.json` in the address bucket:
+
+    npm run zip-cities:build -- --upload --account <id>
+
+The first place GeoNames lists for a ZIP is used (29611 → Greenville,
+29673 → Piedmont). A ZIP the table does not know keeps a blank town.
+
 ## To finish
 
-1. Allow `www2.census.gov` in the environment's network settings (or run the
-   loader on a machine that can reach it), then:
-   `npm run national:build -- --theme tiger --upload --account <id> --clean`
+1. Census TIGER ranges: loaded nationally on 2026-09-30 (all 3,227 county
+   files) with `npm run national:build -- --theme tiger --upload --account <id>`.
+   The Census firewall refuses bursts; the loader backs off, retries a refused
+   file under `?try=N`, and lists anything still refused in `read.skipped`.
 2. Re-measure coverage in the gap areas and record the share still needing a
-   fallback.
+   fallback. Dry run on production data (2026-09-30): Powdersville SC 239 of
+   313 home rooftops named, Detroit 665 of 666, Philadelphia 2,183 of 2,222.
 3. Post-launch: county address points for Philadelphia/Detroit-type gaps,
    parcel land-use for a residential flag.

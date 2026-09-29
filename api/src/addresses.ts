@@ -6,6 +6,7 @@ import { estimate, nudge, rangesIn, type Estimate } from './ranges'
 import { Near, reverseGeocode, rooftopsInside, type Rooftop } from './rooftops'
 import { repsOf } from './territory-reps'
 import type { Env, SessionUser } from './types'
+import { withTown, zipCities } from './zip-city'
 
 /**
  * The houses inside a territory, and making them leads.
@@ -406,7 +407,9 @@ export async function generateLeadsForTerritory(
   const named = await reverseGeocode(env, toLookUp)
   const geocoded: Lead[] = named.addresses.map((a) => ({ ...a, confidence: 'GEOCODED', residential: roofIndex.nearest(a, ON_ROOF_METRES)?.kind === 'r' ? 'RESIDENTIAL' : 'UNKNOWN' }))
 
-  const sources: Lead[] = [...homes, ...estimated, ...geocoded]
+  // A town for every lead that arrived without one — the Census estimates, always.
+  const towns = estimated.length || homes.some((h) => !h.city) ? await zipCities(env.ADDRESSES) : null
+  const sources: Lead[] = [...homes, ...estimated, ...geocoded].map((a) => withTown(a, towns))
   const found = sources.length
 
   /*
