@@ -527,7 +527,7 @@ export function AdminTerritories() {
                     nav(`/admin/leads?territory=${selected === UNASSIGNED_TERRITORY ? 'none' : encodeURIComponent(selected)}`)
                   }}
                   data-testid="territory-view-list"
-                  className="focusable text-xs font-semibold text-accent"
+                  className="focusable -my-3 inline-flex min-h-tap items-center px-2 text-xs font-semibold text-accent"
                 >
                   View as list
                 </a>
