@@ -261,7 +261,8 @@ try {
     ok(r.status === 200, 'an admin sets a password for someone who never opened their link', `${r.status}`)
     const live = await page(quinnLink)
     ok(/already set up|already has a password/i.test(live) && !/name="password"/.test(live), 'the still-live invitation link now says they are already set up, with no password form')
-    const forged = await form(quinnLink, { password: 'from-a-forwarded-email' })
+    // Typed twice, as the page asks: a real attempt, refused for the right reason.
+    const forged = await form(quinnLink, { password: 'from-a-forwarded-email', confirm: 'from-a-forwarded-email' })
     ok(!/You're in|You&#39;re in/.test(await forged.text()), 'posting a password to it is refused')
     ok((await login(FOUR, 'set-by-the-admin-123')).ok && !(await login(FOUR, 'from-a-forwarded-email')).ok, 'and the password the admin set is the one that works — the link could not replace it')
     ok(/This link has expired/.test(await page(quinnLink)), 'the refusal spent the token, so it cannot be tried again')
@@ -306,8 +307,10 @@ try {
   // broken the thing that is meant to: a reset link, for exactly that person.
   r = await j(await call(`/api/users/${(await rowFor(A, ONE)).id}/reset-link`, { method: 'POST' }, A))
   ok(r.status === 200, 'an admin makes a reset link for someone with a password')
-  ok(/Set your password|Welcome/.test(await page(r.body.url)), 'which opens a password form — it is a reset, not an invitation')
-  ok(/You're in|You&#39;re in/.test(await (await form(r.body.url, { password: 'sams-new-password-456', confirm: 'sams-new-password-456' })).text()), 'and sets the new password')
+  // Worded as a reset since forgot-password shipped: "Reset your password",
+  // then "Password changed" — not the invitation's "Welcome" / "You're in".
+  ok(/Reset your password/.test(await page(r.body.url)), 'which opens a password form — it is a reset, not an invitation')
+  ok(/Password changed/.test(await (await form(r.body.url, { password: 'sams-new-password-456', confirm: 'sams-new-password-456' })).text()), 'and sets the new password')
   ok((await login(ONE, 'sams-new-password-456')).ok && !(await login(ONE, ONE_PW)).ok, 'which is now the one that works')
   ok((await rowFor(A, ONE))?.invitation === 'accepted', 'and the roster’s invitation status ignores reset links entirely', (await rowFor(A, ONE))?.invitation)
 
