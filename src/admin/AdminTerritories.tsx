@@ -803,6 +803,14 @@ export function AdminTerritories() {
                 {drawError ?? '\u00a0'}
               </p>
 
+              {/* The count on the button is the leads already inside; the
+                  houses are looked up after the territory is saved. */}
+              {mode === 'live' && draftGenerate && draft.points.length >= 3 && (
+                <p className="mt-3 text-[13px] leading-snug text-ink-soft" data-testid="territory-generate-note">
+                  {inside.length.toLocaleString()} existing lead{inside.length === 1 ? '' : 's'} inside. The houses inside are looked up when you create it, and the result is shown here.
+                </p>
+              )}
+
               <Button
                 full
                 className="mt-4"

@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
 import { compressors } from 'hyparquet-compressors'
-import { Tiler, groupOverlaps, parseBbox, snapBoxToTiles, toTileRow } from './lib/address-tiles.mjs'
+import { Tiler, featureToTileRow, groupOverlaps, parseBbox, parseFieldMap, snapBoxToTiles, toTileRow } from './lib/address-tiles.mjs'
 
 /**
  * Build the address tiles the Worker reads when a territory is drawn.
@@ -38,7 +38,7 @@ const opt = (name, fallback) => {
 const flag = (name) => args.includes(`--${name}`)
 
 if (flag('help') || !opt('bbox')) {
-  console.log(`usage: node scripts/addresses-build.mjs --bbox minLng,minLat,maxLng,maxLat [--out dir] [--release YYYY-MM-DD.N] [--upload [--account ID]] [--bucket name] [--parallel 8]`)
+  console.log(`usage: node scripts/addresses-build.mjs --bbox minLng,minLat,maxLng,maxLat [--out dir] [--release YYYY-MM-DD.N] [--geojson file ... --fields number=F,street=F[,unit=F,city=F,zip=F] | address=F [--state XX]] [--upload [--account ID]] [--bucket name] [--parallel 8]`)
   process.exit(opt('bbox') ? 0 : 1)
 }
 
@@ -128,6 +128,31 @@ async function pull(w) {
 }
 for (let i = 0; i < wanted.length; i += parallel) await Promise.all(wanted.slice(i, i + parallel).map(pull))
 
+/*
+  A county's own address points, where Overture has none (upstate South
+  Carolina, for one). Tiled beside the Overture rows in the same run, so every
+  tile written is whole: a tile holds both, and the same door from both is one
+  row. Any number of files; one --fields mapping for all of them.
+*/
+const geojsonFiles = args.flatMap((a, i) => (a === '--geojson' ? [args[i + 1]] : [])).filter(Boolean)
+let county = 0, countySkipped = 0
+if (geojsonFiles.length) {
+  const fields = parseFieldMap(opt('fields'))
+  const defaults = { state: opt('state', '') }
+  for (const file of geojsonFiles) {
+    const fc = JSON.parse(readFileSync(resolve(file), 'utf8'))
+    const features = Array.isArray(fc.features) ? fc.features : []
+    let here = 0
+    for (const f of features) {
+      const t = featureToTileRow(f, fields, defaults)
+      if (!t) { countySkipped++; continue }
+      if (t[6] < box.xmin || t[6] > box.xmax || t[7] < box.ymin || t[7] > box.ymax) continue
+      if (tiler.add(t)) { kept++; county++; here++ }
+    }
+    console.log(`  ${file}: ${features.length.toLocaleString()} features, ${here.toLocaleString()} added`)
+  }
+}
+
 /* --- write --------------------------------------------------------------------- */
 let files = 0
 for (const t of tiler.entries()) {
@@ -137,7 +162,7 @@ for (const t of tiler.entries()) {
   files++
 }
 const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-const manifest = { release, bbox: asked, tileBox: box, tiles: files, addresses: kept, rowsRead: read, droppedNoStreetOrNumber: dropped, builtAt: new Date().toISOString() }
+const manifest = { release, bbox: asked, tileBox: box, tiles: files, addresses: kept, rowsRead: read, droppedNoStreetOrNumber: dropped, county: geojsonFiles.length ? { files: geojsonFiles.map((f) => f.split('/').pop()), added: county, skipped: countySkipped } : undefined, builtAt: new Date().toISOString() }
 const manifestKey = `v1/manifests/${stamp}.json`
 mkdirSync(resolve(out, 'v1/manifests'), { recursive: true })
 writeFileSync(resolve(out, manifestKey), JSON.stringify(manifest, null, 2))

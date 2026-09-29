@@ -68,6 +68,54 @@ const str = (v) => (v == null ? '' : String(v).trim())
 const round = (n) => Math.round(n * 1e6) / 1e6
 
 /**
+ * Where a county's address file keeps each part, as `--fields` names them:
+ * "number=ADDNUM,street=STREETNAME,unit=UNIT,city=CITY,zip=ZIP". Or one
+ * `address` field holding "123 Main St" whole, split at the first space.
+ */
+export function parseFieldMap(text) {
+  const map = {}
+  for (const part of String(text ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
+    const [k, v] = part.split('=').map((s) => s?.trim())
+    if (!k || !v) throw new Error(`--fields wants key=FIELD pairs, got "${part}"`)
+    if (!['number', 'street', 'unit', 'city', 'state', 'zip', 'address'].includes(k)) throw new Error(`--fields does not know "${k}"`)
+    map[k] = v
+  }
+  if (!map.address && !(map.number && map.street)) throw new Error('--fields needs number= and street=, or address=')
+  return map
+}
+
+/** The point a feature stands for: a Point as is, a polygon (a parcel) by its first ring's average. */
+function pointOf(geometry) {
+  if (!geometry) return null
+  if (geometry.type === 'Point') return geometry.coordinates
+  const ring = geometry.type === 'Polygon' ? geometry.coordinates?.[0] : geometry.type === 'MultiPolygon' ? geometry.coordinates?.[0]?.[0] : null
+  if (!Array.isArray(ring) || !ring.length) return null
+  const pts = ring.slice(0, ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1] ? -1 : undefined)
+  return [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length]
+}
+
+/**
+ * A GeoJSON feature from a county's address file as a tile row, or null when
+ * it has no number, street or point. Coordinates must be WGS84 lng/lat (an
+ * ArcGIS query with f=geojson returns that).
+ */
+export function featureToTileRow(feature, map, defaults = {}) {
+  const pr = feature?.properties ?? {}
+  const get = (k) => (map[k] ? str(pr[map[k]]) : '')
+  let number = get('number'), street = get('street')
+  if (map.address) {
+    const m = /^\s*(\d+[a-z]?(?:-\d+)?)\s+(.+)$/i.exec(get('address'))
+    if (m) { number = m[1]; street = m[2] }
+  }
+  if (!number || !street || number === '0') return null
+  const c = pointOf(feature.geometry)
+  if (!c) return null
+  const lng = Number(c[0]), lat = Number(c[1])
+  if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null
+  return [number, street, get('unit') || null, get('city') || str(defaults.city), get('state') || str(defaults.state), get('zip') || str(defaults.zip), round(lng), round(lat)]
+}
+
+/**
  * Sort rows into tiles. Rows are de-duplicated on number+street+unit+zip
  * within a tile, since the same door can appear from two sources.
  */

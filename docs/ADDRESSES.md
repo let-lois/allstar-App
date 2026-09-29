@@ -100,6 +100,24 @@ Once per deployment, from `api/`:
 Refreshing the data is step 3 again with a newer release. New houses on a
 street that was already built appear on the next **Find addresses**.
 
+## Where Overture has no addresses: a county's own file
+
+Overture's US addresses come from OpenAddresses, and coverage is by county.
+Austin is thick with them; upstate South Carolina has almost none (the whole
+Greenville–Anderson box held 225). There, load the county's own address
+points beside the Overture rows. Export them as GeoJSON in WGS84 (an ArcGIS
+layer query with `f=geojson&outSR=4326` does it), then name the fields:
+
+    npm run addresses:build -- --bbox -82.80,34.45,-82.10,35.10 \
+      --geojson greenville.geojson --geojson anderson.geojson --geojson pickens.geojson \
+      --fields number=ADDNUM,street=STREETNAME,unit=UNIT,city=CITY,zip=ZIP --state SC \
+      --upload --account <account id>
+
+Use `address=SITEADDR` instead of `number=`/`street=` when a county keeps the
+whole "123 Main St" in one field. A parcel polygon is placed at its middle;
+a row numbered 0 (a lot with no house yet) is skipped. The run tiles both
+sources together, so each tile is whole and the same door from both is one row.
+
 ## What it costs
 
 Overture's bucket is free to read. R2 storage for a metro's tiles is a few

@@ -2,7 +2,7 @@ import { build } from 'esbuild'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Tiler, groupOverlaps, parseBbox, snapBoxToTiles, tileBounds, tileFor as tilerTileFor, toTileRow } from './lib/address-tiles.mjs'
+import { Tiler, featureToTileRow, groupOverlaps, parseBbox, parseFieldMap, snapBoxToTiles, tileBounds, tileFor as tilerTileFor, toTileRow } from './lib/address-tiles.mjs'
 
 /**
  * The houses inside a territory, made into leads — without a bucket or a database.
@@ -65,6 +65,19 @@ const ok = (cond, msg, extra = '') => {
   ok(groupOverlaps({ 'bbox.xmin': { min_value: -98 }, 'bbox.xmax': { max_value: -97.5 }, 'bbox.ymin': { min_value: 30 }, 'bbox.ymax': { max_value: 31 } }, parseBbox('-97.7,30.5,-97.6,30.6')), 'a row group whose box overlaps is read')
   ok(!groupOverlaps({ 'bbox.xmin': { min_value: -120 }, 'bbox.xmax': { max_value: -110 }, 'bbox.ymin': { min_value: 30 }, 'bbox.ymax': { max_value: 31 } }, parseBbox('-97.7,30.5,-97.6,30.6')), 'one that does not is skipped — that is what keeps a metro to a minute')
   ok(groupOverlaps({}, parseBbox('-97.7,30.5,-97.6,30.6')), 'a group with no statistics is read rather than assumed empty')
+  // A county's address file: parts in named fields, or one whole-address field.
+  const parts = parseFieldMap('number=ADDNUM,street=STREET,unit=UNIT,city=CITY,zip=ZIP')
+  const pt = { type: 'Feature', properties: { ADDNUM: 104, STREET: 'Cypress Ridge Dr', UNIT: '', CITY: 'Powdersville', ZIP: '29642' }, geometry: { type: 'Point', coordinates: [-82.4921234567, 34.7812345678] } }
+  ok(JSON.stringify(featureToTileRow(pt, parts, { state: 'SC' })) === JSON.stringify(['104', 'Cypress Ridge Dr', null, 'Powdersville', 'SC', '29642', -82.492123, 34.781235]), 'a county address point becomes a tile row, the state filled from --state', JSON.stringify(featureToTileRow(pt, parts, { state: 'SC' })))
+  const whole = parseFieldMap('address=SITEADDR,zip=ZIP')
+  const parcel = { type: 'Feature', properties: { SITEADDR: '12 Oak Ct', ZIP: '29673' }, geometry: { type: 'Polygon', coordinates: [[[-82.50, 34.70], [-82.49, 34.70], [-82.49, 34.71], [-82.50, 34.71], [-82.50, 34.70]]] } }
+  const pr = featureToTileRow(parcel, whole, { state: 'SC' })
+  ok(pr?.[0] === '12' && pr?.[1] === 'Oak Ct' && Math.abs(pr[6] + 82.495) < 1e-6 && Math.abs(pr[7] - 34.705) < 1e-6, 'a parcel with one address field is split at the number and placed at its middle', JSON.stringify(pr))
+  ok(featureToTileRow({ properties: { SITEADDR: '0 Unknown Rd' }, geometry: { type: 'Point', coordinates: [-82.5, 34.7] } }, whole) === null, 'a county row numbered 0 (no house yet) is dropped')
+  ok(featureToTileRow({ properties: { ADDNUM: 5, STREET: 'X' }, geometry: null }, parts) === null, 'and so is one with no point')
+  let bad = null
+  try { parseFieldMap('number=A') } catch (e) { bad = e.message }
+  ok(/street=/.test(bad ?? ''), 'a field map with no street is refused, saying what it needs')
   let threw = null
   try { parseBbox('1,2,3') } catch (e) { threw = e.message }
   ok(/minLng,minLat,maxLng,maxLat/.test(threw ?? ''), 'a malformed --bbox is refused with the shape it wants')

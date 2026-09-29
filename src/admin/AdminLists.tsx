@@ -605,6 +605,14 @@ export function AdminLists() {
                 {drawError ?? ' '}
               </p>
 
+              {/* A list only groups leads that already exist, so a new area
+                  reads 0 here. Say where the houses come from instead. */}
+              {draft.points.length >= 3 && inside.length === 0 && (
+                <p className="mt-3 text-[13px] leading-snug text-ink-soft" data-testid="list-empty-hint">
+                  No leads inside this shape yet. A list only groups existing leads — to turn the houses here into leads, draw it under <span className="font-semibold">Territories</span>.
+                </p>
+              )}
+
               <Button
                 full
                 className="mt-4"
