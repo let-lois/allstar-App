@@ -215,6 +215,11 @@ export function MapScreen() {
     setDraftStage('detected')
   }
 
+  const openExisting = (id: string) => {
+    cancelDraft()
+    setSelectedId(id)
+  }
+
   /*
     Saved. The temporary pin goes and the lead's own marker takes its place —
     which is only true if the lead is one the current filter shows, and "My
@@ -770,10 +775,18 @@ export function MapScreen() {
                   the map is the thing being avoided; here the map is beside the
                   form rather than behind it, so the rep can start typing.
                 */}
-                {draftStage === 'detected' ? <DetectedProperty draft={leadDraft} /> : <LeadFields draft={leadDraft} />}
+                {draftStage === 'detected' ? (
+                  <DetectedProperty draft={leadDraft} onAddAnyway={() => setDraftStage('form')} />
+                ) : (
+                  <LeadFields draft={leadDraft} />
+                )}
               </div>
               <div className="border-t border-line-soft p-4">
-                {draftStage === 'detected' ? (
+                {draftStage === 'detected' && leadDraft.existing ? (
+                  <Button size="lg" full onClick={() => openExisting(leadDraft.existing!.id)} data-testid="detected-open-lead">
+                    Open lead
+                  </Button>
+                ) : draftStage === 'detected' ? (
                   <Button size="lg" full onClick={() => setDraftStage('form')} data-testid="detected-add-lead">
                     Add lead
                   </Button>
@@ -796,7 +809,7 @@ export function MapScreen() {
                 className="icon-xs focusable mb-2 flex min-h-tap items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-accent"
               >
                 <IconBack />
-                All properties
+                All leads
               </button>
               <PropertyPeek
                 property={selected}
@@ -807,7 +820,7 @@ export function MapScreen() {
           ) : (
             <>
               <div className="border-b border-line-soft px-4 py-3">
-                <p className="eyebrow">{shown.length} properties</p>
+                <p className="eyebrow">{shown.length} lead{shown.length === 1 ? '' : 's'}</p>
               </div>
               <ul className="scroll-pane">
                 {shown.slice(0, 200).map((p) => (
@@ -918,7 +931,12 @@ export function MapScreen() {
             <Button variant="secondary" size="lg" onClick={cancelDraft} className="shrink-0">
               Cancel
             </Button>
-            {draftStage === 'detected' ? (
+            {draftStage === 'detected' && leadDraft.existing ? (
+              // A door that is already a lead opens that lead, not a second card.
+              <Button size="lg" full buzz onClick={() => openExisting(leadDraft.existing!.id)} data-testid="detected-open-lead">
+                Open lead
+              </Button>
+            ) : draftStage === 'detected' ? (
               /*
                 The one thing to do with a house that is not a lead. It opens
                 the form with the address, the town and the pin already in it —
@@ -948,7 +966,7 @@ export function MapScreen() {
       >
         <div data-testid="add-lead-sheet" className="pb-2">
           {draftStage === 'detected' ? (
-            <DetectedProperty draft={leadDraft} />
+            <DetectedProperty draft={leadDraft} onAddAnyway={() => setDraftStage('form')} />
           ) : (
             <LeadFields draft={leadDraft} autoFocus={false} />
           )}

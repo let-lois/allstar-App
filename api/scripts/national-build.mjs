@@ -110,12 +110,21 @@ if (theme === 'tiger' && !readComplete) {
       try {
         const r = await fetch(root + zip)
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        // The Census firewall answers a burst of downloads with a small HTML
+        // "Request Rejected" page (status 200). Back off hard and try again.
+        if (!/zip|octet-stream/.test(r.headers.get('content-type') ?? '')) throw new Error('rejected by the server (rate limit)')
         // A cut-off or garbled download fails here too, so it is retried.
         files = unzipSync(new Uint8Array(await r.arrayBuffer()))
         break
       } catch (err) {
-        if (attempt >= 6) throw new Error(`${zip}: ${err.message}`)
-        await new Promise((res) => setTimeout(res, 1000 * 2 ** attempt))
+        if (attempt >= 5) {
+          // One county the server keeps refusing must not stop the other
+          // 3,000; it is listed in read.skipped and retried on the next run.
+          console.log(`  skipped ${zip}: ${err.message}`)
+          appendFileSync(resolve(work, 'read.skipped'), zip + '\n')
+          return
+        }
+        await new Promise((res) => setTimeout(res, 15_000 * attempt))
       }
     }
     const shp = Object.keys(files).find((f) => f.endsWith('.shp'))
@@ -142,6 +151,9 @@ if (theme === 'tiger' && !readComplete) {
     if (finished % 50 === 0 || finished === todo.length) console.log(`  read ${finished}/${todo.length} counties · ${segs.toLocaleString()} ranged segments (${secs()})`)
   }
   for (let i = 0; i < todo.length; i += parallel) await Promise.all(todo.slice(i, i + parallel).map(readCounty))
+  const skipped = existsSync(resolve(work, 'read.skipped')) ? new Set(readFileSync(resolve(work, 'read.skipped'), 'utf8').split('\n').filter(Boolean)) : new Set()
+  const stillSkipped = [...skipped].filter((z) => !readFileSync(readDone, 'utf8').includes(z))
+  if (stillSkipped.length) console.log(`${stillSkipped.length} county files were refused and skipped: ${stillSkipped.join(', ')}. They are left out of this load; fetch them later with a separate --work folder.`)
   if (todo.length === zips.filter((z) => !doneGroups.has(z)).length) writeFileSync(resolve(work, 'read.complete'), new Date().toISOString())
   else { console.log('stopped at --max-groups; run again to continue reading'); process.exit(0) }
 }

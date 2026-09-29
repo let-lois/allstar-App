@@ -5,7 +5,7 @@ import { useAppStore, useMyLists } from '../../store/useAppStore'
 import { canEditList } from '../../lib/leadLists'
 import { reverseGeocode, type ReverseAddress } from '../../lib/reverseGeocode'
 import { addressFieldMode } from '../../lib/address'
-import { getPosition } from '../../lib/geo'
+import { distanceMiles, getPosition, territoryAt } from '../../lib/geo'
 import { uid } from '../../lib/id'
 import * as db from '../../lib/db'
 import { enqueue } from '../../lib/sync'
@@ -191,6 +191,21 @@ export function useLeadDraft({
 
   const save = async () => {
     if (!address.trim() || !pin) return
+    /*
+      The same door twice.
+
+      A rep who taps a house that is already a lead is shown that lead instead
+      (`existing`, below), but one who types the address by hand never sees the
+      pin. The same street line and ZIP as a lead already on this phone is the
+      same house; saving it again would put two cards on one door and split the
+      visit history between them. A different unit is a different line.
+    */
+    const typed = picked?.address1 ?? address.trim()
+    const same = sameAddressLead(typed, picked?.zip ?? found?.zip ?? '')
+    if (same) {
+      setError(`${same.address1} is already a lead. Open it from the map or the Leads list, or add the unit number if this is a different unit.`)
+      return
+    }
     setSaving(true)
     setError(null)
     haptic('confirm')
@@ -217,6 +232,8 @@ export function useLeadDraft({
         ? [{ id: uid('ct'), name: name.trim(), phone: phone.trim() || undefined, isPrimary: true }]
         : [],
       assignedRepId: useAppStore.getState().user?.id,
+      // The patch it stands in, by the rule the server applies to the same create.
+      territoryId: territoryAt(pin, Object.values(useAppStore.getState().territories))?.id,
     }
 
     /*
@@ -355,7 +372,45 @@ export function useLeadDraft({
     setNewListName,
     canSave: !!address.trim() && !!pin && !saving,
     save,
+    existing: at ? existingLeadAt(at, found?.address1, found?.zip) : null,
   }
+}
+
+const norm = (s: string | undefined) => (s ?? '').toLowerCase().replace(/[.,#]/g, ' ').replace(/\s+/g, ' ').trim()
+
+/** A lead on this phone with the same street line (and ZIP, when both have one). */
+function sameAddressLead(address1: string, zip: string): Property | null {
+  const a = norm(address1)
+  if (!a) return null
+  for (const p of Object.values(useAppStore.getState().properties)) {
+    if (norm(p.address1) !== a) continue
+    if (zip && p.zip && norm(zip) !== norm(p.zip)) continue
+    return p
+  }
+  return null
+}
+
+/**
+ * The lead already standing where the rep tapped, if there is one.
+ *
+ * A roof tapped a few metres from an existing pin is that house: the pin sits
+ * where somebody tapped last time, not on a surveyed point, so an exact match
+ * would miss nearly every real repeat. 15 metres is inside one suburban lot and
+ * short of the house next door. The address the map found is checked too, for
+ * a lead whose pin was dropped at the kerb.
+ */
+function existingLeadAt(at: { lat: number; lng: number }, address1?: string, zip?: string): Property | null {
+  let best: Property | null = null
+  let bestM = 15
+  for (const p of Object.values(useAppStore.getState().properties)) {
+    if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue
+    const m = distanceMiles(at, p) * 1609.34
+    if (m <= bestM) {
+      best = p
+      bestM = m
+    }
+  }
+  return best ?? (address1 ? sameAddressLead(address1, zip ?? '') : null)
 }
 
 export type LeadDraft = ReturnType<typeof useLeadDraft>

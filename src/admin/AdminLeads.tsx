@@ -4,7 +4,8 @@ import { AdminPage, FilterBar } from './AdminLayout'
 import { Chip } from '../components/ui/Chip'
 import { Button } from '../components/ui/Button'
 import { useAppStore } from '../store/useAppStore'
-import { ApiError, NetworkError, apiAssignProperties, apiEraseLeads, apiExportLeadsCsv, apiSetLeadStatus } from '../lib/http'
+import { ApiError, NetworkError, apiAssignProperties, apiEraseLeads, apiExportLeadsCsv, apiMoveToTerritory, apiSetLeadStatus } from '../lib/http'
+import { UNASSIGNED_TERRITORY, inTerritory } from './useAdminData'
 import { Field } from '../components/ui/Input'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { liveToken } from '../lib/session'
@@ -110,6 +111,9 @@ export default function AdminLeads() {
   const [query, setQuery] = useState(() => params.get('q') ?? '')
   const [status, setStatus] = useState<LeadStatus | 'all'>('all')
   const [repFilter, setRepFilter] = useState<string>('all')
+  // 'all', 'none' (in no territory) or a territory id. Seeded from ?territory=
+  // so the Territories page can open its own leads here as a list.
+  const [territoryFilter, setTerritoryFilter] = useState<string>(() => params.get('territory') ?? 'all')
   const [visited, setVisited] = useState<VisitedWindow>('any')
   const [sort, setSort] = useState<SortKey>('address')
   const [shown, setShown] = useState(PAGE)
@@ -127,6 +131,7 @@ export default function AdminLeads() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignTo, setAssignTo] = useState('')
   const [statusTo, setStatusTo] = useState<LeadStatus | ''>('')
+  const [territoryTo, setTerritoryTo] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -163,6 +168,10 @@ export default function AdminLeads() {
   )
 
   const reps = useMemo(() => team.filter((m) => m.active && m.role !== 'super_admin'), [team])
+  const territoryList = useMemo(
+    () => Object.values(territories).sort((a, b) => a.name.localeCompare(b.name)),
+    [territories],
+  )
   const nameOf = (id?: string) => (id ? (team.find((m) => m.id === id)?.name ?? id) : null)
 
   const rows = useMemo(() => {
@@ -181,6 +190,9 @@ export default function AdminLeads() {
     if (status !== 'all') list = list.filter((p) => p.status === status)
     if (repFilter === 'unassigned') list = list.filter((p) => !p.assignedRepId)
     else if (repFilter !== 'all') list = list.filter((p) => p.assignedRepId === repFilter)
+    // 'none' is the Territories page's Unassigned row, by the same test, so the counts agree.
+    if (territoryFilter === 'none') list = list.filter((p) => inTerritory(p, UNASSIGNED_TERRITORY))
+    else if (territoryFilter !== 'all') list = list.filter((p) => p.territoryId === territoryFilter)
     /*
       Through the shared predicate rather than inline arithmetic, so this screen,
       the rep's list and the map cannot disagree about what "the last 7 days"
@@ -196,7 +208,7 @@ export default function AdminLeads() {
       sorted.sort((a, b) => (b.opportunityValue ?? 0) - (a.opportunityValue ?? 0))
     else sorted.sort((a, b) => (b.lastVisitAt ?? 0) - (a.lastVisitAt ?? 0))
     return sorted
-  }, [properties, query, status, repFilter, visited, sort, timezone])
+  }, [properties, query, status, repFilter, territoryFilter, visited, sort, timezone])
 
   const page = rows.slice(0, shown)
 
@@ -270,6 +282,30 @@ export default function AdminLeads() {
           ? `${res.assigned} lead${res.assigned === 1 ? '' : 's'} moved to ${nameOf(assignTo)}.`
           : `${res.assigned} lead${res.assigned === 1 ? '' : 's'} unassigned.`,
       )
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save that. Nothing was changed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function applyTerritory() {
+    const token = liveToken()
+    if (!token || !territoryTo) {
+      setError('Moving leads needs a live account. The demo has no server.')
+      return
+    }
+    const territoryId = territoryTo === '__none' ? null : territoryTo
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const res = await apiMoveToTerritory(token, { propertyIds: [...selected], territoryId })
+      await refreshFromServer()
+      setSelected(new Set())
+      setTerritoryTo('')
+      const n = `${res.moved} lead${res.moved === 1 ? '' : 's'}`
+      setNotice(territoryId ? `${n} moved to ${territories[territoryId]?.name ?? 'that territory'}.` : `${n} taken out of every territory.`)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save that. Nothing was changed.')
     } finally {
@@ -586,6 +622,21 @@ export default function AdminLeads() {
           ))}
         </select>
         <select
+          value={territoryFilter}
+          onChange={(e) => setTerritoryFilter(e.target.value)}
+          className="focusable min-h-[40px] rounded-field border border-line bg-surface px-2 text-sm"
+          aria-label="Territory"
+          data-testid="leads-territory-filter"
+        >
+          <option value="all">Every territory</option>
+          <option value="none">No territory</option>
+          {territoryList.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        <select
           aria-label="Sort by"
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
@@ -677,6 +728,36 @@ export default function AdminLeads() {
             onClick={() => void applyStatus()}
           >
             {busy ? 'Saving…' : 'Set'}
+          </Button>
+
+          {/*
+            Which patch the selection is filed in. Only the territory moves; the
+            rep working each lead keeps it, and the reassign control beside this
+            one is where that changes.
+          */}
+          <select
+            value={territoryTo}
+            onChange={(e) => setTerritoryTo(e.target.value)}
+            className="focusable min-h-[38px] rounded-lg border border-ink/15 bg-surface px-2 text-sm"
+            aria-label="Move to territory"
+            data-testid="bulk-territory"
+          >
+            <option value="">Move to territory…</option>
+            {territoryList.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+            <option value="__none">No territory</option>
+          </select>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={busy || mode !== 'live' || !territoryTo}
+            onClick={() => void applyTerritory()}
+            data-testid="bulk-territory-apply"
+          >
+            {busy ? 'Saving…' : 'Move'}
           </Button>
           {/*
             Offered only to who the server would allow. A manager sees the two

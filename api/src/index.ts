@@ -27,7 +27,7 @@ import {
 import { googleReverseGeocode, useGoogleBase } from './geocode-google'
 import { findProvider } from './geocode-providers'
 import { MAX_IMPORT_ROWS, canImport, importProperties, propertyIdFor, type ImportInput, type ImportRow } from './import'
-import { assignProperties, assignTerritory } from './assign'
+import { assignProperties, assignTerritory, moveToTerritory } from './assign'
 import { createTerritory, deleteTerritory, renameTerritory } from './territories'
 import { generateLeadsForTerritory } from './addresses'
 import { streetViewAt, useStreetViewBase } from './streetview'
@@ -1767,6 +1767,17 @@ export default {
             cors,
           )
         }
+      }
+
+      // Selected leads into a territory, or out of every territory (territoryId null).
+      if (path === '/api/properties/territory' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await moveToTerritory(env, user, {
+          propertyIds: Array.isArray(body.propertyIds) ? (body.propertyIds as string[]) : [],
+          territoryId: typeof body.territoryId === 'string' && body.territoryId ? body.territoryId : null,
+        })
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        return json(result, 200, cors)
       }
 
       if (path === '/api/properties/assign' && req.method === 'POST') {

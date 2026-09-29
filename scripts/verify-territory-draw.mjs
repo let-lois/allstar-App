@@ -201,7 +201,7 @@ ok(
 
 /** "12 territories · 1,234 properties · $…" from the page description. */
 const propertyTotal = async () => {
-  const m = (await page.locator('body').innerText()).match(/·\s*([\d,]+)\s*properties/)
+  const m = (await page.locator('body').innerText()).match(/·\s*([\d,]+)\s*(?:leads|properties)/)
   return m ? Number(m[1].replace(/,/g, '')) : null
 }
 

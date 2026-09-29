@@ -132,7 +132,7 @@ async function tapOpenGround(candidates) {
     }
     // A lead's own sheet came up instead — that tap found a house. Put it away
     // and try elsewhere.
-    const close = page.getByRole('button', { name: /All properties/ })
+    const close = page.getByRole('button', { name: /All leads/ })
     if (await close.isVisible().catch(() => false)) await close.click()
     await page.keyboard.press('Escape')
     await page.waitForTimeout(300)
@@ -608,7 +608,7 @@ try {
           break
         }
         // A lead's own panel came up instead — that click found a house.
-        const back = wp.getByRole('button', { name: /All properties/ })
+        const back = wp.getByRole('button', { name: /All leads/ })
         if (await back.isVisible().catch(() => false)) await back.click()
         await wp.waitForTimeout(300)
       }

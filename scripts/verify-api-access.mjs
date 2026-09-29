@@ -152,6 +152,7 @@ const ROUTES = {
   "/api/settings|POST": { how: 'delegate', fn: 'writeSettings', file: 'settings.ts' },
   "/api/settings/timezone|POST": { how: 'delegate', fn: 'writeTimezone', file: 'settings.ts' },
   "/api/properties/assign|POST": { how: 'delegate', fn: 'assignProperties', file: 'assign.ts' },
+  "/api/properties/territory|POST": { how: 'delegate', fn: 'moveToTerritory', file: 'assign.ts' },
   /*
     Bulk status. Office-only, and the check lives in `setLeadStatus` rather than
     at the route so it travels with the function — the same arrangement as

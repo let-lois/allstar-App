@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AdminPage } from './AdminLayout'
 import { fitZoom } from '../components/map/FieldMap'
 import { AllStarMap } from '../components/map/AllStarMap'
+import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { UNASSIGNED_TERRITORY, inTerritory, useTerritories } from './useAdminData'
 import { DataList } from './DataList'
@@ -27,6 +28,7 @@ export function AdminTerritories() {
   const properties = useAppStore((s) => s.properties)
   const territories = useAppStore((s) => s.territories)
   const mode = useAppStore((s) => s.mode)
+  const nav = useNavigate()
   const list = useMemo(() => Object.values(properties), [properties])
   const unsorted = useTerritories(list)
 
@@ -351,7 +353,7 @@ export function AdminTerritories() {
     <AdminPage
       tour="console-territories"
       title="Territories"
-      description={`${rows.length} territories · ${totals.properties.toLocaleString()} properties · ${moneyFull(totals.open)} open`}
+      description={`${rows.length} territories · ${totals.properties.toLocaleString()} leads · ${moneyFull(totals.open)} open`}
       actions={
         draft ? (
           <Button variant="secondary" onClick={() => setDraft(null)}>
@@ -448,7 +450,7 @@ export function AdminTerritories() {
                   />
                 ),
             },
-            { header: 'Properties', align: 'right', cell: (t) => t.properties },
+            { header: 'Leads', align: 'right', cell: (t) => t.properties },
             {
               header: 'Coverage',
               cell: (t) => (
@@ -499,8 +501,8 @@ export function AdminTerritories() {
             ) : (
               <p className="text-ink-mute">
                 {mode === 'live'
-                  ? 'Changing the rep moves every lead in that territory to them. Coverage is knocked properties over total, not route completion.'
-                  : 'Demo data — assignment needs a live account. Coverage is knocked properties over total, not route completion.'}
+                  ? 'A territory can have several reps, and each of them sees every lead in it. Adding or removing a rep never takes a lead off the rep working it. Coverage is leads knocked over total, not route completion.'
+                  : 'Demo data — assignment needs a live account. Coverage is leads knocked over total, not route completion.'}
               </p>
             )}
         </div>
@@ -511,10 +513,30 @@ export function AdminTerritories() {
             <h2 className="text-sm font-semibold">
               {draft ? 'Outline the area' : selected ? label(selected) : 'All territories'}
             </h2>
-            <span className="nums text-xs text-ink-mute">
-              {draft
-                ? `${draft.points.length} point${draft.points.length === 1 ? '' : 's'}`
-                : `${shown.length} properties`}
+            <span className="flex items-baseline gap-3">
+              {/*
+                The same leads as a list. The Leads page filtered to this
+                territory, where they can be searched, sorted, reassigned and
+                moved in bulk; the map here and that list read the same rows.
+              */}
+              {!draft && selected && (
+                <a
+                  href={`/admin/leads?territory=${selected === UNASSIGNED_TERRITORY ? 'none' : encodeURIComponent(selected)}`}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    nav(`/admin/leads?territory=${selected === UNASSIGNED_TERRITORY ? 'none' : encodeURIComponent(selected)}`)
+                  }}
+                  data-testid="territory-view-list"
+                  className="focusable text-xs font-semibold text-accent"
+                >
+                  View as list
+                </a>
+              )}
+              <span className="nums text-xs text-ink-mute">
+                {draft
+                  ? `${draft.points.length} point${draft.points.length === 1 ? '' : 's'}`
+                  : `${shown.length} lead${shown.length === 1 ? '' : 's'}`}
+              </span>
             </span>
           </div>
 
@@ -840,7 +862,7 @@ export function AdminTerritories() {
           )}
           {shown.length === 0 && !draft && (
             <p className="px-4 py-6 text-sm text-ink-mute">
-              No properties in this territory have coordinates yet, so there is
+              No leads in this territory have coordinates yet, so there is
               nothing to place on a map.
             </p>
           )}

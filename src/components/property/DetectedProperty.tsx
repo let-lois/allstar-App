@@ -17,9 +17,41 @@ import type { LeadDraft } from './LeadForm'
  * it says so, and if Google has nothing the title says that too, and the
  * button still leads to a form they can type into.
  */
-export function DetectedProperty({ draft }: { draft: LeadDraft }) {
-  const { at, found, looking } = draft
+export function DetectedProperty({ draft, onAddAnyway }: { draft: LeadDraft; onAddAnyway?: () => void }) {
+  const { at, found, looking, existing } = draft
   if (!at) return null
+  /*
+    Already a lead.
+
+    The pin of an existing lead is meant to open that lead, but a roof tapped
+    beside the pin, or a house whose pin sits at the kerb, lands here instead.
+    Saying "Not a lead yet" about a door that is one is how the same house ends
+    up with two cards. So the sheet says whose door it is, and the button below
+    opens it; a second unit at the same spot is still one tap away.
+  */
+  if (existing) {
+    return (
+      <div className="space-y-3 pt-1" data-testid="detected-property" data-state="existing">
+        <div>
+          <h3 className="text-lg font-semibold leading-tight">{existing.address1}</h3>
+          <p className="text-sm text-ink-mute">{cityLine(existing)}</p>
+        </div>
+        <PropertyImage lat={existing.lat} lng={existing.lng} address={existing.address1} className="mt-0" />
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge tone="brand">Already a lead</StatusBadge>
+        </div>
+        {onAddAnyway && (
+          <button
+            onClick={onAddAnyway}
+            data-testid="detected-add-anyway"
+            className="focusable min-h-tap rounded-lg px-1 text-sm font-semibold text-accent"
+          >
+            A different unit here? Add it as its own lead
+          </button>
+        )}
+      </div>
+    )
+  }
   const title = looking
     ? 'Finding the address…'
     : found?.address1 || (found ? cityLine(found) || 'Address not found' : 'Address not found')

@@ -50,6 +50,7 @@ export type AuditAction =
   | 'team.deleted'
   | 'company.changed'
   | 'territory.assigned'
+  | 'territory.leads_moved'
   | 'territory.unassigned'
   | 'territory.created'
   | 'territory.generated'

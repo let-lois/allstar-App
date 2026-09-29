@@ -34,7 +34,7 @@ const GROUPS = [
     label: 'People',
     actions: ['user.invited', 'user.deactivated', 'user.reactivated', 'user.deleted'],
   },
-  { key: 'leads', label: 'Leads', actions: ['territory.assigned', 'territory.unassigned', 'territory.generated', 'leads.imported', 'leads.exported'] },
+  { key: 'leads', label: 'Leads', actions: ['territory.assigned', 'territory.unassigned', 'territory.generated', 'territory.leads_moved', 'leads.imported', 'leads.exported'] },
   {
     key: 'connections',
     label: 'Connections',
@@ -60,6 +60,7 @@ const WEIGHT: Record<string, 'high' | 'medium' | 'low'> = {
   'territory.assigned': 'low',
   'territory.unassigned': 'low',
   'territory.generated': 'low',
+  'territory.leads_moved': 'low',
   'leads.imported': 'low',
   'leads.exported': 'medium',
   // A geocoding key is a customer's own billable credential, and switching
@@ -246,6 +247,13 @@ function describe(e: AuditRowDTO): React.ReactNode {
           {String(d.created ?? 0)} new lead{d.created === 1 ? '' : 's'}
           {d.existed ? `, ${String(d.existed)} already there` : ''}
           {d.skipped ? `, ${String(d.skipped)} past the limit` : ''}
+        </>
+      )
+    case 'territory.leads_moved':
+      return (
+        <>
+          {who} moved {String(d.leads ?? 0)} lead{d.leads === 1 ? '' : 's'}{' '}
+          {d.territoryId ? <>into {target}</> : 'out of every territory'}
         </>
       )
     case 'territory.unassigned':

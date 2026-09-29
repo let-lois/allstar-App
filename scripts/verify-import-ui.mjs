@@ -514,7 +514,7 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   const panelCount = () =>
     page.evaluate(() => {
       const el = [...document.querySelectorAll('span')].find((s) =>
-        /^\d+ properties$/.test((s.textContent || '').trim()),
+        /^\d+ leads?$/.test((s.textContent || '').trim()),
       )
       return el?.textContent?.trim() ?? null
     })
@@ -531,13 +531,13 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   await rowNamed('Unassigned').click()
   await page.waitForTimeout(700)
   const unassignedCount = await panelCount()
-  ok(unassignedCount === '14 properties', `the map panel agrees with the table (${unassignedCount})`)
+  ok(unassignedCount === '14 leads', `the map panel agrees with the table (${unassignedCount})`)
 
   // And selecting the named territory switches the map to its three.
   await rowNamed('Cedar Bend — August').click()
   await page.waitForTimeout(700)
   const after = await panelCount()
-  ok(after === '3 properties', `selecting a territory filters the map to it (${after})`)
+  ok(after === '3 leads', `selecting a territory filters the map to it (${after})`)
 
   // The rep dropdown must offer the real team, not the demo roster.
   const options = await page.evaluate(() =>
