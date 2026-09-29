@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Allstar field sales API \u2014 Cloudflare Workers + D1 + R2",
+  "description": "Allstar field sales API — Cloudflare Workers + D1 + R2",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -53,6 +53,7 @@
     "db:rebuild-stats": "node scripts/rebuild-daily-stats.mjs",
     "smoke:tiles": "node scripts/smoke-tiles.mjs",
     "addresses:build": "node scripts/addresses-build.mjs",
+    "national:build": "node scripts/national-build.mjs",
     "verify:addresses": "node scripts/verify-addresses.mjs",
     "smoke:territory-leads": "node scripts/smoke-territory-leads.mjs",
     "smoke:lead-edit": "node scripts/smoke-lead-edit.mjs",
@@ -60,6 +61,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",
+    "aws4fetch": "^1.0.20",
     "hyparquet": "^1.31.2",
     "hyparquet-compressors": "^1.1.2",
     "typescript": "^5.6.3",

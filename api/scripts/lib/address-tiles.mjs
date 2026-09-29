@@ -165,3 +165,54 @@ export function parseBbox(text) {
   if (xmin >= xmax || ymin >= ymax) throw new Error('--bbox min must be less than max on both axes')
   return { xmin, ymin, xmax, ymax }
 }
+
+/* --- rooftops ------------------------------------------------------------- */
+
+/**
+ * Building tiles sit beside the address tiles under their own prefix:
+ * `b1/14/{x}/{y}.json`, each an array of `[lng, lat, kind]`.
+ *
+ *   'r'  a house or other home (Overture subtype residential, or a home class)
+ *   'u'  unclassified, house-sized: most American houses in the data
+ *   'n'  not a home: commercial, industrial, civic, a church, a school, or an
+ *        unclassified footprint too big to be one house
+ *
+ * Sheds, garages and other outbuildings are dropped at build time.
+ */
+export const buildingKey = (x, y, z = TILE_ZOOM) => `b1/${z}/${x}/${y}.json`
+
+const HOME_CLASSES = new Set(['house', 'detached', 'semidetached_house', 'terrace', 'residential', 'apartments', 'bungalow', 'dormitory', 'farm', 'houseboat', 'static_caravan', 'cabin', 'trullo', 'stilt_house', 'ger'])
+const OUTBUILDINGS = new Set(['garage', 'garages', 'shed', 'carport', 'hut', 'outbuilding', 'barn', 'greenhouse', 'roof', 'boathouse', 'storage_tank', 'silo', 'kiosk', 'toilets', 'service', 'transformer_tower', 'bunker'])
+/** Smallest footprint that is a dwelling rather than a shed, and largest that is one house. */
+const MIN_HOME_M2 = 30
+const MAX_HOUSE_M2 = 2500
+
+/** An Overture building row as [lng, lat, kind], or null for an outbuilding or a row with no box. */
+export function buildingRow(row) {
+  const b = row?.bbox
+  if (!b || ![b.xmin, b.xmax, b.ymin, b.ymax].every((v) => Number.isFinite(Number(v)))) return null
+  const subtype = row.subtype ? String(row.subtype) : ''
+  const cls = row.class ? String(row.class) : ''
+  if (subtype === 'outbuilding' || OUTBUILDINGS.has(cls)) return null
+  const lng = (Number(b.xmin) + Number(b.xmax)) / 2
+  const lat = (Number(b.ymin) + Number(b.ymax)) / 2
+  const w = (Number(b.xmax) - Number(b.xmin)) * 111_320 * Math.cos((lat * Math.PI) / 180)
+  const h = (Number(b.ymax) - Number(b.ymin)) * 110_540
+  const area = Math.abs(w * h)
+  let kind
+  if (subtype === 'residential' || HOME_CLASSES.has(cls)) kind = area < MIN_HOME_M2 ? null : 'r'
+  else if (subtype || cls) kind = 'n'
+  else kind = area < MIN_HOME_M2 ? null : area > MAX_HOUSE_M2 ? 'n' : 'u'
+  if (!kind) return null
+  return [round(lng), round(lat), kind]
+}
+
+/** The United States as boxes: the lower 48, Alaska, Hawaii, Puerto Rico and the Virgin Islands. */
+export const US_BOXES = [
+  { xmin: -125.0, ymin: 24.3, xmax: -66.9, ymax: 49.5 },
+  { xmin: -179.3, ymin: 51.1, xmax: -129.9, ymax: 71.6 },
+  { xmin: -160.4, ymin: 18.8, xmax: -154.7, ymax: 22.4 },
+  { xmin: -67.4, ymin: 17.8, xmax: -64.5, ymax: 18.6 },
+]
+export const inUS = (lng, lat) => US_BOXES.some((b) => lng >= b.xmin && lng <= b.xmax && lat >= b.ymin && lat <= b.ymax)
+export const US_COUNTRIES = new Set(['US', 'PR', 'VI', 'GU', 'AS', 'MP'])

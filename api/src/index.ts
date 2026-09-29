@@ -644,6 +644,7 @@ export default {
               // it (Overture address tiles in R2); absent means it claims only
               // the leads that already exist. See docs/ADDRESSES.md.
               addresses: !!env.ADDRESSES,
+              geocodio: !!env.GEOCODIO_API_KEY,
               // Absent means connecting a CRM is refused rather than storing a
               // customer's token in plaintext — a deliberate refusal, but one
               // that is otherwise indistinguishable from a broken integration.

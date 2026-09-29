@@ -100,6 +100,48 @@ Once per deployment, from `api/`:
 Refreshing the data is step 3 again with a newer release. New houses on a
 street that was already built appear on the next **Find addresses**.
 
+## The whole United States
+
+`npm run national:build` loads every U.S. address Overture has (about 126
+million) and, with `--theme buildings`, every U.S. rooftop, into the same
+bucket. It reads Overture's release once, writes the U.S. rows into one file
+per ~70 km cell on disk, then tiles each cell whole and uploads through R2's
+S3 API (the REST API wrangler uses allows about four writes a second, which
+is a day for a country). Run from `api/` with `CLOUDFLARE_API_TOKEN` set to an
+account token that can write R2; it derives the S3 key from it, prints nothing
+secret, and resumes where it stopped if run again:
+
+    npm run national:build -- --theme addresses --upload --account <id> --clean
+    npm run national:build -- --theme buildings --upload --account <id> --clean
+
+## Houses the address data does not name
+
+Overture's addresses are county by county: Austin has every door, upstate
+South Carolina almost none. Its buildings are everywhere. When a territory is
+drawn the Worker reads both, and:
+
+- an address on a building Overture calls commercial, civic, industrial, a
+  school or a church is left out (counted as `nonResidential`);
+- a home rooftop with no address point or lead within 25 m is a door the data
+  missed. With `GEOCODIO_API_KEY` set on the Worker it is reverse-geocoded by
+  Geocodio in batches of 500 — at most 2,000 per press, the rest waiting for
+  the next press — and a U.S. street address on or next to that roof becomes
+  a lead (`geo_provider = 'geocodio'`, pinned on the roof). Without the key
+  those houses are counted and the console says the key is needed.
+
+Geocodio, not Google, because a lead is a kept result and Geocodio's terms
+allow keeping them (Google's are LAUNCH.md blocker 1). Pricing when this was
+written: 2,500 look-ups a day free, then $1.00 per 1,000, so a press costs at
+most $2 and usually nothing. A Geocodio failure or timeout never fails the
+territory: the addresses the data had are written, and the rest are counted
+with the reason so pressing **Find addresses** again retries them.
+
+Set the key once:
+
+    npx wrangler secret put GEOCODIO_API_KEY
+
+`/api/health` reports `config.geocodio: true` (never the value).
+
 ## Where Overture has no addresses: a county's own file
 
 Overture's US addresses come from OpenAddresses, and coverage is by county.

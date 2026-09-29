@@ -25,6 +25,15 @@ export interface Env {
    */
   ADDRESSES?: R2Bucket
   /**
+   * Geocodio key, for the houses the address data has no address for: their
+   * rooftops (from the same bucket) are reverse-geocoded, and a result may be
+   * kept as a lead under Geocodio's terms. Optional: without it those houses
+   * are counted and the console says the look-up is not set up.
+   */
+  GEOCODIO_API_KEY?: string
+  /** Geocodio's API root; overridable so the smokes can point it at a stand-in. */
+  GEOCODIO_URL?: string
+  /**
    * Encrypts those backups. Optional, and its absence is a refusal rather than
    * a fallback — the Worker will not write a dump in the clear.
    *

@@ -365,7 +365,7 @@ export function apiUploadPhoto(token: string, photoId: string, blob: Blob) {
     token,
     raw: blob,
     contentType: blob.type || 'image/jpeg',
-    timeoutMs: 60_000,
+    timeoutMs: 90_000,
   })
 }
 
@@ -726,7 +726,9 @@ export function apiCreateTerritory(
     generated?: GeneratedLeads | { error: string; code?: string }
   }>(
     '/api/territories',
-    { method: 'POST', body: input, token, timeoutMs: 30_000 },
+    // A minute, like Find addresses: with the box ticked the Worker also looks
+    // the houses up before it answers.
+    { method: 'POST', body: input, token, timeoutMs: input.generate ? 90_000 : 30_000 },
   )
 }
 
@@ -860,6 +862,20 @@ export interface GeneratedLeads {
   erased: number
   skipped: number
   tiles: number
+  /*
+    Optional: a Worker from before the rooftop look-up answers without them,
+    and the console then describes the result the old way.
+  */
+  coverage?: 'addresses' | 'rooftops' | 'none'
+  rooftops?: number
+  nonResidential?: number
+  withoutAddress?: number
+  resolved?: number
+  unresolved?: number
+  lookupFailed?: number
+  lookupSkipped?: number
+  geocoder?: 'on' | 'off'
+  lookupError?: string | null
 }
 
 /**
