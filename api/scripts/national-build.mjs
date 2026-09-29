@@ -108,7 +108,13 @@ if (theme === 'tiger' && !readComplete) {
     let files
     for (let attempt = 1; ; attempt++) {
       try {
-        const r = await fetch(root + zip)
+        /*
+          A retry asks for the same file with a query string. The Census
+          firewall, once it has refused a file, goes on refusing that exact
+          address for hours while serving the same file under any other; the
+          query is ignored by the file server.
+        */
+        const r = await fetch(root + zip + (attempt > 1 ? `?try=${attempt}` : ''))
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         // The Census firewall answers a burst of downloads with a small HTML
         // "Request Rejected" page (status 200). Back off hard and try again.
