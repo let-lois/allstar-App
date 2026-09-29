@@ -285,6 +285,9 @@ export async function bootstrap(env: Env, user: SessionUser) {
       // How well the pin is known. Sent to the phone because the honesty has to
       // reach the person standing on the pavement, not just the office.
       geoPrecision: p.geo_precision ?? undefined,
+      addressConfidence: p.address_confidence ?? undefined,
+      addressSource: p.address_source ?? undefined,
+      residentialStatus: p.residential_status ?? undefined,
       contacts: contactsByProperty.get(String(p.id)) ?? [],
     })),
     routes: (routes.results as Record<string, unknown>[]).map((r) => ({

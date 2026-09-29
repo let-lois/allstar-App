@@ -731,6 +731,10 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
                 state = COALESCE(?4, state),
                 zip = COALESCE(?5, zip),
                 tags = COALESCE(?8, tags),
+                -- A person who changed the street line has read it off the
+                -- house: an estimated address stops being an estimate.
+                address_confidence = CASE WHEN ?2 IS NOT NULL AND ?2 != address1 THEN 'MANUAL' ELSE address_confidence END,
+                address_source = CASE WHEN ?2 IS NOT NULL AND ?2 != address1 THEN 'manual' ELSE address_source END,
                 updated_at = ?6
           WHERE id = ?1 AND client_id = ?7`,
       )

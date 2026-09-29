@@ -884,6 +884,14 @@ export interface GeneratedLeads {
   lookupSkipped?: number
   geocoder?: 'on' | 'off'
   lookupError?: string | null
+  coverageStatus?: 'GOOD' | 'PARTIAL' | 'LIMITED' | 'NONE'
+  pointCoverage?: number | null
+  homeRooftops?: number
+  bySource?: { overture: number; census_tiger: number; geocodio: number }
+  residential?: { residential: number; unknown: number }
+  interpolated?: number
+  rangeData?: boolean
+  unranged?: number
 }
 
 /**

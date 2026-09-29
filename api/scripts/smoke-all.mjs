@@ -96,6 +96,7 @@ const TESTS = [
   { script: 'verify:territories', kind: 'pure' },
   { script: 'verify:territory-reps', kind: 'pure' },
   { script: 'verify:addresses', kind: 'pure' },
+  { script: 'verify:tiger', kind: 'pure' },
   { script: 'verify:onboarding-status', kind: 'pure' },
 
   // --- shared: one Worker on 8787, and order matters --------------------

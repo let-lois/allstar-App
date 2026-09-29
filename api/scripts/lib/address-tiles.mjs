@@ -216,3 +216,57 @@ export const US_BOXES = [
 ]
 export const inUS = (lng, lat) => US_BOXES.some((b) => lng >= b.xmin && lng <= b.xmax && lat >= b.ymin && lat <= b.ymax)
 export const US_COUNTRIES = new Set(['US', 'PR', 'VI', 'GU', 'AS', 'MP'])
+
+/* --- Census TIGER street ranges ---------------------------------------------- */
+
+/**
+ * Street segments with house-number ranges, from the Census Bureau's TIGER/Line
+ * ADDRFEAT files (public domain; free to keep, use commercially and
+ * redistribute). Tiles `r1/14/{x}/{y}.json`, each row
+ *
+ *   [street, leftFrom, leftTo, rightFrom, rightTo, zipLeft, zipRight, state, [lng, lat, lng, lat, ...]]
+ *
+ * These are *potential* ranges — the numbers a block could hold, not the
+ * houses that exist — so an address made from one is marked INTERPOLATED and
+ * is only ever put on a real rooftop.
+ */
+export const rangeKey = (x, y, z = TILE_ZOOM) => `r1/${z}/${x}/${y}.json`
+
+const STATE_BY_FIPS = { '01': 'AL', '02': 'AK', '04': 'AZ', '05': 'AR', '06': 'CA', '08': 'CO', '09': 'CT', '10': 'DE', '11': 'DC', '12': 'FL', '13': 'GA', '15': 'HI', '16': 'ID', '17': 'IL', '18': 'IN', '19': 'IA', '20': 'KS', '21': 'KY', '22': 'LA', '23': 'ME', '24': 'MD', '25': 'MA', '26': 'MI', '27': 'MN', '28': 'MS', '29': 'MO', '30': 'MT', '31': 'NE', '32': 'NV', '33': 'NH', '34': 'NJ', '35': 'NM', '36': 'NY', '37': 'NC', '38': 'ND', '39': 'OH', '40': 'OK', '41': 'OR', '42': 'PA', '44': 'RI', '45': 'SC', '46': 'SD', '47': 'TN', '48': 'TX', '49': 'UT', '50': 'VT', '51': 'VA', '53': 'WA', '54': 'WV', '55': 'WI', '56': 'WY', '60': 'AS', '66': 'GU', '69': 'MP', '72': 'PR', '78': 'VI' }
+export const stateForFips = (fips) => STATE_BY_FIPS[String(fips).slice(0, 2)] ?? ''
+
+const num = (v) => {
+  const t = String(v ?? '').trim()
+  return /^\d{1,6}$/.test(t) ? Number(t) : null
+}
+
+/**
+ * One ADDRFEAT feature as a range row, or null when it has no street name or
+ * no numeric range on either side. Multi-part lines become their first part:
+ * ADDRFEAT edges are single lines in practice.
+ */
+export function rangeRow(feature, countyFips) {
+  const p = feature?.properties ?? {}
+  const name = String(p.FULLNAME ?? '').trim()
+  if (!name) return null
+  const lf = num(p.LFROMHN), lt = num(p.LTOHN), rf = num(p.RFROMHN), rt = num(p.RTOHN)
+  if ((lf === null || lt === null) && (rf === null || rt === null)) return null
+  const g = feature.geometry
+  const line = g?.type === 'LineString' ? g.coordinates : g?.type === 'MultiLineString' ? g.coordinates?.[0] : null
+  if (!Array.isArray(line) || line.length < 2) return null
+  const flat = []
+  for (const c of line) { flat.push(round(Number(c[0])), round(Number(c[1]))) }
+  if (flat.some((v) => !Number.isFinite(v))) return null
+  return [name, lf, lt, rf, rt, String(p.ZIPL ?? '').trim(), String(p.ZIPR ?? '').trim(), stateForFips(countyFips), flat]
+}
+
+/** The z14 tiles a range row's bounding box touches (a street can cross a tile edge). */
+export function tilesForRange(row) {
+  const pts = row[8]
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+  for (let i = 0; i < pts.length; i += 2) { x0 = Math.min(x0, pts[i]); x1 = Math.max(x1, pts[i]); y0 = Math.min(y0, pts[i + 1]); y1 = Math.max(y1, pts[i + 1]) }
+  const nw = tileFor(x0, y1), se = tileFor(x1, y0)
+  const out = []
+  for (let x = nw.x; x <= se.x; x++) for (let y = nw.y; y <= se.y; y++) out.push({ x, y })
+  return out
+}
