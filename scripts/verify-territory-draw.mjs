@@ -239,7 +239,7 @@ ok(
 /* --- delete keeps the leads ----------------------------------------------- */
 await pick(RENAMED)
 const heldBefore = Number(
-  ((await page.locator('body').innerText()).match(/([\d,]+) properties/) ?? ['', '0'])[1].replace(/,/g, ''),
+  ((await page.locator('body').innerText()).match(/([\d,]+) (?:leads?|properties)\b/) ?? ['', '0'])[1].replace(/,/g, ''),
 )
 const totalBefore = await propertyTotal()
 ok(heldBefore > 0 && totalBefore > 0, 'the territory holds leads worth not losing',
