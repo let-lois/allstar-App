@@ -5,7 +5,7 @@ import { AllStarMap } from '../components/map/AllStarMap'
 import { useAppStore } from '../store/useAppStore'
 import { UNASSIGNED_TERRITORY, inTerritory, useTerritories } from './useAdminData'
 import { DataList } from './DataList'
-import { ApiError, apiAssignTerritory } from '../lib/http'
+import { ApiError, type GeneratedLeads, apiAssignTerritory } from '../lib/http'
 import { liveToken } from '../lib/session'
 import { moneyFull } from '../lib/format'
 import { pointInPolygon, polygonAreaSqMiles } from '../lib/geo'
@@ -49,6 +49,7 @@ export function AdminTerritories() {
   const [saving2, setSaving2] = useState(false)
   const [drawError, setDrawError] = useState<string | null>(null)
   const [drawDone, setDrawDone] = useState<string | null>(null)
+  const [drawWarn, setDrawWarn] = useState(false)
 
   /*
     Counted on every tap, over every lead with coordinates. A manager dragging a
@@ -86,10 +87,12 @@ export function AdminTerritories() {
         boundary: draft.points,
         generate: draftGenerate && mode === 'live',
       })
-      setDrawDone(
-        `Created ${name} with ${res.assigned.toLocaleString()} lead${res.assigned === 1 ? '' : 's'}.` +
-          (res.generated ? ` ${describeGenerated(res.generated)}` : ''),
-      )
+      // What the drawing did, and whether it needs attention: a territory saved
+      // with no new houses says why, in the warning colour, not as a success.
+      const g = res.generated
+      const claimed = res.assigned ? ` ${res.assigned.toLocaleString()} existing lead${res.assigned === 1 ? '' : 's'} inside joined it.` : ''
+      setDrawDone(`Created ${name}.${claimed}` + (g ? ` ${describeGenerated(g)}` : ''))
+      setDrawWarn(!!g && ('error' in g || (g.created === 0 && (g.coverage === 'none' || !!g.withoutAddress || !!g.lookupFailed))))
       /*
         Select what was just made. Without this the map left drawing mode with
         no selection, reframed itself on every lead in the company, and the
@@ -827,7 +830,11 @@ export function AdminTerritories() {
           )}
 
           {drawDone && !draft && (
-            <p role="status" className="border-b border-line-soft px-4 py-3 text-[13px] font-medium text-good">
+            <p
+              role="status"
+              data-testid="territory-created"
+              className={`border-b border-line-soft px-4 py-3 text-[13px] font-medium leading-snug ${drawWarn ? 'text-warn' : 'text-good'}`}
+            >
               {drawDone}
             </p>
           )}
@@ -954,12 +961,40 @@ function RepChips({
   )
 }
 
-/** The look-up's counts as one sentence, or its refusal as the server put it. */
-function describeGenerated(g: { error: string; code?: string } | { found: number; created: number; existed: number; erased: number; skipped: number }): string {
+/**
+ * The look-up's result as sentences, or its refusal as the server put it.
+ *
+ * Says what happened and, when nothing was made, why: no address data for the
+ * area, houses whose addresses need the Geocodio key, or a look-up that failed
+ * and can be retried. An empty territory never reads as a silent success.
+ */
+export function describeGenerated(g: { error: string; code?: string } | GeneratedLeads): string {
   if ('error' in g) return g.error
-  const parts = [`${g.found.toLocaleString()} address${g.found === 1 ? '' : 'es'} found`, `${g.created.toLocaleString()} new lead${g.created === 1 ? '' : 's'}`]
-  if (g.existed) parts.push(`${g.existed.toLocaleString()} already there`)
-  if (g.erased) parts.push(`${g.erased.toLocaleString()} erased before and left that way`)
-  if (g.skipped) parts.push(`${g.skipped.toLocaleString()} past the limit — draw a smaller area for the rest`)
-  return parts.join(', ') + '.'
+  const n = (x: number | undefined) => (x ?? 0).toLocaleString()
+  const plural = (x: number | undefined, one: string, many = `${one}s`) => ((x ?? 0) === 1 ? one : many)
+  const out: string[] = []
+
+  if (g.coverage === 'none') {
+    return 'No address data covers this area yet, so no houses were found. The territory is saved; see docs/ADDRESSES.md to load this area, then press Find addresses.'
+  }
+
+  const counts = [`${n(g.found)} ${plural(g.found, 'address', 'addresses')} found`, `${n(g.created)} new ${plural(g.created, 'lead')}`]
+  if (g.existed) counts.push(`${n(g.existed)} already there`)
+  if (g.erased) counts.push(`${n(g.erased)} erased before and left that way`)
+  if (g.skipped) counts.push(`${n(g.skipped)} past the limit — press Find addresses again for the rest`)
+  out.push(counts.join(', ') + '.')
+
+  if (g.nonResidential) out.push(`${n(g.nonResidential)} on commercial or public buildings ${plural(g.nonResidential, 'was', 'were')} left out.`)
+  if (g.resolved) out.push(`${n(g.resolved)} of them came from rooftops the address data had no address for.`)
+
+  if (g.geocoder === 'off' && g.withoutAddress) {
+    out.push(`${n(g.withoutAddress)} more ${plural(g.withoutAddress, 'house has', 'houses have')} no address in the data. Add the Geocodio key to the Worker to turn them into leads.`)
+  } else {
+    if (g.lookupFailed) out.push(`Looking up ${n(g.lookupFailed)} ${plural(g.lookupFailed, 'house')} failed${g.lookupError ? ` (${g.lookupError})` : ''} — press Find addresses to try again; nothing is duplicated.`)
+    if (g.lookupSkipped) out.push(`${n(g.lookupSkipped)} more ${plural(g.lookupSkipped, 'house is', 'houses are')} waiting — press Find addresses again to look them up.`)
+    if (g.unresolved) out.push(`${n(g.unresolved)} ${plural(g.unresolved, 'rooftop has', 'rooftops have')} no street address on record.`)
+  }
+
+  if (!g.found && !g.withoutAddress && g.coverage === 'addresses') out.push('There are no houses inside this shape.')
+  return out.join(' ')
 }

@@ -2,6 +2,7 @@ import { record } from './audit'
 import { erasedAmong } from './erase'
 import { pointInPolygon, type LatLng } from './geo'
 import { addressKey, propertyIdFor } from './import'
+import { Near, reverseGeocode, rooftopsInside, type Rooftop } from './rooftops'
 import { repsOf } from './territory-reps'
 import type { Env, SessionUser } from './types'
 
@@ -95,16 +96,16 @@ export function tilesCovering(polygon: LatLng[], z = TILE_ZOOM): { x: number; y:
 
 export type Bucket = Pick<R2Bucket, 'get'>
 
-/** A tile's rows, or none: a cell nobody built is empty ground, not an error. */
-async function readTile(bucket: Bucket, x: number, y: number): Promise<TileRow[]> {
+/** A tile's rows, or null for a cell nobody built — no data, which is not the same as no houses. */
+async function readTile(bucket: Bucket, x: number, y: number): Promise<TileRow[] | null> {
   const obj = await bucket.get(tileKey(x, y))
-  if (!obj) return []
+  if (!obj) return null
   const parsed: unknown = await obj.json()
   return Array.isArray(parsed) ? (parsed as TileRow[]) : []
 }
 
 export type Inside =
-  | { addresses: FoundAddress[]; tiles: number }
+  | { addresses: FoundAddress[]; tiles: number; tilesWithData: number; cells: { x: number; y: number }[] }
   | { error: string; status: number; code: 'addresses_not_configured' | 'territory_too_large' }
 
 /** The addresses inside a polygon, de-duplicated by the import's address key. */
@@ -126,10 +127,13 @@ export async function addressesInside(env: Pick<Env, 'ADDRESSES'>, polygon: LatL
   }
   const seen = new Set<string>()
   const addresses: FoundAddress[] = []
+  let tilesWithData = 0
   // A few at a time: R2 is fast, and a territory is rarely more than a dozen cells.
   for (let i = 0; i < tiles.length; i += 8) {
     const batch = await Promise.all(tiles.slice(i, i + 8).map((t) => readTile(env.ADDRESSES!, t.x, t.y)))
     for (const rows of batch) {
+      if (!rows) continue
+      tilesWithData++
       for (const r of rows) {
         const lng = Number(r[6]), lat = Number(r[7])
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
@@ -143,7 +147,7 @@ export async function addressesInside(env: Pick<Env, 'ADDRESSES'>, polygon: LatL
       }
     }
   }
-  return { addresses, tiles: tiles.length }
+  return { addresses, tiles: tiles.length, tilesWithData, cells: tiles }
 }
 
 /** A tile row as a lead's address, or null when it has no street or number. */
@@ -177,7 +181,44 @@ export interface Generated {
   /** Past the cap and not written. */
   skipped: number
   tiles: number
+  /** Where the houses came from, and what could not be named. */
+  coverage: 'addresses' | 'rooftops' | 'none'
+  /** Rooftops inside the shape (Overture buildings), homes and not. */
+  rooftops: number
+  /** Addresses on a building Overture calls commercial, civic, industrial…: not leads. */
+  nonResidential: number
+  /** Home rooftops with no address point near them. */
+  withoutAddress: number
+  /** Of those, how many Geocodio named. */
+  resolved: number
+  /** Sent to Geocodio and not named: no U.S. street address on that roof. */
+  unresolved: number
+  /** In a Geocodio batch that failed or timed out; pressing again retries them. */
+  lookupFailed: number
+  /** Past the per-press look-up cap; pressing again takes the next ones. */
+  lookupSkipped: number
+  /** 'off' when there is no Geocodio key, so rooftops without an address stay unnamed. */
+  geocoder: 'on' | 'off'
+  /** The first Geocodio failure, in words. */
+  lookupError: string | null
 }
+
+/** Rooftops sent to Geocodio per press: $1 per 1,000 past the free 2,500 a day, so a press costs at most $2. */
+export const MAX_LOOKUPS = 2000
+/** An address point this close to a rooftop is that building's address. */
+const ON_ROOF_METRES = 15
+/** A home rooftop with no address point or lead this close is a door the data missed. */
+const GAP_METRES = 25
+
+/** The United States as boxes — the same ones the national build keeps. */
+const US_BOXES = [
+  { xmin: -125.0, ymin: 24.3, xmax: -66.9, ymax: 49.5 },
+  { xmin: -179.3, ymin: 51.1, xmax: -129.9, ymax: 71.6 },
+  { xmin: -160.4, ymin: 18.8, xmax: -154.7, ymax: 22.4 },
+  { xmin: -67.4, ymin: 17.8, xmax: -64.5, ymax: 18.6 },
+]
+export const touchesUS = (polygon: LatLng[]) =>
+  polygon.some((p) => US_BOXES.some((b) => p.lng >= b.xmin && p.lng <= b.xmax && p.lat >= b.ymin && p.lat <= b.ymax))
 
 const houseNumber = (address1: string) => /^\s*(\d+[a-z]?)\b/i.exec(address1)?.[1]?.toLowerCase() ?? null
 
@@ -264,8 +305,13 @@ export async function generateLeadsForTerritory(
     return { error: 'This territory has no outline on the map, so there is nothing to look inside. Draw it first.', status: 400, code: 'no_boundary' }
   }
 
+  if (!touchesUS(boundary)) {
+    return { error: 'Address look-up covers the United States only, and this territory is outside it.', status: 400, code: 'outside_us' }
+  }
+
   const inside = await addressesInside(env, boundary)
   if ('error' in inside) return inside
+  const roofs = await rooftopsInside(env.ADDRESSES!, boundary, inside.cells)
 
   // Sole rep gets the houses; a shared patch leaves them for the field —
   // the same rule as drawing the territory.
@@ -290,6 +336,38 @@ export async function generateLeadsForTerritory(
   }
 
   /*
+    Homes only, where the data can tell. An address point on a building
+    Overture calls commercial, civic, industrial, a school, a church… is not
+    a door to knock; one on a house, or on a building nobody classified, is.
+    With no rooftop data for the area every address is kept, as before.
+  */
+  const roofIndex = new Near<Rooftop>()
+  for (const r of roofs.rooftops) roofIndex.add(r)
+  let nonResidential = 0
+  const homes: FoundAddress[] = []
+  for (const a of inside.addresses) {
+    if (roofIndex.nearest(a, ON_ROOF_METRES)?.kind === 'n') { nonResidential++; continue }
+    homes.push(a)
+  }
+
+  /*
+    The doors the address data missed: a home rooftop with no address point
+    and no lead near it. Named by Geocodio when there is a key; counted and
+    said when there is not. Bounded per press, so a huge patch costs at most
+    MAX_LOOKUPS look-ups and pressing Find addresses again takes the rest.
+  */
+  const known = new Near<LatLng>()
+  for (const a of inside.addresses) known.add(a)
+  for (const e of nearby) known.add(e)
+  const gaps = roofs.rooftops.filter((r) => r.kind !== 'n' && !known.nearest(r, GAP_METRES))
+  const toLookUp = gaps.slice(0, MAX_LOOKUPS)
+  const lookupSkipped = gaps.length - toLookUp.length
+  const named = await reverseGeocode(env, toLookUp)
+
+  const sources: (FoundAddress & { provider?: string })[] = [...homes, ...named.addresses]
+  const found = homes.length + named.addresses.length
+
+  /*
     The same door under two spellings: the same house number, on what reads
     as the same street (a typo in the name allowed, a different suffix not),
     within a few metres. Not a unit — a building lists each flat at one
@@ -301,11 +379,15 @@ export async function generateLeadsForTerritory(
     queries rather than failing outright; what lies past the cap is counted
     as skipped and said so.
   */
-  const candidates: { a: FoundAddress; id: string }[] = []
+  const candidates: { a: FoundAddress & { provider?: string }; id: string }[] = []
   let existed = 0
   let skipped = 0
-  for (const a of inside.addresses) {
-    if (existingKeys.has(addressKey({ ref: '', ...a }))) { existed++; continue }
+  // Two rooftops can come back as one address (a house and its garage).
+  const taken = new Set<string>()
+  for (const a of sources) {
+    const key = addressKey({ ref: '', ...a })
+    if (existingKeys.has(key) || taken.has(key)) { existed++; continue }
+    taken.add(key)
     const n = houseNumber(a.address1)
     const street = streetParts(a.address1)
     if (n && !a.unit && nearby.some((e) => e.number === n && sameStreet(e.street, street) && metresBetween(e, a) <= SAME_DOOR_METRES)) { existed++; continue }
@@ -325,11 +407,11 @@ export async function generateLeadsForTerritory(
     `INSERT OR IGNORE INTO properties
        (id, client_id, address1, city, state, zip, lat, lng, status, score,
         territory_id, assigned_rep_id, geo_precision, geo_provider, updated_at)
-     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'new',50,?9,?10,'rooftop','overture',?11)`,
+     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'new',50,?9,?10,'rooftop',?12,?11)`,
   )
   for (let i = 0; i < toWrite.length; i += 100) {
     const batch = toWrite.slice(i, i + 100).map(({ a, id }) =>
-      insert.bind(id, actor.clientId, a.address1, a.city || null, a.state || null, a.zip || null, a.lat, a.lng, territoryId, claimFor, now),
+      insert.bind(id, actor.clientId, a.address1, a.city || null, a.state || null, a.zip || null, a.lat, a.lng, territoryId, claimFor, now, a.provider ?? 'overture'),
     )
     const results = await env.DB.batch(batch)
     for (const r of results) created += r.meta.changes ?? 0
@@ -339,15 +421,33 @@ export async function generateLeadsForTerritory(
   // those houses are "already there", not nowhere.
   existed += toWrite.length - created
 
+  const coverage: Generated['coverage'] = inside.tilesWithData > 0 ? 'addresses' : roofs.tilesWithData > 0 ? 'rooftops' : 'none'
+  const result: Generated = {
+    found, created, existed, erased, skipped, tiles: inside.tiles,
+    coverage,
+    rooftops: roofs.rooftops.length,
+    nonResidential,
+    withoutAddress: gaps.length,
+    resolved: named.addresses.length,
+    unresolved: named.unresolved,
+    lookupFailed: named.failed,
+    lookupSkipped,
+    geocoder: env.GEOCODIO_API_KEY ? 'on' : 'off',
+    lookupError: named.error,
+  }
+  if (coverage === 'none' || named.error) {
+    console.warn(JSON.stringify({ event: 'territory.generated.incomplete', territoryId, coverage, lookupError: named.error, lookupFailed: named.failed }))
+  }
+
   await record(env, actor, {
     action: 'territory.generated',
     targetType: 'territory',
     targetId: territoryId,
     targetLabel: territory.name,
-    detail: { found: inside.addresses.length, created, existed, erased, skipped, tiles: inside.tiles, repId: claimFor },
+    detail: { ...result, repId: claimFor },
   })
 
-  return { found: inside.addresses.length, created, existed, erased, skipped, tiles: inside.tiles }
+  return result
 }
 
 function parseBoundaryJson(raw: string | null): LatLng[] | null {

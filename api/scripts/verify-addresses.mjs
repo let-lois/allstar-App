@@ -2,7 +2,7 @@ import { build } from 'esbuild'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Tiler, featureToTileRow, groupOverlaps, parseBbox, parseFieldMap, snapBoxToTiles, tileBounds, tileFor as tilerTileFor, toTileRow } from './lib/address-tiles.mjs'
+import { Tiler, buildingRow, inUS, featureToTileRow, groupOverlaps, parseBbox, parseFieldMap, snapBoxToTiles, tileBounds, tileFor as tilerTileFor, toTileRow } from './lib/address-tiles.mjs'
 
 /**
  * The houses inside a territory, made into leads — without a bucket or a database.
@@ -145,7 +145,7 @@ function fakeDb({ existing = [], erased = [], reps = ['u_curtis'], boundary = BO
     async batch(stmts) {
       return stmts.map((s) => {
         const a = s._args()
-        inserted.push({ id: a[0], address1: a[2], territory: a[8], rep: a[9] })
+        inserted.push({ id: a[0], address1: a[2], territory: a[8], rep: a[9], provider: a[11] })
         return { meta: { changes: 1 } }
       })
     },
@@ -240,6 +240,157 @@ const REP = { id: 'u_curtis', clientId: 'c_1', role: 'field_rep', name: 'Curtis'
   w.env.ADDRESSES = bucket(many)
   const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
   ok(res.created === worker.MAX_NEW_LEADS && res.skipped === 7, 'past the cap the rest are counted as skipped, and said so', `${res.created} created, ${res.skipped} skipped`)
+}
+
+/* --- rooftops: homes only, and the doors the address data missed ----------- */
+// One tile, as before, now with rooftops beside it under b1/. Round Rock
+// coordinates inside BOX; a metre is about 0.000009 degrees here.
+const roofBucket = (addrRows, roofRows) => ({
+  async get(key) {
+    if (key === worker.tileKey(t.x, t.y) && addrRows) return { async json() { return addrRows } }
+    if (key === `b1/14/${t.x}/${t.y}.json` && roofRows) return { async json() { return roofRows } }
+    return null
+  },
+})
+const HOUSE_ADDR = ['10', 'Inside St', null, 'Round Rock', 'TX', '78664', -97.675, 30.505]
+const SHOP_ADDR = ['500', 'Main St', null, 'Round Rock', 'TX', '78664', -97.668, 30.512]
+const ROOFS = [
+  [-97.67501, 30.50501, 'u'], // the house at 10 Inside St
+  [-97.66801, 30.51201, 'n'], // the shop at 500 Main St
+  [-97.66500, 30.51500, 'r'], // a house the address data has no address for
+  [-97.66200, 30.51800, 'u'], // and another
+]
+const realFetch = globalThis.fetch
+const geocodio = (answer) => {
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), body: JSON.parse(init.body) })
+    return answer(JSON.parse(init.body), String(url))
+  }
+  return calls
+}
+const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+const named = (q, number, street) => {
+  const [lat, lng] = q.split(',').map(Number)
+  return { response: { results: [{ address_components: { number, formatted_street: street, city: 'Round Rock', state: 'TX', zip: '78664', country: 'US' }, location: { lat, lng }, accuracy_type: 'rooftop' }] } }
+}
+
+{
+  // No key: the house on a shop's roof is skipped; the doors with no address are counted and said.
+  const w = fakeDb()
+  w.env.ADDRESSES = roofBucket([HOUSE_ADDR, SHOP_ADDR], ROOFS)
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  ok(res.nonResidential === 1 && !w.inserted.some((r) => r.address1.startsWith('500 ')), 'an address on a building Overture calls commercial does not become a lead', JSON.stringify(res))
+  ok(res.created === 1 && w.inserted[0].address1 === '10 Inside St', 'the house does')
+  ok(res.rooftops === 4 && res.withoutAddress === 2 && res.geocoder === 'off' && res.resolved === 0, 'two home rooftops have no address, and with no Geocodio key that is counted, not guessed', JSON.stringify(res))
+}
+
+{
+  // With a key: Geocodio names them; the pin stays on the roof; the key never reaches a log.
+  const w = fakeDb()
+  w.env.ADDRESSES = roofBucket([HOUSE_ADDR, SHOP_ADDR], ROOFS)
+  w.env.GEOCODIO_API_KEY = 'test-key'
+  const calls = geocodio((qs) => reply(200, { results: qs.map((q, i) => named(q, String(20 + i * 2), 'Oak Ridge Dr')) }))
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  globalThis.fetch = realFetch
+  ok(calls.length === 1 && calls[0].body.length === 2 && /\/reverse\?api_key=test-key$/.test(calls[0].url), 'one batched reverse look-up, for just the two rooftops with no address', `${calls.length} calls, ${calls[0]?.body.length}`)
+  ok(res.resolved === 2 && res.created === 3 && res.geocoder === 'on', 'both are named and become leads beside the house', JSON.stringify(res))
+  const g = w.inserted.filter((r) => /Oak Ridge Dr/.test(r.address1))
+  ok(g.length === 2 && g.every((r) => r.provider === 'geocodio'), 'recorded as Geocodio’s, not Overture’s', JSON.stringify(g))
+}
+
+{
+  // A result 200 m away is another house; one that is not a street address is nothing.
+  const w = fakeDb()
+  w.env.ADDRESSES = roofBucket([HOUSE_ADDR], ROOFS)
+  w.env.GEOCODIO_API_KEY = 'k'
+  geocodio((qs) => reply(200, { results: [
+    { response: { results: [{ address_components: { number: '9', formatted_street: 'Far Rd', country: 'US' }, location: { lat: 30.517, lng: -97.665 }, accuracy_type: 'rooftop' }] } },
+    { response: { results: [{ address_components: { formatted_street: 'Some Rd', country: 'US' }, location: { lat: 30.518, lng: -97.662 }, accuracy_type: 'street_center' }] } },
+  ] }))
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  globalThis.fetch = realFetch
+  ok(res.resolved === 0 && res.unresolved === 2 && res.created === 1, 'a far-off result and a street-centre guess are counted unresolved, not made leads', JSON.stringify(res))
+}
+
+{
+  // Two rooftops, one address (a house and its garage): one lead.
+  const w = fakeDb()
+  w.env.ADDRESSES = roofBucket([HOUSE_ADDR], ROOFS)
+  w.env.GEOCODIO_API_KEY = 'k'
+  geocodio((qs) => reply(200, { results: qs.map((q) => named(q, '30', 'Oak Ridge Dr')) }))
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  globalThis.fetch = realFetch
+  ok(w.inserted.filter((r) => r.address1 === '30 Oak Ridge Dr').length === 1 && res.existed === 1, 'two rooftops that name one address make one lead', JSON.stringify(res))
+}
+
+{
+  // The provider times out: the addresses the data had are still written, and the failure is said.
+  const w = fakeDb()
+  w.env.ADDRESSES = roofBucket([HOUSE_ADDR], ROOFS)
+  w.env.GEOCODIO_API_KEY = 'k'
+  geocodio(() => { throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }) })
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  globalThis.fetch = realFetch
+  ok(!('error' in res) && res.created === 1, 'a Geocodio timeout does not fail the territory — the addresses it had are written', JSON.stringify(res))
+  ok(res.lookupFailed === 2 && /did not answer within 25s/.test(res.lookupError ?? ''), 'and the rooftops it could not name are counted, with the reason', res.lookupError)
+  ok(!JSON.stringify(res).includes('k&') && !/api_key/.test(res.lookupError ?? ''), 'the reason never carries the key')
+}
+
+{
+  // The provider refuses the key.
+  const w = fakeDb()
+  w.env.ADDRESSES = roofBucket([HOUSE_ADDR], ROOFS)
+  w.env.GEOCODIO_API_KEY = 'bad'
+  geocodio(() => reply(403, { error: 'Invalid API key' }))
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  globalThis.fetch = realFetch
+  ok(res.lookupFailed === 2 && /403: Invalid API key/.test(res.lookupError ?? ''), 'a refused key is reported as Geocodio said it', res.lookupError)
+}
+
+{
+  // Nothing built here at all: said as "no data", not as "no houses".
+  const w = fakeDb()
+  w.env.ADDRESSES = roofBucket(null, null)
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  ok(res.coverage === 'none' && res.found === 0 && res.created === 0, 'an area with no data answers coverage "none", so the console can say so', JSON.stringify(res))
+  const w2 = fakeDb()
+  w2.env.ADDRESSES = roofBucket(null, ROOFS.slice(2))
+  const res2 = await worker.generateLeadsForTerritory(w2.env, MANAGER, 't_a')
+  ok(res2.coverage === 'rooftops' && res2.withoutAddress === 2, 'an area with rooftops but no address list answers "rooftops"', JSON.stringify(res2))
+}
+
+{
+  // Outside the United States.
+  const LONDON = [{ lat: 51.50, lng: -0.13 }, { lat: 51.51, lng: -0.13 }, { lat: 51.51, lng: -0.12 }]
+  const w = fakeDb({ boundary: LONDON })
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  ok(res.status === 400 && res.code === 'outside_us', 'a territory outside the U.S. is told the look-up is U.S.-only', JSON.stringify(res))
+}
+
+{
+  // A huge patch: at most MAX_LOOKUPS rooftops per press, and the rest said.
+  const roofs = []
+  for (let i = 0; i < worker.MAX_LOOKUPS + 30; i++) roofs.push([-97.679 + (i % 60) * 0.0003, 30.501 + Math.floor(i / 60) * 0.0003, 'u'])
+  const w = fakeDb()
+  w.env.ADDRESSES = roofBucket([], roofs)
+  w.env.GEOCODIO_API_KEY = 'k'
+  const calls = geocodio((qs) => reply(200, { results: qs.map(() => ({ response: { results: [] } })) }))
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  globalThis.fetch = realFetch
+  const sent = calls.reduce((a, c) => a + c.body.length, 0)
+  ok(sent === worker.MAX_LOOKUPS && res.lookupSkipped === 30 && calls.every((c) => c.body.length <= 500), `a press looks up at most ${worker.MAX_LOOKUPS} rooftops, in batches, and counts the rest`, `${sent} sent in ${calls.length} batches, ${res.lookupSkipped} skipped`)
+}
+
+/* --- rooftop rows at build time ------------------------------------------------ */
+{
+  const box = (w, h) => ({ xmin: -97.67, xmax: -97.67 + w / (111320 * Math.cos((30.51 * Math.PI) / 180)), ymin: 30.51, ymax: 30.51 + h / 110540 })
+  ok(buildingRow({ bbox: box(12, 15), subtype: 'residential', class: 'house' })?.[2] === 'r', 'a residential building is a home')
+  ok(buildingRow({ bbox: box(12, 15) })?.[2] === 'u', 'an unclassified house-sized building is kept as a likely home')
+  ok(buildingRow({ bbox: box(60, 60), subtype: 'commercial' })?.[2] === 'n', 'a commercial one is marked not a home')
+  ok(buildingRow({ bbox: box(80, 80) })?.[2] === 'n', 'an unclassified one too big to be a house is marked not a home')
+  ok(buildingRow({ bbox: box(4, 5) }) === null && buildingRow({ bbox: box(8, 8), class: 'garage' }) === null, 'sheds and garages are dropped')
+  ok(inUS(-82.49, 34.78) && inUS(-157.85, 21.3) && !inUS(-0.13, 51.5), 'the U.S. boxes hold Powdersville and Honolulu, and not London')
 }
 
 if (fails.length) {

@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url'
 const here = dirname(fileURLToPath(import.meta.url))
 const api = resolve(here, '..')
 const PORT = Number(process.env.PORT || 8854)
+const GEO_PORT = 8864
 const BASE = `http://127.0.0.1:${PORT}`
 const SETUP_TOKEN = 'local-setup-token'
 const STATE = resolve(api, '.wrangler/territory-leads-state')
@@ -52,12 +53,13 @@ function writeConfig(name, withAddresses = true) {
 }
 
 let child = null
-async function start(config) {
+async function start(config, vars = []) {
   child = spawn(resolve(api, 'node_modules/.bin/wrangler'),
     ['dev', '-c', config, '--port', String(PORT), '--ip', '127.0.0.1',
      '--local-protocol', 'http', '--persist-to', STATE, '--log-level', 'warn',
      '--var', `SETUP_TOKEN:${SETUP_TOKEN}`,
-     '--var', 'SESSION_PEPPER:local-tleads-pepper'],
+     '--var', 'SESSION_PEPPER:local-tleads-pepper',
+     ...vars.flatMap((v) => ['--var', v])],
     { cwd: api, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
   child.stdout.on('data', () => {})
   child.stderr.on('data', () => {})
@@ -244,6 +246,69 @@ try {
     ok(e.status === 200, '10 Inside St is erased at the homeowner’s request', `${e.status} ${e.body.error ?? ''}`)
     const r = await j(await call(`/api/territories/${T.id}/leads`, { method: 'POST' }, manager))
     ok(r.status === 200 && r.body.created === 0 && r.body.erased === 1, 'a redraw does not bring them back — counted as erased, not created', JSON.stringify(r.body))
+  }
+
+  /* ===== 3b. rooftops where the data has no addresses (Powdersville) ====== */
+  //
+  // Upstate South Carolina: Overture has rooftops and no addresses. A stand-in
+  // Geocodio names them; the Worker is pointed at it with GEOCODIO_URL.
+  {
+    const { createServer } = await import('node:http')
+    const { execFile } = await import('node:child_process')
+    const { promisify } = await import('node:util')
+    const run = promisify(execFile)
+    let mode = 'ok'
+    const seen = []
+    const geo = createServer((req, res) => {
+      let body = ''
+      req.on('data', (d) => (body += d))
+      req.on('end', () => {
+        seen.push({ url: req.url, body: JSON.parse(body || '[]') })
+        if (mode === 'down') { res.writeHead(503, { 'content-type': 'application/json' }); res.end('{"error":"Service unavailable"}'); return }
+        const results = JSON.parse(body).map((q, i) => {
+          const [lat, lng] = q.split(',').map(Number)
+          return { query: q, response: { results: [{ address_components: { number: String(100 + i * 2), formatted_street: 'Cypress Ridge Dr', city: 'Powdersville', state: 'SC', zip: '29642', country: 'US' }, location: { lat, lng }, accuracy_type: 'rooftop' }] } }
+        })
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ results }))
+      })
+    })
+    await new Promise((r) => geo.listen(GEO_PORT, '127.0.0.1', r))
+    try {
+      const P = [{ lat: 34.780, lng: -82.500 }, { lat: 34.790, lng: -82.500 }, { lat: 34.790, lng: -82.490 }, { lat: 34.780, lng: -82.490 }]
+      const ROOFS = [[-82.4980, 34.7820, 'u'], [-82.4960, 34.7840, 'r'], [-82.4940, 34.7860, 'u'], [-82.4920, 34.7880, 'n']]
+      const { x, y } = tileFor(-82.495, 34.785)
+      const inTile = ROOFS.filter((r) => { const t = tileFor(r[0], r[1]); return t.x === x && t.y === y })
+      await stop()
+      const file = resolve(api, '.wrangler', 'tleads-roofs.json')
+      writeFileSync(file, JSON.stringify(inTile))
+      await run(resolve(api, 'node_modules/.bin/wrangler'),
+        ['r2', 'object', 'put', `allstar-addresses/b1/14/${x}/${y}.json`, '--file', file, '--content-type', 'application/json', '--local', '--persist-to', STATE, '-c', config],
+        { cwd: api })
+      const h = await start(config, ['GEOCODIO_API_KEY:smoke-key', `GEOCODIO_URL:http://127.0.0.1:${GEO_PORT}/v1.9`])
+      ok(h.config?.geocodio === true, '/api/health reports the Geocodio key as present (never its value)')
+      const { token: m2 } = await (await call('/api/auth/login', { method: 'POST', body: JSON.stringify(OWNER) })).json()
+      const homes = inTile.filter((r) => r[2] !== 'n').length
+
+      const r = await j(await call('/api/territories', { method: 'POST', body: JSON.stringify({ name: 'Powdersville', repIds: [curtis.id], boundary: P, generate: true }) }, m2))
+      const g = r.body.generated
+      ok(r.status === 201 && g?.coverage === 'rooftops', 'a territory where Overture has rooftops but no addresses is created, and says where the houses came from', `${r.status} ${JSON.stringify(g)}`)
+      ok(g?.withoutAddress === homes && g?.resolved === homes && g?.created === homes, `each of its ${homes} home rooftops is named and becomes a lead; the commercial one does not`, JSON.stringify(g))
+      ok(seen.length === 1 && seen[0].body.length === homes && /\/v1\.9\/reverse\?api_key=smoke-key/.test(seen[0].url), 'in one batched reverse look-up', JSON.stringify(seen.map((c) => c.body.length)))
+      const rows = await query(`SELECT address1, state, geo_provider AS p, assigned_rep_id AS rep FROM properties WHERE territory_id='${r.body.territory.id}'`)
+      ok(rows.length === homes && rows.every((x) => x.p === 'geocodio' && x.state === 'SC' && x.rep === curtis.id), 'stored as Geocodio’s, in SC, handed to the territory’s one rep', JSON.stringify(rows))
+
+      const again = await j(await call(`/api/territories/${r.body.territory.id}/leads`, { method: 'POST' }, m2))
+      ok(again.status === 200 && again.body.created === 0 && seen.length === 1, 'pressing Find addresses again makes no duplicates and does not pay for the look-up twice', JSON.stringify(again.body))
+
+      mode = 'down'
+      const P2 = P.map((p) => ({ lat: p.lat, lng: p.lng + 0.00001 }))
+      await query(`DELETE FROM properties WHERE territory_id='${r.body.territory.id}'`)
+      const d = await j(await call('/api/territories', { method: 'POST', body: JSON.stringify({ name: 'Powdersville 2', boundary: P2, generate: true }) }, m2))
+      ok(d.status === 201 && d.body.generated?.lookupFailed === homes && /503/.test(d.body.generated?.lookupError ?? '') && d.body.generated?.created === 0, 'with Geocodio down the territory is still saved, and the failure is counted and named', JSON.stringify(d.body.generated))
+    } finally {
+      geo.close()
+    }
   }
 
   /* ===== 4. with no address data ========================================== */
