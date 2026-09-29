@@ -66,16 +66,21 @@ Once per deployment, from `api/`:
 
        npx wrangler r2 bucket create allstar-addresses
 
-2. In `wrangler.toml`, uncomment the three lines under *The houses on the
-   ground* so the Worker binds `ADDRESSES` to it. Deploy (a merge does that).
-   `wrangler deploy` refuses a binding whose bucket does not exist, and this
-   repo deploys on every merge — which is why the binding ships commented out
-   and the bucket comes first.
+2. Bind it. `wrangler.toml` binds `ADDRESSES` to `allstar-addresses` (done
+   on 2026-09-28, once the bucket existed). `wrangler deploy` refuses a
+   binding whose bucket does not exist, and this repo deploys on every merge,
+   so the bucket always comes first. A bound, empty bucket is safe: a territory
+   is created with no new leads until its area's tiles are uploaded.
 
 3. Build and upload the ground you sell on, as a bounding box
    (`minLng,minLat,maxLng,maxLat`). Austin's metro, for example:
 
-       npm run addresses:build -- --bbox -98.10,30.05,-97.45,30.65 --upload
+       npm run addresses:build -- --bbox -98.10,30.05,-97.45,30.65 --upload --account <account id>
+
+   `<account id>` is the Cloudflare account `allstar-api` deploys to (the one
+   holding `allstar-photos`); without it, a login that can see several
+   accounts stops to ask. A failed upload stops with wrangler's message
+   rather than leaving half an area uploaded.
 
    That reads about forty row groups, takes a few minutes, and uploads a few
    thousand tiles. Repeat for each market. The box is widened to the whole

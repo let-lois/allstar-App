@@ -38,7 +38,7 @@ const opt = (name, fallback) => {
 const flag = (name) => args.includes(`--${name}`)
 
 if (flag('help') || !opt('bbox')) {
-  console.log(`usage: node scripts/addresses-build.mjs --bbox minLng,minLat,maxLng,maxLat [--out dir] [--release YYYY-MM-DD.N] [--upload] [--bucket name] [--parallel 8]`)
+  console.log(`usage: node scripts/addresses-build.mjs --bbox minLng,minLat,maxLng,maxLat [--out dir] [--release YYYY-MM-DD.N] [--upload [--account ID]] [--bucket name] [--parallel 8]`)
   process.exit(opt('bbox') ? 0 : 1)
 }
 
@@ -146,8 +146,20 @@ console.log(`wrote ${files} tiles holding ${kept.toLocaleString()} addresses to 
 /* --- upload -------------------------------------------------------------------- */
 if (flag('upload')) {
   const wrangler = resolve(api, 'node_modules/.bin/wrangler')
-  const put = (key) =>
-    execFileSync(wrangler, ['r2', 'object', 'put', `${bucket}/${key}`, '--file', resolve(out, key), '--content-type', 'application/json', ...(flag('local') ? ['--local'] : [])], { cwd: api, stdio: 'ignore' })
+  // The account the Worker deploys to, so wrangler never stops to ask which
+  // one: --account, or CLOUDFLARE_ACCOUNT_ID already in the environment.
+  const account = opt('account', process.env.CLOUDFLARE_ACCOUNT_ID)
+  const env = account ? { ...process.env, CLOUDFLARE_ACCOUNT_ID: account } : process.env
+  const put = (key) => {
+    try {
+      execFileSync(wrangler, ['r2', 'object', 'put', `${bucket}/${key}`, '--file', resolve(out, key), '--content-type', 'application/json', ...(flag('local') ? ['--local'] : [])], { cwd: api, env, stdio: ['ignore', 'ignore', 'pipe'] })
+    } catch (err) {
+      // Say what wrangler said, and stop: a half-uploaded area reads as
+      // "no houses here" to the Worker, which is worse than an error now.
+      console.error(`upload of ${key} failed:\n${String(err.stderr ?? err.message).trim()}`)
+      process.exit(1)
+    }
+  }
   let n = 0
   for (const t of tiler.entries()) {
     put(t.key)

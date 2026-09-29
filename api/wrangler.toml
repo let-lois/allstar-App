@@ -51,19 +51,17 @@ bucket_name = "allstar-backups"
 # `npm run addresses:build` and uploaded here. With it, drawing a territory
 # finds every address inside and makes each one a lead (docs/ADDRESSES.md).
 #
-# Commented out on purpose. `wrangler deploy` refuses a binding whose bucket
-# does not exist, and this repo deploys to production on every merge — so the
-# binding goes live only once the bucket does. Two steps, in this order:
+# The bucket exists in the account this Worker deploys to (created
+# 2026-09-28, beside allstar-photos and allstar-backups). `wrangler deploy`
+# refuses a binding whose bucket does not exist, so this stays in step with
+# it: remove the bucket and this block must go too.
 #
-#   npx wrangler r2 bucket create allstar-addresses
-#   uncomment the three lines below, then deploy
-#
-# Until then /api/health reports `addresses: false` and the console says the
-# look-up is not set up yet. Nothing else changes.
-#
-# [[r2_buckets]]
-# binding = "ADDRESSES"
-# bucket_name = "allstar-addresses"
+# A bound but empty bucket is safe: a tile nobody built reads as empty
+# ground, so a territory is created with no new leads until the tiles for
+# that area are uploaded (docs/ADDRESSES.md, step 3).
+[[r2_buckets]]
+binding = "ADDRESSES"
+bucket_name = "allstar-addresses"
 
 # ---------------------------------------------------------------------------
 # Scheduled work.

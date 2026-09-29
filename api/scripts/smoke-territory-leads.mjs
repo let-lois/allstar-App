@@ -39,10 +39,12 @@ const ADDR_OFF = '# [[r2_buckets]]\n# binding = "ADDRESSES"\n# bucket_name = "al
 const ADDR_ON = '[[r2_buckets]]\nbinding = "ADDRESSES"\nbucket_name = "allstar-addresses"'
 function writeConfig(name, withAddresses = true) {
   const source = readFileSync(resolve(api, 'wrangler.toml'), 'utf8')
-  if (!source.includes(ADDR_OFF)) throw new Error('wrangler.toml no longer carries the commented ADDRESSES binding this smoke switches on')
+  // Production binds ADDRESSES; the smoke also needs a Worker without it, to
+  // pin the 501 a deployment with no address data answers.
+  if (!source.includes(ADDR_ON)) throw new Error('wrangler.toml no longer binds ADDRESSES the way this smoke expects')
   const body = source
     .replace('main = "src/index.ts"', 'main = "../src/index.ts"')
-    .replace(ADDR_OFF, withAddresses ? ADDR_ON : ADDR_OFF)
+    .replace(ADDR_ON, withAddresses ? ADDR_ON : ADDR_OFF)
   const path = resolve(api, '.wrangler', name)
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, body)
