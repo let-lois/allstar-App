@@ -57,7 +57,8 @@
     "verify:addresses": "node scripts/verify-addresses.mjs",
     "smoke:territory-leads": "node scripts/smoke-territory-leads.mjs",
     "smoke:lead-edit": "node scripts/smoke-lead-edit.mjs",
-    "smoke:quote-sent": "node scripts/smoke-quote-sent.mjs"
+    "smoke:quote-sent": "node scripts/smoke-quote-sent.mjs",
+    "smoke:account-delete": "node scripts/smoke-account-delete.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",

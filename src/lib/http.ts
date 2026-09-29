@@ -110,6 +110,14 @@ export function apiOnboardingStep(token: string, step: OnboardingStep, data?: Re
   })
 }
 
+/**
+ * Delete the signed-in person's own account (App Store 5.1.1(v)). The password
+ * and a typed DELETE are checked by the server; the phone signs out after.
+ */
+export function apiDeleteAccount(token: string, input: { password: string; confirm: string }) {
+  return request<{ ok: true }>('/api/me/delete', { method: 'POST', body: input, token, timeoutMs: 30_000 })
+}
+
 export function apiUpdateProfile(
   token: string,
   input: { firstName?: string; lastName?: string; phone?: string; jobTitle?: string },

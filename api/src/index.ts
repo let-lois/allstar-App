@@ -37,6 +37,7 @@ import { readAudit, record as recordAudit } from './audit'
 import {
   createResetLink,
   deleteUser,
+  deleteOwnAccount,
   footprint,
   setActive,
   setPassword,
@@ -101,7 +102,7 @@ import {
 } from './integrations'
 import { checkLoginRate, clearFailures, recordFailure } from './ratelimit'
 import { directions } from './directions'
-import { invitePage, setupPage } from './pages'
+import { invitePage, setupPage, privacyPage, supportPage } from './pages'
 import { bootstrap } from './read'
 import type { Env, Mutation, Role, SessionUser } from './types'
 
@@ -394,6 +395,10 @@ export default {
       // anyone can sign in: the first admin has no account, and an invited rep
       // has no password. The React app can't help with either.
       const appUrl = env.APP_URL ?? 'https://allstar.letlois.com'
+
+      // Public pages App Store Connect and the app link to.
+      if (path === '/privacy' && req.method === 'GET') return privacyPage({ supportEmail: env.SUPPORT_EMAIL })
+      if (path === '/support' && req.method === 'GET') return supportPage({ supportEmail: env.SUPPORT_EMAIL })
 
       if (path === '/setup') {
         if (req.method === 'GET') {
@@ -872,6 +877,14 @@ export default {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
         const result = await completeStep(env, user, body)
         if ('error' in result) return json({ error: result.error, missing: result.missing }, result.status, cors)
+        return json(result, 200, cors)
+      }
+      // Deleting your own account (App Store 5.1.1(v)). POST, not DELETE, so
+      // the body — password and a typed confirmation — always arrives.
+      if (path === '/api/me/delete' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await deleteOwnAccount(env, user, body)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 200, cors)
       }
       if (path === '/api/me/profile' && req.method === 'PATCH') {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { API_URL } from '../lib/api-url'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { SyncDetail, usePhotoSync, useSync } from '../components/sync/SyncBadge'
@@ -398,8 +399,12 @@ export function More() {
                 <>
                   <MoreLink label="My badge" onClick={() => nav('/badge')} />
                   <MoreLink label="Edit profile" onClick={() => nav('/profile')} />
+                  <MoreLink label="Delete account" onClick={() => nav('/profile#delete-account')} />
                 </>
               )}
+              {/* Plain links: the phone shell hands an https link to Safari. */}
+              <MoreHref label="Help & support" href={`${API_URL}/support`} />
+              <MoreHref label="Privacy policy" href={`${API_URL}/privacy`} />
               <MoreLink label="Standings" onClick={() => nav('/standings')} />
               <MoreLink label="Today's route" onClick={() => nav('/route')} />
               <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
@@ -513,6 +518,24 @@ function Row({ label, value }: { label: string; value: string }) {
  * meaning. The chevron is the only tell, and it points the way it behaves:
  * right for "this leaves the screen", down for "this opens in place".
  */
+function MoreHref({ label, href }: { label: string; href: string }) {
+  return (
+    <div className="card overflow-hidden">
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="metal-row focusable flex min-h-tap w-full items-center justify-between gap-3 px-4 py-3 text-left text-[15px] font-medium"
+      >
+        {label}
+        <span className="shrink-0 text-accent-strong">
+          <IconChevron />
+        </span>
+      </a>
+    </div>
+  )
+}
+
 function MoreLink({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <div className="card overflow-hidden">

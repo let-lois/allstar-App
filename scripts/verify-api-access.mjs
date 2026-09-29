@@ -73,6 +73,7 @@ const ROUTES = {
   "/api/me/onboarding|GET": { how: 'session' },
   "/api/me/onboarding/step|POST": { how: 'session' },
   "/api/me/profile|PATCH": { how: 'session' },
+  "/api/me/delete|POST": { how: 'session' },
   "/api/me/badge|POST": { how: 'session' },
   "/api/me/badge/confirm|POST": { how: 'session' },
   "/api/me/badge/renew|POST": { how: 'session' },
