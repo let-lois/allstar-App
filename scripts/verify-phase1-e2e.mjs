@@ -481,6 +481,32 @@ try {
     await bare.close()
   }
 
+  /* ===== last: the rep deletes their own account from the phone =========== */
+  // App Store guideline 5.1.1(v). Last, because it removes the rep the walk used.
+  {
+    await rep.goto(`${APP}/more`, { waitUntil: 'domcontentloaded' })
+    await settle(rep, 1500)
+    ok((await rep.getByRole('link', { name: 'Privacy policy' }).getAttribute('href'))?.endsWith('/privacy') === true, 'More links the privacy policy')
+    ok((await rep.getByRole('link', { name: 'Help & support' }).getAttribute('href'))?.endsWith('/support') === true, 'and support')
+    await rep.getByRole('button', { name: 'Delete account' }).click()
+    await settle(rep, 1200)
+    ok(/\/profile/.test(rep.url()) && (await rep.getByTestId('delete-account').count()) === 1, 'Delete account leads to the profile, where it is explained')
+    await rep.getByTestId('delete-account-open').click()
+    await settle(rep, 600)
+    const submit = rep.getByTestId('delete-account-submit')
+    await rep.getByTestId('delete-account-password').fill(REP.password)
+    ok(await submit.isDisabled(), 'the button stays off until DELETE is typed')
+    await rep.getByTestId('delete-account-confirm').fill('delete')
+    ok(!(await submit.isDisabled()), 'typing it, in any case, turns it on')
+    const overflow = await rep.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+    ok(overflow <= 0, 'the sheet fits a 390px phone', `overflow ${overflow}px`)
+    await submit.click()
+    await settle(rep, 3000)
+    ok((await rep.locator('input[type="email"]').count()) === 1, 'the phone is signed out, back on the sign-in screen')
+    const gone = await fetch(`${API}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: REP.email, password: REP.password }) })
+    ok(gone.status === 401, 'and the account can no longer sign in', `${gone.status}`)
+  }
+
   ok(errors.length === 0, `no page errors${errors.length ? ': ' + errors[0] : ''}`)
   await repCtx2.close(); await mgrCtx.close()
 } catch (err) {

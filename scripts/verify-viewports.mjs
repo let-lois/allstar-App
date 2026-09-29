@@ -86,7 +86,7 @@ const tapSize = async (locator) => {
 }
 
 try {
-  for (const [width, height, label] of [[360, 800, 'small Android'], [390, 844, 'iPhone'], [430, 932, 'large iPhone']]) {
+  for (const [width, height, label] of [[360, 800, 'small Android'], [375, 667, 'iPhone SE'], [390, 844, 'iPhone'], [430, 932, 'large iPhone']]) {
     console.log(`\n--- ${width}x${height} (${label}) ---`)
     const { ctx, page, errors } = await phone(width, height)
     const screens = [
@@ -217,4 +217,4 @@ if (fails.length) {
   fails.forEach((f) => console.log(`  - ${f}`))
   process.exit(1)
 }
-console.log('=== fits three phones, and the map flow holds on the common one ===')
+console.log('=== fits four phones, from the iPhone SE up, and the map flow holds on the common one ===')

@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
 import { Field } from '../components/ui/Input'
+import { BottomSheet } from '../components/ui/BottomSheet'
 import { AvatarPicker, AvatarRemove } from '../components/ui/AvatarPicker'
-import { ApiError, apiUpdateProfile } from '../lib/http'
+import { ApiError, apiDeleteAccount, apiUpdateProfile } from '../lib/http'
 import { ROLE_LABEL } from '../lib/roles'
 import { liveToken } from '../lib/session'
 import { useAppStore } from '../store/useAppStore'
@@ -113,7 +114,74 @@ export function MyProfile() {
             </p>
           )}
         </form>
+        {mode === 'live' && <DeleteAccount />}
       </div>
+    </div>
+  )
+}
+
+/*
+  Delete my account. Apple requires it of any app that lets people make an
+  account (guideline 5.1.1(v)), and it has to be findable, not hidden behind
+  an email to support. It asks for the password and a typed DELETE, says
+  exactly what goes and what stays, and signs out when it is done.
+*/
+function DeleteAccount() {
+  const nav = useNavigate()
+  const signOut = useAppStore((s) => s.signOut)
+  const [open, setOpen] = useState(false)
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function remove() {
+    const token = liveToken()
+    if (!token) return
+    setBusy(true)
+    setError(null)
+    try {
+      await apiDeleteAccount(token, { password, confirm: confirm.trim().toUpperCase() })
+      await signOut()
+      nav('/', { replace: true })
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not delete the account just now. Try again when you have signal.')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="content-col px-4 pb-8">
+      <div className="card mt-6 p-4" id="delete-account" data-testid="delete-account">
+        <p className="text-[15px] font-semibold">Delete account</p>
+        <p className="mt-1 text-[13px] leading-snug text-ink-mute">
+          Permanently removes your sign-in, profile, badge and your own visits and notes. Leads you worked stay with your company.
+        </p>
+        <Button type="button" variant="danger" full className="mt-3" onClick={() => setOpen(true)} data-testid="delete-account-open">
+          Delete my account
+        </Button>
+      </div>
+      <BottomSheet open={open} onClose={() => !busy && setOpen(false)} title="Delete your account?">
+        <div className="space-y-4 px-4 pb-6" data-testid="delete-account-sheet">
+          <p className="text-[14px] leading-relaxed text-ink-soft">
+            This cannot be undone. Your sign-in, profile, badge, and the visits, notes and photos you recorded are deleted. The leads you worked stay with your company and go back to its unassigned list.
+          </p>
+          <Field label="Password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} data-testid="delete-account-password" />
+          <Field label="Type DELETE to confirm" autoCapitalize="characters" autoCorrect="off" value={confirm} onChange={(e) => setConfirm(e.target.value)} data-testid="delete-account-confirm" />
+          {error && <p role="alert" className="rounded-field bg-bad-bg px-3 py-2.5 text-[14px] font-medium text-bad">{error}</p>}
+          <Button
+            type="button"
+            variant="danger"
+            size="lg"
+            full
+            disabled={busy || !password || confirm.trim().toUpperCase() !== 'DELETE'}
+            onClick={() => void remove()}
+            data-testid="delete-account-submit"
+          >
+            {busy ? 'Deleting…' : 'Delete my account'}
+          </Button>
+        </div>
+      </BottomSheet>
     </div>
   )
 }

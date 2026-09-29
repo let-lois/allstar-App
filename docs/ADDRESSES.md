@@ -123,7 +123,11 @@ drawn the Worker reads both, and:
 - an address on a building Overture calls commercial, civic, industrial, a
   school or a church is left out (counted as `nonResidential`);
 - a home rooftop with no address point or lead within 25 m is a door the data
-  missed. With `GEOCODIO_API_KEY` set on the Worker it is reverse-geocoded by
+  missed. First, for free, it is named from the Census TIGER range of the
+  street it faces (`national:build --theme tiger`): street, side and ZIP from
+  the data, the house number estimated and stored as `INTERPOLATED` for the rep
+  to confirm (see `docs/ADDRESS_SOURCES.md`). Only a roof no numbered street is
+  near goes further: with `GEOCODIO_API_KEY` set on the Worker it is reverse-geocoded by
   Geocodio in batches of 500 — at most 2,000 per press, the rest waiting for
   the next press — and a U.S. street address on or next to that roof becomes
   a lead (`geo_provider = 'geocodio'`, pinned on the roof). Without the key

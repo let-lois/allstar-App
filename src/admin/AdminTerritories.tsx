@@ -92,7 +92,7 @@ export function AdminTerritories() {
       const g = res.generated
       const claimed = res.assigned ? ` ${res.assigned.toLocaleString()} existing lead${res.assigned === 1 ? '' : 's'} inside joined it.` : ''
       setDrawDone(`Created ${name}.${claimed}` + (g ? ` ${describeGenerated(g)}` : ''))
-      setDrawWarn(!!g && ('error' in g || (g.created === 0 && (g.coverage === 'none' || !!g.withoutAddress || !!g.lookupFailed))))
+      setDrawWarn(!!g && ('error' in g || g.coverageStatus === 'LIMITED' || g.coverageStatus === 'NONE' || (g.created === 0 && (g.coverage === 'none' || !!g.withoutAddress || !!g.lookupFailed))))
       /*
         Select what was just made. Without this the map left drawing mode with
         no selection, reframed itself on every lead in the company, and the
@@ -974,8 +974,8 @@ export function describeGenerated(g: { error: string; code?: string } | Generate
   const plural = (x: number | undefined, one: string, many = `${one}s`) => ((x ?? 0) === 1 ? one : many)
   const out: string[] = []
 
-  if (g.coverage === 'none') {
-    return 'No address data covers this area yet, so no houses were found. The territory is saved; see docs/ADDRESSES.md to load this area, then press Find addresses.'
+  if (g.coverage === 'none' && g.coverageStatus !== 'LIMITED') {
+    return 'No address or building data covers this area yet, so no houses were found. The territory is saved; see docs/ADDRESSES.md to load this area, then press Find addresses.'
   }
 
   const counts = [`${n(g.found)} ${plural(g.found, 'address', 'addresses')} found`, `${n(g.created)} new ${plural(g.created, 'lead')}`]
@@ -984,11 +984,22 @@ export function describeGenerated(g: { error: string; code?: string } | Generate
   if (g.skipped) counts.push(`${n(g.skipped)} past the limit — press Find addresses again for the rest`)
   out.push(counts.join(', ') + '.')
 
+  // Where they came from, when more than one source was used.
+  const src = g.bySource
+  if (src && (src.census_tiger || src.geocodio)) {
+    const parts = [src.overture ? `${n(src.overture)} published address points` : '', src.census_tiger ? `${n(src.census_tiger)} estimated from Census street ranges (confirm the number at the door)` : '', src.geocodio ? `${n(src.geocodio)} from Geocodio` : ''].filter(Boolean)
+    out.push(`Sources: ${parts.join(', ')}.`)
+  }
+  if (g.coverageStatus && g.pointCoverage != null && g.homeRooftops) {
+    out.push(`Coverage: ${g.coverageStatus} — ${g.pointCoverage}% of the ${n(g.homeRooftops)} homes here have a published address point.`)
+  }
   if (g.nonResidential) out.push(`${n(g.nonResidential)} on commercial or public buildings ${plural(g.nonResidential, 'was', 'were')} left out.`)
-  if (g.resolved) out.push(`${n(g.resolved)} of them came from rooftops the address data had no address for.`)
 
-  if (g.geocoder === 'off' && g.withoutAddress) {
-    out.push(`${n(g.withoutAddress)} more ${plural(g.withoutAddress, 'house has', 'houses have')} no address in the data. Add the Geocodio key to the Worker to turn them into leads.`)
+  const leftover = g.unranged ?? g.withoutAddress ?? 0
+  if (g.rangeData === false && g.withoutAddress) {
+    out.push(`${n(g.withoutAddress)} ${plural(g.withoutAddress, 'home has', 'homes have')} no published address and the Census street ranges for this area are not loaded yet.`)
+  } else if (g.geocoder === 'off' && leftover) {
+    out.push(`${n(leftover)} ${plural(leftover, 'home is', 'homes are')} too far from a numbered street to estimate.`)
   } else {
     if (g.lookupFailed) out.push(`Looking up ${n(g.lookupFailed)} ${plural(g.lookupFailed, 'house')} failed${g.lookupError ? ` (${g.lookupError})` : ''} — press Find addresses to try again; nothing is duplicated.`)
     if (g.lookupSkipped) out.push(`${n(g.lookupSkipped)} more ${plural(g.lookupSkipped, 'house is', 'houses are')} waiting — press Find addresses again to look them up.`)

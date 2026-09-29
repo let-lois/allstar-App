@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { API_URL } from '../lib/api-url'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { DEMO_USERS } from '../data/seed'
@@ -550,6 +551,10 @@ export function Login() {
           <p className="mt-8 text-center text-[12.5px] leading-relaxed text-ink-faint">
             Your work is saved on this device first and uploads automatically when
             you have signal.
+          </p>
+          <p className="mt-3 flex justify-center gap-5 text-[13px] font-medium">
+            <a href={`${API_URL}/support`} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Help &amp; support</a>
+            <a href={`${API_URL}/privacy`} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Privacy policy</a>
           </p>
         </div>
       </div>

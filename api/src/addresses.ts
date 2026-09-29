@@ -2,6 +2,7 @@ import { record } from './audit'
 import { erasedAmong } from './erase'
 import { pointInPolygon, type LatLng } from './geo'
 import { addressKey, propertyIdFor } from './import'
+import { estimate, nudge, rangesIn, type Estimate } from './ranges'
 import { Near, reverseGeocode, rooftopsInside, type Rooftop } from './rooftops'
 import { repsOf } from './territory-reps'
 import type { Env, SessionUser } from './types'
@@ -169,6 +170,13 @@ export function toAddress(r: TileRow, lat: number, lng: number): FoundAddress | 
 
 /* --- making leads --------------------------------------------------------- */
 
+/** An address on its way to becoming a lead, with where it came from and how sure it is. */
+type Lead = FoundAddress & {
+  provider: 'overture' | 'census_tiger' | 'geocodio'
+  confidence: 'ADDRESS_POINT' | 'INTERPOLATED' | 'GEOCODED'
+  residential: 'RESIDENTIAL' | 'UNKNOWN'
+}
+
 export interface Generated {
   /** Addresses the data holds inside the shape. */
   found: number
@@ -197,6 +205,21 @@ export interface Generated {
   lookupFailed: number
   /** Past the per-press look-up cap; pressing again takes the next ones. */
   lookupSkipped: number
+  /** GOOD ≥ 90% of home rooftops have a published address point; PARTIAL ≥ 50%; LIMITED below; NONE no data at all. */
+  coverageStatus: 'GOOD' | 'PARTIAL' | 'LIMITED' | 'NONE'
+  /** Percent of home rooftops inside with a published address point; null when there is no rooftop data. */
+  pointCoverage: number | null
+  homeRooftops: number
+  /** Leads found, by where their address came from. */
+  bySource: { overture: number; census_tiger: number; geocodio: number }
+  /** Of the leads found: on a building Overture calls a home, or unclassified. */
+  residential: { residential: number; unknown: number }
+  /** Addresses estimated from Census street ranges (confirm the number at the door). */
+  interpolated: number
+  /** Whether street-range data was available for the area's gaps. */
+  rangeData: boolean
+  /** Home rooftops with no numbered street near enough to estimate from. */
+  unranged: number
   /** 'off' when there is no Geocodio key, so rooftops without an address stay unnamed. */
   geocoder: 'on' | 'off'
   /** The first Geocodio failure, in words. */
@@ -344,28 +367,47 @@ export async function generateLeadsForTerritory(
   const roofIndex = new Near<Rooftop>()
   for (const r of roofs.rooftops) roofIndex.add(r)
   let nonResidential = 0
-  const homes: FoundAddress[] = []
+  const homes: Lead[] = []
   for (const a of inside.addresses) {
-    if (roofIndex.nearest(a, ON_ROOF_METRES)?.kind === 'n') { nonResidential++; continue }
-    homes.push(a)
+    const roof = roofIndex.nearest(a, ON_ROOF_METRES)
+    if (roof?.kind === 'n') { nonResidential++; continue }
+    homes.push({ ...a, provider: 'overture', confidence: 'ADDRESS_POINT', residential: roof?.kind === 'r' ? 'RESIDENTIAL' : 'UNKNOWN' })
   }
 
   /*
     The doors the address data missed: a home rooftop with no address point
-    and no lead near it. Named by Geocodio when there is a key; counted and
-    said when there is not. Bounded per press, so a huge patch costs at most
-    MAX_LOOKUPS look-ups and pressing Find addresses again takes the rest.
+    and no lead near it.
+
+    Free first. Each is named from the Census TIGER range of the street it
+    faces — the street, side and ZIP from the data, the house number an
+    estimate from its place on the block, stored as INTERPOLATED for the rep
+    to confirm. Only a rooftop no numbered street is near goes to Geocodio,
+    and only when a key is set; bounded per press either way.
   */
   const known = new Near<LatLng>()
   for (const a of inside.addresses) known.add(a)
   for (const e of nearby) known.add(e)
   const gaps = roofs.rooftops.filter((r) => r.kind !== 'n' && !known.nearest(r, GAP_METRES))
-  const toLookUp = gaps.slice(0, MAX_LOOKUPS)
-  const lookupSkipped = gaps.length - toLookUp.length
+  const ranges = gaps.length ? await rangesIn(env.ADDRESSES!, inside.cells) : { rows: [], tilesWithData: 0 }
+  const estimated: Lead[] = []
+  const unranged: Rooftop[] = []
+  const estimateKeys = new Set<string>()
+  for (const roof of gaps) {
+    let e: Estimate | null = estimate(roof, ranges.rows)
+    if (!e) { unranged.push(roof); continue }
+    // Two roofs on one block can land on the same number: step to the next
+    // one on that side rather than folding two houses into one lead.
+    for (let step = 0; step < 6 && estimateKeys.has(addressKey({ ref: '', ...e })); step++) e = nudge(e, 2)
+    estimateKeys.add(addressKey({ ref: '', ...e }))
+    estimated.push({ ...e, residential: roof.kind === 'r' ? 'RESIDENTIAL' : 'UNKNOWN' })
+  }
+  const toLookUp = unranged.slice(0, MAX_LOOKUPS)
+  const lookupSkipped = env.GEOCODIO_API_KEY ? unranged.length - toLookUp.length : 0
   const named = await reverseGeocode(env, toLookUp)
+  const geocoded: Lead[] = named.addresses.map((a) => ({ ...a, confidence: 'GEOCODED', residential: roofIndex.nearest(a, ON_ROOF_METRES)?.kind === 'r' ? 'RESIDENTIAL' : 'UNKNOWN' }))
 
-  const sources: (FoundAddress & { provider?: string })[] = [...homes, ...named.addresses]
-  const found = homes.length + named.addresses.length
+  const sources: Lead[] = [...homes, ...estimated, ...geocoded]
+  const found = sources.length
 
   /*
     The same door under two spellings: the same house number, on what reads
@@ -379,7 +421,7 @@ export async function generateLeadsForTerritory(
     queries rather than failing outright; what lies past the cap is counted
     as skipped and said so.
   */
-  const candidates: { a: FoundAddress & { provider?: string }; id: string }[] = []
+  const candidates: { a: Lead; id: string }[] = []
   let existed = 0
   let skipped = 0
   // Two rooftops can come back as one address (a house and its garage).
@@ -406,12 +448,13 @@ export async function generateLeadsForTerritory(
   const insert = env.DB.prepare(
     `INSERT OR IGNORE INTO properties
        (id, client_id, address1, city, state, zip, lat, lng, status, score,
-        territory_id, assigned_rep_id, geo_precision, geo_provider, updated_at)
-     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'new',50,?9,?10,'rooftop',?12,?11)`,
+        territory_id, assigned_rep_id, geo_precision, geo_provider, updated_at,
+        address_confidence, address_source, residential_status)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'new',50,?9,?10,'rooftop',?12,?11,?13,?12,?14)`,
   )
   for (let i = 0; i < toWrite.length; i += 100) {
     const batch = toWrite.slice(i, i + 100).map(({ a, id }) =>
-      insert.bind(id, actor.clientId, a.address1, a.city || null, a.state || null, a.zip || null, a.lat, a.lng, territoryId, claimFor, now, a.provider ?? 'overture'),
+      insert.bind(id, actor.clientId, a.address1, a.city || null, a.state || null, a.zip || null, a.lat, a.lng, territoryId, claimFor, now, a.provider, a.confidence, a.residential),
     )
     const results = await env.DB.batch(batch)
     for (const r of results) created += r.meta.changes ?? 0
@@ -422,9 +465,36 @@ export async function generateLeadsForTerritory(
   existed += toWrite.length - created
 
   const coverage: Generated['coverage'] = inside.tilesWithData > 0 ? 'addresses' : roofs.tilesWithData > 0 ? 'rooftops' : 'none'
+  /*
+    How much of the area the published address points cover, measured on the
+    homes themselves: of the house rooftops inside, how many have one. This is
+    the number that says whether a territory is well served, and what the
+    console shows when it is not.
+  */
+  // Published address points only: leads made earlier (by estimate or by
+  // hand) do not make an area better covered.
+  const points = new Near<LatLng>()
+  for (const a of inside.addresses) points.add(a)
+  const homeList = roofs.rooftops.filter((r) => r.kind !== 'n')
+  const homeRoofs = homeList.length
+  const withPoint = homeList.filter((r) => points.nearest(r, GAP_METRES)).length
+  const pointCoverage = homeRoofs ? Math.round((100 * withPoint) / homeRoofs) : null
+  const coverageStatus: Generated['coverageStatus'] =
+    coverage === 'none' && !ranges.tilesWithData ? 'NONE'
+      : pointCoverage === null ? (inside.addresses.length ? 'GOOD' : 'NONE')
+        : pointCoverage >= 90 ? 'GOOD' : pointCoverage >= 50 ? 'PARTIAL' : 'LIMITED'
+  const count = (p: string) => sources.filter((x) => x.provider === p).length
   const result: Generated = {
     found, created, existed, erased, skipped, tiles: inside.tiles,
     coverage,
+    coverageStatus,
+    pointCoverage,
+    homeRooftops: homeRoofs,
+    bySource: { overture: count('overture'), census_tiger: count('census_tiger'), geocodio: count('geocodio') },
+    residential: { residential: sources.filter((x) => x.residential === 'RESIDENTIAL').length, unknown: sources.filter((x) => x.residential === 'UNKNOWN').length },
+    interpolated: estimated.length,
+    rangeData: ranges.tilesWithData > 0 || !gaps.length,
+    unranged: unranged.length,
     rooftops: roofs.rooftops.length,
     nonResidential,
     withoutAddress: gaps.length,

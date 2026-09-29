@@ -154,6 +154,17 @@ export interface Property {
    * warning on thousands of pins that may well be exact.
    */
   geoPrecision?: 'rooftop' | 'interpolated' | 'approximate'
+  /**
+   * How good the *address* is, as opposed to the pin. INTERPOLATED: the house
+   * number was estimated from the Census street range in front of a real
+   * rooftop — the street and ZIP are right, the number is to be confirmed at
+   * the door. Undefined for leads from before this was recorded.
+   */
+  addressConfidence?: 'ADDRESS_POINT' | 'GEOCODED' | 'INTERPOLATED' | 'MANUAL'
+  /** Where the address came from: 'overture', 'census_tiger', 'geocodio'. */
+  addressSource?: string
+  /** From Overture's building class where one was matched; undefined is not known. */
+  residentialStatus?: 'RESIDENTIAL' | 'COMMERCIAL' | 'UNKNOWN'
 }
 
 export type NoteTag =

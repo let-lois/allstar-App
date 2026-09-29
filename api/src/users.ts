@@ -1,4 +1,4 @@
-import { PBKDF2_ITERATIONS, hashPassword, randomId } from './auth'
+import { PBKDF2_ITERATIONS, hashPassword, randomId, safeEqual } from './auth'
 import { record } from './audit'
 import { canInvite, grantableRoles, revokeLiveInvites } from './invites'
 import { regenerateBadgeFor, renewBadgeDates } from './onboardingFlow'
@@ -505,6 +505,75 @@ export async function footprint(a: Actorable): Promise<Footprint | Failure> {
 
 /* --- delete --------------------------------------------------------------- */
 
+/*
+  Deleting your own account, from inside the app (App Store guideline
+  5.1.1(v): an app that lets people make an account must let them delete it).
+
+  The same removal the office uses, with three differences: it asks for the
+  password again, so a phone left unlocked cannot close someone's account; it
+  is recorded before the row goes, so the audit line still names who did it;
+  and the last administrator is told how to hand the company over rather than
+  being allowed to lock it. Leads they worked stay the company's, back in the
+  unassigned bucket; their sessions, badge, visits and notes go with the
+  account, exactly as when the office deletes someone.
+*/
+export async function deleteOwnAccount(
+  env: Env,
+  actor: SessionUser,
+  body: { password?: unknown; confirm?: unknown },
+): Promise<{ ok: true } | Failure> {
+  const password = typeof body.password === 'string' ? body.password : ''
+  if (body.confirm !== 'DELETE') return fail('Type DELETE to confirm.', 400)
+  if (!password) return fail('Enter your password to confirm.', 400)
+  const row = await env.DB.prepare(
+    'SELECT id, name, email, role, password_hash, password_salt FROM users WHERE id = ?1 AND client_id = ?2',
+  )
+    .bind(actor.id, actor.clientId)
+    .first<{ id: string; name: string; email: string; role: string; password_hash: string | null; password_salt: string | null }>()
+  if (!row) return fail('No such account.', 404)
+  if (!row.password_hash || !row.password_salt) return fail('This account has no password yet, so it cannot be confirmed. Ask your office to remove it.', 400)
+  const attempt = await hashPassword(password, row.password_salt, env.SESSION_PEPPER ?? '')
+  if (!safeEqual(attempt, row.password_hash)) return fail('That password is not right.', 403)
+
+  // Refused up front, in words, rather than by the guard's generic message.
+  const admins = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM users WHERE client_id = ?1 AND id != ?2 AND active = 1
+        AND role IN ('client_admin','super_admin')`,
+  )
+    .bind(actor.clientId, actor.id)
+    .first<{ n: number }>()
+  if ((row.role === 'client_admin' || row.role === 'super_admin') && !admins?.n) {
+    return fail('You are the last administrator for your company. Make another team member an administrator first, then delete your account.', 400)
+  }
+
+  await record(env, actor, {
+    action: 'user.deleted',
+    targetType: 'user',
+    targetId: row.id,
+    targetLabel: row.name,
+    detail: { email: row.email, role: row.role, self: true },
+  })
+  const done = await env.DB.prepare(LAST_ADMIN_GUARD('DELETE FROM users'))
+    .bind(row.id, actor.clientId)
+    .run()
+  if (!done.meta.changes) return fail(LAST_ADMIN_MESSAGE, 400)
+  await repointTerritoryMirror(env, actor.clientId)
+  return { ok: true }
+}
+
+/** After a user is deleted: territories.rep_id went null where it named them; point it at whoever is left. */
+async function repointTerritoryMirror(env: Env, clientId: string): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE territories
+        SET rep_id = (SELECT r.user_id FROM territory_reps r
+                       WHERE r.territory_id = territories.id
+                       ORDER BY r.assigned_at, r.user_id LIMIT 1)
+      WHERE client_id = ?1 AND rep_id IS NULL`,
+  )
+    .bind(clientId)
+    .run()
+}
+
 export async function deleteUser(a: Actorable): Promise<{ ok: true } | Failure> {
   const g = await guard(a, {})
   if ('error' in g) return g
@@ -522,15 +591,7 @@ export async function deleteUser(a: Actorable): Promise<{ ok: true } | Failure> 
   // null where it named them; re-point that mirror at whoever is still on
   // each patch, so the import's drawn-shape path and older phones do not
   // read a shared territory as unowned.
-  await a.env.DB.prepare(
-    `UPDATE territories
-        SET rep_id = (SELECT r.user_id FROM territory_reps r
-                       WHERE r.territory_id = territories.id
-                       ORDER BY r.assigned_at, r.user_id LIMIT 1)
-      WHERE client_id = ?1 AND rep_id IS NULL`,
-  )
-    .bind(a.actor.clientId)
-    .run()
+  await repointTerritoryMirror(a.env, a.actor.clientId)
 
   // Recorded after the fact and by name, because the row this points at no
   // longer exists — which is exactly why the label was copied rather than

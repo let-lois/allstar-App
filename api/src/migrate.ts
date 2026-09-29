@@ -587,6 +587,34 @@ const MIGRATIONS: Migration[] = [
            FROM territories WHERE rep_id IS NOT NULL`,
     ],
   },
+  /*
+    Where a lead's address came from, and how sure it is.
+
+    geo_precision says how good the pin is; these say how good the *address*
+    is, which is a different question once a rooftop can be named from a
+    street's number range: the pin is on the right roof, the house number is
+    an estimate. address_confidence is ADDRESS_POINT (a published address on
+    that spot), GEOCODED (a paid service named it), INTERPOLATED (estimated
+    from Census street ranges — confirm at the door) or MANUAL (a rep or an
+    import said so); null is a lead from before this column.
+    residential_status is RESIDENTIAL, COMMERCIAL or UNKNOWN, from Overture's
+    building class where a building was matched; null is not known.
+
+    Backfilled only where the provider already says it: leads the address
+    look-up wrote. Every other row keeps null rather than a guess.
+  */
+  {
+    id: '025-address-confidence',
+    statements: [
+      { sql: 'ALTER TABLE properties ADD COLUMN address_confidence TEXT', skipIfColumn: { table: 'properties', column: 'address_confidence' } },
+      { sql: 'ALTER TABLE properties ADD COLUMN address_source TEXT', skipIfColumn: { table: 'properties', column: 'address_source' } },
+      { sql: 'ALTER TABLE properties ADD COLUMN residential_status TEXT', skipIfColumn: { table: 'properties', column: 'residential_status' } },
+      `UPDATE properties SET address_confidence = 'ADDRESS_POINT', address_source = 'overture'
+         WHERE geo_provider = 'overture' AND address_confidence IS NULL`,
+      `UPDATE properties SET address_confidence = 'GEOCODED', address_source = 'geocodio'
+         WHERE geo_provider = 'geocodio' AND address_confidence IS NULL`,
+    ],
+  },
 ]
 
 async function hasColumn(

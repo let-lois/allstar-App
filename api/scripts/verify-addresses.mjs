@@ -145,7 +145,7 @@ function fakeDb({ existing = [], erased = [], reps = ['u_curtis'], boundary = BO
     async batch(stmts) {
       return stmts.map((s) => {
         const a = s._args()
-        inserted.push({ id: a[0], address1: a[2], territory: a[8], rep: a[9], provider: a[11] })
+        inserted.push({ id: a[0], address1: a[2], zip: a[5], territory: a[8], rep: a[9], provider: a[11], confidence: a[12], residential: a[13] })
         return { meta: { changes: 1 } }
       })
     },
@@ -380,6 +380,78 @@ const named = (q, number, street) => {
   globalThis.fetch = realFetch
   const sent = calls.reduce((a, c) => a + c.body.length, 0)
   ok(sent === worker.MAX_LOOKUPS && res.lookupSkipped === 30 && calls.every((c) => c.body.length <= 500), `a press looks up at most ${worker.MAX_LOOKUPS} rooftops, in batches, and counts the rest`, `${sent} sent in ${calls.length} batches, ${res.lookupSkipped} skipped`)
+}
+
+/* --- Census street ranges: the free estimate for roofs with no address ---------- */
+{
+  // Cypress Ridge Dr runs west→east along lat 30.5100 across the tile, 100–198
+  // on the left (north) side and 101–199 on the right (south). Four roofs: two
+  // north of it (one a quarter along, one three quarters), one south, and one
+  // 150 m away from any street.
+  const rangeBucket = (roofs, extraKeys = {}) => ({
+    async get(key) {
+      if (key === `r1/14/${t.x}/${t.y}.json`) return { async json() { return [['Cypress Ridge Dr', 100, 198, 101, 199, '78664', '78665', 'TX', [-97.6780, 30.5100, -97.6620, 30.5100]]] } }
+      if (key === `b1/14/${t.x}/${t.y}.json`) return { async json() { return roofs } }
+      if (extraKeys[key]) return { async json() { return extraKeys[key] } }
+      return null
+    },
+  })
+  const q = -97.6780 + 0.25 * 0.016, tq = -97.6780 + 0.75 * 0.016
+  const ROOFS = [[q, 30.5102, 'r'], [tq, 30.5102, 'u'], [q, 30.5098, 'u'], [-97.6700, 30.5150, 'u']]
+  const w = fakeDb()
+  w.env.ADDRESSES = rangeBucket(ROOFS)
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  const est = w.inserted.filter((r) => r.provider === 'census_tiger')
+  ok(est.length === 3 && res.interpolated === 3 && res.unranged === 1, 'three roofs near a numbered street are named from its Census range; the one 150 m from any street is not', JSON.stringify(res))
+  const byLng = (lng, lat) => est.find((r) => r.address1 && w.inserted) && est
+  const north1 = est.find((r) => /^1[0-9][0-9] Cypress/.test(r.address1) && Number(r.address1.split(' ')[0]) % 2 === 0 && Number(r.address1.split(' ')[0]) < 140)
+  const north3 = est.find((r) => Number(r.address1.split(' ')[0]) % 2 === 0 && Number(r.address1.split(' ')[0]) > 160)
+  const south = est.find((r) => Number(r.address1.split(' ')[0]) % 2 === 1)
+  ok(north1?.address1 === '124 Cypress Ridge Dr' && north3?.address1 === '174 Cypress Ridge Dr', 'the left side is even, and the number follows the roof along the block (¼ → 124, ¾ → 174)', JSON.stringify(est.map((r) => r.address1)))
+  ok(south?.address1 === '125 Cypress Ridge Dr' && south.zip === '78665', 'the right side is odd, with the right side’s ZIP', JSON.stringify(south))
+  ok(est.every((r) => r.confidence === 'INTERPOLATED'), 'every one is stored as INTERPOLATED, never as an address point')
+  ok(est.find((r) => r.address1 === '124 Cypress Ridge Dr')?.residential === 'RESIDENTIAL' && south?.residential === 'UNKNOWN', 'a roof Overture calls a house is RESIDENTIAL; an unclassified one stays UNKNOWN')
+  ok(res.coverageStatus === 'LIMITED' && res.pointCoverage === 0 && res.bySource.census_tiger === 3 && res.bySource.overture === 0, 'with no address points the area is LIMITED, and says where its leads came from', JSON.stringify({ s: res.coverageStatus, c: res.pointCoverage, b: res.bySource }))
+  ok(res.geocoder === 'off' && res.resolved === 0, 'no paid look-up was needed or made')
+}
+
+{
+  // Two roofs a metre apart land on the same number: the second steps to the next on that side.
+  const w = fakeDb()
+  const q = -97.6780 + 0.25 * 0.016
+  w.env.ADDRESSES = { async get(key) {
+    if (key === `r1/14/${t.x}/${t.y}.json`) return { async json() { return [['Cypress Ridge Dr', 100, 198, 101, 199, '78664', '78665', 'TX', [-97.6780, 30.5100, -97.6620, 30.5100]]] } }
+    if (key === `b1/14/${t.x}/${t.y}.json`) return { async json() { return [[q, 30.5102, 'u'], [q + 0.00001, 30.5102, 'u']] } }
+    return null
+  } }
+  await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  const got = w.inserted.map((r) => r.address1).sort()
+  ok(got.length === 2 && got[0] !== got[1] && got.every((a) => Number(a.split(' ')[0]) % 2 === 0), 'two roofs that estimate to one number become two leads, both on the even side', JSON.stringify(got))
+}
+
+{
+  // With a Geocodio key, only the roof no street is near is sent.
+  const w = fakeDb()
+  const q = -97.6780 + 0.25 * 0.016
+  w.env.ADDRESSES = { async get(key) {
+    if (key === `r1/14/${t.x}/${t.y}.json`) return { async json() { return [['Cypress Ridge Dr', 100, 198, 101, 199, '78664', '78665', 'TX', [-97.6780, 30.5100, -97.6620, 30.5100]]] } }
+    if (key === `b1/14/${t.x}/${t.y}.json`) return { async json() { return [[q, 30.5102, 'u'], [-97.6700, 30.5150, 'u']] } }
+    return null
+  } }
+  w.env.GEOCODIO_API_KEY = 'k'
+  const calls = geocodio((qs) => reply(200, { results: qs.map((qq) => named(qq, '9', 'Far Ln')) }))
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  globalThis.fetch = realFetch
+  ok(calls.length === 1 && calls[0].body.length === 1, 'the free estimate comes first: Geocodio is asked only about the roof no numbered street is near', `${calls.map((c) => c.body.length)}`)
+  ok(res.bySource.census_tiger === 1 && res.bySource.geocodio === 1 && w.inserted.find((r) => r.provider === 'geocodio')?.confidence === 'GEOCODED', 'and its answer is stored as GEOCODED, apart from the estimates', JSON.stringify(res.bySource))
+}
+
+{
+  // Address points present: GOOD coverage, ADDRESS_POINT confidence.
+  const w = fakeDb()
+  w.env.ADDRESSES = roofBucket([HOUSE_ADDR, SHOP_ADDR], [[-97.67501, 30.50501, 'r'], [-97.66801, 30.51201, 'n']])
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  ok(res.coverageStatus === 'GOOD' && res.pointCoverage === 100 && w.inserted[0]?.confidence === 'ADDRESS_POINT' && w.inserted[0]?.residential === 'RESIDENTIAL', 'where every home has an address point the area is GOOD, and its leads are ADDRESS_POINT', JSON.stringify({ s: res.coverageStatus, c: res.pointCoverage, i: w.inserted[0] }))
 }
 
 /* --- rooftop rows at build time ------------------------------------------------ */

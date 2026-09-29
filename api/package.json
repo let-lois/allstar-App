@@ -54,16 +54,20 @@
     "smoke:tiles": "node scripts/smoke-tiles.mjs",
     "addresses:build": "node scripts/addresses-build.mjs",
     "national:build": "node scripts/national-build.mjs",
+    "verify:tiger": "node scripts/verify-tiger.mjs",
     "verify:addresses": "node scripts/verify-addresses.mjs",
     "smoke:territory-leads": "node scripts/smoke-territory-leads.mjs",
     "smoke:lead-edit": "node scripts/smoke-lead-edit.mjs",
-    "smoke:quote-sent": "node scripts/smoke-quote-sent.mjs"
+    "smoke:quote-sent": "node scripts/smoke-quote-sent.mjs",
+    "smoke:account-delete": "node scripts/smoke-account-delete.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",
     "aws4fetch": "^1.0.20",
+    "fflate": "^0.8.3",
     "hyparquet": "^1.31.2",
     "hyparquet-compressors": "^1.1.2",
+    "shapefile": "^0.6.6",
     "typescript": "^5.6.3",
     "wrangler": "^3.99.0"
   }

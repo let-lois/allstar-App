@@ -188,6 +188,12 @@ export function PropertyDetail() {
               Pin is estimated from the street — check the house number before you knock.
             </p>
           )}
+          {/* The pin is on the real roof; only the house number is an estimate. */}
+          {property.addressConfidence === 'INTERPOLATED' && (
+            <p className="mt-2 text-[12.5px] leading-snug text-warn" data-testid="address-estimated">
+              House number estimated from the street's Census range — confirm it at the door, then fix it with Edit if it is wrong.
+            </p>
+          )}
 
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
             <StatusPill status={property.status} />

@@ -311,6 +311,40 @@ try {
     }
   }
 
+  /* ===== 3c. free: Census street ranges name the roofs, no key at all ======= */
+  {
+    const { execFile } = await import('node:child_process')
+    const { promisify } = await import('node:util')
+    const run = promisify(execFile)
+    // A block in Anderson County with no published address points: rooftops
+    // from Overture, the street and its number range from Census TIGER.
+    const Q = [{ lat: 34.7700, lng: -82.5200 }, { lat: 34.7760, lng: -82.5200 }, { lat: 34.7760, lng: -82.5100 }, { lat: 34.7700, lng: -82.5100 }]
+    const { x, y } = tileFor(-82.515, 34.773)
+    const put = async (key, rows, name) => {
+      const file = resolve(api, '.wrangler', name)
+      writeFileSync(file, JSON.stringify(rows))
+      await run(resolve(api, 'node_modules/.bin/wrangler'), ['r2', 'object', 'put', `allstar-addresses/${key}`, '--file', file, '--content-type', 'application/json', '--local', '--persist-to', STATE, '-c', config], { cwd: api })
+    }
+    await stop()
+    await put(`r1/14/${x}/${y}.json`, [['Hood Rd', 200, 298, 201, 299, '29642', '29642', 'SC', [-82.5190, 34.7730, -82.5110, 34.7730]]], 'tleads-range.json')
+    await put(`b1/14/${x}/${y}.json`, [[-82.5170, 34.7732, 'r'], [-82.5130, 34.7732, 'u'], [-82.5150, 34.7728, 'u']], 'tleads-roofs2.json')
+    await start(config) // no Geocodio key
+    const { token: m3 } = await (await call('/api/auth/login', { method: 'POST', body: JSON.stringify(OWNER) })).json()
+    const r = await j(await call('/api/territories', { method: 'POST', body: JSON.stringify({ name: 'Hood Rd', repIds: [curtis.id], boundary: Q, generate: true }) }, m3))
+    const g = r.body.generated
+    ok(r.status === 201 && g?.created === 3 && g?.bySource?.census_tiger === 3 && g?.geocoder === 'off', 'with no key and no address points, three roofs become leads from the Census street range', JSON.stringify(g))
+    ok(g?.coverageStatus === 'LIMITED' && g?.pointCoverage === 0, 'and the area is reported LIMITED, 0% address points', `${g?.coverageStatus} ${g?.pointCoverage}`)
+    const rows = await query(`SELECT address1, zip, address_confidence AS c, address_source AS s, residential_status AS rs FROM properties WHERE territory_id='${r.body.territory.id}' ORDER BY address1`)
+    ok(rows.length === 3 && rows.every((x) => x.c === 'INTERPOLATED' && x.s === 'census_tiger' && x.zip === '29642' && /Hood Rd$/.test(x.address1)), 'stored as INTERPOLATED from census_tiger, with the ZIP from the range', JSON.stringify(rows))
+    ok(rows.filter((x) => Number(x.address1.split(' ')[0]) % 2 === 0).length === 2 && rows.filter((x) => Number(x.address1.split(' ')[0]) % 2 === 1).length === 1, 'the two roofs north of the road are even, the one south is odd')
+    const b = await (await call('/api/bootstrap', {}, curtis.token)).json()
+    const mine = (b.properties ?? []).filter((p) => p.territoryId === r.body.territory.id)
+    ok(mine.length === 3 && mine.every((p) => p.addressConfidence === 'INTERPOLATED'), 'the rep’s phone is told each house number is an estimate')
+    const fix = await j(await call('/api/mutations', { method: 'POST', body: JSON.stringify({ mutations: [{ id: `m_fix_${stamp}`, kind: 'property.update', at: Date.now(), payload: { id: mine[0].id, address1: '211 Hood Rd' } }] }) }, curtis.token))
+    const after = await query(`SELECT address_confidence AS c, address_source AS s FROM properties WHERE id='${mine[0].id}'`)
+    ok(fix.status === 200 && after[0]?.c === 'MANUAL' && after[0]?.s === 'manual', 'once the rep corrects it at the door it is MANUAL, no longer an estimate', JSON.stringify(after))
+  }
+
   /* ===== 4. with no address data ========================================== */
   {
     await stop()

@@ -187,6 +187,11 @@ CREATE TABLE IF NOT EXISTS properties (
   -- different claim from 'approximate' and the map treats it as such.
   geo_precision      TEXT,
   geo_provider       TEXT,          -- who said so
+  -- How good the address is, as opposed to the pin (migration 025):
+  -- ADDRESS_POINT | GEOCODED | INTERPOLATED | MANUAL; null = older lead.
+  address_confidence TEXT,
+  address_source     TEXT,          -- 'overture', 'census_tiger', 'geocodio', …
+  residential_status TEXT,          -- RESIDENTIAL | COMMERCIAL | UNKNOWN; null = not known
   updated_at         INTEGER NOT NULL
 );
 -- The rep's bootstrap query is "my properties" — this is the index it rides.
