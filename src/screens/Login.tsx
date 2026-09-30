@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { API_URL } from '../lib/api-url'
+import { HELP_URL } from '../lib/help'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { DEMO_USERS } from '../data/seed'
@@ -553,7 +554,7 @@ export function Login() {
             you have signal.
           </p>
           <p className="mt-3 flex justify-center gap-5 text-[13px] font-medium">
-            <a href={`${API_URL}/support`} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Help &amp; support</a>
+            <a href={HELP_URL} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Help &amp; support</a>
             <a href={`${API_URL}/privacy`} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Privacy policy</a>
           </p>
         </div>

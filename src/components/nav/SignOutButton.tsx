@@ -31,7 +31,7 @@ import { usePhotoSync, useSync } from '../sync/SyncBadge'
  * buttons the person could not reach. The blur is gone; the portal stays,
  * because any future filter or transform on the header would bring it back.
  */
-export function SignOutButton() {
+export function SignOutButton({ row = false }: { row?: boolean } = {}) {
   const [open, setOpen] = useState(false)
   const signOut = useAppStore((s) => s.signOut)
   const user = useAppStore((s) => s.user)
@@ -65,15 +65,32 @@ export function SignOutButton() {
         the situations where a picture is not enough; the target is square and
         still a full 44px.
       */}
-      <button
-        onClick={() => setOpen(true)}
-        aria-label="Sign out"
-        title="Sign out"
-        data-testid="sign-out"
-        className="press focusable metal metal-quiet grid min-h-tap w-11 shrink-0 place-items-center rounded-field text-ink-soft"
-      >
-        <IconSignOut />
-      </button>
+      {row ? (
+        /*
+          The More screen's last row: a full-width target with its name in
+          words, in the destructive colour, and the same confirmation below.
+        */
+        <div className="card overflow-hidden">
+          <button
+            onClick={() => setOpen(true)}
+            data-testid="sign-out"
+            className="metal-row focusable flex min-h-tap w-full items-center gap-3 px-4 py-3 text-left text-[15px] font-semibold text-bad"
+          >
+            <IconSignOut />
+            Sign out
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          aria-label="Sign out"
+          title="Sign out"
+          data-testid="sign-out"
+          className="press focusable metal metal-quiet grid min-h-tap w-11 shrink-0 place-items-center rounded-field text-ink-soft"
+        >
+          <IconSignOut />
+        </button>
+      )}
 
       {createPortal(
         <BottomSheet open={open} onClose={() => setOpen(false)} title="Sign out?" detents={[0.52]}>

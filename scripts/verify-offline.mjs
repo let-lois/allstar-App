@@ -241,7 +241,10 @@ const queued = await page.evaluate(async () => {
 })
 ok(queued >= 3, `three mutations are waiting when the rep signs out (${queued})`)
 
-await page.locator('header').first().getByRole('button', { name: 'Sign out', exact: true }).click()
+// Through the dock, as a person would: an in-app move, which also works offline.
+  await page.locator('a[href="/more"]:visible').first().click()
+  await page.waitForTimeout(900)
+  await page.getByTestId('sign-out').click()
 await page.waitForTimeout(400)
 await page.getByRole('button', { name: /^Sign out$/ }).last().click()
 await page.waitForTimeout(900)

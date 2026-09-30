@@ -60,3 +60,4 @@ dist-*/
 
 # national address loader working data (scripts/national-build.mjs)
 api/national-*/
+.ux/

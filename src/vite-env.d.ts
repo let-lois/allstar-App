@@ -33,5 +33,7 @@ declare const process: {
     EXPO_DOM_HOST_OS?: 'ios' | 'android'
     EXPO_PUBLIC_GOOGLE_MAPS_KEY?: string
     EXPO_PUBLIC_GOOGLE_MAP_ID?: string
+    /** The All Star Help site; the API's /support page when unset. */
+    EXPO_PUBLIC_HELP_URL?: string
   }
 }

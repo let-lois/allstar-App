@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { IconBack } from './icons'
+import { HelpButton } from './HelpButton'
 
 interface Props {
   title: string
@@ -19,6 +20,13 @@ interface Props {
    * what screen they are on.
    */
   identity?: ReactNode
+  /**
+   * The Help question mark at the far right. On by default, so every screen
+   * with a header has it in the same place; off only where the screen already
+   * leads somewhere Help could not be reached from safely (a flow that must
+   * not be left halfway).
+   */
+  help?: boolean
 }
 
 /**
@@ -28,7 +36,7 @@ interface Props {
  * Note what is *not* here — no primary action in the top-right. Anything the
  * rep actually does lives at the bottom of the screen, in thumb range.
  */
-export function TopBar({ title, subtitle, back, right, below, identity }: Props) {
+export function TopBar({ title, subtitle, back, right, below, identity, help = true }: Props) {
   const nav = useNavigate()
   /*
     Two sizes of title, decided by where the screen sits.
@@ -81,7 +89,12 @@ export function TopBar({ title, subtitle, back, right, below, identity }: Props)
             </>
           )}
         </div>
-        {right && <div className="flex shrink-0 items-center gap-1 pr-2">{right}</div>}
+        {(right || help) && (
+          <div className="flex shrink-0 items-center gap-1 pr-2">
+            {right}
+            {help && <HelpButton />}
+          </div>
+        )}
       </div>
       {below && <div className="px-4 pb-2.5">{below}</div>}
     </header>

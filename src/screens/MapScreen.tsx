@@ -1,4 +1,5 @@
 import { IconFilter } from '../components/nav/icons'
+import { HelpButton } from '../components/nav/HelpButton'
 import { IconBack } from '../components/nav/icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -418,6 +419,8 @@ export function MapScreen() {
           </Chip>
         )}
       </div>
+      {/* Help, in the top-right corner like every other screen's header. */}
+      <HelpButton floating />
     </div>
   )
 

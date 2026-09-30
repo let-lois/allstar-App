@@ -169,8 +169,14 @@ export function Leads() {
               scroll, and the Filters button is pinned so it is never the thing
               that got pushed off.
             */}
-            <div className="flex flex-wrap items-center gap-2" data-testid="leads-header-row">
-              <div className="flex min-w-0 flex-wrap gap-2" data-tour="leads-sort" role="group" aria-label="Sort">
+            {/*
+              One row at every width: the sort chips scroll sideways and the
+              Filters button stays pinned at the right. Wrapped, four chips on a
+              375pt phone pushed Filters onto a line of its own, a whole band of
+              chrome for one button.
+            */}
+            <div className="flex items-center gap-2" data-testid="leads-header-row">
+              <div className="snap-x-row min-w-0 flex-1" data-tour="leads-sort" role="group" aria-label="Sort">
                 {SORTS.map((s) => (
                   <Chip key={s.key} size="sm" selected={sort === s.key} onClick={() => setSort(s.key)}>
                     {s.label}
@@ -182,7 +188,7 @@ export function Leads() {
                 data-testid="leads-filters"
                 aria-label={activeFilters ? `Filters, ${activeFilters} active` : 'Filters'}
                 title={activeFilters ? `Filters, ${activeFilters} active` : 'Filters'}
-                className="icon-sm focusable press metal metal-quiet ml-auto flex min-h-[44px] shrink-0 items-center justify-center gap-1 rounded-pill px-3 text-ink-soft"
+                className="icon-sm focusable press metal metal-quiet flex min-h-[44px] shrink-0 items-center justify-center gap-1 rounded-pill px-3 text-ink-soft"
               >
                 <IconFilter />
                 {activeFilters > 0 && (

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AdminPage, FilterBar } from './AdminLayout'
+import { IconFilter } from '../components/nav/icons'
 import { Chip } from '../components/ui/Chip'
 import { Button } from '../components/ui/Button'
 import { useAppStore } from '../store/useAppStore'
@@ -115,6 +116,17 @@ export default function AdminLeads() {
   // so the Territories page can open its own leads here as a list.
   const [territoryFilter, setTerritoryFilter] = useState<string>(() => params.get('territory') ?? 'all')
   const [visited, setVisited] = useState<VisitedWindow>('any')
+  // Phone only: whether the folded filters are open. Opened from a territory,
+  // they start open, so the territory the manager came for is in view.
+  const [filtersShown, setFiltersShown] = useState(() => params.has('territory'))
+  const activeFilterCount =
+    Number(status !== 'all') + Number(repFilter !== 'all') + Number(territoryFilter !== 'all') + Number(visited !== 'any')
+  const resetFilters = () => {
+    setStatus('all')
+    setRepFilter('all')
+    setTerritoryFilter('all')
+    setVisited('any')
+  }
   const [sort, setSort] = useState<SortKey>('address')
   const [shown, setShown] = useState(PAGE)
   const [view, setView] = useState<'list' | 'map'>('list')
@@ -586,8 +598,34 @@ export default function AdminLeads() {
           }}
           type="search"
           placeholder="Search address, city, ZIP or owner"
-          className="focusable min-h-[40px] w-72 rounded-field border border-line px-3 text-sm"
+          className="focusable min-h-[40px] w-full rounded-field border border-line px-3 text-sm md:w-72"
         />
+        {/*
+          On a phone the filters fold behind one button. Four dropdowns and
+          eleven status chips stood between a manager and the first lead; the
+          search and the list/map switch stay in view, and the rest opens with
+          a count of what is on and a way to clear it.
+        */}
+        <button
+          type="button"
+          onClick={() => setFiltersShown((v) => !v)}
+          aria-expanded={filtersShown}
+          data-testid="console-leads-filters"
+          className="focusable flex min-h-[44px] items-center gap-1.5 rounded-field border border-line bg-surface px-3 text-sm font-semibold text-ink-soft md:hidden"
+        >
+          <IconFilter />
+          Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
+        </button>
+        {activeFilterCount > 0 && (
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="focusable min-h-[44px] px-2 text-sm font-semibold text-accent md:hidden"
+          >
+            Reset
+          </button>
+        )}
+        <div className={filtersShown ? 'contents' : 'hidden md:contents'}>
         <select
           value={visited}
           onChange={(e) => setVisited(e.target.value as VisitedWindow)}
@@ -647,8 +685,10 @@ export default function AdminLeads() {
           <option value="value">Highest value</option>
           <option value="status">By status</option>
         </select>
+        </div>
       </FilterBar>
 
+      <div className={filtersShown ? 'contents' : 'hidden md:contents'}>
       <FilterBar>
         <Chip size="sm" selected={status === 'all'} onClick={() => setStatus('all')}>
           All statuses
@@ -659,6 +699,7 @@ export default function AdminLeads() {
           </Chip>
         ))}
       </FilterBar>
+      </div>
 
       {notice && (
         <p role="status" className="mb-3 rounded-field bg-good-bg p-3 text-sm font-medium text-good">

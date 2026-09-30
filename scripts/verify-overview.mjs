@@ -52,14 +52,17 @@ async function signIn(from, match) {
 }
 
 /**
- * Sign out from the header, and confirm.
+ * Sign out from the foot of More, and confirm.
  *
- * It used to be a button at the bottom of More. It is one tap from every home
- * screen now, so it asks first — see `SignOutButton` for why that is not
- * decoration.
+ * It sat in the header on the two home screens for a while, beside the sync
+ * chip; the redesign moved it back to the bottom of More, where the menu ends,
+ * in words and the destructive colour. It still asks first — see
+ * `SignOutButton` for why that is not decoration.
  */
 async function signOut(page) {
-  await page.getByRole('button', { name: 'Sign out', exact: true }).first().click()
+  await page.locator('a[href="/more"]:visible').first().click()
+  await page.waitForTimeout(1000)
+  await page.getByTestId('sign-out').click()
   await page.waitForTimeout(800)
 
   /*
@@ -134,77 +137,30 @@ console.log('\n--- sign out ---')
   await dismissTour(page)
   await page.waitForTimeout(1000)
 
+  // Not in the home header any more: that holds the sync chip and Help.
   const header = page.locator('header').first()
-  const out = header.getByRole('button', { name: 'Sign out', exact: true })
-  ok((await out.count()) > 0, 'the header offers it')
+  ok((await header.getByRole('button', { name: 'Sign out', exact: true }).count()) === 0, 'the home header no longer carries sign out, beside the sync chip')
+  ok((await header.getByTestId('help-button').count()) === 1, 'and carries Help instead')
 
-  /*
-    A button, not a loose glyph. It was an icon on the header's own ground,
-    which is the same affordance as a decoration — and the control that ends the
-    session is a poor place to make somebody guess whether it can be pressed.
-  */
-  const shape = await out.first().evaluate((el) => {
-    const cs = getComputedStyle(el)
-    const r = el.getBoundingClientRect()
-    return {
-      h: r.height,
-      w: r.width,
-      shadow: cs.boxShadow,
-      title: el.getAttribute('title') || '',
-      icons: el.querySelectorAll('svg').length,
-    }
-  })
-  ok(shape.h >= 44, 'at a size a thumb can hit in a truck', `${Math.round(shape.h)}px tall`)
-  ok(
-    /rgb/.test(shape.shadow) && shape.shadow !== 'none',
-    'wearing the machined face the rest of the app uses for buttons',
-  )
-  /*
-    It announces itself, and it is not blank.
-
-    This asserted the *word* "Logout" was on the button. That was the
-    implementation, not the requirement: the word was the widest and loudest
-    thing in the header — a secondary action in uppercase with letterspacing,
-    competing with the rep's own name at the top of every screen — and it is an
-    icon now. A gate that pins the pixel-level answer rather than the thing
-    that must stay true goes red for the fix and teaches people to delete it,
-    which is what happened to the console gate when the console became
-    mobile-first.
-
-    What must stay true is that the control that ends the session says what it
-    does to anybody who asks: a screen reader gets the accessible name (the
-    `getByRole` lookup above already depends on it), a pointer user gets the
-    tooltip, and there is a drawing inside rather than an empty square — which
-    is the way an icon-only button actually fails.
-  */
-  ok(shape.title === 'Sign out', 'and names itself to a pointer, as a tooltip', shape.title || '(none)')
-  ok(shape.icons === 1, 'with exactly one drawing inside, not an empty square', `${shape.icons} svg`)
-
-  /*
-    The accessible name stays "Sign out" whether or not the word is drawn — the
-    label is hidden below 360px, and a control that renames itself with the
-    viewport is one nobody can find twice.
-  */
-  ok(
-    (await header.getByRole('button', { name: 'Sign out', exact: true }).count()) === 1,
-    'named the same way at every width',
-  )
-
-  // And it is gone from where it used to be.
+  // At the foot of More: named in words, thumb-sized, in the destructive colour.
   await page.goto(`${BASE}/more`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(1200)
-  const moreText = await page.locator('body').innerText()
-  ok(!/Sign out/.test(moreText), 'and More no longer carries a second one')
-
-  await page.goto(`${BASE}/today`, { waitUntil: 'domcontentloaded' })
-  await page.waitForTimeout(1200)
+  const out = page.getByTestId('sign-out')
+  ok((await out.count()) === 1, 'More offers it, once')
+  const shape = await out.evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    const rows = [...document.querySelectorAll('[data-testid], a, button')].filter((x) => x.getBoundingClientRect().height > 0)
+    return { h: r.height, text: el.textContent?.trim() ?? '', last: rows.every((x) => x === el || x.contains(el) || x.getBoundingClientRect().top <= r.top + 1 || !x.closest('.content-col')), icons: el.querySelectorAll('svg').length }
+  })
+  ok(shape.h >= 44, 'at a size a thumb can hit in a truck', `${Math.round(shape.h)}px tall`)
+  ok(shape.text === 'Sign out', 'saying what it does in words', shape.text)
+  ok(shape.last, 'as the last control in the menu, below everything that is not destructive')
 
   /*
-    It asks. This is the assertion that matters: the control moved from the
-    bottom of a settings screen to a permanent header beside a chip people tap
-    to check sync, and signing out clears photos that have not uploaded.
+    It asks. Signing out clears photos that have not uploaded, so the
+    confirmation is the assertion that matters wherever the button sits.
   */
-  await page.locator('header').first().getByRole('button', { name: 'Sign out', exact: true }).click()
+  await out.click()
   await page.waitForTimeout(800)
   const asking = await page.locator('body').innerText()
   ok(/Sign out\?/.test(asking), 'and asks before doing it')
@@ -218,7 +174,7 @@ console.log('\n--- sign out ---')
   await page.getByRole('button', { name: /Stay signed in/ }).click()
   await page.waitForTimeout(900)
   ok(
-    (await page.locator('header').first().innerText()).includes('Petrov'),
+    (await page.locator('body').innerText()).includes('Petrov'),
     'and backing out keeps you signed in',
   )
 
