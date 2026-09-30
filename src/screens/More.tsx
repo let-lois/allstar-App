@@ -155,6 +155,9 @@ export function More() {
             something is wrong rather than every day.
           */}
           <MoreGroup title="Your work">
+            {/* First: the badge is what a rep shows at the door, so it is
+                one tap from More rather than tucked into the account rows. */}
+            {mode === 'live' && <MoreLink label="My badge" onClick={() => nav('/badge')} />}
             <MoreLink label="Today's route" onClick={() => nav('/route')} />
             <MoreLink label="Lists" onClick={() => nav('/lists')} />
             <MoreLink label="Standings" onClick={() => nav('/standings')} />
@@ -178,7 +181,6 @@ export function More() {
 
           {mode === 'live' && (
             <MoreGroup title="Account">
-              <MoreLink label="My badge" onClick={() => nav('/badge')} />
               <MoreLink label="Edit profile" onClick={() => nav('/profile')} />
               {/*
               Self-service, because routing every forgotten password through an

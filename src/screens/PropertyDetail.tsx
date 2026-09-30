@@ -122,9 +122,20 @@ export function PropertyDetail() {
     }
   }
 
+  // One note per tap: a quick double tap on Save wrote the note twice.
+  const savingNote = useRef(false)
+  const [noteBusy, setNoteBusy] = useState(false)
   const saveNote = async () => {
-    if (noteBody.trim() || noteTags.length) {
-      await addNote(property.id, noteBody.trim(), noteTags)
+    if (savingNote.current) return
+    savingNote.current = true
+    setNoteBusy(true)
+    try {
+      if (noteBody.trim() || noteTags.length) {
+        await addNote(property.id, noteBody.trim(), noteTags)
+      }
+    } finally {
+      savingNote.current = false
+      setNoteBusy(false)
     }
     setNoteBody('')
     setNoteTags([])
@@ -405,7 +416,7 @@ export function PropertyDetail() {
             onBody={setNoteBody}
             onTags={setNoteTags}
           />
-          <Button size="lg" full onClick={() => void saveNote()}>
+          <Button size="lg" full disabled={noteBusy} onClick={() => void saveNote()}>
             Save note
           </Button>
         </div>

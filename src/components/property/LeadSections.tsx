@@ -9,6 +9,7 @@ import { outcomeByCode } from '../../data/outcomes'
 import { relative, time } from '../../lib/format'
 import { dayKeyIn, dayLabel } from '../../lib/day'
 import { syncPropertyPhotos } from '../../lib/photos'
+import { EmptyState } from '../ui/EmptyState'
 
 /**
  * Everything below the fold about a lead, as one grouped list.
@@ -151,7 +152,7 @@ export function LeadSections({
       {show('notes') && (
         <Collapsible flat title="Notes" count={notes.length} defaultOpen={notes.length > 0}>
           {notes.length === 0 ? (
-            <p className="text-[14px] text-ink-mute">No notes yet.</p>
+            <EmptyState compact testId="notes-empty" title="No notes yet" body={onAddNote ? 'Anything worth remembering about this home goes here.' : undefined} />
           ) : (
             <ul className="space-y-3.5">
               {notes.map((n) => (
@@ -197,7 +198,7 @@ export function LeadSections({
       {show('visits') && (
         <Collapsible flat title="Visit history" count={visits.length}>
           {visits.length === 0 ? (
-            <p className="text-[14px] text-ink-mute">No completed visits recorded.</p>
+            <EmptyState compact testId="visits-empty" title="No visits yet" body="Each finished visit is recorded here, with its outcome and time." />
           ) : (
             <ul className="space-y-3.5">
               {visits.map((v) => {
@@ -225,7 +226,7 @@ export function LeadSections({
       {show('activity') && (
         <Collapsible flat title="Activity" count={timeline.length}>
           {timeline.length === 0 ? (
-            <p className="text-[14px] text-ink-mute">Nothing recorded yet.</p>
+            <EmptyState compact title="Nothing recorded yet" body="Status changes, visits and notes on this lead appear here." />
           ) : (
             <ul className="space-y-3.5">
               {timeline.map((ev) => (

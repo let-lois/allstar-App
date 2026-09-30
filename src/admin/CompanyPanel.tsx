@@ -17,6 +17,7 @@ import {
 } from '../lib/http'
 import { liveToken } from '../lib/session'
 import { useAppStore } from '../store/useAppStore'
+import { SkeletonRows } from '../components/ui/Skeleton'
 
 /**
  * Settings → Company: what the badge says about the company, and the two ways
@@ -265,7 +266,7 @@ export function CompanyPanel() {
           {mode !== 'live' ? (
             <p className="mt-3 text-xs text-ink-mute">Demo data — a real company has its own code here.</p>
           ) : join === null ? (
-            <p className="mt-3 text-xs text-ink-mute">Loading…</p>
+            <SkeletonRows rows={1} label="Loading the company code…" className="mt-3" />
           ) : join.code ? (
             <div className="mt-3 rounded-lg bg-surface-sunk p-3 ring-1 ring-line">
               <p className="text-xs text-ink-mute">Company code</p>

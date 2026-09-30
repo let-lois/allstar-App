@@ -14,6 +14,7 @@ import {
 import { liveToken } from '../lib/session'
 import { relative } from '../lib/format'
 import { useAppStore } from '../store/useAppStore'
+import { SkeletonRows } from '../components/ui/Skeleton'
 
 /**
  * Connecting the company's own CRM.
@@ -137,7 +138,7 @@ export function IntegrationsPanel() {
   if (loading) {
     return (
       <section className="card p-5">
-        <p className="text-[13px] text-ink-mute">Checking…</p>
+        <SkeletonRows rows={2} label="Checking connections…" />
       </section>
     )
   }

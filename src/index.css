@@ -1490,3 +1490,25 @@
     --metal-ring: rgb(0 0 0 / 0.1);
   }
 }
+
+/* A loading placeholder: the space the content will take, pulsing gently.
+   Under Reduce Motion it stands still — the global rule only shortens
+   animations, and a 0.01ms infinite pulse would flicker. */
+.skeleton {
+  background-color: rgb(var(--surface-field));
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none !important;
+  }
+}

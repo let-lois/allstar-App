@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AdminPage } from './AdminLayout'
 import { fitZoom } from '../components/map/FieldMap'
 import { AllStarMap } from '../components/map/AllStarMap'
@@ -49,6 +49,28 @@ export function AdminTerritories() {
   */
   const [draftGenerate, setDraftGenerate] = useState(true)
   const [saving2, setSaving2] = useState(false)
+  // A second tap before the button re-renders disabled must not make a second
+  // territory; state is too late for that, a ref is not.
+  const creating = useRef(false)
+  /*
+    What creating is doing, said honestly while it runs. The save itself is
+    quick; looking up every house inside is what takes the time, and a big
+    patch can take most of a minute. Staged by elapsed time — the server does
+    not report progress — so the words only ever claim what is certainly true.
+  */
+  const [createStage, setCreateStage] = useState(0)
+  useEffect(() => {
+    if (!saving2) {
+      setCreateStage(0)
+      return
+    }
+    const a = window.setTimeout(() => setCreateStage(1), 3000)
+    const b = window.setTimeout(() => setCreateStage(2), 15000)
+    return () => {
+      window.clearTimeout(a)
+      window.clearTimeout(b)
+    }
+  }, [saving2])
   const [drawError, setDrawError] = useState<string | null>(null)
   const [drawDone, setDrawDone] = useState<string | null>(null)
   const [drawWarn, setDrawWarn] = useState(false)
@@ -79,6 +101,8 @@ export function AdminTerritories() {
       setDrawError('Give the area a name — the reps will see it.')
       return
     }
+    if (creating.current) return
+    creating.current = true
     setSaving2(true)
     setDrawError(null)
     try {
@@ -110,6 +134,7 @@ export function AdminTerritories() {
         err instanceof ApiError ? err.message : 'Could not create the territory. Try again.',
       )
     } finally {
+      creating.current = false
       setSaving2(false)
     }
   }
@@ -848,6 +873,17 @@ export function AdminTerritories() {
                     ? 'Drop at least three points'
                     : `Create with ${inside.length.toLocaleString()} lead${inside.length === 1 ? '' : 's'}`}
               </Button>
+              {saving2 && (
+                <p role="status" aria-live="polite" className="mt-2 text-[13px] leading-snug text-ink-soft" data-testid="territory-progress">
+                  {!(draftGenerate && mode === 'live')
+                    ? 'Saving the territory…'
+                    : createStage === 0
+                      ? 'Saving the territory…'
+                      : createStage === 1
+                        ? 'Finding the homes inside and adding them as leads…'
+                        : 'Still working — a large territory can take up to a minute. You can keep this screen open.'}
+                </p>
+              )}
             </div>
           )}
 

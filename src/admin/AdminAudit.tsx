@@ -7,6 +7,7 @@ import { liveToken } from '../lib/session'
 import { useAppStore } from '../store/useAppStore'
 import { relative } from '../lib/format'
 import { STATUS } from './charts/tokens'
+import { SkeletonRows } from '../components/ui/Skeleton'
 
 /**
  * The activity log.
@@ -135,7 +136,9 @@ export default function AdminAudit() {
       </FilterBar>
 
       <div className="overflow-hidden card">
-        {shown.length === 0 && !loading ? (
+        {entries.length === 0 && loading ? (
+          <SkeletonRows rows={5} label="Loading the audit log…" className="p-5" testId="audit-loading" />
+        ) : shown.length === 0 && !loading ? (
           <p className="p-8 text-center text-sm text-ink-mute">
             {entries.length === 0
               ? 'Nothing recorded yet. Invites, password resets, role changes, deletions and lead assignments all appear here.'
