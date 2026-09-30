@@ -122,6 +122,26 @@ export function More() {
             <ThemeToggle />
           </div>
 
+          {/*
+            Help, where somebody stuck looks first.
+
+            It was a row two thirds of the way down this list, after the badge
+            and the profile; a rep standing on a porch with a question does not
+            scroll for it. A full-width button under their own name, opening the
+            same support page the sign-in screen links to (the phone shell hands
+            an https link to the in-app browser).
+          */}
+          <a
+            href={`${API_URL}/support`}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="more-need-help"
+            className="focusable card flex min-h-tap items-center justify-between gap-3 px-4 py-3.5 text-[15.5px] font-semibold text-accent-strong"
+          >
+            <span>Need help?</span>
+            <span className="text-[13px] font-medium text-ink-mute">Help Center &amp; support</span>
+          </a>
+
           {/* --- sync ----------------------------------------------------- */}
           <section className="section">
             <SectionHeader title="Sync &amp; offline" standalone />
@@ -135,12 +155,12 @@ export function More() {
             defaultOpen
             right={
               <span className="nums text-xs text-ink-soft">
-                {Object.keys(properties).length} properties
+                {Object.keys(properties).length} leads
               </span>
             }
           >
             <dl className="grid grid-cols-2 gap-y-3 text-[14px]">
-              <Row label="Properties" value={String(Object.keys(properties).length)} />
+              <Row label="Leads" value={String(Object.keys(properties).length)} />
               <Row label="Photos" value={`${Object.keys(photos).length}`} />
               <Row label="Photo storage" value={`${Math.round(photoBytes / 1024)} KB`} />
               {/*
@@ -402,7 +422,7 @@ export function More() {
                   <MoreLink label="Delete account" onClick={() => nav('/profile#delete-account')} />
                 </>
               )}
-              {/* Plain links: the phone shell hands an https link to Safari. */}
+              {/* Plain links: the phone shell opens an https link in the in-app browser. */}
               <MoreHref label="Help & support" href={`${API_URL}/support`} />
               <MoreHref label="Privacy policy" href={`${API_URL}/privacy`} />
               <MoreLink label="Standings" onClick={() => nav('/standings')} />

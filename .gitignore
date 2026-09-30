@@ -57,3 +57,6 @@ Allstar-week*.pdf
 # has to come from the machine doing the build.
 api/src/version.ts
 dist-*/
+
+# national address loader working data (scripts/national-build.mjs)
+api/national-*/

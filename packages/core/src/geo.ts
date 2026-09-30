@@ -190,6 +190,31 @@ export function polygonAreaSqMiles(polygon: { lat: number; lng: number }[]): num
   return Math.abs(sum / 2) * milesPerDegLat * milesPerDegLng
 }
 
+/**
+ * Which drawn territory holds this point, by the server's rule.
+ *
+ * The same answer `territoryFor` in the Worker gives, so a lead added on the
+ * phone shows under the right patch before the server has seen it: smallest
+ * patch first (a downtown patch carved out of a city-wide one wins), a tie
+ * broken by id, and null for a point in nothing.
+ */
+export function territoryAt<T extends { id: string; boundary?: { lat: number; lng: number }[] }>(
+  point: { lat: number; lng: number },
+  territories: T[],
+): T | null {
+  let best: T | null = null
+  let bestArea = Infinity
+  for (const t of territories) {
+    if (!t.boundary || !pointInPolygon(point, t.boundary)) continue
+    const area = polygonAreaSqMiles(t.boundary)
+    if (!best || area < bestArea || (area === bestArea && t.id < best.id)) {
+      best = t
+      bestArea = area
+    }
+  }
+  return best
+}
+
 /* --- Web Mercator, used by the in-app map renderer ----------------------- */
 
 export function project(lat: number, lng: number) {

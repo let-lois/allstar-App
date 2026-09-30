@@ -86,6 +86,58 @@ export async function assignProperties(
 }
 
 /**
+ * Move selected leads into a territory, or out of every territory.
+ *
+ * The office's fix for a lead filed in the wrong patch, or in none: a door
+ * added before the territory was drawn, a street that belongs with the patch
+ * next door. Only the territory changes. The rep working a lead keeps it, the
+ * same as when a territory is deleted, because taking a house off a rep is a
+ * separate decision with its own control beside this one.
+ */
+export async function moveToTerritory(
+  env: Env,
+  actor: SessionUser,
+  input: { propertyIds: string[]; territoryId: string | null },
+): Promise<{ moved: number } | { error: string; status: number }> {
+  if (!canImport(actor)) return { error: 'Not permitted.', status: 403 }
+  const ids = Array.isArray(input.propertyIds) ? input.propertyIds.filter((x) => typeof x === 'string' && x) : []
+  if (ids.length === 0) return { error: 'No leads selected.', status: 400 }
+  if (ids.length > 500) return { error: 'Select at most 500 leads.', status: 413 }
+
+  let name: string | null = null
+  if (input.territoryId) {
+    const t = await env.DB.prepare('SELECT id, name FROM territories WHERE id = ?1 AND client_id = ?2')
+      .bind(input.territoryId, actor.clientId)
+      .first<{ id: string; name: string }>()
+    if (!t) return { error: 'That territory is not in this account.', status: 400 }
+    name = t.name
+  }
+
+  const now = Date.now()
+  let moved = 0
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100)
+    const placeholders = chunk.map((_, n) => `?${n + 4}`).join(',')
+    const res = await env.DB.prepare(
+      `UPDATE properties SET territory_id = ?1, updated_at = ?2
+        WHERE client_id = ?3 AND id IN (${placeholders})`,
+    )
+      .bind(input.territoryId, now, actor.clientId, ...chunk)
+      .run()
+    moved += res.meta.changes ?? 0
+  }
+
+  await record(env, actor, {
+    action: 'territory.leads_moved',
+    targetType: 'territory',
+    targetId: input.territoryId ?? undefined,
+    targetLabel: name ?? 'No territory',
+    detail: { territoryId: input.territoryId, leads: moved },
+  })
+  return { moved }
+}
+
+/**
  * Put a rep on a territory, take one off, or clear it.
  *
  * A territory holds any number of reps (`territory_reps`), and this never

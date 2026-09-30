@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { Button } from '../components/ui/Button'
@@ -55,10 +56,40 @@ const NAV: Item[] = [
 
 export const ADMIN_ROLES: Role[] = ['manager', 'client_admin', 'super_admin']
 
+/**
+ * The console keeps up with the field on its own.
+ *
+ * It read the company's data once, at sign-in, and again only after the office
+ * itself changed something, so a lead a rep added on the phone stayed off the
+ * console's map and territory counts until somebody reloaded the page. Now it
+ * re-reads when the tab comes back into view and every two minutes while it is
+ * in view. Two minutes because the read is the whole company; a hidden tab
+ * costs nothing. `refreshFromServer` merges rather than replaces while work is
+ * still queued, so nothing typed in the console is lost to a refresh.
+ */
+const CONSOLE_REFRESH_MS = 120_000
+
+function useConsoleRefresh(enabled: boolean) {
+  const refresh = useAppStore((s) => s.refreshFromServer)
+  useEffect(() => {
+    if (!enabled) return
+    const tick = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+    const timer = window.setInterval(tick, CONSOLE_REFRESH_MS)
+    document.addEventListener('visibilitychange', tick)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', tick)
+    }
+  }, [enabled, refresh])
+}
+
 export function AdminLayout() {
   const user = useAppStore((s) => s.user)
   const nav = useNavigate()
   const location = useLocation()
+  useConsoleRefresh(!!user && ADMIN_ROLES.includes(user.role))
 
   if (!user) return null
 

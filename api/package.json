@@ -54,11 +54,13 @@
     "smoke:tiles": "node scripts/smoke-tiles.mjs",
     "addresses:build": "node scripts/addresses-build.mjs",
     "national:build": "node scripts/national-build.mjs",
+    "zip-cities:build": "node scripts/zip-cities-build.mjs",
     "verify:tiger": "node scripts/verify-tiger.mjs",
     "verify:addresses": "node scripts/verify-addresses.mjs",
     "smoke:territory-leads": "node scripts/smoke-territory-leads.mjs",
     "smoke:lead-edit": "node scripts/smoke-lead-edit.mjs",
     "smoke:quote-sent": "node scripts/smoke-quote-sent.mjs",
+    "smoke:manual-leads": "node scripts/smoke-manual-leads.mjs",
     "smoke:account-delete": "node scripts/smoke-account-delete.mjs"
   },
   "devDependencies": {

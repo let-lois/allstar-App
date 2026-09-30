@@ -979,6 +979,16 @@ export function apiAssignProperties(
   })
 }
 
+/** Selected leads into a territory, or out of every territory with `territoryId: null`. */
+export function apiMoveToTerritory(token: string, input: { propertyIds: string[]; territoryId: string | null }) {
+  return request<{ moved: number }>('/api/properties/territory', {
+    method: 'POST',
+    body: input,
+    token,
+    timeoutMs: 30_000,
+  })
+}
+
 export interface GeocodeRequestDTO {
   ref: string
   address1: string

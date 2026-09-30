@@ -103,6 +103,8 @@ Census TIGER range of the street each such roof faces (≤ 80 m)                
       ↓
 Only roofs with no numbered street nearby, only if a key is set: Geocodio                 → GEOCODED
       ↓
+A blank town filled from the ZIP (GeoNames postal codes, meta/zip-city.json)
+      ↓
 Normalise + deduplicate (import key; same number on the same street within 12 m;
 never merge units; erased homeowners stay erased)
       ↓
@@ -172,12 +174,45 @@ measured once TIGER is loaded; it is expected to be small.
 | Geocodio fallback (optional) | $0 under 2,500 look-ups a day; $1.00 per 1,000 beyond |
 | **Expected monthly total** | **under $1 plus the existing Workers plan** |
 
+## Towns for estimated addresses
+
+Census ranges carry the street, the side, the ZIP and the state, not the town.
+The Worker fills a blank town from a ZIP → postal-town table built from the
+[GeoNames](https://www.geonames.org/) US postal-code list, **licensed CC BY
+4.0** (attribution: "Postal code data © GeoNames, CC BY 4.0"). 41,488 ZIPs,
+about 800 KB, at `meta/zip-city.json` in the address bucket:
+
+    npm run zip-cities:build -- --upload --account <id>
+
+The first place GeoNames lists for a ZIP is used (29611 → Greenville,
+29673 → Piedmont). A ZIP the table does not know keeps a blank town.
+
+## Local address files loaded
+
+| Area | Source | Licence | Loaded | Result |
+|---|---|---|---|---|
+| City of Milwaukee, WI | Master Address Index (residential rows, `RES_COM_FLAG = R`) placed at parcel centroids from the city's parcel layer — `api/scripts/county/milwaukee.mjs` | CC BY (credit: © City of Milwaukee) | 2026-09-30, 265,660 addresses | Sample blocks went from 0% to 98–99% published address points; 12–26 non-residential buildings per block left out |
+
+Wisconsin has no current statewide address file: the State Cartographer's
+Office lists only the 2014 LinkWISCONSIN aggregation (2013 data, not
+maintained). Counties that publish are already in Overture (Madison 89%,
+Green Bay 93% measured), which is why Milwaukee was the Wisconsin gap.
+
+Rebuild when the city updates its data:
+
+    node scripts/county/milwaukee.mjs --out milwaukee.geojson
+    npm run addresses:build -- --bbox -88.0650,42.9205,-87.8680,43.1925 \
+      --geojson milwaukee.geojson --fields number=number,street=street,unit=unit,city=city,zip=zip \
+      --state WI --upload --account <id>
+
 ## To finish
 
-1. Allow `www2.census.gov` in the environment's network settings (or run the
-   loader on a machine that can reach it), then:
-   `npm run national:build -- --theme tiger --upload --account <id> --clean`
+1. Census TIGER ranges: loaded nationally on 2026-09-30 (all 3,227 county
+   files) with `npm run national:build -- --theme tiger --upload --account <id>`.
+   The Census firewall refuses bursts; the loader backs off, retries a refused
+   file under `?try=N`, and lists anything still refused in `read.skipped`.
 2. Re-measure coverage in the gap areas and record the share still needing a
-   fallback.
+   fallback. Dry run on production data (2026-09-30): Powdersville SC 239 of
+   313 home rooftops named, Detroit 665 of 666, Philadelphia 2,183 of 2,222.
 3. Post-launch: county address points for Philadelphia/Detroit-type gaps,
    parcel land-use for a residential flag.

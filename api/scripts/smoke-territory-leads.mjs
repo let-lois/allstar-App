@@ -328,6 +328,8 @@ try {
     await stop()
     await put(`r1/14/${x}/${y}.json`, [['Hood Rd', 200, 298, 201, 299, '29642', '29642', 'SC', [-82.5190, 34.7730, -82.5110, 34.7730]]], 'tleads-range.json')
     await put(`b1/14/${x}/${y}.json`, [[-82.5170, 34.7732, 'r'], [-82.5130, 34.7732, 'u'], [-82.5150, 34.7728, 'u']], 'tleads-roofs2.json')
+    // The ZIP → town table (GeoNames), for the town the Census range does not carry.
+    await put('meta/zip-city.json', { 29642: 'Easley' }, 'tleads-zipcity.json')
     await start(config) // no Geocodio key
     const { token: m3 } = await (await call('/api/auth/login', { method: 'POST', body: JSON.stringify(OWNER) })).json()
     const r = await j(await call('/api/territories', { method: 'POST', body: JSON.stringify({ name: 'Hood Rd', repIds: [curtis.id], boundary: Q, generate: true }) }, m3))
@@ -336,6 +338,8 @@ try {
     ok(g?.coverageStatus === 'LIMITED' && g?.pointCoverage === 0, 'and the area is reported LIMITED, 0% address points', `${g?.coverageStatus} ${g?.pointCoverage}`)
     const rows = await query(`SELECT address1, zip, address_confidence AS c, address_source AS s, residential_status AS rs FROM properties WHERE territory_id='${r.body.territory.id}' ORDER BY address1`)
     ok(rows.length === 3 && rows.every((x) => x.c === 'INTERPOLATED' && x.s === 'census_tiger' && x.zip === '29642' && /Hood Rd$/.test(x.address1)), 'stored as INTERPOLATED from census_tiger, with the ZIP from the range', JSON.stringify(rows))
+    const towns = await query(`SELECT DISTINCT city FROM properties WHERE territory_id='${r.body.territory.id}'`)
+    ok(towns.length === 1 && towns[0].city === 'Easley', 'each estimated lead has its town, from the ZIP, not a blank', JSON.stringify(towns))
     ok(rows.filter((x) => Number(x.address1.split(' ')[0]) % 2 === 0).length === 2 && rows.filter((x) => Number(x.address1.split(' ')[0]) % 2 === 1).length === 1, 'the two roofs north of the road are even, the one south is odd')
     const b = await (await call('/api/bootstrap', {}, curtis.token)).json()
     const mine = (b.properties ?? []).filter((p) => p.territoryId === r.body.territory.id)

@@ -18,6 +18,7 @@ import { Tiler, buildingRow, inUS, featureToTileRow, groupOverlaps, parseBbox, p
 const dir = mkdtempSync(join(tmpdir(), 'addr-'))
 const out = join(dir, 'addresses.mjs')
 await build({ entryPoints: ['src/addresses.ts'], bundle: true, format: 'esm', outfile: out, logLevel: 'silent' })
+await build({ entryPoints: ['src/geo.ts'], bundle: true, format: 'esm', outfile: join(dir, 'geo.mjs'), logLevel: 'silent' })
 const worker = await import(out)
 
 const fails = []
@@ -463,6 +464,90 @@ const named = (q, number, street) => {
   ok(buildingRow({ bbox: box(80, 80) })?.[2] === 'n', 'an unclassified one too big to be a house is marked not a home')
   ok(buildingRow({ bbox: box(4, 5) }) === null && buildingRow({ bbox: box(8, 8), class: 'garage' }) === null, 'sheds and garages are dropped')
   ok(inUS(-82.49, 34.78) && inUS(-157.85, 21.3) && !inUS(-0.13, 51.5), 'the U.S. boxes hold Powdersville and Honolulu, and not London')
+}
+
+/* --- inclusion: inside the line, or on it ------------------------------------ */
+//
+// A territory drawn along a street runs its line through the houses, and each
+// house is one point that lands a few metres to one side of it. The real case
+// behind this section: a three-point territory in Clackamas County, OR, where
+// the data held 6 address points strictly inside and 9 more 1.3–4.8 m outside
+// — every one a house the line crossed — and the next at 8.6 m. Only 6 leads
+// were made. Built here in metres around a point in the Round Rock tile.
+{
+  const geo = await import(join(dir, 'geo.mjs'))
+  const O = { lat: 30.51, lng: -97.67 }
+  const kx = 111320 * Math.cos((O.lat * Math.PI) / 180), ky = 110574
+  const at = (east, north) => ({ lat: O.lat + north / ky, lng: O.lng + east / kx })
+  const row = (n, street, p, unit = null) => [String(n), street, unit, 'Round Rock', 'TX', '78664', Number(p.lng.toFixed(7)), Number(p.lat.toFixed(7))]
+  // An 80 m square, west edge at 0 m, east edge at 80 m.
+  const SQ = [at(0, 0), at(80, 0), at(80, 80), at(0, 80)]
+
+  ok(geo.placeInTerritory(at(40, 40), SQ) === 'inside', 'a house in the middle of the territory is inside')
+  ok(geo.placeInTerritory(at(200, 40), SQ) === 'outside', 'one 120 m away is outside')
+  ok(geo.placeInTerritory(at(80, 40), SQ) !== 'outside' && geo.placeInTerritory(at(80, 80), SQ) !== 'outside', 'a point exactly on an edge, or on a corner, counts — never dropped for landing on the line')
+  ok(geo.placeInTerritory(at(83, 40), SQ) === 'edge', '3 m outside: on the edge, the line runs through that house')
+  ok(geo.placeInTerritory(at(85.5, 40), SQ) === 'outside', '5.5 m outside is the house next door, and stays out')
+  ok(Math.abs(geo.metresToEdge(at(83, 40), SQ) - 3) < 0.05, 'distance to the line is measured in metres', geo.metresToEdge(at(83, 40), SQ).toFixed(3))
+  // Concave: an L, with the notch (40..80, 40..80) cut out.
+  const L = [at(0, 0), at(80, 0), at(80, 40), at(40, 40), at(40, 80), at(0, 80)]
+  ok(geo.placeInTerritory(at(60, 60), L) === 'outside', 'a concave territory: a house in the notch, 20 m from the line, is out')
+  ok(geo.placeInTerritory(at(60, 20), L) === 'inside' && geo.placeInTerritory(at(20, 60), L) === 'inside', 'and houses in both arms are in')
+  ok(geo.placeInTerritory(at(42, 60), L) === 'edge', 'a house the notch’s line runs through is in')
+  const tiny = [at(0, 0), at(15, 0), at(0, 15)]
+  ok(geo.placeInTerritory(at(4, 4), tiny) === 'inside', 'a small territory (15 m triangle) still finds the house inside it')
+
+  // The Clackamas case, rebuilt: 6 inside, 9 on the line at the measured
+  // distances, 2 just beyond (8.6 and 11.2 m), 1 far off.
+  const inside6 = [[10, 10], [30, 20], [50, 30], [70, 40], [20, 60], [60, 70]].map(([e, n], i) => row(100 + i * 2, 'Swallowtail Pl', at(e, n)))
+  const edge9 = [1.3, 1.8, 2.6, 2.6, 3.2, 3.3, 3.3, 4.1, 4.8].map((d, i) => row(201 + i * 2, 'Swallowtail Pl', at(80 + d, 5 + i * 8)))
+  const beyond = [row(301, 'Tidewater St', at(88.6, 30)), row(303, 'Tidewater St', at(91.2, 50)), row(999, 'Far Rd', at(400, 400))]
+  const CASE = [...inside6, ...edge9, ...beyond]
+  const w = fakeDb({ boundary: SQ })
+  w.env.ADDRESSES = bucket(CASE)
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  const d = res.diagnostics ?? {}
+  ok(res.created === 15, 'the case that made 6 leads: all 15 houses in or on the line become leads', `${res.created} created`)
+  ok(d.insidePolygon === 6 && d.onEdge === 9, 'counted as 6 inside and 9 on the edge', JSON.stringify({ i: d.insidePolygon, e: d.onEdge }))
+  ok(!w.inserted.some((r) => /^(301|303|999) /.test(r.address1)), 'the houses 8.6 m and 11.2 m out, and the one far off, are not leads')
+  ok(d.outsidePolygon === 3 && d.recordsRead === CASE.length, 'and the diagnostics account for every row read', JSON.stringify(d))
+  ok(d.created === 15 && d.existingLead === 0 && d.invalid === 0 && d.duplicateInData === 0 && d.insertIgnored === 0 && typeof d.rule === 'string', 'with each reason for leaving one out counted, and the rule in words')
+
+  // Close together, duplicates, bad data, existing leads, and 20 in a concave shape.
+  const close = [row(10, 'Pine St', at(40, 40)), row(12, 'Pine St', at(42, 40)), row(14, 'Pine St', at(40, 40), '1'), row(14, 'Pine St', at(40, 40), '2')]
+  const dupe = [row(20, 'Oak St', at(20, 20)), row(20, 'Oak St', at(20, 20))]
+  const bad = [['30', 'Elm St', null, 'Round Rock', 'TX', '78664', null, null], ['', 'Nameless', null, 'Round Rock', 'TX', '78664', at(30, 30).lng, at(30, 30).lat]]
+  const w2 = fakeDb({ boundary: SQ, existing: [{ id: 'p_old', address1: '10 Pine St', city: 'Round Rock', state: 'TX', zip: '78664', lat: at(40, 40).lat, lng: at(40, 40).lng }] })
+  w2.env.ADDRESSES = bucket([...close, ...dupe, ...bad])
+  const r2 = await worker.generateLeadsForTerritory(w2.env, MANAGER, 't_a')
+  const d2 = r2.diagnostics ?? {}
+  ok(w2.inserted.some((r) => r.address1 === '12 Pine St'), 'two houses 2 m apart are two leads')
+  ok(w2.inserted.filter((r) => /^14 Pine St/.test(r.address1)).length === 2, 'two units at one point are two leads')
+  ok(w2.inserted.filter((r) => r.address1 === '20 Oak St').length === 1 && d2.duplicateInData === 1, 'the same address listed twice is one lead, and counted as a duplicate')
+  ok(!w2.inserted.some((r) => r.address1 === '10 Pine St') && d2.existingLead === 1, 'an address that is already a lead is not made again, and is counted', JSON.stringify(d2))
+  ok(d2.invalid === 2 && !w2.inserted.some((r) => /Elm|Nameless/.test(r.address1)), 'a row with no coordinates and one with no number are counted as invalid, not guessed at')
+
+  const twenty = []
+  for (let i = 0; i < 10; i++) twenty.push(row(400 + i * 2, 'Arm A Ct', at(8 + i * 7, 15)))
+  for (let i = 0; i < 10; i++) twenty.push(row(500 + i * 2, 'Arm B Ct', at(15, 45 + i * 3)))
+  const notch = [row(600, 'Notch Ln', at(60, 60)), row(602, 'Notch Ln', at(70, 55))]
+  const w3 = fakeDb({ boundary: L })
+  w3.env.ADDRESSES = bucket([...twenty, ...notch])
+  const r3 = await worker.generateLeadsForTerritory(w3.env, MANAGER, 't_a')
+  ok(r3.created === 20, 'a concave territory holding 20 houses makes 20 leads', `${r3.created}`)
+  ok(!w3.inserted.some((r) => /Notch Ln/.test(r.address1)), 'and none from the notch it leaves out')
+
+  // A house just past the line can sit in the next map tile.
+  const tb = tileBounds(t.x, t.y)
+  const edgeX = tb.xmax - 2 / kx // the territory's east edge, 2 m inside this tile
+  const nextTile = { x: t.x + 1, y: t.y }
+  const beside = [String(700), 'Border Rd', null, 'Round Rock', 'TX', '78664', Number((edgeX + 3 / kx).toFixed(7)), 30.51]
+  const EDGEBOX = [{ lat: 30.5095, lng: edgeX - 60 / kx }, { lat: 30.5095, lng: edgeX }, { lat: 30.5105, lng: edgeX }, { lat: 30.5105, lng: edgeX - 60 / kx }]
+  const w4 = fakeDb({ boundary: EDGEBOX })
+  w4.env.ADDRESSES = { async get(key) { return key === worker.tileKey(nextTile.x, nextTile.y) ? { async json() { return [beside] } } : key === worker.tileKey(t.x, t.y) ? { async json() { return [] } } : null } }
+  const r4 = await worker.generateLeadsForTerritory(w4.env, MANAGER, 't_a')
+  ok(worker.tileFor(beside[6], beside[7]).x === nextTile.x, 'the fixture house really is in the neighbouring tile')
+  ok(r4.created === 1, 'a house on the line whose point lies in the next map tile is still read and made a lead', `${r4.created}`)
 }
 
 if (fails.length) {

@@ -249,7 +249,7 @@ export function privacyPage(opts: { supportEmail?: string }): Response {
 <li><b>Service providers</b> that run parts of the app: Cloudflare (hosting and storage), Google Maps Platform (map display, place search, Street View, directions), Resend (account email), and, where your company turns them on, GoHighLevel (its CRM) and Geocodio (turning a map location into a street address).</li>
 <li><b>Anyone who scans your badge QR code</b> sees your name, photo, company and whether your badge is current.</li>
 </ul>
-<p>Address data used to find houses in a territory comes from public and open datasets (Overture Maps, the U.S. National Address Database, and U.S. Census data).</p>
+<p>Address data used to find houses in a territory comes from public and open datasets (Overture Maps, the U.S. National Address Database, and U.S. Census data). Postal town names for ZIP codes: © GeoNames, CC BY 4.0. City of Milwaukee addresses: © City of Milwaukee, CC BY.</p>
 <h2>How long it is kept</h2>
 <p>Your account data is kept while your account exists. Lead and work records belong to your company and are kept until your company deletes them. Homeowners who ask to be forgotten are erased, and stay erased.</p>
 <h2>Your choices</h2>

@@ -107,8 +107,11 @@ const signIn = async (ctx, name, url = BASE) => {
       being tested for. So this measures the box: the label has to be inside the
       viewport and wide enough to read.
     */
+    // Not a dropdown's <option>: the Leads page's Territory filter says
+    // "Every territory" too, and an option has no box of its own to measure.
     const box = await page
       .getByText(pattern, { exact: false })
+      .and(page.locator(':not(option)'))
       .first()
       .boundingBox()
       .catch(() => null)

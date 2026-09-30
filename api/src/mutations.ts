@@ -5,6 +5,7 @@ import { queueForCrm } from './integrations'
 import { noteIfStale, snapshotUpdatedAt } from './stale'
 import { createList, repScopeSql, setReps, updateList, updateMembers } from './lists'
 import { canImport } from './import'
+import { parseBoundary, polygonAreaSqMiles, territoryFor, type TerritoryShape } from './geo'
 
 /** The statuses a person may set by hand; the same list the office's bulk change allows. */
 const SETTABLE_STATUSES = new Set(['new', 'contacted', 'follow_up', 'working', 'appointment', 'quoted', 'won', 'lost', 'dnc'])
@@ -618,11 +619,22 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
       if (!id) throw new Error('property.status: missing id')
       // A lead added in the field arrives here as a create.
       if (p.created) {
+        /*
+          The patch the new door is in.
+
+          A lead added from the map used to arrive with no territory at all, so
+          the Console filed it under Unassigned even when it sat in the middle
+          of a drawn patch, and the other reps on that patch never saw it. The
+          same geometry the import and the CRM use decides it here.
+        */
+        const lat = num(p.lat)
+        const lng = num(p.lng)
+        const territoryId = lat != null && lng != null ? await territoryAtPoint(env, user.clientId, lat, lng) : null
         await env.DB.prepare(
           `INSERT OR IGNORE INTO properties
              (id, client_id, address1, city, state, zip, lat, lng, status, score,
-              assigned_rep_id, updated_at)
-           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'new',50,?9,?10)`,
+              assigned_rep_id, territory_id, updated_at)
+           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'new',50,?9,?11,?10)`,
         )
           .bind(
             id,
@@ -631,10 +643,11 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
             str(p.city),
             str(p.state),
             str(p.zip),
-            num(p.lat) ?? 0,
-            num(p.lng) ?? 0,
+            lat ?? 0,
+            lng ?? 0,
             user.id,
             Date.now(),
+            territoryId,
           )
           .run()
         /*
@@ -968,4 +981,25 @@ async function bumpDailyStats(
       value,
     )
     .run()
+}
+
+/**
+ * The drawn territory a point falls in, for a lead added from the map.
+ *
+ * Built exactly as the CSV import and the CRM inbound build their shapes, so a
+ * door added on the phone and the same door arriving in a file land in the same
+ * patch. Null for a point in no patch: that lead stays with the rep who added it
+ * and waits for a manager to place it.
+ */
+async function territoryAtPoint(env: Env, clientId: string, lat: number, lng: number): Promise<string | null> {
+  const drawn = await env.DB.prepare('SELECT id, rep_id, boundary FROM territories WHERE client_id = ?1 AND boundary IS NOT NULL')
+    .bind(clientId)
+    .all<{ id: string; rep_id: string | null; boundary: string }>()
+  const shapes: TerritoryShape[] = []
+  for (const t of drawn.results ?? []) {
+    const boundary = parseBoundary(t.boundary)
+    if (!boundary) continue
+    shapes.push({ id: String(t.id), repId: t.rep_id == null ? null : String(t.rep_id), boundary, areaSqMiles: polygonAreaSqMiles(boundary) })
+  }
+  return shapes.length ? (territoryFor({ lat, lng }, shapes)?.id ?? null) : null
 }
