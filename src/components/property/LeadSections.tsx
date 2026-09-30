@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { Collapsible } from '../ui/Collapsible'
 import { Button } from '../ui/Button'
 import { Glyph } from '../ui/Glyph'
-import { PhotoStrip } from '../visit/PhotoStrip'
+import { PhotoImage, PhotoStrip } from '../visit/PhotoStrip'
 import { ListMembership } from './ListMembership'
 import { useAppStore, useListsContaining } from '../../store/useAppStore'
 import { outcomeByCode } from '../../data/outcomes'
@@ -73,6 +73,16 @@ export function LeadSections({
     () => Object.values(allVisits).filter((v) => v.propertyId === propertyId && v.endedAt).sort((a, b) => b.startedAt - a.startedAt),
     [allVisits, propertyId],
   )
+  // Found by the photo's own visit id and by the visit's list, so a photo whose
+  // server row predates the visit link still shows with the visit on this phone.
+  const photosByVisit = useMemo(() => {
+    const by = new Map<string, typeof photos>()
+    for (const v of visits) {
+      const own = photos.filter((p) => p.visitId === v.id || v.photoIds?.includes(p.id))
+      if (own.length) by.set(v.id, own)
+    }
+    return by
+  }, [photos, visits])
   const timeline = useMemo(() => activity.filter((a) => a.propertyId === propertyId).slice(0, 20), [activity, propertyId])
 
   /*
@@ -214,6 +224,19 @@ export function LeadSections({
                         {dayLabel(dayKeyIn(v.startedAt, tz), { month: 'short', day: 'numeric' })} at {time(v.startedAt)}
                         {v.startLocation && ' · location confirmed'}
                       </span>
+                      {/* The photos taken on this visit, with the visit — not only in Photos above. */}
+                      {(photosByVisit.get(v.id)?.length ?? 0) > 0 && (
+                        <span className="mt-1.5 flex gap-1.5" data-testid="visit-photos">
+                          {photosByVisit.get(v.id)!.slice(0, 4).map((ph) => (
+                            <PhotoImage key={ph.id} photo={ph} alt="Visit photo" className="h-11 w-11 rounded-md object-cover" />
+                          ))}
+                          {photosByVisit.get(v.id)!.length > 4 && (
+                            <span className="grid h-11 w-11 place-items-center rounded-md bg-surface-field text-[12px] font-semibold text-ink-soft">
+                              +{photosByVisit.get(v.id)!.length - 4}
+                            </span>
+                          )}
+                        </span>
+                      )}
                     </span>
                   </li>
                 )

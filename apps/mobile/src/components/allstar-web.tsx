@@ -28,6 +28,7 @@ import { apply, readChoice } from '@web/lib/theme'
 import { API_URL } from '@web/lib/http'
 import '@web/index.css'
 import { installApiProxy, type ApiRequest, type ApiResponse } from '@/lib/api-bridge'
+import type { ShellBridge } from '@web/lib/external'
 
 /*
   The page box, which Expo's wrapper HTML leaves half-specified.
@@ -180,10 +181,13 @@ function BackBridge({
 
 export default function AllStarWeb({
   apiFetch,
+  openExternal,
   onCanGoBack,
   ref,
 }: {
   apiFetch: (req: ApiRequest) => Promise<ApiResponse>
+  /** Native action: open a tel:, sms: or mailto: link, and say whether it did. See `web/lib/external.ts`. */
+  openExternal?: (url: string) => Promise<{ ok: boolean }>
   /** Native action: told whenever going back becomes possible or impossible. */
   onCanGoBack?: (canGoBack: boolean) => Promise<void>
   ref?: Ref<AllStarWebRef>
@@ -197,6 +201,11 @@ export default function AllStarWeb({
   */
   ownTheScreen()
   installApiProxy(apiFetch, API_URL)
+  // Call, Text and Email go through this rather than navigating the webview.
+  if (openExternal) {
+    const w = window as Window & { __allstarShell?: ShellBridge }
+    w.__allstarShell = { ...w.__allstarShell, openExternal }
+  }
 
   /*
     The handle is published from here because `useDOMImperativeHandle` has to

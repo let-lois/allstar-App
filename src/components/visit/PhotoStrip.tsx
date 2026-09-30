@@ -1,9 +1,10 @@
 import { Glyph } from '../ui/Glyph'
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { Photo, PhotoCategory } from '../../types'
 import { usePhotoCategories } from '../../lib/useSettings'
 import { compressImage, openCamera, openLibrary } from '../../lib/media'
-import { ensureBytes, photoState } from '../../lib/photos'
+import { ensureBytes, photoState, retryFailedPhotos } from '../../lib/photos'
 import { StorageFull } from '../../lib/db'
 import { useAppStore } from '../../store/useAppStore'
 import { BottomSheet } from '../ui/BottomSheet'
@@ -64,9 +65,13 @@ export function PhotoStrip({
     try {
       // Compress on-device before anything touches storage or the queue.
       const compressed = await Promise.all(files.map((f) => compressImage(f)))
+      setFailed(null)
       setPending(compressed)
-    } catch {
-      setBusy(false)
+    } catch (err) {
+      // It used to stop here in silence: the camera closed and nothing happened.
+      console.warn('[photos] could not read the picture', err)
+      setFailed('We couldn’t read this photo. Please try taking it again.')
+      haptic('warn')
     } finally {
       setBusy(false)
     }
@@ -192,6 +197,15 @@ export function PhotoStrip({
 
       {photos.length > 0 && <PhotoTally photos={photos} />}
 
+      {/*
+        The sheet and the viewer go to the page body rather than rendering in
+        place. `BottomSheet` is position: fixed, and a fixed element inside a
+        transformed ancestor — another sheet's panel — is clipped to that
+        ancestor. That is what kept this strip out of Edit details: its own
+        category sheet would have opened inside the Edit sheet's box.
+      */}
+      {createPortal(
+        <>
       {/* Categorize after the shot, in one tap. */}
       <BottomSheet
         open={pending.length > 0 || editing !== null}
@@ -312,6 +326,9 @@ export function PhotoStrip({
           setOtherType(photo.type ?? '')
         }}
       />
+        </>,
+        document.body,
+      )}
     </div>
   )
 }
@@ -329,7 +346,7 @@ export function PhotoStrip({
  * cellular to fill a scroll container nobody scrolled is exactly the kind of
  * thing that makes a field app feel broken.
  */
-function PhotoImage({
+export function PhotoImage({
   photo,
   alt,
   className,
@@ -435,13 +452,30 @@ function PhotoTally({ photos }: { photos: Photo[] }) {
 
   const count = `${photos.length} photo${photos.length === 1 ? '' : 's'}`
   let detail: string
-  if (failed > 0) detail = `${failed} did not upload — retry from More › Upload queue`
-  else if (waiting > 0) detail = `${waiting} waiting to upload · ${Math.round(owedBytes / 1024)} KB`
+  // "Uploaded" only once the server has said it stored every one of them —
+  // `photoState` reads that from the row, which is marked after a 200 and not
+  // before.
+  if (failed > 0)
+    return (
+      <div role="alert" className="flex items-center gap-2 rounded-field bg-bad-bg px-3 py-2 text-[13px] text-bad" data-testid="photo-upload-failed">
+        <span className="flex-1">
+          {failed === 1 ? 'We couldn’t upload this photo.' : `We couldn’t upload ${failed} photos.`} Please try again.
+        </span>
+        <button
+          type="button"
+          onClick={() => void retryFailedPhotos()}
+          className="focusable min-h-[44px] shrink-0 rounded-lg px-2 font-semibold"
+        >
+          Try again
+        </button>
+      </div>
+    )
+  if (waiting > 0) detail = `${waiting} waiting to upload · ${Math.round(owedBytes / 1024)} KB`
   else if (local === photos.length) detail = `kept on this phone`
   else detail = 'uploaded'
 
   return (
-    <p className={`text-xs ${failed > 0 ? 'text-bad' : 'text-ink-mute'}`}>
+    <p className="text-xs text-ink-mute" data-testid="photo-tally" data-state={waiting > 0 ? 'uploading' : local === photos.length ? 'local' : 'uploaded'}>
       {count} · {detail}
     </p>
   )

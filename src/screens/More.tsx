@@ -21,8 +21,7 @@ import { IconChevron, IconConsole, IconHelp } from '../components/nav/icons'
 import { SignOutButton } from '../components/nav/SignOutButton'
 import { HELP_URL } from '../lib/help'
 import { AvatarPicker, AvatarRemove } from '../components/ui/AvatarPicker'
-import * as db from '../lib/db'
-import { TOUR_KEY } from '../data/tour'
+import { clearTourSeen } from '../lib/tourState'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 
 const ROLE_LABEL: Record<string, string> = {
@@ -41,7 +40,7 @@ export function More() {
     every step points at something on Today or at the bar underneath it.
   */
   const replayTour = async () => {
-    await db.metaSet(TOUR_KEY, undefined)
+    await clearTourSeen(user ? { id: user.id, role: user.role } : null)
     /*
       Go first, then ask. The tour's first step lives on Today, and asking
       before navigating means it spotlights this screen for a moment before the

@@ -1,5 +1,5 @@
 import { IconRefresh } from '../components/nav/icons'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { LeadSections } from '../components/property/LeadSections'
@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button'
 import { Field } from '../components/ui/Input'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { NoteComposer } from '../components/visit/NoteComposer'
+import { PhotoStrip } from '../components/visit/PhotoStrip'
 import { CommActions } from '../components/property/CommActions'
 import { StreetView } from '../components/property/StreetView'
 import { OutcomePill, ScoreBar, StatusPill } from '../components/ui/StatusPill'
@@ -54,6 +55,12 @@ export function PropertyDetail() {
   const user = useAppStore((s) => s.user)
   const dncLocked = property?.status === 'dnc' && user?.role === 'field_rep'
   const [editBusy, setEditBusy] = useState(false)
+  // Newest first, the same order the Photos section shows them in.
+  const allPhotos = useAppStore((s) => s.photos)
+  const leadPhotos = useMemo(
+    () => Object.values(allPhotos).filter((p) => p.propertyId === propertyId).sort((a, b) => b.createdAt - a.createdAt),
+    [allPhotos, propertyId],
+  )
   const [editError, setEditError] = useState<string | null>(null)
 
   const [noteOpen, setNoteOpen] = useState(params.get('note') === '1')
@@ -395,6 +402,17 @@ export function PropertyDetail() {
             autoComplete="email"
             disabled={editBusy}
           />
+          {/*
+            The lead's photos, here as well as under Photos. Somebody fixing the
+            details is often the person who just took the pictures, and a sheet
+            that showed everything about the house except them read as the
+            photos having been dropped. They are saved as they are taken, not
+            with this form, so Save details neither needs nor touches them.
+          */}
+          <section aria-label="Photos" data-testid="lead-edit-photos">
+            <p className="mb-1.5 text-[13px] font-medium text-ink-soft">Photos</p>
+            <PhotoStrip propertyId={property.id} photos={leadPhotos} />
+          </section>
           {editError && (
             <p role="alert" className="rounded-field bg-bad-bg px-3 py-2 text-[12.5px] text-bad">
               {editError}

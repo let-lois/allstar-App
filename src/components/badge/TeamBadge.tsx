@@ -79,6 +79,46 @@ export function badgeTarget(
 /* A length as a fraction of the card's width. 100cqw is the whole card. */
 const w = (fraction: number) => `${fraction}cqw`
 
+/*
+  The card's vertical plan, in card widths (the card is 158.8 tall).
+
+  The code used to be pinned to the bottom-right corner at 40 wide, which put
+  its top edge at 112.8 — across the name (109–117) and the title (118–124),
+  which ran the full width underneath it. A long name simply went under the
+  code. Now each band has its own height and the code starts below the rule:
+
+      photo      49.9 – 95.8
+      name       97.6 – 105.6   one line, sized to fit
+      title     106.9 – 111.9   one line, sized to fit
+      rule      113.2
+      details   116.5 –         left column
+      code      117.0 – 155.0   right column, 38 wide (0.81 in printed)
+
+  `lib/badge-image.ts` draws the file to the same plan in inches.
+*/
+const TEXT_WIDTH = 81 // the card less its 9.4 margins, in cqw, with a hair spare
+let measurer: CanvasRenderingContext2D | null | undefined
+
+/**
+ * The largest font, in cqw, at which `text` fits the badge's width on one
+ * line — between `max` and `min`. Past the minimum the line is truncated with
+ * an ellipsis, and the full text stays in the element's title and label.
+ *
+ * Measured, not guessed from a character count: "WILLIAM" and "IIIIIII" are
+ * very different widths, and a name is exactly where that shows.
+ */
+function fitCqw(text: string, weight: number, max: number, min: number, trackingEm = 0): number {
+  if (!text) return max
+  if (measurer === undefined) measurer = typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null
+  if (!measurer) return max
+  const family = getComputedStyle(document.body).fontFamily || 'sans-serif'
+  measurer.font = `${weight} 100px ${family}`
+  // Width at a 1cqw font, in cqw: the glyphs, plus the tracking per character.
+  const perUnit = measurer.measureText(text).width / 100 + text.length * trackingEm
+  if (perUnit <= 0) return max
+  return Math.max(min, Math.min(max, TEXT_WIDTH / perUnit))
+}
+
 export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitials, minting = false, showQr = true, className = '' }: TeamBadgeProps) {
   /*
     What the code encodes. The company's own QR link when the admin set one —
@@ -92,6 +132,10 @@ export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitia
   const qr = useMemo(() => (target && showQr ? qrModules(target) : null), [target, showQr])
   const status = badge?.status ?? 'none'
   const tz = company.timezone
+  const shownName = name || 'Your name'
+  // Sized to the one line each has; see the plan above `fitCqw`.
+  const nameSize = useMemo(() => fitCqw(shownName.toUpperCase(), 900, 8, 4.6, -0.01), [shownName])
+  const titleSize = useMemo(() => fitCqw((title || '').toUpperCase(), 700, 4, 3, 0.04), [title])
   const fmt = (ms?: number) =>
     ms ? new Date(ms).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', timeZone: tz }) : '—'
 
@@ -130,7 +174,7 @@ export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitia
         {/* --- the company --------------------------------------------------- */}
         <div
           className="absolute inset-x-0 flex items-center justify-center"
-          style={{ top: w(32), height: w(17), paddingLeft: w(8), paddingRight: w(8) }}
+          style={{ top: w(31.5), height: w(17), paddingLeft: w(8), paddingRight: w(8) }}
         >
           {company.logoUrl ? (
             <>
@@ -160,14 +204,14 @@ export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitia
             src={avatarUrl}
             alt=""
             className="absolute left-1/2 aspect-[4/5] -translate-x-1/2 object-cover"
-            style={{ top: w(51.8), width: w(42.4), borderRadius: w(2.8) }}
+            style={{ top: w(49.9), width: w(36.7), borderRadius: w(2.6) }}
             data-testid="badge-photo"
             data-state="present"
           />
         ) : (
           <div
             className="absolute left-1/2 grid aspect-[4/5] -translate-x-1/2 place-items-center bg-[#e9edf3] text-center"
-            style={{ top: w(51.8), width: w(42.4), borderRadius: w(2.8) }}
+            style={{ top: w(49.9), width: w(36.7), borderRadius: w(2.6) }}
             data-testid="badge-photo"
             data-state="missing"
           >
@@ -176,12 +220,12 @@ export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitia
               <span
                 aria-hidden
                 className="mx-auto grid place-items-center rounded-full bg-white font-semibold text-[#5a697d]"
-                style={{ width: w(15), height: w(15), fontSize: w(6) }}
+                style={{ width: w(13.5), height: w(13.5), fontSize: w(5.4) }}
                 data-testid="badge-initials"
               >
                 {avatarInitials}
               </span>
-              <p className="font-medium text-[#5a697d]" style={{ marginTop: w(2.5), fontSize: w(3.5) }}>
+              <p className="font-medium text-[#5a697d]" style={{ marginTop: w(2.2), fontSize: w(3.2) }}>
                 Your photo goes here
               </p>
             </div>
@@ -189,18 +233,22 @@ export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitia
         )}
 
         {/* --- name and title ------------------------------------------------- */}
-        <div className="absolute inset-x-0" style={{ top: w(109), paddingLeft: w(9.4), paddingRight: w(9.4) }}>
+        <div className="absolute inset-x-0" style={{ top: w(97.6), paddingLeft: w(9.4), paddingRight: w(9.4) }}>
           <p
-            className="badge-blue-ink truncate font-black uppercase leading-none tracking-[-0.01em]"
-            style={{ fontSize: w(8) }}
+            className="badge-blue-ink overflow-hidden text-ellipsis whitespace-nowrap font-black uppercase tracking-[-0.01em]"
+            style={{ fontSize: w(nameSize), lineHeight: w(8), height: w(8) }}
+            title={shownName}
             data-testid="badge-name"
+            data-font-cqw={nameSize.toFixed(2)}
           >
-            {name || 'Your name'}
+            {shownName}
           </p>
           <p
-            className="truncate font-bold uppercase tracking-[0.04em] text-[#0b1220]"
-            style={{ marginTop: w(1.5), fontSize: w(4) }}
+            className="overflow-hidden text-ellipsis whitespace-nowrap font-bold uppercase tracking-[0.04em] text-[#0b1220]"
+            style={{ marginTop: w(1.3), fontSize: w(titleSize), lineHeight: w(5), height: w(5) }}
+            title={title}
             data-testid="badge-title"
+            data-font-cqw={titleSize.toFixed(2)}
           >
             {title}
           </p>
@@ -209,9 +257,10 @@ export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitia
         {/* --- id, dates, and the code ---------------------------------------- */}
         <div
           className="absolute inset-x-0 border-t border-black/10"
-          style={{ top: w(127.5), left: w(9.4), right: w(9.4) }}
+          style={{ top: w(113.2), left: w(9.4), right: w(9.4) }}
+          data-testid="badge-rule"
         />
-        <dl className="absolute grid" style={{ top: w(131), left: w(9.4), gap: w(1.4), fontSize: w(3.6) }}>
+        <dl className="absolute grid" style={{ top: w(116.5), left: w(9.4), gap: w(1.4), fontSize: w(3.6) }} data-testid="badge-details">
           <div className="flex items-baseline" style={{ gap: w(2) }}>
             <dt className="badge-blue-ink shrink-0 font-black uppercase tracking-[0.02em]" style={{ width: w(19) }}>ID:</dt>
             <dd className="nums font-bold" data-testid="badge-id">
@@ -245,7 +294,7 @@ export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitia
           </div>
         </dl>
         {/*
-          The code, sized to the card: 40% of its width is 0.85 inches on a
+          The code, sized to the card: 38% of its width is 0.81 inches on a
           printed CR80, inside the three-quarters-to-one-inch band a phone
           camera locks onto at arm's length. The quiet zone is the white
           padding around it, and `crispEdges` keeps each cell a square.
@@ -256,7 +305,7 @@ export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitia
             target="_blank"
             rel="noopener noreferrer"
             className="focusable absolute block bg-white"
-            style={{ right: w(6), bottom: w(6), width: w(40), height: w(40), padding: w(3.2), borderRadius: w(1.5) }}
+            style={{ right: w(6), bottom: w(3.8), width: w(38), height: w(38), padding: w(3), borderRadius: w(1.5) }}
             aria-label={targetKind === 'company' ? `Open ${company.name}’s link` : 'Verify this badge'}
             data-testid="badge-qr"
             data-target={target}
@@ -269,7 +318,7 @@ export function TeamBadge({ badge, name, title, company, avatarUrl, avatarInitia
         ) : showQr ? (
           <p
             className="absolute leading-snug text-[#5a697d]"
-            style={{ right: w(6), bottom: w(8), width: w(40), fontSize: w(3.2) }}
+            style={{ right: w(6), bottom: w(6), width: w(38), fontSize: w(3.2) }}
             data-testid="badge-qr-missing"
           >
             The QR code appears once the badge is created. Scanning it shows a homeowner this badge is real.

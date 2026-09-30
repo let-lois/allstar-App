@@ -16,7 +16,7 @@ import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTyp
 import AllStarWeb, { type AllStarWebRef } from '@/components/allstar-web'
 import type { ApiRequest, ApiResponse } from '@/lib/api-bridge'
 import { diagnosticLines } from '@/lib/build-diagnostic'
-import { destinationFor } from '@/lib/handoff'
+import { contactUrlFor, destinationFor } from '@/lib/handoff'
 import { isInspectable } from '@/lib/inspectable'
 import { shouldApply, shouldCheck, type OtaMoment } from '@/lib/ota'
 
@@ -119,6 +119,35 @@ function handOff(url: string): void {
       return
     case 'shell':
       return
+  }
+}
+
+/**
+ * Call, Text and Email, asked for by the web app directly.
+ *
+ * A native action rather than a link the webview navigates, because the answer
+ * matters: `Linking.openURL` rejects when nothing on the phone can open the URL
+ * (no Mail account, a simulator with no Phone app), and the screen needs to know
+ * that to say so. The navigation route above still catches a plain link, but it
+ * can only guess and stay silent.
+ *
+ * `canOpenURL` is deliberately not the check. On iOS it answers false for any
+ * scheme not listed in the binary's `LSApplicationQueriesSchemes` — a native
+ * build change, not something an update can fix — so trusting it would refuse
+ * working calls. The rejection from `openURL` is the honest signal.
+ *
+ * Only the three contact schemes are accepted; anything else is refused.
+ */
+async function openExternal(url: string): Promise<{ ok: boolean }> {
+  const target = contactUrlFor(url, Platform.OS)
+  if (!target) return { ok: false }
+  try {
+    await Linking.openURL(target)
+    return { ok: true }
+  } catch (err) {
+    // The detail stays here, for a developer; the person is told a sentence.
+    console.warn('[shell] could not open', target.split(':')[0], err)
+    return { ok: false }
   }
 }
 
@@ -264,6 +293,7 @@ export default function Index() {
       <AllStarWeb
         ref={shell}
         apiFetch={apiFetch}
+        openExternal={openExternal}
         onCanGoBack={onCanGoBack}
         dom={{
           /*

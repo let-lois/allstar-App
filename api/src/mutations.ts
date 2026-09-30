@@ -343,6 +343,18 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
       if (!id || !propertyId) throw new Error('photo.create: missing fields')
       await assertPropertyInTenant(env, user, propertyId)
       const category = str(p.category) ?? 'property'
+      /*
+        The visit it was taken on, now that the phone sends it — but only a
+        visit of this tenant's that the server already holds. A missing one
+        (its own mutation refused) must not cost the photo its row, and a
+        foreign one must never be linked.
+      */
+      const wantVisit = str(p.visitId)
+      const visitId = wantVisit
+        ? ((await env.DB.prepare('SELECT id FROM visits WHERE id = ?1 AND client_id = ?2')
+            .bind(wantVisit, user.clientId)
+            .first<{ id: string }>())?.id ?? null)
+        : null
       await env.DB.prepare(
         `INSERT OR REPLACE INTO photos
            (id, client_id, property_id, visit_id, category, type, r2_key,
@@ -353,7 +365,7 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
           id,
           user.clientId,
           propertyId,
-          str(p.visitId),
+          visitId,
           category,
           photoType(category, p.type),
           `${user.clientId}/${propertyId}/${id}.jpg`,
@@ -364,6 +376,24 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
           num(obj(p.capturedAt).lng),
           num(p.createdAt) ?? Date.now(),
         )
+        .run()
+      /*
+        Its line in the lead's history, keyed by the mutation id — the id the
+        phone gave its own copy of this line — so the two are one row. OR IGNORE
+        for the reason the status line gives: a replace keyed on a phone-chosen
+        id could clobber another tenant's row.
+
+        The label is the category as the company names it, sent by the phone
+        because the server does not keep the renamed list; it is display text
+        in this tenant's own history, trimmed and bounded.
+      */
+      const label = (str(p.label) ?? category).replace(/\s+/g, ' ').trim().slice(0, 80) || 'Photo'
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO activity
+           (id, client_id, property_id, rep_id, type, summary, at)
+         VALUES (?1,?2,?3,?4,'photo',?5,?6)`,
+      )
+        .bind(m.id, user.clientId, propertyId, user.id, `Photo added · ${label}`, num(p.createdAt) ?? Date.now())
         .run()
       return
     }
