@@ -385,3 +385,12 @@ export const IconBan = () => (
     <path d="M6 18L18 6" />
   </svg>
 )
+
+/** Help: a question mark in a circle, the mark people already read as "help". */
+export const IconHelp = () => (
+  <svg {...base}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.6 9.3a2.5 2.5 0 014.8.9c0 1.7-2.4 2.2-2.4 3.8" />
+    <path d="M12 17.2h.01" strokeWidth={2.6} />
+  </svg>
+)

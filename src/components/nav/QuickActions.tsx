@@ -42,6 +42,14 @@ export function QuickActions() {
     list runs under the button, so the last door on the street was covered.
   */
   if (/^\/(property|lead|schedule|visit|capture|navigate|street)/.test(pathname)) return null
+  /*
+    And only on the screens people work from. On More, the profile, the badge,
+    the list screens and the pipeline the circle sat on top of content (the
+    last pipeline stage, the rows under "Saved on this phone") while offering
+    nothing those screens were for; Lists has its own add button in the header.
+    Today, the Map, Leads and the office's Team and Overview keep it.
+  */
+  if (/^\/(more|profile|badge|lists?|pipeline|standings|verify|rep)(\/|$)/.test(pathname)) return null
 
   /*
     The list is chosen by job.

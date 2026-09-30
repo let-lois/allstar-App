@@ -51,6 +51,7 @@ export default defineConfig(({ mode }) => {
     'process.env.EXPO_PUBLIC_ORIGIN': pass('PUBLIC_ORIGIN'),
     'process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY': pass('GOOGLE_MAPS_KEY'),
     'process.env.EXPO_PUBLIC_GOOGLE_MAP_ID': pass('GOOGLE_MAP_ID'),
+    'process.env.EXPO_PUBLIC_HELP_URL': pass('HELP_URL'),
   },
   server: { host: true, port: 5173 },
   build: {

@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { Button } from '../components/ui/Button'
 import { IconBack } from '../components/nav/icons'
+import { HelpButton } from '../components/nav/HelpButton'
 import type { Role } from '../types'
 
 /**
@@ -156,6 +157,7 @@ export function AdminLayout() {
             </p>
             <p className="truncate text-[12.5px] leading-tight text-ink-mute">Console</p>
           </div>
+          <HelpButton />
         </div>
         <div className="snap-x-row px-2 pb-2" data-tour="console-tabs">
           {items.map((i) => (
@@ -179,9 +181,12 @@ export function AdminLayout() {
       </header>
 
       <nav className="hidden w-56 shrink-0 flex-col border-r border-line bg-surface px-3 py-4 md:flex">
-        <div className="mb-5 px-2">
-          <p className="text-sm font-semibold">{user.clientName}</p>
-          <p className="text-xs text-ink-mute">Console</p>
+        <div className="mb-5 flex items-start justify-between gap-2 px-2">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">{user.clientName}</p>
+            <p className="text-xs text-ink-mute">Console</p>
+          </div>
+          <HelpButton />
         </div>
 
         {items.map((i) => (

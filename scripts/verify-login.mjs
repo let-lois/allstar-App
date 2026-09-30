@@ -319,14 +319,15 @@ const jsonRoute = (status, body) => (route) =>
   await dismissTour(page)
 
   /*
-    From the header, and through the confirmation. Sign out moved off More when
-    it moved into the header on the two home screens; it asks first, because it
-    is now one tap from a chip people press to check sync and it clears photos
-    that have not uploaded.
+    From the foot of More, and through the confirmation: it clears photos that
+    have not uploaded, so it asks first wherever it sits.
   */
   await page.goto(`${BASE}/today`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(900)
-  await page.locator('header').first().getByRole('button', { name: 'Sign out', exact: true }).click()
+  // Through the dock, as a person would: an in-app move, which also works offline.
+  await page.locator('a[href="/more"]:visible').first().click()
+  await page.waitForTimeout(900)
+  await page.getByTestId('sign-out').click()
   await page.waitForTimeout(700)
   await page
     .locator('[role="dialog"], .fixed')

@@ -17,7 +17,9 @@ import { relative } from '../lib/format'
 import { ApiError, apiSetPassword } from '../lib/http'
 import { liveToken } from '../lib/session'
 import type { Mutation } from '../types'
-import { IconChevron } from '../components/nav/icons'
+import { IconChevron, IconHelp } from '../components/nav/icons'
+import { SignOutButton } from '../components/nav/SignOutButton'
+import { HELP_URL } from '../lib/help'
 import { AvatarPicker, AvatarRemove } from '../components/ui/AvatarPicker'
 import * as db from '../lib/db'
 import { TOUR_KEY } from '../data/tour'
@@ -123,36 +125,138 @@ export function More() {
           </div>
 
           {/*
-            Help, where somebody stuck looks first.
-
-            It was a row two thirds of the way down this list, after the badge
-            and the profile; a rep standing on a porch with a question does not
-            scroll for it. A full-width button under their own name, opening the
-            same support page the sign-in screen links to (the phone shell hands
-            an https link to the in-app browser).
+            Help, where somebody stuck looks first: under their own name, and
+            the same place the header's question mark opens.
           */}
           <a
-            href={`${API_URL}/support`}
+            href={HELP_URL}
             target="_blank"
             rel="noopener noreferrer"
             data-testid="more-need-help"
-            className="focusable card flex min-h-tap items-center justify-between gap-3 px-4 py-3.5 text-[15.5px] font-semibold text-accent-strong"
+            className="focusable card flex min-h-tap items-center gap-3 px-4 py-3.5"
           >
-            <span>Need help?</span>
-            <span className="text-[13px] font-medium text-ink-mute">Help Center &amp; support</span>
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface-tint text-accent-strong">
+              <IconHelp />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15.5px] font-semibold">Need help?</span>
+              <span className="block text-[13px] text-ink-mute">Visit All Star Help</span>
+            </span>
+            <span className="shrink-0 text-accent-strong">
+              <IconChevron />
+            </span>
           </a>
 
-          {/* --- sync ----------------------------------------------------- */}
+          {/*
+            The menu, grouped by what it is for, and only what this person can
+            use. Where things live after the dock: the work, the office's
+            tools, the account, and help. The phone's own housekeeping (sync,
+            storage, offline maps) comes after, since it is looked at when
+            something is wrong rather than every day.
+          */}
+          <MoreGroup title="Your work">
+            <MoreLink label="Today's route" onClick={() => nav('/route')} />
+            <MoreLink label="Lists" onClick={() => nav('/lists')} />
+            <MoreLink label="Standings" onClick={() => nav('/standings')} />
+            <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
+            <MoreLink label="Schedule an appointment" onClick={() => nav('/schedule/new')} />
+          </MoreGroup>
+
+          {user?.role !== 'field_rep' && (
+            <MoreGroup title="Manage">
+              <MoreLink label="Team activity" onClick={() => nav('/team')} />
+              {/*
+                The console is in the phone bundle (`admin-routes-native.tsx`), so
+                the link goes where it says. Reps never see it — and a rep who
+                reaches /admin anyway gets `AdminLayout`'s refusal, with every API
+                behind it refused on the Worker too.
+              */}
+              <MoreLink label="Admin console" onClick={() => nav('/admin')} />
+              <MoreLink label="Territories" onClick={() => nav('/admin/territories')} />
+            </MoreGroup>
+          )}
+
+          {mode === 'live' && (
+            <MoreGroup title="Account">
+              <MoreLink label="My badge" onClick={() => nav('/badge')} />
+              <MoreLink label="Edit profile" onClick={() => nav('/profile')} />
+              {/*
+              Self-service, because routing every forgotten password through an
+              admin is a support call for something the rep can do in ten seconds
+              — usually while standing on a doorstep.
+            */}
+              <Collapsible title="Change my password">
+                <p className="text-[13px] leading-relaxed text-ink-mute">
+                  Changing it signs you out on every device, including this one. Anything
+                  you’ve recorded is saved here and uploads once you sign back in.
+                </p>
+                <Field
+                  type="password"
+                  value={pw}
+                  onChange={(e) => setPw(e.target.value)}
+                  autoComplete="new-password"
+                  placeholder="At least 10 characters"
+                  className="mt-4"
+                  error={pwErr}
+                />
+                {pwMsg && (
+                  <p role="status" className="mt-2 text-[13px] font-semibold text-good">
+                    {pwMsg}
+                  </p>
+                )}
+                <Button
+                  size="lg"
+                  full
+                  className="mt-4"
+                  disabled={pwBusy || pw.length < 10}
+                  onClick={async () => {
+                    const token = liveToken()
+                    if (!token || !user) return
+                    setPwBusy(true)
+                    setPwErr(null)
+                    setPwMsg(null)
+                    try {
+                      await apiSetPassword(token, user.id, pw)
+                      setPw('')
+                      setPwMsg('Changed. Sign in again with the new one.')
+                    } catch (err) {
+                      setPwErr(
+                        err instanceof ApiError ? err.message : 'Could not change it. Try again.',
+                      )
+                    } finally {
+                      setPwBusy(false)
+                    }
+                  }}
+                >
+                  {pwBusy ? 'Changing…' : 'Change password'}
+                </Button>
+              </Collapsible>
+              <MoreLink label="Delete account" onClick={() => nav('/profile#delete-account')} />
+            </MoreGroup>
+          )}
+
+          <MoreGroup title="Help">
+            {/* Plain links: the phone shell opens an https link in the in-app browser. */}
+            <MoreHref label="All Star Help" href={HELP_URL} />
+            {/*
+              Replay, because the tour offers Skip and people take it — often on
+              the first morning, standing next to a van. Everyone, not just reps:
+              the office has its own tour.
+            */}
+            <MoreLink label="Show the tutorial again" onClick={() => void replayTour()} />
+            <MoreHref label="Privacy policy" href={`${API_URL}/privacy`} />
+          </MoreGroup>
+
           <section className="section">
-            <SectionHeader title="Sync &amp; offline" standalone />
-            <SyncDetail />
+            <SectionHeader title="This phone" standalone />
           </section>
+          {/* --- sync ----------------------------------------------------- */}
+          <SyncDetail />
 
           {/* --- what's cached ------------------------------------------- */}
           <div data-tour="more-sync">
           <Collapsible
             title="Saved on this phone"
-            defaultOpen
             right={
               <span className="nums text-xs text-ink-soft">
                 {Object.keys(properties).length} leads
@@ -387,128 +491,8 @@ export function More() {
             )}
           </Collapsible>
 
-          <section className="section">
-            <SectionHeader title="Go to" standalone />
-            {/* Separate cards rather than one plate of rows. Full-bleed square
-                rows read as a different kind of control from the rounded
-                collapsibles directly above them, when they are the same kind of
-                thing: one tap, one destination. Same shape, same rhythm. */}
-            <nav className="flex flex-col gap-2.5">
-              {/*
-                Replay, because the tour offers Skip and people take it — often
-                on the first morning, standing next to a van, with somewhere to
-                be. Without a way back it is a one-shot explanation of the app
-                aimed at the exact moment someone has least attention to give
-                it.
-
-                Everyone, not just reps. This was gated to `field_rep` back when
-                the rep tour was the only one there was; the office has had its
-                own since, and leaving the gate meant the people with the most
-                screens to learn were the ones who could not ask to see them
-                again.
-
-                First in the list on purpose. It is the one row here that is
-                worth more the less you know, so it should not be underneath
-                four things you have to already understand to skip past.
-              */}
-              <MoreLink
-                label="Show the tutorial again"
-                onClick={() => void replayTour()}
-              />
-              {mode === 'live' && (
-                <>
-                  <MoreLink label="My badge" onClick={() => nav('/badge')} />
-                  <MoreLink label="Edit profile" onClick={() => nav('/profile')} />
-                  <MoreLink label="Delete account" onClick={() => nav('/profile#delete-account')} />
-                </>
-              )}
-              {/* Plain links: the phone shell opens an https link in the in-app browser. */}
-              <MoreHref label="Help & support" href={`${API_URL}/support`} />
-              <MoreHref label="Privacy policy" href={`${API_URL}/privacy`} />
-              <MoreLink label="Standings" onClick={() => nav('/standings')} />
-              <MoreLink label="Today's route" onClick={() => nav('/route')} />
-              <MoreLink label="Add a lead" onClick={() => nav('/lead/new')} />
-              <MoreLink label="Schedule an appointment" onClick={() => nav('/schedule/new')} />
-              {user?.role !== 'field_rep' && (
-                <>
-                  <MoreLink label="Team activity" onClick={() => nav('/team')} />
-                  {/*
-                    On every surface now, the phone app included.
-
-                    For a while this was hidden in the native app, because
-                    `apps/mobile` swapped the console's routes for a stub and
-                    the catch-all sent a tapping manager to Today. The console
-                    is in the phone bundle now (`admin-routes-native.tsx`), so
-                    the link goes where it says. Reps never see it — and a rep
-                    who reaches /admin anyway gets `AdminLayout`'s refusal, with
-                    every API behind it refused on the Worker too.
-                  */}
-                  <MoreLink label="Admin console" onClick={() => nav('/admin')} />
-                </>
-              )}
-            </nav>
-          </section>
-
-          {/*
-            Self-service, because routing every forgotten password through an
-            admin is a support call for something the rep can do in ten seconds
-            — usually while standing on a doorstep.
-          */}
-          {mode === 'live' && (
-            <Collapsible title="Change my password">
-              <p className="text-[13px] leading-relaxed text-ink-mute">
-                Changing it signs you out on every device, including this one. Anything
-                you’ve recorded is saved here and uploads once you sign back in.
-              </p>
-              <Field
-                type="password"
-                value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                autoComplete="new-password"
-                placeholder="At least 10 characters"
-                className="mt-4"
-                error={pwErr}
-              />
-              {pwMsg && (
-                <p role="status" className="mt-2 text-[13px] font-semibold text-good">
-                  {pwMsg}
-                </p>
-              )}
-              <Button
-                size="lg"
-                full
-                className="mt-4"
-                disabled={pwBusy || pw.length < 10}
-                onClick={async () => {
-                  const token = liveToken()
-                  if (!token || !user) return
-                  setPwBusy(true)
-                  setPwErr(null)
-                  setPwMsg(null)
-                  try {
-                    await apiSetPassword(token, user.id, pw)
-                    setPw('')
-                    setPwMsg('Changed. Sign in again with the new one.')
-                  } catch (err) {
-                    setPwErr(
-                      err instanceof ApiError ? err.message : 'Could not change it. Try again.',
-                    )
-                  } finally {
-                    setPwBusy(false)
-                  }
-                }}
-              >
-                {pwBusy ? 'Changing…' : 'Change password'}
-              </Button>
-            </Collapsible>
-          )}
-
-          {/*
-            Sign out has moved to the header, beside the sync chip, on Today and
-            the Overview — one tap from the screen each role starts on rather
-            than at the bottom of this one. It asks before it acts now, which it
-            did not need to when it was this far down.
-          */}
+          {/* The last row, in the destructive colour, with its confirmation. */}
+          <SignOutButton row />
 
           <p className="pb-1 pt-1 text-center text-[12.5px] text-ink-mute">
             Allstar Field · v0.1.0
@@ -570,5 +554,15 @@ function MoreLink({ label, onClick }: { label: string; onClick: () => void }) {
         </span>
       </button>
     </div>
+  )
+}
+
+/** One group of the menu: a quiet heading and its rows. */
+function MoreGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="section" aria-label={title}>
+      <SectionHeader title={title} standalone />
+      <nav className="flex flex-col gap-2.5">{children}</nav>
+    </section>
   )
 }

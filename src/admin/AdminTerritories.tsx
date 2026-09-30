@@ -991,17 +991,21 @@ function RepChips({
  * and can be retried. An empty territory never reads as a silent success.
  */
 export function describeGenerated(g: { error: string; code?: string } | GeneratedLeads): string {
-  if ('error' in g) return g.error
+  if ('error' in g) {
+    // In words a manager can act on; the server's own text names config files.
+    if (g.code === 'addresses_not_configured') return 'Finding houses is not set up for this company yet. The territory is saved; ask your administrator to turn on address look-up, then press Find addresses.'
+    return g.error
+  }
   const n = (x: number | undefined) => (x ?? 0).toLocaleString()
   const plural = (x: number | undefined, one: string, many = `${one}s`) => ((x ?? 0) === 1 ? one : many)
   const out: string[] = []
 
   if (g.coverage === 'none' && g.coverageStatus !== 'LIMITED') {
-    return 'No address or building data covers this area yet, so no houses were found. The territory is saved; see docs/ADDRESSES.md to load this area, then press Find addresses.'
+    return 'There is no address data for this area yet, so no houses were found. The territory is saved; press Find addresses again once the area has data.'
   }
 
-  const counts = [`${n(g.found)} ${plural(g.found, 'address', 'addresses')} found`, `${n(g.created)} new ${plural(g.created, 'lead')}`]
-  if (g.existed) counts.push(`${n(g.existed)} already there`)
+  const counts = [`${n(g.found)} ${plural(g.found, 'address', 'addresses')} found`, `${n(g.created)} ${plural(g.created, 'lead')} created`]
+  if (g.existed) counts.push(`${n(g.existed)} already ${plural(g.existed, 'a lead', 'leads')}`)
   if (g.erased) counts.push(`${n(g.erased)} erased before and left that way`)
   if (g.skipped) counts.push(`${n(g.skipped)} past the limit — press Find addresses again for the rest`)
   out.push(counts.join(', ') + '.')
@@ -1013,7 +1017,7 @@ export function describeGenerated(g: { error: string; code?: string } | Generate
     out.push(`Sources: ${parts.join(', ')}.`)
   }
   if (g.coverageStatus && g.pointCoverage != null && g.homeRooftops) {
-    out.push(`Coverage: ${g.coverageStatus} — ${g.pointCoverage}% of the ${n(g.homeRooftops)} homes here have a published address point.`)
+    out.push(`${g.pointCoverage}% of the ${n(g.homeRooftops)} homes here have an official address.`)
   }
   if (g.nonResidential) out.push(`${n(g.nonResidential)} on commercial or public buildings ${plural(g.nonResidential, 'was', 'were')} left out.`)
 
@@ -1023,7 +1027,7 @@ export function describeGenerated(g: { error: string; code?: string } | Generate
   } else if (g.geocoder === 'off' && leftover) {
     out.push(`${n(leftover)} ${plural(leftover, 'home is', 'homes are')} too far from a numbered street to estimate.`)
   } else {
-    if (g.lookupFailed) out.push(`Looking up ${n(g.lookupFailed)} ${plural(g.lookupFailed, 'house')} failed${g.lookupError ? ` (${g.lookupError})` : ''} — press Find addresses to try again; nothing is duplicated.`)
+    if (g.lookupFailed) out.push(`Looking up ${n(g.lookupFailed)} ${plural(g.lookupFailed, 'house')} failed — press Find addresses to try again; nothing is duplicated.`)
     if (g.lookupSkipped) out.push(`${n(g.lookupSkipped)} more ${plural(g.lookupSkipped, 'house is', 'houses are')} waiting — press Find addresses again to look them up.`)
     if (g.unresolved) out.push(`${n(g.unresolved)} ${plural(g.unresolved, 'rooftop has', 'rooftops have')} no street address on record.`)
   }

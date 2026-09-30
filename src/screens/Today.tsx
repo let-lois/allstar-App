@@ -10,7 +10,6 @@ import {
 } from '../store/useAppStore'
 import { TopBar } from '../components/nav/TopBar'
 import { BadgeNudge } from '../components/badge/BadgeNudge'
-import { SignOutButton } from '../components/nav/SignOutButton'
 import { SyncBadge, SyncDetail } from '../components/sync/SyncBadge'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { PullToRefresh } from '../components/ui/PullToRefresh'
@@ -117,21 +116,21 @@ export function Today() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <TopBar
-        title={`${greeting}, ${user?.name.split(' ')[0] ?? 'there'}`}
-        subtitle={dateLine}
         /*
-          A rep's only way out, now that it has left More. Today and the
-          Overview are the two home screens, one per role — putting it on
-          every screen would be a destructive control permanently under a
-          thumb, and putting it on neither would strand whoever does not see
-          the other one.
+          The screen's name, the same word as the dock, with the greeting under
+          it. "Good evening, Dana" as the 28pt title was cut to "Good
+          evening, …" on a small phone once the header also held the sync chip
+          and Help, and it did not say where the rep was.
         */
-        right={
-          <>
-            <SignOutButton />
-            <SyncBadge onClick={() => setSyncOpen(true)} />
-          </>
-        }
+        title="Today"
+        subtitle={`${greeting}, ${user?.name.split(' ')[0] ?? 'there'} · ${dateLine}`}
+        /*
+          Sync state and Help, and nothing destructive. Sign out used to sit
+          here, a door-shaped icon beside the greeting that squeezed the
+          rep's own name to "Good evening, …" on a small phone; it lives at the
+          foot of More now, with the same confirmation.
+        */
+        right={<SyncBadge onClick={() => setSyncOpen(true)} />}
       />
 
       <PullToRefresh
