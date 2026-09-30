@@ -91,7 +91,42 @@ export function More() {
       <div className="scroll-pane pad-nav bg-surface-sunk">
         <div className="content-col page anim-rise">
           {/*
-            The two shortcuts, above everything, so neither needs a scroll.
+            --- identity -------------------------------------------------
+            Not in a card. Who you are is the page's own heading, and wrapping it
+            in a bordered rectangle made it read as the first of six widgets
+            rather than as the top of a settings screen.
+          */}
+          <div className="flex items-center gap-3.5 pb-1 pt-1" data-tour="more-avatar">
+            <AvatarPicker />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[19px] font-semibold tracking-[-0.01em]">{user?.name}</p>
+              <p className="truncate text-[13.5px] text-ink-mute">
+                {ROLE_LABEL[user?.role ?? '']} · {user?.clientName}
+              </p>
+              {/*
+                Stated rather than implied. A rep who can't tell whether their
+                knocks are going to the company's database or to a sample
+                dataset has no way to trust the app, and an admin demoing to a
+                prospect needs to know that nothing they tap is real.
+              */}
+              <p className="mt-1 truncate text-[12.5px] font-medium text-ink-mute">
+                {mode === 'live' ? 'Signed in · syncing to server' : 'Demo — sample data'}
+              </p>
+              <AvatarRemove />
+            </div>
+            {/*
+              Appearance sits with the person, not under a heading.
+
+              It is a property of this handset rather than of the account, and
+              putting it beside the avatar is the difference between a setting
+              somebody finds and a setting somebody is told about.
+            */}
+            <ThemeToggle />
+          </div>
+
+
+          {/*
+            The two shortcuts, right under the name, so neither needs a scroll.
             Help first, for everybody: where somebody stuck looks, and the
             same place the header's question mark opens.
           */}
@@ -140,41 +175,6 @@ export function More() {
               </span>
             </button>
           )}
-
-          {/*
-            --- identity -------------------------------------------------
-            Not in a card. Who you are is the page's own heading, and wrapping it
-            in a bordered rectangle made it read as the first of six widgets
-            rather than as the top of a settings screen.
-          */}
-          <div className="flex items-center gap-3.5 pb-1 pt-1" data-tour="more-avatar">
-            <AvatarPicker />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[19px] font-semibold tracking-[-0.01em]">{user?.name}</p>
-              <p className="truncate text-[13.5px] text-ink-mute">
-                {ROLE_LABEL[user?.role ?? '']} · {user?.clientName}
-              </p>
-              {/*
-                Stated rather than implied. A rep who can't tell whether their
-                knocks are going to the company's database or to a sample
-                dataset has no way to trust the app, and an admin demoing to a
-                prospect needs to know that nothing they tap is real.
-              */}
-              <p className="mt-1 truncate text-[12.5px] font-medium text-ink-mute">
-                {mode === 'live' ? 'Signed in · syncing to server' : 'Demo — sample data'}
-              </p>
-              <AvatarRemove />
-            </div>
-            {/*
-              Appearance sits with the person, not under a heading.
-
-              It is a property of this handset rather than of the account, and
-              putting it beside the avatar is the difference between a setting
-              somebody finds and a setting somebody is told about.
-            */}
-            <ThemeToggle />
-          </div>
-
 
           {/*
             The menu, grouped by what it is for, and only what this person can

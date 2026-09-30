@@ -61,6 +61,8 @@ const helpOnScreen = async (page) => {
   }
 }
 const sideways = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+/** The top of More, in order: the name row, the shortcuts, the first group. */
+const order = (page) => page.evaluate(() => [...document.querySelectorAll('.content-col [data-tour="more-avatar"], .content-col [data-testid="more-need-help"], .content-col [data-testid="more-console"], .content-col section[aria-label]')].map((e) => e.getAttribute('data-testid') || e.getAttribute('data-tour') || e.getAttribute('aria-label')).slice(0, 4))
 const fab = (page) => page.getByRole('button', { name: 'Quick actions' }).count()
 
 try {
@@ -93,8 +95,8 @@ try {
     ok(groups.includes('Your work') && groups.includes('Help'), 'More is grouped: Your work, Help', groups.join(' · '))
     ok(!groups.includes('Manage'), 'a rep sees no Manage group')
     ok((await page.getByRole('button', { name: /Admin console/ }).count()) === 0 && (await page.getByTestId('more-console').count()) === 0, 'and no console shortcut anywhere')
-    const repTop = await page.evaluate(() => [...document.querySelectorAll('.content-col a, .content-col button')].filter((b) => b.getBoundingClientRect().height > 0)[0]?.getAttribute('data-testid'))
-    ok(repTop === 'more-need-help', 'Need help is the first thing on More', repTop)
+    const repTop = await order(page)
+    ok(repTop[0] === 'more-avatar' && repTop[1] === 'more-need-help' && repTop[2] === 'Your work', 'More opens with the name, then Need help, then the groups', repTop.join(' → '))
     for (const label of ["Today's route", 'Lists', 'Standings', 'Add a lead', 'Schedule an appointment', 'Show the tutorial again']) {
       ok((await page.getByRole('button', { name: label }).count()) === 1, `More still reaches “${label}”`)
     }
@@ -152,14 +154,10 @@ try {
       ok((await page.getByRole('button', { name: label, exact: true }).count()) === 1, `with “${label}”`)
     }
     // The console: a shortcut at the very top, right under Need help, in view without a scroll.
-    const top = await page.evaluate(() =>
-      [...document.querySelectorAll('.content-col a, .content-col button')]
-        .filter((b) => b.getBoundingClientRect().height > 0)
-        .slice(0, 2)
-        .map((b) => ({ id: b.getAttribute('data-testid'), bottom: Math.round(b.getBoundingClientRect().bottom), h: Math.round(b.getBoundingClientRect().height) })),
-    )
-    ok(top[0]?.id === 'more-need-help' && top[1]?.id === 'more-console', 'a manager’s More opens with Need help, then the Admin console', JSON.stringify(top))
-    ok(!!top[1] && top[1].bottom <= 667 - 100 && top[1].h >= 44, 'the console shortcut is in view above the dock with no scroll, 44pt or larger', `bottom ${top[1]?.bottom}`)
+    const mgrTop = await order(page)
+    ok(mgrTop[0] === 'more-avatar' && mgrTop[1] === 'more-need-help' && mgrTop[2] === 'more-console' && mgrTop[3] === 'Your work', 'a manager’s More opens with the name, then Need help, then the Admin console, then the groups', mgrTop.join(' → '))
+    const cb = await page.getByTestId('more-console').boundingBox()
+    ok(!!cb && cb.y + cb.height <= 667 - 100 && cb.height >= 44, 'the console shortcut is in view above the dock with no scroll, 44pt or larger', `bottom ${cb && Math.round(cb.y + cb.height)}`)
     ok((await page.getByRole('button', { name: /Admin console/ }).count()) === 1, 'and appears once — not again inside Manage')
     await page.getByTestId('more-console').click()
     await page.waitForTimeout(900)
