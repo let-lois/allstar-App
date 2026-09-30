@@ -170,13 +170,15 @@ export function Leads() {
               that got pushed off.
             */}
             {/*
-              One row at every width: the sort chips scroll sideways and the
-              Filters button stays pinned at the right. Wrapped, four chips on a
-              375pt phone pushed Filters onto a line of its own, a whole band of
-              chrome for one button.
+              Filters pinned at the top right, the sort chips wrapping beside it.
+              Wrapped as one group, four chips on a 375pt phone pushed Filters
+              onto a line of its own, a whole band of chrome for one button; a
+              sideways-scrolling rail would hide a sort option behind a swipe
+              (verify:leadsheet forbids one). So the chips wrap in their own
+              column and the button never moves.
             */}
-            <div className="flex items-center gap-2" data-testid="leads-header-row">
-              <div className="snap-x-row min-w-0 flex-1" data-tour="leads-sort" role="group" aria-label="Sort">
+            <div className="flex items-start gap-2" data-testid="leads-header-row">
+              <div className="flex min-w-0 flex-1 flex-wrap gap-2" data-tour="leads-sort" role="group" aria-label="Sort">
                 {SORTS.map((s) => (
                   <Chip key={s.key} size="sm" selected={sort === s.key} onClick={() => setSort(s.key)}>
                     {s.label}

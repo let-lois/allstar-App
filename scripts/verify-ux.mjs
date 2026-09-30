@@ -131,7 +131,7 @@ try {
       const s = document.querySelector('[data-tour="leads-sort"]')?.getBoundingClientRect()
       return f && s ? { fy: Math.round(f.top), sy: Math.round(s.top), right: Math.round(f.right) } : null
     })
-    ok(!!row && Math.abs(row.fy - row.sy) <= 6 && row.right <= 375, 'Leads: sort chips and Filters share one row on a 375 phone', JSON.stringify(row))
+    ok(!!row && Math.abs(row.fy - row.sy) <= 6 && row.right <= 375, 'Leads: Filters sits on the first row beside the sort chips on a 375 phone', JSON.stringify(row))
     await ctx.close()
   }
 
