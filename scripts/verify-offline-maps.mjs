@@ -420,7 +420,7 @@ ok(
 
   const t0 = Date.now()
   await page2.locator('a[href="/more"]:visible').first().click()
-  await page2.getByRole('heading', { name: 'Sync & offline' }).waitFor({ timeout: 30_000 })
+  await page2.getByRole('heading', { name: 'This phone' }).waitFor({ timeout: 30_000 })
   /*
     The Offline maps header specifically, not any text ending in MB — the first
     attempt matched the "App storage 0.1 / 1077 MB" row two sections above and

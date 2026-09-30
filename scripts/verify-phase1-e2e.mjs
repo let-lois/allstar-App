@@ -487,7 +487,7 @@ try {
     await rep.goto(`${APP}/more`, { waitUntil: 'domcontentloaded' })
     await settle(rep, 1500)
     ok((await rep.getByRole('link', { name: 'Privacy policy' }).getAttribute('href'))?.endsWith('/privacy') === true, 'More links the privacy policy')
-    ok((await rep.getByRole('link', { name: 'Help & support' }).getAttribute('href'))?.endsWith('/support') === true, 'and support')
+    ok((await rep.getByRole('link', { name: 'All Star Help', exact: true }).getAttribute('href'))?.endsWith('/support') === true, 'and All Star Help (the support page)')
     await rep.getByRole('button', { name: 'Delete account' }).click()
     await settle(rep, 1200)
     ok(/\/profile/.test(rep.url()) && (await rep.getByTestId('delete-account').count()) === 1, 'Delete account leads to the profile, where it is explained')
