@@ -1,4 +1,5 @@
 import { record } from './audit'
+import { EDGE_TOUCH_METRES, metresToEdge } from './geo'
 import { generateLeadsForTerritory, type Generated } from './addresses'
 import { activeTeamMembers, cleanRepIds, clearTerritoryReps, writeTerritoryReps } from './territory-reps'
 import type { Env, SessionUser } from './types'
@@ -149,12 +150,19 @@ export async function createTerritory(
     is a few thousand rows of two numbers, and it runs the *same* test the browser
     ran, so the count the manager saw is the count they get.
   */
-  const rows = await env.DB.prepare('SELECT id, lat, lng FROM properties WHERE client_id = ?1')
+  const rows = await env.DB.prepare('SELECT id, lat, lng, territory_id FROM properties WHERE client_id = ?1')
     .bind(actor.clientId)
     .all()
 
-  const ids = (rows.results as { id: string; lat: number; lng: number }[])
-    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && inside(p, boundary))
+  /*
+    Inside the line, as before; and on it — a house the line runs through, its
+    point a few metres outside (EDGE_TOUCH_METRES) — only when no territory
+    has it yet. A patch drawn along its neighbour's boundary must not take the
+    houses on that shared line away from the neighbour.
+  */
+  const ids = (rows.results as { id: string; lat: number; lng: number; territory_id: string | null }[])
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+    .filter((p) => inside(p, boundary) || (!p.territory_id && metresToEdge(p, boundary) <= EDGE_TOUCH_METRES))
     .map((p) => p.id)
 
   const now = Date.now()

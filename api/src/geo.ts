@@ -49,6 +49,62 @@ export function pointInPolygon(point: LatLng, polygon: LatLng[]): boolean {
   return inside
 }
 
+/**
+ * How far a house's point may sit outside the drawn line and still be in the
+ * territory: the line runs through the house.
+ *
+ * A territory is drawn with a finger along a street or a back fence, and the
+ * line lands on the houses themselves. Each house is stored as one point (its
+ * address point, or its roof's centre), so a house the line visibly cuts
+ * through has its point a few metres to one side or the other. Measured on a
+ * real three-point territory: 6 address points strictly inside, 11 more
+ * between 1.3 and 4.8 m outside — every one of them a house the line crossed —
+ * and the next at 8.6 m. Five metres is under half the width of a house (the
+ * smallest homes are about 8 m across), so a point this close to the line
+ * means the line crosses that house; a neighbour whose house the line misses
+ * has its point further out than this.
+ */
+export const EDGE_TOUCH_METRES = 5
+
+/** Metres from a point to the nearest edge of a polygon, flat at the point's own latitude. */
+export function metresToEdge(point: LatLng, polygon: LatLng[]): number {
+  if (polygon.length < 2) return Infinity
+  const kx = 111_320 * Math.cos((point.lat * Math.PI) / 180)
+  const ky = 110_574
+  let best = Infinity
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i], b = polygon[(i + 1) % polygon.length]
+    const ax = (a.lng - point.lng) * kx, ay = (a.lat - point.lat) * ky
+    const dx = (b.lng - a.lng) * kx, dy = (b.lat - a.lat) * ky
+    const len = dx * dx + dy * dy
+    const t = len ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len)) : 0
+    best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy))
+  }
+  return best
+}
+
+/**
+ * Where a house's point stands relative to a territory: 'inside' the line,
+ * on the 'edge' (outside by no more than EDGE_TOUCH_METRES, so the line runs
+ * through the house), or 'outside'.
+ */
+export function placeInTerritory(point: LatLng, polygon: LatLng[], edgeMetres = EDGE_TOUCH_METRES): 'inside' | 'edge' | 'outside' {
+  if (pointInPolygon(point, polygon)) return 'inside'
+  return metresToEdge(point, polygon) <= edgeMetres ? 'edge' : 'outside'
+}
+
+/** The polygon's bounding box, grown by `metres` on every side. */
+export function boundsAround(polygon: LatLng[], metres: number): { minLat: number; maxLat: number; minLng: number; maxLng: number } {
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity
+  for (const p of polygon) {
+    minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat)
+    minLng = Math.min(minLng, p.lng); maxLng = Math.max(maxLng, p.lng)
+  }
+  const dLat = metres / 110_574
+  const dLng = metres / (111_320 * Math.cos((((minLat + maxLat) / 2) * Math.PI) / 180))
+  return { minLat: minLat - dLat, maxLat: maxLat + dLat, minLng: minLng - dLng, maxLng: maxLng + dLng }
+}
+
 /** Shoelace area, scaled to miles at the polygon's own latitude. */
 export function polygonAreaSqMiles(polygon: LatLng[]): number {
   if (polygon.length < 3) return 0

@@ -1,5 +1,5 @@
 import type { LatLng } from './geo'
-import { pointInPolygon } from './geo'
+import { placeInTerritory } from './geo'
 import type { Bucket, FoundAddress } from './addresses'
 import type { Env } from './types'
 
@@ -34,9 +34,10 @@ export async function rooftopsInside(
   bucket: Bucket,
   polygon: LatLng[],
   tiles: { x: number; y: number }[],
-): Promise<{ rooftops: Rooftop[]; tilesWithData: number }> {
+): Promise<{ rooftops: Rooftop[]; tilesWithData: number; onEdge: number }> {
   const rooftops: Rooftop[] = []
   let tilesWithData = 0
+  let onEdge = 0
   for (let i = 0; i < tiles.length; i += 8) {
     const batch = await Promise.all(tiles.slice(i, i + 8).map(async (t) => {
       const obj = await bucket.get(rooftopKey(t.x, t.y))
@@ -51,12 +52,15 @@ export async function rooftopsInside(
         const lng = Number(r[0]), lat = Number(r[1])
         const kind = r[2] === 'r' || r[2] === 'n' ? r[2] : 'u'
         if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue
-        if (!pointInPolygon({ lat, lng }, polygon)) continue
+        // The same rule as the address points: inside the line, or on it.
+        const place = placeInTerritory({ lat, lng }, polygon)
+        if (place === 'outside') continue
+        if (place === 'edge') onEdge++
         rooftops.push({ lng, lat, kind })
       }
     }
   }
-  return { rooftops, tilesWithData }
+  return { rooftops, tilesWithData, onEdge }
 }
 
 /**

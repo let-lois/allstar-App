@@ -236,6 +236,25 @@ try {
     const audit = await query(`SELECT COUNT(*) FROM audit_log WHERE action='territory.leads_moved'`)
     ok(n(audit) === 2, 'each move is in the audit log', `${n(audit)}`)
   }
+
+  /* ===== 8. a new territory and the houses on its line ======================= */
+  {
+    // Big's east edge is at lng -97.66. "Next" is drawn against it, sharing that
+    // edge, out to -97.64. About 95,900 m per degree of longitude here.
+    const m = (metres) => metres / 95_900
+    const onSharedLine = `p_${stamp}_shared`
+    const pastFarEdge = `p_${stamp}_pastedge`
+    // 3 m inside Big: Big's lead, and 3 m from Next's west edge.
+    await addFromMap(ann.token, onSharedLine, '5 Shared Line Rd', 30.52, -97.66 - m(3))
+    // 3 m past where Next's east edge will be, in no territory yet.
+    await addFromMap(ann.token, pastFarEdge, '7 Past Edge Rd', 30.52, -97.64 + m(3))
+    ok((await row(onSharedLine)).territory_id === BIG && (await row(pastFarEdge)).territory_id == null, 'before: one lead in Big by its shared line, one in no territory just past a line not drawn yet')
+    const r = await j(await call('/api/territories', { method: 'POST', body: JSON.stringify({ name: 'Next', boundary: box(30.50, -97.66, 30.54, -97.64), repIds: [ben.id] }) }, manager))
+    ok(r.status === 201, 'Next is drawn against Big', `${r.status}`)
+    const NEXT = r.body.territory.id
+    ok((await row(pastFarEdge)).territory_id === NEXT, 'a house on the new line, in no territory, joins the new territory')
+    ok((await row(onSharedLine)).territory_id === BIG, 'a house on the shared line stays in Big: drawing a neighbour never takes it away')
+  }
 } catch (err) {
   console.error(err)
   fails.push(String(err))

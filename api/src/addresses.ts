@@ -1,6 +1,6 @@
 import { record } from './audit'
 import { erasedAmong } from './erase'
-import { pointInPolygon, type LatLng } from './geo'
+import { EDGE_TOUCH_METRES, boundsAround, placeInTerritory, type LatLng } from './geo'
 import { addressKey, propertyIdFor } from './import'
 import { estimate, nudge, rangesIn, type Estimate } from './ranges'
 import { Near, reverseGeocode, rooftopsInside, type Rooftop } from './rooftops'
@@ -80,13 +80,12 @@ export function tileFor(lng: number, lat: number, z = TILE_ZOOM): { x: number; y
 
 export const tileKey = (x: number, y: number, z = TILE_ZOOM) => `v1/${z}/${x}/${y}.json`
 
-/** Every tile a polygon's bounding box touches. */
-export function tilesCovering(polygon: LatLng[], z = TILE_ZOOM): { x: number; y: number }[] {
-  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity
-  for (const p of polygon) {
-    minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat)
-    minLng = Math.min(minLng, p.lng); maxLng = Math.max(maxLng, p.lng)
-  }
+/**
+ * Every tile a polygon's bounding box touches, grown by the edge allowance so a
+ * house whose point sits just past the line in the next tile is still read.
+ */
+export function tilesCovering(polygon: LatLng[], z = TILE_ZOOM, marginMetres = EDGE_TOUCH_METRES): { x: number; y: number }[] {
+  const { minLat, maxLat, minLng, maxLng } = boundsAround(polygon, marginMetres)
   const a = tileFor(minLng, maxLat, z) // north-west corner: lowest y
   const b = tileFor(maxLng, minLat, z) // south-east corner
   const out: { x: number; y: number }[] = []
@@ -106,8 +105,24 @@ async function readTile(bucket: Bucket, x: number, y: number): Promise<TileRow[]
   return Array.isArray(parsed) ? (parsed as TileRow[]) : []
 }
 
+/** What happened to every address row read for a territory, for the diagnostics. */
+export interface InsideCounts {
+  /** Rows in the tiles read (the polygon's bounding box, plus the edge allowance). */
+  recordsRead: number
+  /** No usable coordinates, or no house number or street. */
+  invalid: number
+  /** Further than EDGE_TOUCH_METRES outside the line. */
+  outside: number
+  /** Strictly inside the line. */
+  inside: number
+  /** Outside the line by no more than EDGE_TOUCH_METRES: the line runs through the house. */
+  edge: number
+  /** The same address twice in the data (one door listed by two sources). */
+  duplicateInData: number
+}
+
 export type Inside =
-  | { addresses: FoundAddress[]; tiles: number; tilesWithData: number; cells: { x: number; y: number }[] }
+  | { addresses: FoundAddress[]; tiles: number; tilesWithData: number; cells: { x: number; y: number }[]; counts: InsideCounts }
   | { error: string; status: number; code: 'addresses_not_configured' | 'territory_too_large' }
 
 /** The addresses inside a polygon, de-duplicated by the import's address key. */
@@ -129,6 +144,7 @@ export async function addressesInside(env: Pick<Env, 'ADDRESSES'>, polygon: LatL
   }
   const seen = new Set<string>()
   const addresses: FoundAddress[] = []
+  const counts: InsideCounts = { recordsRead: 0, invalid: 0, outside: 0, inside: 0, edge: 0, duplicateInData: 0 }
   let tilesWithData = 0
   // A few at a time: R2 is fast, and a territory is rarely more than a dozen cells.
   for (let i = 0; i < tiles.length; i += 8) {
@@ -137,19 +153,24 @@ export async function addressesInside(env: Pick<Env, 'ADDRESSES'>, polygon: LatL
       if (!rows) continue
       tilesWithData++
       for (const r of rows) {
-        const lng = Number(r[6]), lat = Number(r[7])
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
-        if (!pointInPolygon({ lat, lng }, polygon)) continue
+        counts.recordsRead++
+        // A missing coordinate is missing, not zero: Number(null) is 0, which is a real place off Africa.
+        const lng = r[6] == null || (r[6] as unknown) === '' ? NaN : Number(r[6]), lat = r[7] == null || (r[7] as unknown) === '' ? NaN : Number(r[7])
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) { counts.invalid++; continue }
+        // Inside the line, or on it: see EDGE_TOUCH_METRES in geo.ts.
+        const place = placeInTerritory({ lat, lng }, polygon)
+        if (place === 'outside') { counts.outside++; continue }
         const a = toAddress(r, lat, lng)
-        if (!a) continue
+        if (!a) { counts.invalid++; continue }
         const key = addressKey({ ref: '', ...a })
-        if (seen.has(key)) continue
+        if (seen.has(key)) { counts.duplicateInData++; continue }
         seen.add(key)
+        counts[place]++
         addresses.push(a)
       }
     }
   }
-  return { addresses, tiles: tiles.length, tilesWithData, cells: tiles }
+  return { addresses, tiles: tiles.length, tilesWithData, cells: tiles, counts }
 }
 
 /** A tile row as a lead's address, or null when it has no street or number. */
@@ -225,6 +246,28 @@ export interface Generated {
   geocoder: 'on' | 'off'
   /** The first Geocodio failure, in words. */
   lookupError: string | null
+  /**
+   * Every address row read, and where each one went: the numbers that explain
+   * a territory with fewer leads than houses on the map.
+   */
+  diagnostics: {
+    rule: string
+    edgeMetres: number
+    recordsRead: number
+    invalid: number
+    outsidePolygon: number
+    insidePolygon: number
+    onEdge: number
+    duplicateInData: number
+    nonResidential: number
+    existingLead: number
+    erased: number
+    overCap: number
+    insertIgnored: number
+    created: number
+    rooftopsInside: number
+    rooftopsOnEdge: number
+  }
 }
 
 /** Rooftops sent to Geocodio per press: $1 per 1,000 past the free 2,500 a day, so a press costs at most $2. */
@@ -354,7 +397,8 @@ export async function generateLeadsForTerritory(
   for (const p of existingRows.results) {
     existingIds.add(p.id)
     existingKeys.add(addressKey({ ref: '', address1: p.address1, city: p.city ?? undefined, state: p.state ?? undefined, zip: p.zip ?? undefined }))
-    if (Number.isFinite(p.lat) && Number.isFinite(p.lng) && pointInPolygon(p, boundary)) {
+    // A little past the edge too, so a house on the line is matched to the lead already on it.
+    if (Number.isFinite(p.lat) && Number.isFinite(p.lng) && placeInTerritory(p, boundary, EDGE_TOUCH_METRES + SAME_DOOR_METRES) !== 'outside') {
       nearby.push({ lat: p.lat, lng: p.lng, number: houseNumber(p.address1), street: streetParts(p.address1) })
     }
   }
@@ -465,7 +509,8 @@ export async function generateLeadsForTerritory(
   // Two presses at once: the ids are deterministic and the insert ignores a
   // row that is already there, so the one that lost the race wrote nothing —
   // those houses are "already there", not nowhere.
-  existed += toWrite.length - created
+  const insertIgnored = toWrite.length - created
+  existed += insertIgnored
 
   const coverage: Generated['coverage'] = inside.tilesWithData > 0 ? 'addresses' : roofs.tilesWithData > 0 ? 'rooftops' : 'none'
   /*
@@ -507,7 +552,27 @@ export async function generateLeadsForTerritory(
     lookupSkipped,
     geocoder: env.GEOCODIO_API_KEY ? 'on' : 'off',
     lookupError: named.error,
+    diagnostics: {
+      rule: `address point inside the territory, or outside it by no more than ${EDGE_TOUCH_METRES} m (the line runs through the house)`,
+      edgeMetres: EDGE_TOUCH_METRES,
+      recordsRead: inside.counts.recordsRead,
+      invalid: inside.counts.invalid,
+      outsidePolygon: inside.counts.outside,
+      insidePolygon: inside.counts.inside,
+      onEdge: inside.counts.edge,
+      duplicateInData: inside.counts.duplicateInData,
+      nonResidential,
+      existingLead: existed - insertIgnored,
+      erased,
+      overCap: skipped,
+      insertIgnored,
+      created,
+      rooftopsInside: roofs.rooftops.length - roofs.onEdge,
+      rooftopsOnEdge: roofs.onEdge,
+    },
   }
+  // One line per press, so a territory with fewer leads than houses can be read back from the logs.
+  console.log(JSON.stringify({ event: 'territory.generated', territoryId, ...result.diagnostics }))
   if (coverage === 'none' || named.error) {
     console.warn(JSON.stringify({ event: 'territory.generated.incomplete', territoryId, coverage, lookupError: named.error, lookupFailed: named.failed }))
   }

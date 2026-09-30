@@ -27,6 +27,35 @@ Coverage is whatever you build. A shape drawn outside it finds nothing rather
 than something wrong. There is no residential/commercial flag in the data, so a
 corner shop becomes a lead too — a rep marks it Not interested and moves on.
 
+## Which houses are in a territory
+
+Each house is one point: its published address point, or its roof's centre
+when the address data has none. A house is in the territory when that point is
+
+- **inside the drawn line**, or
+- **outside it by no more than 5 m** (`EDGE_TOUCH_METRES` in `api/src/geo.ts`):
+  the line runs through the house.
+
+A territory is drawn by hand along streets and fences, so its line lands on
+the houses themselves, and a house the line visibly crosses has its point a
+few metres to one side. Before this rule only points strictly inside counted:
+on a real three-point territory in Clackamas County, OR, that made 6 leads
+where the line took in 15 houses — the other 9 points sat 1.3–4.8 m outside.
+The next house out was 8.6 m away. Five metres is under half the width of the
+smallest house, so the allowance takes in the houses the line crosses and not
+their neighbours.
+
+The same rule is used for rooftops (houses with no address point) and for the
+leads already inside when a territory is drawn, with one difference: a lead on
+the line that already belongs to another territory stays there, so drawing a
+neighbour along a shared boundary never takes its houses.
+
+Every press logs one line (`event: "territory.generated"`) and returns
+`diagnostics`: rows read, invalid, outside, inside, on the edge, duplicates in
+the data, non-residential, existing leads, erased, over the cap, insert
+conflicts and created, so a territory with fewer leads than houses on the map
+can be explained from the numbers.
+
 ## What does not become a lead
 
 - An address that is already a lead in this company, by the same normalised key
