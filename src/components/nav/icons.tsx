@@ -394,3 +394,13 @@ export const IconHelp = () => (
     <path d="M12 17.2h.01" strokeWidth={2.6} />
   </svg>
 )
+
+/** The admin console: four panes of a dashboard. */
+export const IconConsole = () => (
+  <svg {...base}>
+    <rect x="3.5" y="3.5" width="7" height="8" rx="1.5" />
+    <rect x="13.5" y="3.5" width="7" height="5" rx="1.5" />
+    <rect x="13.5" y="11.5" width="7" height="9" rx="1.5" />
+    <rect x="3.5" y="14.5" width="7" height="6" rx="1.5" />
+  </svg>
+)

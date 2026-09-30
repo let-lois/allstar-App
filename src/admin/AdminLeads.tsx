@@ -1033,13 +1033,17 @@ export default function AdminLeads() {
         rows={page}
         keyOf={(p) => p.id}
         leading={(p) => (
-          <input
-            type="checkbox"
-            checked={selected.has(p.id)}
-            onChange={() => toggle(p.id)}
-            aria-label={`Select ${p.address1}`}
-            className="h-[18px] w-[18px] accent-brand-600"
-          />
+          // The box stays 18 px; the label around it is the 44 pt target a
+          // thumb needs, pulled back by its own margin so nothing moves.
+          <label className="-m-[13px] grid h-11 w-11 shrink-0 cursor-pointer place-items-center">
+            <input
+              type="checkbox"
+              checked={selected.has(p.id)}
+              onChange={() => toggle(p.id)}
+              aria-label={`Select ${p.address1}`}
+              className="h-[18px] w-[18px] accent-brand-600"
+            />
+          </label>
         )}
         leadingHeader={
           <input

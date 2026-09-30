@@ -11,7 +11,12 @@ import { HELP_URL } from '../../lib/help'
  *
  * `floating` is the map's version: the same mark on a round plate, for a
  * screen with no header to sit in.
+ *
+ * A tap on it is its own and nothing else's: it never reaches the map under
+ * it (no pin, no selection, no drawing point), nor a row or card it sits in.
+ * Only propagation is stopped — the link still opens.
  */
+const own = (e: { stopPropagation: () => void }) => e.stopPropagation()
 export function HelpButton({ floating = false }: { floating?: boolean }) {
   return (
     <a
@@ -21,6 +26,10 @@ export function HelpButton({ floating = false }: { floating?: boolean }) {
       aria-label="Help"
       title="Help"
       data-testid="help-button"
+      onClick={own}
+      onPointerDown={own}
+      onMouseDown={own}
+      onTouchStart={own}
       className={
         floating
           ? 'icon-sm press focusable metal metal-map grid min-h-[44px] w-11 shrink-0 place-items-center rounded-pill text-ink-soft'

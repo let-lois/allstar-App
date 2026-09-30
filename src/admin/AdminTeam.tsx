@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { AdminPage, FilterBar } from './AdminLayout'
+import { IconFilter } from '../components/nav/icons'
 import { Button } from '../components/ui/Button'
 import { Chip } from '../components/ui/Chip'
 import { BottomSheet } from '../components/ui/BottomSheet'
@@ -51,6 +52,8 @@ export function AdminTeam() {
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all')
   const [attention, setAttention] = useState<Attention>('all')
+  const [filtersShown, setFiltersShown] = useState(false)
+  const activeFilterCount = Number(roleFilter !== 'all') + (view === 'people' ? Number(attention !== 'all') : Number(range !== '14d'))
   const [editingId, setEditingId] = useState<string | null>(null)
   const [inviting, setInviting] = useState(false)
 
@@ -280,14 +283,28 @@ export function AdminTeam() {
             </Chip>
           ))}
         </div>
-        <span className="mx-2 h-6 w-px bg-line" />
+        <span className="mx-2 hidden h-6 w-px bg-line md:block" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           type="search"
+          aria-label="Search the team"
           placeholder="Search name, email or team"
-          className="focusable min-h-[40px] w-64 rounded-field border border-line px-3 text-sm"
+          className="focusable min-h-[44px] min-w-0 flex-1 rounded-field border border-line px-3 text-sm md:min-h-[40px] md:w-64 md:flex-none"
         />
+        {/* On a phone the chips below fold behind one button, as on Leads:
+            three rows of them pushed the first person off the screen. */}
+        <button
+          type="button"
+          onClick={() => setFiltersShown((v) => !v)}
+          aria-expanded={filtersShown}
+          data-testid="console-team-filters"
+          className="focusable flex min-h-[44px] items-center gap-1.5 rounded-field border border-line bg-surface px-3 text-sm font-semibold text-ink-soft md:hidden"
+        >
+          <IconFilter />
+          Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
+        </button>
+        <div className={filtersShown ? 'contents' : 'hidden md:contents'}>
         {(['all', 'field_rep', 'manager', 'client_admin'] as const).map((r) => (
           <Chip key={r} size="sm" selected={roleFilter === r} onClick={() => setRoleFilter(r)}>
             {r === 'all' ? 'All roles' : ROLE_LABEL[r]}
@@ -316,6 +333,7 @@ export function AdminTeam() {
             </Chip>
           ))
         )}
+        </div>
       </FilterBar>
 
       {/*

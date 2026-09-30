@@ -9,6 +9,7 @@ import { FilterSection } from '../components/map/FilterSheet'
 import { PropertyRow } from '../components/property/PropertyRow'
 import { PropertyPeek } from '../components/property/PropertyPeek'
 import { VirtualList } from '../components/ui/VirtualList'
+import { EmptyState } from '../components/ui/EmptyState'
 import { useAppStore, useScopedProperties } from '../store/useAppStore'
 import { VISITED_WINDOWS, matchesRep, matchesVisited, type VisitedWindow } from '../lib/leadFilter'
 import { useIsDesktop } from '../lib/useMediaQuery'
@@ -317,10 +318,38 @@ export function Leads() {
                 always drawn the distinction; this is the same distinction, in
                 the rep's words.
               */
-              <div className="grid place-items-center px-8 py-14 text-center text-[14px] text-ink-mute">
-                {scoped.length === 0
-                  ? 'No leads here yet. Your office adds them, or you can add one from the map.'
-                  : 'No leads match those filters.'}
+              <div className="grid place-items-center px-2 py-8">
+                {scoped.length === 0 ? (
+                  <EmptyState
+                    testId="leads-empty"
+                    title="No leads here yet"
+                    body="That is normal on a new account. Your office adds them, or you can add one from the map."
+                    action={
+                      <Button variant="secondary" onClick={() => nav('/map')}>
+                        Open the map
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <EmptyState
+                    testId="leads-empty"
+                    title="No leads match"
+                    body={query.trim() ? `Nothing matches “${query.trim()}” with these filters.` : 'Nothing matches these filters.'}
+                    action={
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setQuery('')
+                          setStatus('all')
+                          setVisited('any')
+                          setRepFilter('all')
+                        }}
+                      >
+                        Clear search and filters
+                      </Button>
+                    }
+                  />
+                )}
               </div>
             }
           />

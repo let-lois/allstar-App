@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { TeamBadge } from '../components/badge/TeamBadge'
 import { ApiError, apiVerifyBadge, type VerifyDTO } from '../lib/http'
 import { badgeIdFromPath } from '../lib/badge'
+import { SkeletonRows } from '../components/ui/Skeleton'
 
 /**
  * The page a homeowner reaches by scanning a badge.
@@ -79,9 +80,9 @@ export function VerifyBadge() {
           </div>
         )}
         {state.kind === 'loading' && (
-          <p className="mt-3 text-[15px] text-ink-mute" role="status">
-            Checking…
-          </p>
+          <div className="mt-4 card p-5" data-testid="verify-loading">
+            <SkeletonRows rows={2} label="Checking this badge…" />
+          </div>
         )}
 
         {state.kind === 'ok' && (

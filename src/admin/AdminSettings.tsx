@@ -223,7 +223,7 @@ export function AdminSettings() {
                             prev.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)),
                           )
                         }
-                        className="focusable min-h-[36px] w-40 rounded-lg border border-line px-2 text-sm"
+                        className="focusable min-h-[44px] w-40 rounded-lg border border-line px-2 text-sm md:min-h-[36px]"
                       />
                     </span>
                   </td>

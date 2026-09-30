@@ -17,7 +17,7 @@ import { relative } from '../lib/format'
 import { ApiError, apiSetPassword } from '../lib/http'
 import { liveToken } from '../lib/session'
 import type { Mutation } from '../types'
-import { IconChevron, IconHelp } from '../components/nav/icons'
+import { IconChevron, IconConsole, IconHelp } from '../components/nav/icons'
 import { SignOutButton } from '../components/nav/SignOutButton'
 import { HELP_URL } from '../lib/help'
 import { AvatarPicker, AvatarRemove } from '../components/ui/AvatarPicker'
@@ -91,6 +91,57 @@ export function More() {
       <div className="scroll-pane pad-nav bg-surface-sunk">
         <div className="content-col page anim-rise">
           {/*
+            The two shortcuts, above everything, so neither needs a scroll.
+            Help first, for everybody: where somebody stuck looks, and the
+            same place the header's question mark opens.
+          */}
+          <a
+            href={HELP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="more-need-help"
+            className="focusable card flex min-h-tap items-center gap-3 px-4 py-3.5"
+          >
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface-tint text-accent-strong">
+              <IconHelp />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15.5px] font-semibold">Need help?</span>
+              <span className="block text-[13px] text-ink-mute">Visit the All Star Help Center</span>
+            </span>
+            <span className="shrink-0 text-accent-strong">
+              <IconChevron />
+            </span>
+          </a>
+
+          {/*
+            Then the console, for the roles it is built for and nobody else —
+            the same rule its own routes and the Worker enforce, so a rep never
+            sees a door that would refuse them. Filled rather than a quiet row:
+            it is where an admin's day starts, and it was easy to miss as the
+            second line of Manage.
+          */}
+          {user?.role !== 'field_rep' && (
+            <button
+              type="button"
+              onClick={() => nav('/admin')}
+              data-testid="more-console"
+              className="metal metal-brand press focusable flex min-h-tap w-full items-center gap-3 rounded-card px-4 py-3.5 text-left"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/15" aria-hidden>
+                <IconConsole />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15.5px] font-semibold">Admin console</span>
+                <span className="block text-[13px] opacity-90">Team, leads, territories and reports</span>
+              </span>
+              <span className="shrink-0">
+                <IconChevron />
+              </span>
+            </button>
+          )}
+
+          {/*
             --- identity -------------------------------------------------
             Not in a card. Who you are is the page's own heading, and wrapping it
             in a bordered rectangle made it read as the first of six widgets
@@ -124,28 +175,6 @@ export function More() {
             <ThemeToggle />
           </div>
 
-          {/*
-            Help, where somebody stuck looks first: under their own name, and
-            the same place the header's question mark opens.
-          */}
-          <a
-            href={HELP_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="more-need-help"
-            className="focusable card flex min-h-tap items-center gap-3 px-4 py-3.5"
-          >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface-tint text-accent-strong">
-              <IconHelp />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[15.5px] font-semibold">Need help?</span>
-              <span className="block text-[13px] text-ink-mute">Visit All Star Help</span>
-            </span>
-            <span className="shrink-0 text-accent-strong">
-              <IconChevron />
-            </span>
-          </a>
 
           {/*
             The menu, grouped by what it is for, and only what this person can
@@ -155,6 +184,9 @@ export function More() {
             something is wrong rather than every day.
           */}
           <MoreGroup title="Your work">
+            {/* First: the badge is what a rep shows at the door, so it is
+                one tap from More rather than tucked into the account rows. */}
+            {mode === 'live' && <MoreLink label="My badge" onClick={() => nav('/badge')} />}
             <MoreLink label="Today's route" onClick={() => nav('/route')} />
             <MoreLink label="Lists" onClick={() => nav('/lists')} />
             <MoreLink label="Standings" onClick={() => nav('/standings')} />
@@ -165,20 +197,12 @@ export function More() {
           {user?.role !== 'field_rep' && (
             <MoreGroup title="Manage">
               <MoreLink label="Team activity" onClick={() => nav('/team')} />
-              {/*
-                The console is in the phone bundle (`admin-routes-native.tsx`), so
-                the link goes where it says. Reps never see it — and a rep who
-                reaches /admin anyway gets `AdminLayout`'s refusal, with every API
-                behind it refused on the Worker too.
-              */}
-              <MoreLink label="Admin console" onClick={() => nav('/admin')} />
               <MoreLink label="Territories" onClick={() => nav('/admin/territories')} />
             </MoreGroup>
           )}
 
           {mode === 'live' && (
             <MoreGroup title="Account">
-              <MoreLink label="My badge" onClick={() => nav('/badge')} />
               <MoreLink label="Edit profile" onClick={() => nav('/profile')} />
               {/*
               Self-service, because routing every forgotten password through an

@@ -12,6 +12,7 @@ import {
 } from '../lib/http'
 import { liveToken } from '../lib/session'
 import { useAppStore } from '../store/useAppStore'
+import { SkeletonRows } from '../components/ui/Skeleton'
 
 /**
  * Where a company chooses who turns their addresses into map pins.
@@ -202,7 +203,7 @@ export function GeocodingPanel() {
     )
   }
 
-  if (loading) return <p className="p-4 text-[15px] text-ink-mute">Loading providers…</p>
+  if (loading) return <SkeletonRows rows={3} label="Loading providers…" className="p-4" />
   if (!data) return <p className="p-4 text-[15px] text-ink-mute">Could not load providers.</p>
 
   const configured = new Map(data.configured.map((c) => [c.provider, c]))

@@ -7,6 +7,7 @@ import {
   IconMap,
   IconMore,
   IconPipeline,
+  IconConsole,
   IconToday,
 } from './icons'
 import { Wordmark } from '../ui/Wordmark'
@@ -168,6 +169,10 @@ export function SideRail({ role }: { role: Role }) {
         <NavLink
           key={to}
           to={to}
+          // At rail width the label is hidden, which also hid it from a screen
+          // reader and left no tooltip: an iPad in portrait had five unnamed icons.
+          aria-label={label}
+          title={label}
           className={({ isActive }) =>
             [
               'flex min-h-[52px] items-center gap-3 rounded-field px-2 text-sm font-semibold lg:justify-start',
@@ -196,6 +201,8 @@ export function SideRail({ role }: { role: Role }) {
       {showConsole && (
         <NavLink
           to="/admin"
+          aria-label="Console"
+          title="Console"
           className={({ isActive }) =>
             [
               'mt-auto flex min-h-[52px] items-center justify-center gap-3 rounded-field px-2 text-sm font-semibold lg:justify-start',
@@ -208,7 +215,8 @@ export function SideRail({ role }: { role: Role }) {
           {({ isActive }) => (
             <>
               <NavBadge to="/admin" active={isActive} size={38}>
-                <IconPipeline />
+                {/* Its own mark: the pipeline's lines made it read as a second Pipeline. */}
+                <IconConsole />
               </NavBadge>
               <span className="hidden lg:block">Console</span>
             </>
