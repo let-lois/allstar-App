@@ -309,7 +309,7 @@ try {
   const src = readFileSync(new URL('../src/screens/More.tsx', import.meta.url), 'utf8')
   const code = src.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
   ok(
-    /user\?\.role !== 'field_rep' && \(\s*<(?:>|MoreGroup\b)[\s\S]*?<MoreLink label="Admin console"/.test(code) && !/isNativeShell/.test(code),
+    /user\?\.role !== 'field_rep' && \(\s*<button[\s\S]*?nav\('\/admin'\)[\s\S]*?Admin console/.test(code) && !/isNativeShell/.test(code),
     'and the native shell is offered the console too — by role alone, now that its bundle carries it',
   )
   ok(!/admin console is desktop software/i.test(code), 'with no leftover sentence sending the manager to a computer')

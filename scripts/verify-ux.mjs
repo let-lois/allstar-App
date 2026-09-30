@@ -82,7 +82,7 @@ try {
     const hl = await helpOnScreen(page)
     ok(hl.found && hl.inView, 'rep lead detail: Help is in the header beside Back')
 
-    ok(/\/support$|help/i.test(hm.href ?? '') && hm.target === '_blank' && hm.label === 'Help', 'it opens All Star Help in a new window, and is named "Help" for a screen reader', `${hm.href} ${hm.target}`)
+    ok(hm.href === 'https://help.allstarhomesolutions.com' && hm.target === '_blank' && hm.label === 'Help', 'it opens the All Star Help Center in a new window, and is named "Help" for a screen reader', `${hm.href} ${hm.target}`)
 
     // More: Need help first, then the groups a rep can use, sign out last.
     await go(page, '/more')
@@ -92,7 +92,9 @@ try {
     const groups = await page.locator('section[aria-label]').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))
     ok(groups.includes('Your work') && groups.includes('Help'), 'More is grouped: Your work, Help', groups.join(' · '))
     ok(!groups.includes('Manage'), 'a rep sees no Manage group')
-    ok((await page.getByRole('button', { name: /Admin console/ }).count()) === 0, 'and no console link')
+    ok((await page.getByRole('button', { name: /Admin console/ }).count()) === 0 && (await page.getByTestId('more-console').count()) === 0, 'and no console shortcut anywhere')
+    const repTop = await page.evaluate(() => [...document.querySelectorAll('.content-col a, .content-col button')].filter((b) => b.getBoundingClientRect().height > 0)[0]?.getAttribute('data-testid'))
+    ok(repTop === 'more-need-help', 'Need help is the first thing on More', repTop)
     for (const label of ["Today's route", 'Lists', 'Standings', 'Add a lead', 'Schedule an appointment', 'Show the tutorial again']) {
       ok((await page.getByRole('button', { name: label }).count()) === 1, `More still reaches “${label}”`)
     }
@@ -146,9 +148,22 @@ try {
     await go(page, '/more')
     const groups = await page.locator('section[aria-label]').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))
     ok(groups.includes('Manage'), 'a manager sees the Manage group', groups.join(' · '))
-    for (const label of ['Team activity', 'Admin console', 'Territories']) {
-      ok((await page.getByRole('button', { name: label }).count()) === 1, `with “${label}”`)
+    for (const label of ['Team activity', 'Territories']) {
+      ok((await page.getByRole('button', { name: label, exact: true }).count()) === 1, `with “${label}”`)
     }
+    // The console: a shortcut at the very top, right under Need help, in view without a scroll.
+    const top = await page.evaluate(() =>
+      [...document.querySelectorAll('.content-col a, .content-col button')]
+        .filter((b) => b.getBoundingClientRect().height > 0)
+        .slice(0, 2)
+        .map((b) => ({ id: b.getAttribute('data-testid'), bottom: Math.round(b.getBoundingClientRect().bottom), h: Math.round(b.getBoundingClientRect().height) })),
+    )
+    ok(top[0]?.id === 'more-need-help' && top[1]?.id === 'more-console', 'a manager’s More opens with Need help, then the Admin console', JSON.stringify(top))
+    ok(!!top[1] && top[1].bottom <= 667 - 100 && top[1].h >= 44, 'the console shortcut is in view above the dock with no scroll, 44pt or larger', `bottom ${top[1]?.bottom}`)
+    ok((await page.getByRole('button', { name: /Admin console/ }).count()) === 1, 'and appears once — not again inside Manage')
+    await page.getByTestId('more-console').click()
+    await page.waitForTimeout(900)
+    ok(new URL(page.url()).pathname === '/admin', 'one tap opens the console')
     await go(page, '/admin')
     const hc = await helpOnScreen(page)
     ok(hc.found && hc.inView, 'the console on a phone has Help in its header')

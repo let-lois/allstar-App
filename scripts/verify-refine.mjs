@@ -21,6 +21,9 @@ import { dismissTour } from './lib/tour.mjs'
  *   The console's Team filters fold behind one button on a phone and stay out
  *   on a desktop.
  *
+ *   On an iPad, portrait and landscape, mini to 12.9-inch: nothing scrolls
+ *   sideways, the column stays readable, Help is in view and the rail is named.
+ *
  *   With the keyboard up on a 320×568 and a 375×667 phone, every field on the
  *   sign-in, new lead, lead edit, appointment, invite, territory and search
  *   forms can be
@@ -228,6 +231,48 @@ try {
       ok(shown && anim === 'none', 'under Reduce Motion the placeholder stands still', anim)
     }
     await ctx.close()
+  }
+
+  /* ===== iPad ============================================================== */
+  // Built for the iPhone, and it has to hold up on an iPad: no sideways scroll,
+  // a readable column rather than a stretched one, Help in view, a named rail,
+  // and the console shortcut still first on More.
+  for (const [w, h, name] of [[768, 1024, 'iPad mini portrait'], [820, 1180, 'iPad Air portrait'], [1180, 820, 'iPad Air landscape'], [1024, 1366, 'iPad Pro 12.9 portrait']]) {
+    const issues = []
+    for (const who of [/Dana Whitfield/, /Curtis Lane/]) {
+      const { ctx, page } = await signIn(who, w, h)
+      for (const path of ['/today', '/leads', '/map', '/more', '/admin']) {
+        if (path === '/admin' && who.source.startsWith('Dana')) continue
+        await go(page, path)
+        const m = await page.evaluate(() => {
+          const vw = document.documentElement.clientWidth
+          const col = document.querySelector('.content-col')?.getBoundingClientRect()
+          const help = document.querySelector('[data-testid="help-button"]')?.getBoundingClientRect()
+          const rail = [...document.querySelectorAll('nav[aria-label="Primary"] a')].filter((a) => a.getBoundingClientRect().width > 0)
+          return {
+            side: document.documentElement.scrollWidth - vw,
+            colW: col ? Math.round(col.width) : null,
+            help: !!help && help.right <= vw && help.top >= 0,
+            unnamed: rail.filter((a) => !(a.getAttribute('aria-label') || a.textContent?.trim())).length,
+            rail: rail.length,
+          }
+        })
+        const tag = `${who.source.split(' ')[0]} ${path}`
+        if (m.side > 0) issues.push(`${tag} +${m.side}px sideways`)
+        if (m.colW && m.colW > 720) issues.push(`${tag} column ${m.colW}px wide`)
+        if (!m.help) issues.push(`${tag} Help out of view`)
+        // The console has its own sidebar, not the field app's rail.
+        if (!m.rail && path !== '/admin') issues.push(`${tag} no side rail`)
+        if (m.unnamed) issues.push(`${tag} ${m.unnamed} unnamed rail links`)
+      }
+      if (who.source.startsWith('Curtis')) {
+        await go(page, '/more')
+        const c = await page.getByTestId('more-console').boundingBox()
+        if (!c || c.y + c.height > h) issues.push('console shortcut not in view on More')
+      }
+      await ctx.close()
+    }
+    ok(issues.length === 0, `${name} (${w}×${h}): no sideways scroll, a readable column, Help in view, a named rail, the console first on More`, issues.join(' | ') || 'clean')
   }
 
   /* ===== keyboard on small phones =========================================== */

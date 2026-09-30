@@ -10,7 +10,7 @@ import * as Linking from 'expo-linking'
 import * as Updates from 'expo-updates'
 import * as WebBrowser from 'expo-web-browser'
 import { useCallback, useEffect, useRef } from 'react'
-import { BackHandler, Platform, SafeAreaView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { AppState, BackHandler, Platform, SafeAreaView, StatusBar, StyleSheet, Text, View } from 'react-native'
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes'
 
 import AllStarWeb, { type AllStarWebRef } from '@/components/allstar-web'
@@ -18,6 +18,7 @@ import type { ApiRequest, ApiResponse } from '@/lib/api-bridge'
 import { diagnosticLines } from '@/lib/build-diagnostic'
 import { destinationFor } from '@/lib/handoff'
 import { isInspectable } from '@/lib/inspectable'
+import { shouldApply, shouldCheck, type OtaMoment } from '@/lib/ota'
 
 /** Content types whose bytes will not survive being read as text. */
 const BINARY = /^(image|video|audio|application\/(octet-stream|pdf|zip))/i
@@ -186,6 +187,23 @@ function onShouldStartLoadWithRequest(req: ShouldStartLoadRequest): boolean {
   return false
 }
 
+/**
+ * Fetch and, when the moment allows, apply a newer update — the rule and its
+ * reasons are in `lib/ota.ts`. Failure is silent by design: no network means
+ * the rep keeps the update they have, which is exactly what they had before.
+ */
+async function refreshUpdate(moment: OtaMoment) {
+  if (!shouldCheck(Updates.isEnabled, __DEV__, moment)) return
+  try {
+    const found = await Updates.checkForUpdateAsync()
+    if (!found.isAvailable) return
+    const fetched = await Updates.fetchUpdateAsync()
+    if (fetched.isNew && shouldApply(moment)) await Updates.reloadAsync()
+  } catch {
+    // Offline, or expo-updates already mid-check on its own: try again next time.
+  }
+}
+
 export default function Index() {
   const shell = useRef<AllStarWebRef>(null)
   /*
@@ -215,6 +233,23 @@ export default function Index() {
     have done, which at the app's own home screen is exit, and that is correct.
     `BackHandler` is a no-op on iOS, which has no such button.
   */
+  /*
+    The latest update on reopen, not two cold starts later: see `lib/ota.ts`.
+  */
+  useEffect(() => {
+    void refreshUpdate({ kind: 'launch' })
+    let leftAt: number | null = null
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background') leftAt = Date.now()
+      else if (state === 'active' && leftAt != null) {
+        const awayMs = Date.now() - leftAt
+        leftAt = null
+        void refreshUpdate({ kind: 'foreground', awayMs })
+      }
+    })
+    return () => sub.remove()
+  }, [])
+
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (!canGoBack.current) return false
