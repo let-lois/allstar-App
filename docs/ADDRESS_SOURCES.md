@@ -232,6 +232,66 @@ Rebuild Milwaukee when the city updates its data:
       --geojson milwaukee.geojson --fields number=number,street=street,unit=unit,city=city,zip=zip \
       --state WI --upload --account <id>
 
+## County address layers (ArcGIS), loaded 2026-10-01
+
+A national audit (every county: the share of home rooftops with a published
+address point within 50 m, on six sample tiles weighted by Census street
+ranges) put the U.S. at about 74%. The gaps are whole states that publish to
+neither the NAD nor OpenAddresses: PR, HI, NH, NV, SC, GA, SD, LA, MI, PA,
+ID and MO under 40%; WY, OK, MS and KS 60–70%.
+
+County address layers were found through the ArcGIS Hub catalogue, read with
+`api/scripts/county/arcgis-addresses.mjs` (field names found automatically),
+built locally and kept only when the county's sample tiles gained at least
+15 points — which also rejects a layer that turns out to be another state's
+county of the same name. Each is listed in `api/scripts/county/sources.json`
+with its layer, box, publisher and licence note.
+
+| County | Publisher | Addresses | Homes with a published address (sample) |
+|---|---|---|---|
+| Douglas County, GA | Douglas County, Georgia GIS | 60,929 | 0% → 94.7% |
+| Gwinnett County, GA | GwinnettCountyGIS | 409,771 | 9.7% → 94.5% |
+| Honolulu County, HI | County GIS | 204,982 | 0% → 94.8% |
+| Ascension Parish, LA | County GIS | 64,297 | 0% → 89.9% |
+| Platte County, MO | County GIS | 52,490 | 6.9% → 97.9% |
+| Beckham County, OK | County GIS | 11,006 | 0% → 91.9% |
+| Canadian County, OK | County GIS | 25,186 | 0.7% → 28.6% |
+| Comanche County, OK | County GIS | 44,789 | 0% → 44.6% |
+| Cotton County, OK | County GIS | 5,112 | 0% → 94.5% |
+| Jefferson County, OK | County GIS | 4,162 | 0% → 93.5% |
+| Logan County, OK | County GIS | 12,779 | 0% → 32.5% |
+| Stephens County, OK | County GIS | 7,972 | 0.2% → 48.2% |
+| Washita County, OK | County GIS | 3,679 | 12% → 28.9% |
+| Berks County, PA | County GIS | 164,925 | 0% → 95.1% |
+| Crawford County, PA | County GIS | 45,430 | 0% → 97.5% |
+| Lancaster County, PA | Lancaster County GIS | 228,900 | 0% → 97.1% |
+| Florence County, SC | APD Urban Planning & Management LLC | 65,137 | 0% → 91.5% |
+
+Oklahoma's rows come from the state's NG911 address layer, which covers rural
+and unincorporated areas more than cities; Oklahoma City (Oklahoma County)
+is not in it.
+
+Left out: Bucks County, PA (0% → 97% in testing) — its licence says "Not for
+commercial use or resale."
+
+Most layers state no licence on their Hub record; they are public layers a
+county publishes for anyone to query. Check a county's terms before relying
+on it for anything beyond finding doors to knock.
+
+Reload any of them, or all, with:
+
+    node scripts/county/load-all.mjs [--only pa-berks,ga-gwinnett] --upload --account <id>
+
+Every box is built with every registered source that touches it, so loading
+one county never drops a neighbour's doors. Files are cached in
+`api/county-work/` (git-ignored); delete one to fetch it fresh.
+
+Still blocked from the build environment (2026-10-01): layers on
+services2/5/6/7/8.arcgis.com and utility.arcgis.com (Las Vegas, Detroit, Cobb
+GA, Johnson KS, Allegheny PA, St. Louis and others) and several county
+servers. Greenville County, SC publishes only a geocoding service, not its
+address points.
+
 ## To finish
 
 1. Census TIGER ranges: loaded nationally on 2026-09-30 (all 3,227 county
