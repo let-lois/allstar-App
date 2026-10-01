@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { AwsClient } from 'aws4fetch'
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
 import { compressors } from 'hyparquet-compressors'
 import { Tiler, featureToTileRow, groupOverlaps, parseBbox, parseFieldMap, snapBoxToTiles, toTileRow } from './lib/address-tiles.mjs'
@@ -21,7 +23,7 @@ import { Tiler, featureToTileRow, groupOverlaps, parseBbox, parseFieldMap, snapB
  *
  * Output: `v1/14/{x}/{y}.json` under --out (default ./addr-tiles), plus a
  * manifest with what was built. --upload puts every file into the
- * `allstar-addresses` bucket with wrangler, which needs the bucket to exist
+ * `allstar-addresses` bucket over R2's S3 API (wrangler with --local), which needs the bucket to exist
  * and `wrangler login` (or CLOUDFLARE_API_TOKEN) — see docs/ADDRESSES.md.
  * Re-running over the same box rewrites the same tiles; over a neighbouring
  * box it adds more. Tiles never merge across runs, so build a box whole.
@@ -170,28 +172,66 @@ console.log(`wrote ${files} tiles holding ${kept.toLocaleString()} addresses to 
 
 /* --- upload -------------------------------------------------------------------- */
 if (flag('upload')) {
-  const wrangler = resolve(api, 'node_modules/.bin/wrangler')
-  // The account the Worker deploys to, so wrangler never stops to ask which
-  // one: --account, or CLOUDFLARE_ACCOUNT_ID already in the environment.
+  // The account the Worker deploys to: --account, or CLOUDFLARE_ACCOUNT_ID.
   const account = opt('account', process.env.CLOUDFLARE_ACCOUNT_ID)
-  const env = account ? { ...process.env, CLOUDFLARE_ACCOUNT_ID: account } : process.env
-  const put = (key) => {
-    try {
-      execFileSync(wrangler, ['r2', 'object', 'put', `${bucket}/${key}`, '--file', resolve(out, key), '--content-type', 'application/json', ...(flag('local') ? ['--local'] : [])], { cwd: api, env, stdio: ['ignore', 'ignore', 'pipe'] })
-    } catch (err) {
-      // Say what wrangler said, and stop: a half-uploaded area reads as
-      // "no houses here" to the Worker, which is worse than an error now.
-      console.error(`upload of ${key} failed:\n${String(err.stderr ?? err.message).trim()}`)
+  const token = process.env.CLOUDFLARE_API_TOKEN
+  let put
+  if (!flag('local') && account && token) {
+    /*
+      R2's S3 API, many at once — as national-build does. Wrangler goes
+      through the Cloudflare REST API, about one write a second here, which
+      made a county an hour. The S3 key comes from the token the way
+      Cloudflare documents it; nothing is printed or stored.
+    */
+    const verify = await (await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/tokens/verify`, { headers: { authorization: `Bearer ${token}` } })).json()
+    if (!verify.success || !verify.result?.id) {
+      console.error('CLOUDFLARE_API_TOKEN is not an active token for that account')
       process.exit(1)
     }
+    const s3 = new AwsClient({ accessKeyId: verify.result.id, secretAccessKey: createHash('sha256').update(token).digest('hex'), service: 's3', region: 'auto' })
+    const base = `https://${account}.r2.cloudflarestorage.com/${bucket}`
+    put = async (key) => {
+      const body = readFileSync(resolve(out, key))
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const r = await s3.fetch(`${base}/${key}`, { method: 'PUT', body, headers: { 'content-type': 'application/json' } })
+          if (r.ok) return
+          throw new Error(`HTTP ${r.status} ${(await r.text()).slice(0, 200)}`)
+        } catch (err) {
+          if (attempt >= 5) {
+            // Stop: a half-uploaded area reads as "no houses here" to the Worker.
+            console.error(`upload of ${key} failed after 5 tries: ${err.message}`)
+            process.exit(1)
+          }
+          await new Promise((res) => setTimeout(res, 500 * 2 ** attempt))
+        }
+      }
+    }
+  } else {
+    const wrangler = resolve(api, 'node_modules/.bin/wrangler')
+    const env = account ? { ...process.env, CLOUDFLARE_ACCOUNT_ID: account } : process.env
+    put = async (key) => {
+      try {
+        execFileSync(wrangler, ['r2', 'object', 'put', `${bucket}/${key}`, '--file', resolve(out, key), '--content-type', 'application/json', ...(flag('local') ? ['--local'] : [])], { cwd: api, env, stdio: ['ignore', 'ignore', 'pipe'] })
+      } catch (err) {
+        // Say what wrangler said, and stop: a half-uploaded area reads as
+        // "no houses here" to the Worker, which is worse than an error now.
+        console.error(`upload of ${key} failed:\n${String(err.stderr ?? err.message).trim()}`)
+        process.exit(1)
+      }
+    }
   }
+  const keys = [...tiler.entries()].map((t) => t.key)
   let n = 0
-  for (const t of tiler.entries()) {
-    put(t.key)
-    n++
-    if (n % 25 === 0) console.log(`  uploaded ${n}/${files}`)
-  }
-  put(manifestKey)
+  const width = flag('local') ? 1 : Math.max(parallel, 32)
+  await Promise.all(Array.from({ length: width }, async () => {
+    for (let key; (key = keys.shift()); ) {
+      await put(key)
+      if (++n % 250 === 0) console.log(`  uploaded ${n}/${files}`)
+    }
+  }))
+  // The manifest last, once every tile it lists is in place.
+  await put(manifestKey)
   console.log(`uploaded ${n} tiles and the manifest to ${bucket}`)
 } else {
   console.log(`not uploaded; add --upload to put them in the ${bucket} bucket`)

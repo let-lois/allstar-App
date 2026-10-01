@@ -60,4 +60,6 @@ dist-*/
 
 # national address loader working data (scripts/national-build.mjs)
 api/national-*/
+# county address files and tiles (api/scripts/county/load-all.mjs)
+api/county-work/
 .ux/
