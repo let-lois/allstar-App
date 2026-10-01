@@ -276,6 +276,37 @@ export const MAX_LOOKUPS = 2000
 const ON_ROOF_METRES = 15
 /** A home rooftop with no address point or lead this close is a door the data missed. */
 const GAP_METRES = 25
+/*
+  How far an address point reaches to claim a house. Some sources put the
+  point on the roof; others — Clark County WA, a good share of Overture's own
+  — put it at the street frontage, a median 25–28 m from the house on a
+  suburban lot. Measured on those blocks, 90% of houses have their point within
+  50 m. A point claims the one home roof nearest it in that reach, so a house
+  whose address is published at the curb is not treated as unnamed and given a
+  Census estimate on top of its real address.
+*/
+const CLAIM_METRES = 50
+/*
+  And a spot that holds several addresses — an apartment complex or a
+  manufactured-home park, where the county lists every unit at one point —
+  claims as many nearby buildings as it has addresses, within a wider reach and
+  never more than a complex plausibly has. Without this, every building of a
+  complex but the nearest was "a house with no address" and got a Census
+  estimate: a made-up house number on an apartment block.
+*/
+const COMPLEX_METRES = 80
+const COMPLEX_MAX_BUILDINGS = 40
+
+/** A door as number + street in one spelling + ZIP, for "is this the same address?". */
+const DOOR_WORDS: Record<string, string> = {
+  north: 'n', south: 's', east: 'e', west: 'w', northeast: 'ne', northwest: 'nw', southeast: 'se', southwest: 'sw',
+  street: 'st', avenue: 'ave', av: 'ave', drive: 'dr', road: 'rd', lane: 'ln', court: 'ct', circle: 'cir',
+  boulevard: 'blvd', place: 'pl', trail: 'trl', parkway: 'pkwy', terrace: 'ter', highway: 'hwy',
+}
+function doorKey(address1: string, zip?: string | null): string {
+  const words = address1.toLowerCase().replace(/[.,#]/g, ' ').split(/\s+/).filter(Boolean).map((w) => DOOR_WORDS[w] ?? w)
+  return `${words.join(' ')}|${(zip ?? '').slice(0, 5)}`
+}
 
 /** The United States as boxes — the same ones the national build keeps. */
 const US_BOXES = [
@@ -432,7 +463,38 @@ export async function generateLeadsForTerritory(
   const known = new Near<LatLng>()
   for (const a of inside.addresses) known.add(a)
   for (const e of nearby) known.add(e)
-  const gaps = roofs.rooftops.filter((r) => r.kind !== 'n' && !known.nearest(r, GAP_METRES))
+  // Each address point, and each lead already here, claims its nearest home.
+  const homeIndex = new Near<Rooftop>()
+  for (const r of roofs.rooftops) if (r.kind !== 'n') homeIndex.add(r)
+  const claimedBy = (pts: LatLng[]) => {
+    const set = new Set<Rooftop>()
+    // Addresses at the same spot (to about a metre) are one place with k doors.
+    const spots = new Map<string, { at: LatLng; k: number }>()
+    for (const a of pts) {
+      const key = `${a.lat.toFixed(5)},${a.lng.toFixed(5)}`
+      const s = spots.get(key)
+      if (s) s.k++
+      else spots.set(key, { at: a, k: 1 })
+    }
+    // Single doors first, so a complex never takes a house its own point claims.
+    const ordered = [...spots.values()].sort((x, y) => x.k - y.k)
+    for (const { at, k } of ordered) {
+      if (k === 1) {
+        const r = homeIndex.nearest(at, CLAIM_METRES)
+        if (r) set.add(r)
+        continue
+      }
+      const want = Math.min(k, COMPLEX_MAX_BUILDINGS)
+      const near = homeIndex.within(at, COMPLEX_METRES).filter((r) => !set.has(r))
+      for (const r of near.slice(0, want)) set.add(r)
+    }
+    return set
+  }
+  const claimed = claimedBy([...inside.addresses, ...nearby])
+  const gaps = roofs.rooftops.filter((r) => r.kind !== 'n' && !claimed.has(r) && !known.nearest(r, GAP_METRES))
+  // And never an estimate for a door the data already names under another
+  // spelling ("1004 NE 72nd St" beside "1004 Northeast 72nd Street").
+  const namedDoors = new Set(inside.addresses.map((a) => doorKey(a.address1, a.zip)))
   const ranges = gaps.length ? await rangesIn(env.ADDRESSES!, inside.cells) : { rows: [], tilesWithData: 0 }
   const estimated: Lead[] = []
   const unranged: Rooftop[] = []
@@ -443,6 +505,7 @@ export async function generateLeadsForTerritory(
     // Two roofs on one block can land on the same number: step to the next
     // one on that side rather than folding two houses into one lead.
     for (let step = 0; step < 6 && estimateKeys.has(addressKey({ ref: '', ...e })); step++) e = nudge(e, 2)
+    if (namedDoors.has(doorKey(e.address1, e.zip))) continue
     estimateKeys.add(addressKey({ ref: '', ...e }))
     estimated.push({ ...e, residential: roof.kind === 'r' ? 'RESIDENTIAL' : 'UNKNOWN' })
   }
@@ -525,7 +588,9 @@ export async function generateLeadsForTerritory(
   for (const a of inside.addresses) points.add(a)
   const homeList = roofs.rooftops.filter((r) => r.kind !== 'n')
   const homeRoofs = homeList.length
-  const withPoint = homeList.filter((r) => points.nearest(r, GAP_METRES)).length
+  // A home is covered when a published point is on it or claims it from the curb.
+  const pointClaims = claimedBy(inside.addresses)
+  const withPoint = homeList.filter((r) => pointClaims.has(r) || points.nearest(r, GAP_METRES)).length
   const pointCoverage = homeRoofs ? Math.round((100 * withPoint) / homeRoofs) : null
   const coverageStatus: Generated['coverageStatus'] =
     coverage === 'none' && !ranges.tilesWithData ? 'NONE'
