@@ -50,3 +50,23 @@ export function destinationFor(url: string, devServerOrigin: string | null): Des
   if (!WEB.test(url)) return 'system'
   return 'browser'
 }
+
+/**
+ * A `tel:`, `sms:` or `mailto:` link, in the form the phone's own app reads.
+ *
+ * Returns null for anything else, so the direct hand-off
+ * (`openExternal` in the route) cannot be used to open an arbitrary scheme on
+ * the web page's say-so — only the three a lead's contact buttons produce.
+ *
+ * One rewrite, for iOS Messages. The web app builds `sms:5125550100?body=Hi…`,
+ * which is what Android reads. iOS Messages takes the body after `&`
+ * (`sms:5125550100&body=Hi…`); given `?` it has, on some versions, put the whole
+ * tail into the recipient field. The number and the prefilled greeting are the
+ * web app's, unchanged — only the separator differs.
+ */
+export function contactUrlFor(url: string, os: 'ios' | 'android' | string): string | null {
+  const m = /^(tel|sms|mailto):/i.exec(url)
+  if (!m) return null
+  if (m[1].toLowerCase() === 'sms' && os === 'ios') return url.replace(/^(sms:[^?&]*)\?body=/i, '$1&body=')
+  return url
+}

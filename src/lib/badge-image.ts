@@ -60,7 +60,36 @@ const QR_QUIET_MODULES = 4
  */
 export function qrCellPx(moduleCount: number): number {
   const cells = moduleCount + QR_QUIET_MODULES * 2
-  return Math.max(1, Math.floor(px(QR_MAX_IN) / cells))
+  // As large as the code's own zone allows (see QR_ZONE_IN), and never under
+  // the three-quarter-inch floor a phone camera needs.
+  const fit = Math.floor(px(QR_ZONE_IN) / cells)
+  return Math.max(1, fit * cells >= px(QR_MIN_IN) ? fit : Math.ceil(px(QR_MIN_IN) / cells))
+}
+
+/*
+  Where the code goes. It used to be up to an inch square in the bottom-right
+  corner, its top edge at about 2.23in — while the name and title were drawn at
+  2.50in and 2.64in across the whole width. On the saved file the code sat on
+  top of both. Now the name and title end above a rule at 2.38in and the code
+  lives below it:
+
+      photo       1.06 – 2.04in
+      name        baseline 2.21in, one line, sized to fit
+      title       baseline 2.33in, one line, sized to fit
+      rule        2.38in
+      details     from 2.55in, left column
+      code        right column, top no higher than 2.405in, bottom 0.08in up
+
+  So the zone is 3.375 − 0.08 − 2.405 = 0.89in, which at 300dpi whole-pixel
+  cells gives 0.75–0.89in for every code a badge link produces.
+*/
+export const QR_ZONE_IN = 0.89
+export const QR_RIGHT_IN = 0.15
+export const QR_BOTTOM_IN = 0.08
+
+/** Top-left of the code on the file, in pixels, for a code this many cells wide. */
+export function qrOrigin(size: number): { qx: number; qy: number } {
+  return { qx: BADGE_PX.width - px(QR_RIGHT_IN) - size, qy: BADGE_PX.height - px(QR_BOTTOM_IN) - size }
 }
 
 export interface BadgeImageSpec {
@@ -119,6 +148,18 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, weight: string, st
     if (ctx.measureText(text).width <= maxWidth || size <= minPx) return size
     size -= 2
   }
+}
+
+/**
+ * The text as it fits `maxWidth` at the current font: whole, or cut with an
+ * ellipsis. After `fitText` has already shrunk it to its minimum, this is what
+ * keeps a very long name inside the card instead of running off its edge.
+ */
+function ellipsize(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) return text
+  let cut = text
+  while (cut.length > 1 && ctx.measureText(`${cut}…`).width > maxWidth) cut = cut.slice(0, -1)
+  return `${cut.trimEnd()}…`
 }
 
 function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) {
@@ -191,10 +232,10 @@ export async function drawBadge(spec: BadgeImageSpec): Promise<HTMLCanvasElement
   }
 
   // --- the person: a 4:5 portrait, or the placeholder with a true circle ----
-  const photoW = px(0.9)
+  const photoW = px(0.78)
   const photoH = Math.round(photoW * 1.25)
   const photoX = Math.round((W - photoW) / 2)
-  const photoY = px(1.1)
+  const photoY = px(1.06)
   const photoR = px(0.06)
   ctx.save()
   roundedRect(ctx, photoX, photoY, photoW, photoH, photoR)
@@ -204,7 +245,7 @@ export async function drawBadge(spec: BadgeImageSpec): Promise<HTMLCanvasElement
   } else {
     ctx.fillStyle = '#e9edf3'
     ctx.fillRect(photoX, photoY, photoW, photoH)
-    const r = px(0.16)
+    const r = px(0.14)
     ctx.beginPath()
     ctx.arc(W / 2, photoY + photoH / 2 - px(0.08), r, 0, Math.PI * 2)
     ctx.fillStyle = PAPER
@@ -221,24 +262,26 @@ export async function drawBadge(spec: BadgeImageSpec): Promise<HTMLCanvasElement
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
   const nameText = (spec.name || 'Your name').toUpperCase()
-  const nameSize = fitText(ctx, nameText, '900', px(0.17), px(0.1), W - px(0.4))
+  const textW = W - px(0.4)
+  const nameSize = fitText(ctx, nameText, '900', px(0.17), px(0.1), textW)
   ctx.fillStyle = BLUE
   ctx.font = `900 ${nameSize}px ${FONT}`
-  ctx.fillText(nameText, px(0.2), px(2.5))
+  ctx.fillText(ellipsize(ctx, nameText, textW), px(0.2), px(2.21))
   ctx.fillStyle = INK
-  const titleSize = fitText(ctx, spec.title.toUpperCase(), '700', px(0.085), px(0.06), W - px(0.4))
+  const titleText = spec.title.toUpperCase()
+  const titleSize = fitText(ctx, titleText, '700', px(0.085), px(0.06), textW)
   ctx.font = `700 ${titleSize}px ${FONT}`
-  ctx.fillText(spec.title.toUpperCase(), px(0.2), px(2.64))
+  ctx.fillText(ellipsize(ctx, titleText, textW), px(0.2), px(2.33))
 
   // --- the rule, then id, dates and status on the left ---------------------------
   ctx.fillStyle = 'rgba(11,18,32,0.12)'
-  ctx.fillRect(px(0.2), px(2.72), W - px(0.4), 2)
+  ctx.fillRect(px(0.2), px(2.38), W - px(0.4), 2)
   const rows: [string, string][] = [
     ['ID:', spec.badge ? `#${spec.badge.id}` : 'No badge yet'],
     ['ISSUED:', fmtDate(spec.badge?.issuedAt, spec.company.timezone)],
     ['EXPIRES:', fmtDate(spec.badge?.expiresAt, spec.company.timezone)],
   ]
-  let y = px(2.87)
+  let y = px(2.55)
   for (const [k, v] of rows) {
     ctx.fillStyle = BLUE
     ctx.font = `900 ${px(0.075)}px ${FONT}`
@@ -271,8 +314,7 @@ export async function drawBadge(spec: BadgeImageSpec): Promise<HTMLCanvasElement
     const modules = qrModules(spec.target)
     const cell = qrCellPx(modules.length)
     const size = cell * (modules.length + QR_QUIET_MODULES * 2)
-    const qx = W - px(0.15) - size
-    const qy = H - px(0.15) - size
+    const { qx, qy } = qrOrigin(size)
     ctx.fillStyle = PAPER
     ctx.fillRect(qx, qy, size, size)
     ctx.fillStyle = INK

@@ -24,6 +24,9 @@ import { IconClose } from '../components/nav/icons'
  * Reuses the field map component rather than a second renderer, so what the
  * office sees is what the rep sees.
  */
+/** Said under the name field when Create is pressed without one. */
+const NAME_REQUIRED = 'Give the area a name — the reps will see it.'
+
 export function AdminTerritories() {
   const properties = useAppStore((s) => s.properties)
   const territories = useAppStore((s) => s.territories)
@@ -74,6 +77,15 @@ export function AdminTerritories() {
   const [drawError, setDrawError] = useState<string | null>(null)
   const [drawDone, setDrawDone] = useState<string | null>(null)
   const [drawWarn, setDrawWarn] = useState(false)
+  // The numbers from the last creation, shown as numbers: found, new, kept.
+  const [drawResult, setDrawResult] = useState<GeneratedLeads | null>(null)
+  const [drawHead, setDrawHead] = useState<{ name: string; detail: string } | null>(null)
+  /*
+    What was drawn when the Create section was folded away. Collapsing is not
+    cancelling: a manager who closes it to look something up in the list gets
+    their shape back when they open it again. Start over is the way to discard.
+  */
+  const draftStash = useRef<{ lat: number; lng: number }[] | null>(null)
 
   /*
     Counted on every tap, over every lead with coordinates. A manager dragging a
@@ -98,7 +110,7 @@ export function AdminTerritories() {
     if (!draft || draft.points.length < 3) return
     const name = draftName.trim()
     if (!name) {
-      setDrawError('Give the area a name — the reps will see it.')
+      setDrawError(NAME_REQUIRED)
       return
     }
     if (creating.current) return
@@ -118,7 +130,10 @@ export function AdminTerritories() {
       const g = res.generated
       const claimed = res.assigned ? ` ${res.assigned.toLocaleString()} existing lead${res.assigned === 1 ? '' : 's'} inside joined it.` : ''
       setDrawDone(`Created ${name}.${claimed}` + (g ? ` ${describeGenerated(g)}` : ''))
+      setDrawHead({ name, detail: `${claimed.trim()}${g ? ` ${describeGenerated(g)}` : ''}`.trim() })
       setDrawWarn(!!g && ('error' in g || g.coverageStatus === 'LIMITED' || g.coverageStatus === 'NONE' || (g.created === 0 && (g.coverage === 'none' || !!g.withoutAddress || !!g.lookupFailed))))
+      setDrawResult(g && !('error' in g) ? g : null)
+      draftStash.current = null
       /*
         Select what was just made. Without this the map left drawing mode with
         no selection, reframed itself on every lead in the company, and the
@@ -374,45 +389,276 @@ export function AdminTerritories() {
     [rows],
   )
 
+  /*
+    Open or fold the Create section. Opening starts a drawing (or brings back
+    the one that was folded away); folding keeps it for next time.
+  */
+  const toggleCreate = () => {
+    if (draft) {
+      draftStash.current = draft.points.length ? draft.points : null
+      setDraft(null)
+      setDrawError(null)
+      return
+    }
+    setDraft({ points: draftStash.current ?? [] })
+    setDrawDone(null)
+    setDrawResult(null)
+    setDrawError(null)
+    setRemovedNote(null)
+    /*
+      The selection is deliberately kept.
+
+      Clearing it used to be the first thing this did, and it is why
+      drawing was reported as hard: `view` is framed on the selected
+      territory, so dropping the selection reframed the map on every
+      lead the company owns. A manager looking at one neighbourhood
+      pressed New territory and was thrown out to the whole state,
+      with the streets they meant to draw round now a few pixels
+      wide. Keeping it means the shape is drawn on the map that was
+      already on screen. Every lead is still *shown* while drawing —
+      that is the `properties` prop below — which was the only thing
+      clearing the selection was really for.
+    */
+  }
+
   return (
     <AdminPage
       tour="console-territories"
       title="Territories"
       description={`${rows.length} territories · ${totals.properties.toLocaleString()} leads · ${moneyFull(totals.open)} open`}
-      actions={
-        draft ? (
-          <Button variant="secondary" onClick={() => setDraft(null)}>
-            Cancel
-          </Button>
-        ) : (
-          <Button
-            onClick={() => {
-              setDraft({ points: [] })
-              setDrawDone(null)
-              setDrawError(null)
-              setRemovedNote(null)
-              /*
-                The selection is deliberately kept.
-
-                Clearing it used to be the first thing this did, and it is why
-                drawing was reported as hard: `view` is framed on the selected
-                territory, so dropping the selection reframed the map on every
-                lead the company owns. A manager looking at one neighbourhood
-                pressed New territory and was thrown out to the whole state,
-                with the streets they meant to draw round now a few pixels
-                wide. Keeping it means the shape is drawn on the map that was
-                already on screen. Every lead is still *shown* while drawing —
-                that is the `properties` prop below — which was the only thing
-                clearing the selection was really for.
-              */
-            }}
-          >
-            New territory
-          </Button>
-        )
-      }
     >
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
+      {/*
+        --- Create new territory ----------------------------------------------
+        At the top, folded until it is wanted. Open, it is everything creating
+        takes, in the order it is done: outline the area on the map, name it,
+        pick the reps, choose whether to find the houses, create. Folded, the
+        list of territories is the first thing on the page.
+      */}
+      <section className="mb-4 overflow-hidden card" data-testid="territory-create">
+        <button
+          type="button"
+          onClick={toggleCreate}
+          aria-expanded={!!draft}
+          aria-controls="territory-create-panel"
+          data-testid="territory-create-toggle"
+          className="focusable flex min-h-[56px] w-full items-center gap-3 px-4 py-3 text-left"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-tint text-accent" aria-hidden>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold">Create new territory</span>
+            <span className="block text-[12.5px] text-ink-mute">
+              {draft ? 'Outline the area on the map, then name it' : 'Draw an area, name it and assign reps'}
+            </span>
+          </span>
+          <svg
+            width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden
+            className={`shrink-0 text-ink-mute transition-transform ${draft ? 'rotate-180' : ''}`}
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+
+        {/* The result of the last creation, under the header it came from. */}
+        {drawDone && !draft && (
+          <div
+            role="status"
+            data-testid="territory-created"
+            className={`border-t border-line-soft px-4 py-3 text-[13px] leading-snug ${drawWarn ? 'text-warn' : 'text-good'}`}
+          >
+            {/* The whole sentence stays for a screen reader and for search; the
+                parts below are the same words, laid out. */}
+            <span className="sr-only">{drawDone}</span>
+            <p className="font-medium" aria-hidden>Created {drawHead?.name}.</p>
+            {drawResult && (
+              <dl className="mt-2 grid grid-cols-3 gap-2 text-ink" data-testid="territory-created-counts">
+                {[
+                  ['Addresses found', drawResult.found ?? 0, 'found'],
+                  ['New leads', drawResult.created ?? 0, 'created'],
+                  ['Already leads', drawResult.existed ?? 0, 'existed'],
+                ].map(([k, v, id]) => (
+                  <div key={id as string} className="rounded-field bg-surface-field px-2.5 py-2">
+                    <dt className="text-[11.5px] text-ink-mute">{k}</dt>
+                    <dd className="nums text-[18px] font-semibold" data-testid={`territory-count-${id}`}>
+                      {(v as number).toLocaleString()}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {drawHead?.detail && <p className="mt-2 text-ink-soft" aria-hidden>{drawHead.detail}</p>}
+          </div>
+        )}
+
+        {draft && (
+          <div id="territory-create-panel" className="border-t border-line-soft">
+            {/* Drawing tools, above the map. Fixed height: anything that grows
+                here moves the map under the finger that is drawing on it. */}
+            <div className="px-4 py-3">
+              <p className="text-[13px] leading-snug text-ink-mute">
+                Tap the map to drop points. Three or more make the shape.
+              </p>
+              <div className="mt-2 flex h-7 items-baseline gap-3 whitespace-nowrap">
+                <span className="nums text-[20px] font-semibold leading-none tracking-[-0.02em]">
+                  {inside.length.toLocaleString()}
+                </span>
+                <span className="text-[12.5px] text-ink-mute">lead{inside.length === 1 ? '' : 's'} inside</span>
+                <span className="nums ml-auto text-[12.5px] text-ink-mute">
+                  {draftArea > 0 ? `${draftArea < 10 ? draftArea.toFixed(1) : Math.round(draftArea)} sq mi` : '—'}
+                </span>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="whitespace-nowrap"
+                  disabled={draft.points.length === 0}
+                  onClick={() => setDraft((d) => (d ? { points: d.points.slice(0, -1) } : d))}
+                >
+                  Undo point
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="whitespace-nowrap"
+                  disabled={draft.points.length === 0}
+                  onClick={() => {
+                    draftStash.current = null
+                    setDraft({ points: [] })
+                  }}
+                >
+                  Start over
+                </Button>
+              </div>
+            </div>
+
+            <AllStarMap
+              className="h-[min(440px,55svh)] md:h-[480px]"
+              // Every lead while drawing: the point is to see what falls inside.
+              properties={list}
+              draw={{
+                points: draft.points,
+                onAddPoint: (point) => setDraft((d) => (d ? { points: [...d.points, point] } : d)),
+              }}
+              position={null}
+              disableClustering={list.length <= 25}
+              selectedId={null}
+              onSelect={() => {}}
+              key="draw"
+              initialCenter={view?.center}
+              initialZoom={view?.zoom}
+            />
+
+            {/* Below the map, so nothing here moves the map while drawing. */}
+            <div className="space-y-4 px-4 py-4">
+              <Field
+                label="Territory name (required)"
+                value={draftName}
+                onChange={(e) => {
+                  setDraftName(e.target.value)
+                  if (drawError && e.target.value.trim()) setDrawError(null)
+                }}
+                required
+                aria-required="true"
+                placeholder="e.g. Cypress Ridge & Marigold"
+                error={drawError === NAME_REQUIRED ? drawError : undefined}
+                data-testid="territory-name"
+              />
+              <fieldset>
+                <legend className="mb-1.5 block text-[13px] font-medium text-ink-soft">Assign to reps</legend>
+                {/*
+                  Any number of people. One rep also gets the unclaimed houses
+                  inside; two or more share the patch and claim doors as they
+                  knock them.
+                */}
+                <div className="max-h-[220px] overflow-y-auto rounded-field border border-line bg-surface">
+                  {repOptions.length === 0 && (
+                    <p className="px-3 py-3 text-[13px] text-ink-mute">Nobody on the team yet.</p>
+                  )}
+                  {repOptions.map((r) => {
+                    const on = draftReps.includes(r.id)
+                    return (
+                      <label
+                        key={r.id}
+                        className="flex min-h-[44px] cursor-pointer items-center gap-3 border-b border-line-soft px-3 last:border-b-0"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={() =>
+                            setDraftReps((cur) => (on ? cur.filter((id) => id !== r.id) : [...cur, r.id]))
+                          }
+                          className="h-5 w-5 accent-brand-500"
+                        />
+                        <span className="text-[14px]">{r.name}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <p className="mt-1.5 text-[12.5px] leading-snug text-ink-mute">
+                  {draftReps.length === 0
+                    ? 'Optional. Nobody yet — the leads inside keep whoever has them.'
+                    : draftReps.length === 1
+                      ? 'One rep: they also get every lead inside that nobody is working.'
+                      : `${draftReps.length} reps share it: all of them see every lead inside.`}
+                </p>
+              </fieldset>
+              {mode === 'live' && (
+                <label className="flex min-h-[44px] cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={draftGenerate}
+                    onChange={(e) => setDraftGenerate(e.target.checked)}
+                    className="mt-1 h-5 w-5 accent-brand-500"
+                    data-testid="territory-generate"
+                  />
+                  <span className="text-[13px] leading-snug">
+                    <span className="font-medium">Find the houses inside and add them as leads</span>
+                    <span className="block text-ink-mute">
+                      From open address data. Houses that are already leads are left as they are — never duplicated.
+                    </span>
+                  </span>
+                </label>
+              )}
+
+              <div>
+                {drawError && drawError !== NAME_REQUIRED && (
+                  <p role="alert" className="mb-3 rounded-field bg-bad-bg px-3 py-2 text-[13px] font-medium text-bad">
+                    {drawError}
+                  </p>
+                )}
+                <Button full disabled={draft.points.length < 3 || saving2} onClick={() => void saveDraft()} data-testid="territory-create-submit">
+                  {saving2 ? 'Creating…' : draft.points.length < 3 ? 'Drop at least three points' : 'Create territory'}
+                </Button>
+                {saving2 ? (
+                  <p role="status" aria-live="polite" className="mt-2 text-[13px] leading-snug text-ink-soft" data-testid="territory-progress">
+                    {!(draftGenerate && mode === 'live')
+                      ? 'Saving the territory…'
+                      : createStage === 0
+                        ? 'Saving the territory…'
+                        : createStage === 1
+                          ? 'Finding the homes inside and adding them as leads…'
+                          : 'Still working — a large territory can take up to a minute. You can keep this screen open.'}
+                  </p>
+                ) : (
+                  draft.points.length >= 3 && (
+                    <p className="mt-2 text-[12.5px] leading-snug text-ink-mute" data-testid="territory-generate-note">
+                      {inside.length.toLocaleString()} existing lead{inside.length === 1 ? '' : 's'} inside will join it
+                      {mode === 'live' && draftGenerate ? '; the houses inside are looked up when you create it.' : '.'}
+                    </p>
+                  )
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-ink-mute">Territories</h2>
+      <div className={`grid gap-4 ${draft ? '' : 'xl:grid-cols-[minmax(0,1fr)_460px]'}`}>
         <>
         <DataList
           rows={rows}
@@ -533,10 +779,16 @@ export function AdminTerritories() {
         </div>
         </>
 
+        {/*
+          The selected territory — its map, its reps, rename, find addresses,
+          delete. Out of the way while one is being drawn above, so the page
+          never carries two maps.
+        */}
+        {!draft && (
         <div className="overflow-hidden card">
           <div className="flex items-baseline justify-between border-b border-line-soft px-4 py-3">
             <h2 className="text-sm font-semibold">
-              {draft ? 'Outline the area' : selected ? label(selected) : 'All territories'}
+              {selected ? label(selected) : 'All territories'}
             </h2>
             <span className="flex items-baseline gap-3">
               {/*
@@ -544,7 +796,7 @@ export function AdminTerritories() {
                 territory, where they can be searched, sorted, reassigned and
                 moved in bulk; the map here and that list read the same rows.
               */}
-              {!draft && selected && (
+              {selected && (
                 <a
                   href={`/admin/leads?territory=${selected === UNASSIGNED_TERRITORY ? 'none' : encodeURIComponent(selected)}`}
                   onClick={(e) => {
@@ -558,9 +810,7 @@ export function AdminTerritories() {
                 </a>
               )}
               <span className="nums text-xs text-ink-mute">
-                {draft
-                  ? `${draft.points.length} point${draft.points.length === 1 ? '' : 's'}`
-                  : `${shown.length} lead${shown.length === 1 ? '' : 's'}`}
+                {`${shown.length} lead${shown.length === 1 ? '' : 's'}`}
               </span>
             </span>
           </div>
@@ -574,7 +824,7 @@ export function AdminTerritories() {
             something while outlining something else is a misfire waiting to
             happen.
           */}
-          {!draft && editable && (
+          {editable && (
             <div className="border-b border-line-soft px-4 py-3">
               {renaming ? (
                 <div className="space-y-3">
@@ -705,198 +955,13 @@ export function AdminTerritories() {
             </div>
           )}
 
-          {removedNote && !draft && (
+          {removedNote && (
             <p role="status" className="border-b border-line-soft px-4 py-3 text-[13px] font-medium text-good">
               {removedNote}
             </p>
           )}
 
-          {/*
-            --- the drawing panel -------------------------------------------
-            Above the map, not over it: on a phone the map is the thing being
-            touched, and a floating panel would sit exactly where the next vertex
-            needs to go.
-          */}
-          {draft && (
-            <div className="border-b border-line-soft px-4 py-3">
-              <p className="text-[13px] leading-relaxed text-ink-mute">
-                Tap the map to drop a point. Three or more closes the shape — every
-                lead inside it joins the territory.
-              </p>
-
-              {/*
-                Fixed height, and the area reads "—" rather than disappearing
-                before the third point.
-
-                Not cosmetic: this panel sits *above* the map, so anything that
-                changes its height moves the map under the finger that is drawing
-                on it. The second tap of a shape was landing in a different place
-                than the person aimed at, because placing the first one grew this
-                block. Caught by a gate whose cached coordinates went stale for
-                exactly that reason.
-              */}
-              <div className="mt-3 flex h-8 items-baseline gap-4">
-                <span>
-                  <span className="nums text-[22px] font-semibold leading-none tracking-[-0.02em]">
-                    {inside.length.toLocaleString()}
-                  </span>
-                  <span className="ml-1.5 text-[12.5px] text-ink-mute">
-                    lead{inside.length === 1 ? '' : 's'} inside
-                  </span>
-                </span>
-                <span className="nums text-[12.5px] text-ink-mute">
-                  {draftArea > 0
-                    ? `${draftArea < 10 ? draftArea.toFixed(1) : Math.round(draftArea)} sq mi`
-                    : '—'}
-                </span>
-              </div>
-
-              <div className="mt-3 flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={draft.points.length === 0}
-                  onClick={() =>
-                    setDraft((d) => (d ? { points: d.points.slice(0, -1) } : d))
-                  }
-                >
-                  Undo point
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={draft.points.length === 0}
-                  onClick={() => setDraft({ points: [] })}
-                >
-                  Start over
-                </Button>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                <Field
-                  label="Name"
-                  value={draftName}
-                  onChange={(e) => setDraftName(e.target.value)}
-                  placeholder="e.g. Cypress Ridge & Marigold"
-                />
-                <fieldset>
-                  <legend className="mb-1.5 block text-[13px] font-medium text-ink-soft">
-                    Assign to
-                  </legend>
-                  {/*
-                    Any number of people. One rep also gets the unclaimed houses
-                    inside; two or more share the patch and claim doors as they
-                    knock them. Said on screen, because the difference decides
-                    what lands on whose phone.
-                  */}
-                  <div className="max-h-[220px] overflow-y-auto rounded-field border border-line bg-surface">
-                    {repOptions.length === 0 && (
-                      <p className="px-3 py-3 text-[13px] text-ink-mute">Nobody on the team yet.</p>
-                    )}
-                    {repOptions.map((r) => {
-                      const on = draftReps.includes(r.id)
-                      return (
-                        <label
-                          key={r.id}
-                          className="flex min-h-[44px] cursor-pointer items-center gap-3 border-b border-line-soft px-3 last:border-b-0"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={on}
-                            onChange={() =>
-                              setDraftReps((cur) =>
-                                on ? cur.filter((id) => id !== r.id) : [...cur, r.id],
-                              )
-                            }
-                            className="h-5 w-5 accent-brand-500"
-                          />
-                          <span className="text-[14px]">{r.name}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                  <p className="mt-1.5 text-[12.5px] leading-snug text-ink-mute">
-                    {draftReps.length === 0
-                      ? 'Nobody yet — the leads inside keep whoever has them.'
-                      : draftReps.length === 1
-                        ? 'One rep: they also get every lead inside that nobody is working.'
-                        : `${draftReps.length} reps share it: all of them see every lead inside.`}
-                  </p>
-                </fieldset>
-                {mode === 'live' && (
-                  <label className="flex min-h-[44px] cursor-pointer items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={draftGenerate}
-                      onChange={(e) => setDraftGenerate(e.target.checked)}
-                      className="mt-1 h-5 w-5 accent-brand-500"
-                      data-testid="territory-generate"
-                    />
-                    <span className="text-[13px] leading-snug">
-                      <span className="font-medium">Find the houses inside and add them as leads</span>
-                      <span className="block text-ink-mute">
-                        From open address data. Houses that are already leads are left as they are.
-                      </span>
-                    </span>
-                  </label>
-                )}
-              </div>
-
-              {/* Reserved, for the same reason: an error appearing must not push
-                  the map down while somebody is drawing on it. */}
-              <p
-                role="alert"
-                className={`mt-3 min-h-[18px] text-[13px] font-medium text-bad ${
-                  drawError ? '' : 'invisible'
-                }`}
-              >
-                {drawError ?? '\u00a0'}
-              </p>
-
-              {/* The count on the button is the leads already inside; the
-                  houses are looked up after the territory is saved. */}
-              {mode === 'live' && draftGenerate && draft.points.length >= 3 && (
-                <p className="mt-3 text-[13px] leading-snug text-ink-soft" data-testid="territory-generate-note">
-                  {inside.length.toLocaleString()} existing lead{inside.length === 1 ? '' : 's'} inside. The houses inside are looked up when you create it, and the result is shown here.
-                </p>
-              )}
-
-              <Button
-                full
-                className="mt-4"
-                disabled={draft.points.length < 3 || saving2}
-                onClick={() => void saveDraft()}
-              >
-                {saving2
-                  ? 'Creating…'
-                  : draft.points.length < 3
-                    ? 'Drop at least three points'
-                    : `Create with ${inside.length.toLocaleString()} lead${inside.length === 1 ? '' : 's'}`}
-              </Button>
-              {saving2 && (
-                <p role="status" aria-live="polite" className="mt-2 text-[13px] leading-snug text-ink-soft" data-testid="territory-progress">
-                  {!(draftGenerate && mode === 'live')
-                    ? 'Saving the territory…'
-                    : createStage === 0
-                      ? 'Saving the territory…'
-                      : createStage === 1
-                        ? 'Finding the homes inside and adding them as leads…'
-                        : 'Still working — a large territory can take up to a minute. You can keep this screen open.'}
-                </p>
-              )}
-            </div>
-          )}
-
-          {drawDone && !draft && (
-            <p
-              role="status"
-              data-testid="territory-created"
-              className={`border-b border-line-soft px-4 py-3 text-[13px] font-medium leading-snug ${drawWarn ? 'text-warn' : 'text-good'}`}
-            >
-              {drawDone}
-            </p>
-          )}
-          {shown.length === 0 && !draft && (
+          {shown.length === 0 && (
             <p className="px-4 py-6 text-sm text-ink-mute">
               No leads in this territory have coordinates yet, so there is
               nothing to place on a map.
@@ -909,16 +974,7 @@ export function AdminTerritories() {
               point of the exercise is to see what falls inside the shape, and
               filtering first would hide exactly the leads being claimed.
             */
-            properties={draft ? list : shown}
-            draw={
-              draft
-                ? {
-                    points: draft.points,
-                    onAddPoint: (point) =>
-                      setDraft((d) => (d ? { points: [...d.points, point] } : d)),
-                  }
-                : undefined
-            }
+            properties={shown}
             // No follow-me here: an office user's own GPS is irrelevant to a
             // territory, and passing it would recenter the map off the patch.
             position={null}
@@ -935,17 +991,18 @@ export function AdminTerritories() {
               selection stopped being cleared, and a thousand pins with
               clustering switched off is a map nobody can draw on.
             */
-            disableClustering={(draft ? list : shown).length <= 25}
+            disableClustering={shown.length <= 25}
             selectedId={null}
             onSelect={() => {}}
             /* `key` forces a refit when the selection changes. While drawing it
                is pinned, because remounting the map would throw away the pan and
                zoom the person is drawing against. */
-            key={draft ? 'draw' : (selected ?? 'all')}
+            key={selected ?? 'all'}
             initialCenter={view?.center}
             initialZoom={view?.zoom}
           />
         </div>
+        )}
       </div>
     </AdminPage>
   )

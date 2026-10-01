@@ -311,6 +311,49 @@ try {
     )
   }
 
+  /* --- a photo taken on a visit keeps its visit, and is in the history ------- */
+  //
+  // The phone sent five of the fields this handler reads, so every photo
+  // arrived with no visit and no time of its own — and nothing wrote it into
+  // the lead's history, so a rep looking at Activity saw no photo at all.
+  {
+    const visitId = 'v_smoke_photo'
+    const visitPhoto = 'ph_smoke_visit'
+    const strayPhoto = 'ph_smoke_stray'
+    const takenAt = Date.now() - 60_000
+    const res = await (
+      await push(
+        [
+          { id: 'mut_visit_start', kind: 'visit.start', createdAt: takenAt - 1000, payload: { id: visitId, propertyId, startedAt: takenAt - 1000 } },
+          {
+            id: 'mut_photo_visit', kind: 'photo.create', createdAt: takenAt,
+            payload: { id: visitPhoto, propertyId, visitId, category: 'roof', width: 800, height: 600, bytes: 1234, createdAt: takenAt, capturedAt: { lat: 30.5, lng: -97.6 }, label: 'Roof' },
+          },
+          {
+            // A visit this server never saw: the photo must still be kept.
+            id: 'mut_photo_stray', kind: 'photo.create', createdAt: takenAt + 1,
+            payload: { id: strayPhoto, propertyId, visitId: 'v_never_seen', category: 'damage', bytes: 99, createdAt: takenAt + 1, label: 'Damage' },
+          },
+        ],
+        admin.token,
+      )
+    ).json()
+    ok(res.results?.every((r) => r.status === 'applied'), 'a visit and the photos taken on it are accepted', JSON.stringify(res.results?.map((r) => r.status)))
+    const listed = (await (await call(`/api/properties/${propertyId}/photos`, {}, admin.token)).json()).photos ?? []
+    const onVisit = listed.find((p) => p.id === visitPhoto)
+    ok(onVisit?.visitId === visitId, 'the photo keeps the visit it was taken on', onVisit?.visitId)
+    ok(onVisit?.createdAt === takenAt, 'and the time it was taken, not the time it arrived')
+    const stray = listed.find((p) => p.id === strayPhoto)
+    ok(!!stray && stray.visitId == null, 'a photo naming a visit the server does not hold is kept, unlinked, not refused')
+    const boot2 = await (await call('/api/bootstrap', {}, admin.token)).json()
+    const lines = (boot2.activity ?? []).filter((a) => a.type === 'photo' && a.propertyId === propertyId)
+    ok(lines.some((a) => a.id === 'mut_photo_visit' && a.summary === 'Photo added · Roof'), 'each photo writes its line in the lead’s history, under the id the phone gave its own', JSON.stringify(lines.map((a) => a.summary)))
+    // A retry of the same mutation is answered by the ledger, and writes nothing twice.
+    await push([{ id: 'mut_photo_visit', kind: 'photo.create', createdAt: takenAt, payload: { id: visitPhoto, propertyId, visitId, category: 'roof', createdAt: takenAt, label: 'Roof' } }], admin.token)
+    const boot3 = await (await call('/api/bootstrap', {}, admin.token)).json()
+    ok((boot3.activity ?? []).filter((a) => a.id === 'mut_photo_visit').length === 1, 'and a retry does not write it twice')
+  }
+
   /* --- another tenant's property listing ------------------------------------- */
   {
     const res = await call('/api/properties/p_not_ours/photos', {}, admin.token)

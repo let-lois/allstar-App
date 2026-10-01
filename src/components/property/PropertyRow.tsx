@@ -7,6 +7,7 @@ import { SwipeRow } from '../ui/SwipeRow'
 import { distanceMiles, formatDistance, type Position } from '../../lib/geo'
 import { money, relative } from '../../lib/format'
 import { homeownerContact } from '../../lib/contact'
+import { COULD_NOT_OPEN, openExternal } from '../../lib/external'
 import { useAppStore, useQuoteSentAt } from '../../store/useAppStore'
 
 /**
@@ -56,8 +57,13 @@ export function PropertyRow({
               glyph: <IconPhone />,
               color: '#166534',
               onAction: () => {
-                logComm(property.id, 'call', contact?.name)
-                window.location.href = tel
+                // Through the shell's hand-off in the phone app — a browser-only
+                // location change was the one call path that could not report
+                // a failure. Logged once the phone has actually opened it.
+                void openExternal(tel).then((opened) => {
+                  if (opened) logComm(property.id, 'call', contact?.name)
+                  else window.alert(COULD_NOT_OPEN)
+                })
               },
             }
           : undefined

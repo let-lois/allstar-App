@@ -477,9 +477,13 @@ const readyForBadge = (over = {}) =>
   qr.addData(VERIFY)
   qr.make()
   const n = qr.getModuleCount()
-  const cell = Math.floor(300 / (n + 8))
+  // The code's own zone on the file (badge-image.ts): up to 0.89in on whole
+  // pixels, never under 0.75in, 0.15in from the right and 0.08in from the
+  // bottom — below the rule that ends the name and title.
+  const fit = Math.floor(267 / (n + 8))
+  const cell = fit * (n + 8) >= 225 ? fit : Math.ceil(225 / (n + 8))
   const size = cell * (n + 8)
-  const geometry = { n, cell, size, qx: 638 - 45 - size, qy: 1013 - 45 - size, origin: 4 * cell }
+  const geometry = { n, cell, size, qx: 638 - 45 - size, qy: 1013 - 24 - size, origin: 4 * cell }
   const png = await page.evaluate(async (g) => {
     const b = window.__badgeBlob
     if (!b) return null
@@ -553,6 +557,122 @@ const readyForBadge = (over = {}) =>
     ok(!!qrBox && qrBox.width >= 44, `and the code stays tappable and scannable at ${width}px`, qrBox ? `${Math.round(qrBox.width)}px` : 'none')
     await ctx.close()
   }
+}
+
+/* ========================================================================== */
+/* Nothing overlaps: the code keeps to its own zone, whatever the name         */
+/* ========================================================================== */
+{
+  /*
+    The code was pinned to the bottom-right corner across the name and the
+    title, so any name long enough to reach it ran underneath. Every width a
+    phone comes in, a short and a long and a very long name, a long title, with
+    and without a photo — and on the saved file as well as the screen.
+  */
+  const people = [
+    { firstName: 'Al', lastName: 'Ng', jobTitle: 'Rep', hasPhoto: true, tag: 'short name' },
+    { firstName: 'Marcus', lastName: 'Vance-Whitfield', jobTitle: 'Senior Sales Representative', hasPhoto: true, tag: 'long name, long title' },
+    { firstName: 'Bartholomew', lastName: 'Montgomery-Fitzwilliams', jobTitle: 'Regional Director of Residential Exterior Sales Operations', hasPhoto: false, tag: 'very long name and title, no photo' },
+  ]
+  const intersects = (a, b) => !!a && !!b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+  for (const person of people) {
+    const s = makeState({
+      ...person, completedAt: Date.now() - 30 * DAY, version: 1, step: null, started: true,
+      badge: { id: '32143567', issuedAt: Date.now() - 30 * DAY, expiresAt: Date.now() + 335 * DAY },
+    })
+    const problems = []
+    for (const [width, height] of [[320, 568], [375, 667], [390, 844], [430, 932]]) {
+      const ctx = await phone({ viewport: { width, height } })
+      const page = await ctx.newPage()
+      await mockApi(page, s)
+      await signIn(page, s.email)
+      await dismissTour(page)
+      await page.goto(`${BASE}/badge`, { waitUntil: 'domcontentloaded' })
+      await page.waitForTimeout(1000)
+      const box = async (id) => page.getByTestId(id).boundingBox()
+      const [card, qr, nm, ttl, rule, details, photo] = await Promise.all(['team-badge', 'badge-qr', 'badge-name', 'badge-title', 'badge-rule', 'badge-details', 'badge-photo'].map(box))
+      const text = await page.evaluate(() => {
+        const read = (id) => {
+          const e = document.querySelector(`[data-testid="${id}"]`)
+          return { font: Number(e?.dataset.fontCqw), clipped: !!e && e.scrollWidth > e.clientWidth + 1, px: e ? parseFloat(getComputedStyle(e).fontSize) : 0 }
+        }
+        return { name: read('badge-name'), title: read('badge-title') }
+      })
+      const at = `${width}×${height}`
+      if (!qr || !card) { problems.push(`${at}: no code`); await ctx.close(); continue }
+      if (intersects(qr, nm)) problems.push(`${at}: code over the name`)
+      if (intersects(qr, ttl)) problems.push(`${at}: code over the title`)
+      if (intersects(qr, photo)) problems.push(`${at}: code over the photo`)
+      if (rule && qr.y < rule.y) problems.push(`${at}: code starts above the rule`)
+      if (qr.x < card.x || qr.x + qr.width > card.x + card.width + 0.5 || qr.y + qr.height > card.y + card.height + 0.5) problems.push(`${at}: code leaves the card`)
+      if (details && intersects(qr, details)) problems.push(`${at}: code over the ID and dates`)
+      if (nm && ttl && nm.y + nm.height > ttl.y + 0.5) problems.push(`${at}: name runs into the title`)
+      if (nm && nm.x + nm.width > card.x + card.width) problems.push(`${at}: name leaves the card`)
+      const qrIn = (qr.width / card.width) * 2.125
+      if (qrIn < 0.75) problems.push(`${at}: code only ${qrIn.toFixed(2)}in`)
+      // Readable: a name shrinks before it is cut, and never below the floor.
+      if (text.name.px < 11) problems.push(`${at}: name at ${text.name.px}px`)
+      if (text.title.px < 8) problems.push(`${at}: title at ${text.title.px}px`)
+      if (person.tag === 'short name' && text.name.clipped) problems.push(`${at}: a short name was cut`)
+      await ctx.close()
+    }
+    ok(problems.length === 0, `${person.tag}: at 320, 375, 390 and 430 the code keeps to its own zone, clear of the name, title, photo and dates, at 0.75in or more`, problems.join(' | ') || 'clean')
+  }
+
+  // The saved file: the name and title end above the code, and the code is whole.
+  const s = makeState({
+    firstName: 'Bartholomew', lastName: 'Montgomery-Fitzwilliams', jobTitle: 'Regional Director of Residential Exterior Sales Operations', hasPhoto: true,
+    completedAt: Date.now() - 30 * DAY, version: 1, step: null, started: true,
+    badge: { id: '32143567', issuedAt: Date.now() - 30 * DAY, expiresAt: Date.now() + 335 * DAY },
+  })
+  const ctx = await phone()
+  const page = await ctx.newPage()
+  await mockApi(page, s)
+  await signIn(page, s.email)
+  await dismissTour(page)
+  await page.goto(`${BASE}/badge`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(1200)
+  await page.evaluate(() => {
+    const orig = URL.createObjectURL.bind(URL)
+    URL.createObjectURL = (b) => { window.__badgeBlob = b; return orig(b) }
+    HTMLAnchorElement.prototype.click = function () { window.__badgeName = this.download }
+  })
+  await page.getByTestId('badge-download').click()
+  await page.waitForFunction(() => !!window.__badgeName, null, { timeout: 15_000 }).catch(() => {})
+  const VERIFY = `${BASE}/verify/32143567`
+  const q = qrcode(0, 'M'); q.addData(VERIFY); q.make()
+  const n = q.getModuleCount()
+  const fit = Math.floor(267 / (n + 8))
+  const cell = fit * (n + 8) >= 225 ? fit : Math.ceil(225 / (n + 8))
+  const size = cell * (n + 8)
+  const g = { qx: 638 - 45 - size, qy: 1013 - 24 - size, size }
+  const file = await page.evaluate(async (g) => {
+    const b = window.__badgeBlob
+    if (!b) return null
+    const bmp = await createImageBitmap(b)
+    const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height
+    const x = c.getContext('2d'); x.drawImage(bmp, 0, 0)
+    // Ink in the name and title band (2.05–2.36in), and whether any of it
+    // reaches as low as the code's top edge or into its columns.
+    const ink = (x0, y0, x1, y1) => {
+      const d = x.getImageData(x0, y0, x1 - x0, y1 - y0).data
+      let n = 0
+      for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 0 && d[i] < 120 && d[i + 1] < 160) n++
+      return n
+    }
+    return {
+      nameInk: ink(60, 615, 578, 710),
+      // The strip between the rule and the code, across the code's columns: nothing drawn there.
+      aboveCode: ink(g.qx, 718, g.qx + g.size, g.qy),
+      // The code's own quiet zone, top row of it: white.
+      quietTop: ink(g.qx, g.qy, g.qx + g.size, g.qy + 4 * Math.max(1, Math.floor(g.size / 50))),
+    }
+  }, g)
+  ok(!!file && file.nameInk > 500, 'the saved badge draws the name and title in their band', JSON.stringify(file))
+  ok(!!file && g.qy >= 718, 'and the code starts below the rule that ends them', `code top at ${(g.qy / 300).toFixed(2)}in`)
+  ok(!!file && file.aboveCode === 0 && file.quietTop === 0, 'with nothing drawn between the rule and the code, or in its quiet zone', JSON.stringify(file))
+  ok(size / 300 >= 0.75 && size / 300 <= 1.0, 'at a scannable size', `${(size / 300).toFixed(2)}in`)
+  await ctx.close()
 }
 
 await browser.close()

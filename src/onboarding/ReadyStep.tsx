@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { IconCheck, IconChevron } from '../components/nav/icons'
-import * as db from '../lib/db'
-import { TOUR_KEY } from '../data/tour'
+import { markTourSeen } from '../lib/tourState'
 import type { OnboardingViewDTO } from '../lib/http'
 import { useAppStore } from '../store/useAppStore'
 
@@ -32,7 +31,7 @@ export function ReadyStep({ view }: { view: OnboardingViewDTO }) {
 
   async function start() {
     setLeaving(true)
-    await db.metaSet(TOUR_KEY, true)
+    await markTourSeen(user ? { id: user.id, role: user.role } : null)
     nav(home, { replace: true })
     await refreshMe()
   }

@@ -26,8 +26,7 @@ import { Standings } from './screens/Standings'
 import { RepDetail } from './screens/RepDetail'
 import { Lists } from './screens/Lists'
 import { ListDetail } from './screens/ListDetail'
-import * as db from './lib/db'
-import { TOUR_KEY } from './data/tour'
+import { markTourSeen, tourSeen } from './lib/tourState'
 import { Tour } from './components/system/Tour'
 import { Onboarding } from './onboarding/Onboarding'
 import { MyBadge } from './screens/MyBadge'
@@ -199,25 +198,41 @@ export function App() {
 function FirstRunTour() {
   const [open, setOpen] = useState(false)
   const requested = useAppStore((s) => s.tourRequest)
+  const consumeTourRequest = useAppStore((s) => s.consumeTourRequest)
+  const user = useAppStore((s) => s.user)
+  const who = user ? { id: user.id, role: user.role } : null
 
+  /*
+    This component unmounts whenever the app shell does — a visit renders its
+    own full-screen tree without it — and mounts again when the visit ends. So
+    everything here has to be safe to run again after a visit, a note or a
+    status change: the check below reads a stored answer, and never opens the
+    tour on the strength of anything that happened in this session.
+  */
   useEffect(() => {
     let alive = true
     void (async () => {
-      const seen = await db.metaGet<boolean>(TOUR_KEY)
+      const seen = await tourSeen(who)
       if (!seen && alive) window.setTimeout(() => alive && setOpen(true), 600)
     })()
     return () => {
       alive = false
     }
-  }, [])
+    // Per person: a different user signing in on this phone gets their own answer.
+  }, [who?.id, who?.role])
 
   /*
-    Asked for from the More screen. Skipped at 0 so this does not fire on mount
-    and race the check above into opening the tour twice.
+    Asked for from the More screen or the last onboarding step — and consumed
+    the moment it is honoured. It was a counter that stayed above zero for the
+    rest of the session, and this effect reopened the tour on every mount after
+    that: every time a visit ended, for as long as the app stayed open.
   */
   useEffect(() => {
-    if (requested > 0) setOpen(true)
-  }, [requested])
+    if (requested > 0) {
+      consumeTourRequest()
+      setOpen(true)
+    }
+  }, [requested, consumeTourRequest])
 
   if (!open) return null
   return (
@@ -226,7 +241,7 @@ function FirstRunTour() {
         setOpen(false)
         // Skipping counts. Someone who skipped chose not to see it, and showing
         // it again tomorrow is the app overruling them.
-        void db.metaSet(TOUR_KEY, true)
+        void markTourSeen(who)
       }}
     />
   )

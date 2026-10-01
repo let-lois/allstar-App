@@ -5,6 +5,8 @@ import { useAppStore } from '../../store/useAppStore'
 import { haptic } from '../../lib/haptics'
 import { Link } from 'react-router-dom'
 import { IconMessage, IconNavigate, IconPhone } from '../nav/icons'
+import { useEffect, useRef, useState } from 'react'
+import { COULD_NOT_OPEN, openExternal, shellOpener } from '../../lib/external'
 
 /**
  * Communication actions.
@@ -30,6 +32,15 @@ export function CommActions({
 }) {
   const logComm = useAppStore((s) => s.logComm)
   const { person: primary, tel, sms, mail, blocked } = homeownerContact(property, contact)
+  // One line under the buttons, gone after a few seconds.
+  const [message, setMessage] = useState<string | null>(null)
+  const timer = useRef<number | undefined>(undefined)
+  const say = (text: string) => {
+    setMessage(text)
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setMessage(null), 4000)
+  }
+  useEffect(() => () => window.clearTimeout(timer.current), [])
 
   const cls = compact
     ? 'min-h-[46px] flex-1 gap-1.5 text-[12.5px]'
@@ -69,55 +80,48 @@ export function CommActions({
   }
 
   return (
+    <div className="flex flex-col gap-2">
     <div className="flex gap-2">
-      <a
+      <ContactAction
         href={tel}
-        onClick={() => {
-          if (!tel) return
+        label="Call"
+        missing="No phone number available for this lead."
+        cls={cls}
+        onMessage={say}
+        onOpened={() => {
           haptic('tap')
           logComm(property.id, 'call', primary?.name)
         }}
-        aria-disabled={!tel}
-        className={`metal metal-quiet press focusable flex items-center justify-center rounded-field font-semibold ${cls} ${
-          tel ? 'text-ink-soft active:bg-surface-field' : 'pointer-events-none opacity-40'
-        }`}
       >
         <IconPhone />
-        Call
-      </a>
-      <a
+      </ContactAction>
+      <ContactAction
         href={sms}
-        onClick={() => {
-          if (!sms) return
+        label="Text"
+        missing="No phone number available for this lead."
+        cls={cls}
+        onMessage={say}
+        onOpened={() => {
           haptic('tap')
           logComm(property.id, 'sms', primary?.name)
         }}
-        aria-disabled={!sms}
-        className={`metal metal-quiet press focusable flex items-center justify-center rounded-field font-semibold ${cls} ${
-          sms ? 'text-ink-soft active:bg-surface-field' : 'pointer-events-none opacity-40'
-        }`}
       >
         <IconMessage />
-        Text
-      </a>
+      </ContactAction>
       {!compact && (
-        <a
+        <ContactAction
           href={mail}
-          onClick={() => {
-            if (!mail) return
-            logComm(property.id, 'email', primary?.name)
-          }}
-          aria-disabled={!mail}
-          className={`metal metal-quiet press focusable flex items-center justify-center rounded-field font-semibold ${cls} ${
-            mail ? 'text-ink-soft active:bg-surface-field' : 'pointer-events-none opacity-40'
-          }`}
+          label="Email"
+          missing="No email address available for this lead."
+          cls={cls}
+          onMessage={say}
+          onOpened={() => logComm(property.id, 'email', primary?.name)}
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden>
             <rect x="3" y="5.5" width="18" height="13" rx="2" />
             <path d="M3.5 7l8.5 6 8.5-6" />
           </svg>
-          Email
-        </a>
+        </ContactAction>
       )}
       {/*
         Stays in the app rather than opening a tab. The visit gets logged here,
@@ -134,5 +138,88 @@ export function CommActions({
         Navigate
       </Link>
     </div>
+      {/* Said, not implied: a greyed button reads as "broken", not "no number". */}
+      {message && (
+        <p role="status" data-testid="comm-message" className="rounded-field bg-surface-field px-3 py-2 text-[13px] font-medium text-ink-soft">
+          {message}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * One of Call, Text and Email.
+ *
+ * With something to open, a link — so a browser follows it, and a long press
+ * offers what a phone offers for a number. Inside the phone app the tap goes
+ * through the shell's own hand-off instead (see `lib/external.ts`), which says
+ * whether the phone could open it; the call is only logged once it did.
+ *
+ * With nothing to open, still a button: tapping it says why rather than
+ * leaving a rep poking at a control that does nothing.
+ *
+ * Every tap stops here, so a row or a sheet this sits in never takes it too.
+ */
+function ContactAction({
+  href,
+  label,
+  missing,
+  cls,
+  onOpened,
+  onMessage,
+  children,
+}: {
+  href?: string
+  label: string
+  missing: string
+  cls: string
+  onOpened: () => void
+  onMessage: (text: string) => void
+  children: React.ReactNode
+}) {
+  const base = `metal metal-quiet press focusable flex items-center justify-center rounded-field font-semibold ${cls}`
+  if (!href) {
+    return (
+      <button
+        type="button"
+        // Operable — it explains itself — so not aria-disabled, which would
+        // tell a screen reader there is nothing here to press.
+        aria-label={`${label}: ${missing}`}
+        data-state="missing"
+        data-testid={`comm-${label.toLowerCase()}`}
+        onClick={(e) => {
+          e.stopPropagation()
+          onMessage(missing)
+        }}
+        className={`${base} text-ink-mute opacity-60`}
+      >
+        {children}
+        {label}
+      </button>
+    )
+  }
+  return (
+    <a
+      href={href}
+      data-testid={`comm-${label.toLowerCase()}`}
+      onClick={(e) => {
+        e.stopPropagation()
+        if (!shellOpener()) {
+          // A browser follows the href itself.
+          onOpened()
+          return
+        }
+        e.preventDefault()
+        void openExternal(href).then((opened) => {
+          if (opened) onOpened()
+          else onMessage(COULD_NOT_OPEN)
+        })
+      }}
+      className={`${base} text-ink-soft active:bg-surface-field`}
+    >
+      {children}
+      {label}
+    </a>
   )
 }

@@ -62,6 +62,7 @@ import { dayKey } from '../lib/format'
 import { pointInPolygon } from '../lib/geo'
 import { getPosition, type Position } from '../lib/geo'
 import type { ClientSettings } from '../lib/settings'
+import { effectivePhotoCategories } from '../lib/settings'
 import { buildRoute } from '../lib/route'
 
 /**
@@ -311,6 +312,8 @@ interface AppState {
    */
   tourRequest: number
   requestTour: () => void
+  /** The shell has opened the tour it was asked for; the request is spent. */
+  consumeTourRequest: () => void
   setNextAction: (
     visitId: string,
     type: Visit['nextActionType'],
@@ -1295,8 +1298,44 @@ export const useAppStore = create<AppState>((set, get) => ({
         set((s) => ({ visits: { ...s.visits, [visitId]: updated } }))
       }
     }
-    // The blob rides the queue; on a weak link this is the row that waits.
-    await enqueue('photo.create', { id, propertyId, category, type: photo.type ?? null, bytes: photo.bytes })
+    /*
+      The row's metadata, all of it. This used to send five fields and the
+      server read ten: the visit a photo was taken on, its size, where and when
+      it was taken all arrived as nothing, so on any other phone — or this one
+      after a sign-out — every photo had lost its visit and its time. The bytes
+      travel separately (lib/photos.ts); on a weak link this is the row that
+      waits, and the upload waits for it.
+    */
+    const label = effectivePhotoCategories(get().settings).find((c) => c.key === category)?.label ?? 'Photo'
+    const shown = photo.type ? `${label} · ${photo.type}` : label
+    const mutationId = await enqueue('photo.create', {
+      id,
+      propertyId,
+      visitId: visitId ?? null,
+      category,
+      type: photo.type ?? null,
+      width: photo.width,
+      height: photo.height,
+      bytes: photo.bytes,
+      createdAt: photo.createdAt,
+      capturedAt: photo.capturedAt ?? null,
+      label: shown,
+    })
+    /*
+      Its line in the lead's history, under the id the server gives its own row
+      (the mutation id), so the two are one line once a bootstrap merges them.
+      A photo nobody could see in the timeline read as a photo that was lost.
+    */
+    const event: ActivityEvent = {
+      id: mutationId,
+      propertyId,
+      repId: get().user?.id ?? '',
+      type: 'photo',
+      summary: `Photo added · ${shown}`,
+      at: photo.createdAt,
+    }
+    await db.put('activity', event)
+    set((s) => ({ activity: [event, ...s.activity] }))
     return id
   },
   async updatePhotoCategory(id, category, type) {
@@ -1324,6 +1363,9 @@ export const useAppStore = create<AppState>((set, get) => ({
    */
   requestTour() {
     set((s) => ({ tourRequest: s.tourRequest + 1 }))
+  },
+  consumeTourRequest() {
+    set({ tourRequest: 0 })
   },
 
   async setMyAvatar(dataUrl) {

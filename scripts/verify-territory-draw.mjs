@@ -57,7 +57,8 @@ const before = await page.locator('tbody tr, li').count()
 void before
 
 /* --- the control has to be findable at all -------------------------------- */
-const newBtn = page.getByRole('button', { name: /New territory/ })
+// The Create section's header, folded until it is opened.
+const newBtn = page.getByTestId('territory-create-toggle')
 ok((await newBtn.count()) > 0, 'the console offers a way to create a territory')
 await newBtn.click()
 await page.waitForTimeout(700)
@@ -103,7 +104,7 @@ ok(
 // number nobody questions.
 const shown = Number(
   (
-    (await page.locator('body').innerText()).match(/Create with ([\d,]+) lead/) ?? ['', '0']
+    (await page.locator('body').innerText()).match(/([\d,]+) existing leads? inside will join it/) ?? ['', '0']
   )[1].replace(/,/g, ''),
 )
 ok(shown > 0, `the panel offers to create with a lead count (${shown})`)
@@ -145,7 +146,7 @@ ok(
   (await page.locator('[data-draw="territory"] circle').count()) === 4,
   'the shape can be drawn again after starting over',
 )
-await page.getByRole('button', { name: /^Create with/ }).click()
+await page.getByRole('button', { name: /^Create territory$/ }).click()
 await page.waitForTimeout(500)
 ok(
   /Give the area a name/i.test(await page.locator('body').innerText()),
@@ -155,7 +156,7 @@ ok(
 /* --- and it persists ------------------------------------------------------ */
 const NAME = 'Gate Drawn Patch'
 await page.getByLabel('Name').fill(NAME)
-await page.getByRole('button', { name: /^Create with/ }).click()
+await page.getByRole('button', { name: /^Create territory$/ }).click()
 await page.waitForTimeout(1500)
 
 const after = await page.locator('body').innerText()

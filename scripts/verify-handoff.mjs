@@ -1,4 +1,4 @@
-import { destinationFor } from '../apps/mobile/src/lib/handoff.ts'
+import { contactUrlFor, destinationFor } from '../apps/mobile/src/lib/handoff.ts'
 
 /**
  * Where the shell sends a URL the webview tried to navigate to.
@@ -64,6 +64,21 @@ is('https://allstar.letlois.com/verify/b_123', 'browser')
 is('https://www.google.com/maps/@30.5,-97.6,3a,75y', 'directions') // street view is under /maps too, and belongs with it
 is('http://example.com/', 'browser')
 is('https://help.allstarhomesolutions.com/visits/', 'browser')
+
+console.log('\n--- Call, Text and Email, asked for directly (openExternal) ---')
+const url = (input, os, want, why) => {
+  const got = contactUrlFor(input, os)
+  ok(got === want, why, got === want ? undefined : `got ${got}`)
+}
+url('tel:5125550100', 'ios', 'tel:5125550100', 'a call goes to the dialer as written')
+url('tel:+15125550100', 'android', 'tel:+15125550100', 'with its + intact')
+url('sms:5125550100?body=Hi%20Sam%2C%20', 'ios', 'sms:5125550100&body=Hi%20Sam%2C%20', 'a text on iOS takes its greeting after &, the way Messages reads it')
+url('sms:5125550100?body=Hi%20Sam%2C%20', 'android', 'sms:5125550100?body=Hi%20Sam%2C%20', 'and after ? on Android, unchanged')
+url('sms:5125550100', 'ios', 'sms:5125550100', 'a text with no greeting is left alone')
+url('mailto:sam@example.com?subject=Following%20up', 'ios', 'mailto:sam@example.com?subject=Following%20up', 'an email keeps its subject')
+url('https://evil.example/', 'ios', null, 'the direct hand-off refuses a web page')
+url('javascript:alert(1)', 'ios', null, 'and any other scheme')
+url('file:///etc/passwd', 'android', null, 'and a file')
 
 console.log('')
 if (fails.length) {
