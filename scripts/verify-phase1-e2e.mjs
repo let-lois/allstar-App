@@ -267,7 +267,7 @@ try {
   ok(imported.created === 6, 'six houses exist, assigned to nobody', `${imported.created}`)
   await mgr.goto(`${APP}/admin/lists`, { waitUntil: 'domcontentloaded' })
   await settle(mgr, 2000)
-  await mgr.getByRole('button', { name: /New list/ }).click()
+  await mgr.getByTestId('list-create-toggle').click()
   await mgr.waitForTimeout(800)
   const map = mgr.getByRole('application', { name: /Outline a list/ })
   await map.scrollIntoViewIfNeeded()

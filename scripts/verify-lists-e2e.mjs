@@ -257,7 +257,7 @@ try {
   await mgr.goto(`${APP}/admin/lists`, { waitUntil: 'domcontentloaded' })
   await mgr.waitForTimeout(1800)
   ok(/No lists yet/.test(await text(mgr)), 'the console has no lists yet')
-  await mgr.getByRole('button', { name: /New list/ }).click()
+  await mgr.getByTestId('list-create-toggle').click()
   await mgr.waitForTimeout(800)
   const map = mgr.getByRole('application', { name: /Outline a list/ })
   await map.scrollIntoViewIfNeeded()

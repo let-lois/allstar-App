@@ -35,8 +35,13 @@ export function Collapsible({
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        /* The header is the control; the body it opens stays flat. */
-        className="metal-row focusable flex min-h-tap w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        /*
+          The header is the control; the body it opens stays flat. Inside a
+          card the card is already the edge, so the header is plain — a
+          `metal-row` ring just inside the card's border read as a stray blue
+          line in dark mode.
+        */
+        className={`${flat ? 'metal-row' : 'active:bg-surface-field'} focusable flex min-h-tap w-full items-center justify-between gap-3 px-4 py-3 text-left`}
       >
         <span className="flex items-center gap-2 text-[15px] font-medium">
           {title}

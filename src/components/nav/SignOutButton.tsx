@@ -74,7 +74,7 @@ export function SignOutButton({ row = false }: { row?: boolean } = {}) {
           <button
             onClick={() => setOpen(true)}
             data-testid="sign-out"
-            className="metal-row focusable flex min-h-tap w-full items-center gap-3 px-4 py-3 text-left text-[15px] font-semibold text-bad"
+            className="focusable flex min-h-tap w-full items-center gap-3 px-4 py-3 text-left text-[15px] font-semibold text-bad active:bg-surface-field"
           >
             <IconSignOut />
             Sign out

@@ -170,9 +170,14 @@ ok(new RegExp(NAME).test(after), 'and appears in the list')
 // the map on every lead in the company, so the patch just drawn was off screen.
 // The panel heading names what the map is framed on, which makes it the cheapest
 // true statement of where the map went.
+// No map opens by itself now: the list is the page, and a territory's map
+// appears when it is tapped — framed on that territory, not the whole company.
+ok((await page.locator('[role="application"]').count()) === 0, 'after creating, no map is open until a territory is tapped')
+await page.getByRole('button', { name: `Show ${NAME} on the map` }).click()
+await page.waitForTimeout(700)
 ok(
   (await page.getByRole('heading', { name: NAME }).count()) > 0,
-  'and the map lands on the new territory rather than jumping back out',
+  'and tapping the new territory opens its map, on that territory',
   (await page.locator('h2').allInnerTexts()).join(' / '),
 )
 

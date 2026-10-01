@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AdminPage } from './AdminLayout'
 import { DataList } from './DataList'
 import { fitZoom } from '../components/map/FieldMap'
@@ -38,6 +38,9 @@ function explain(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message
   return fallback
 }
+
+/** Said under the name field when Create is pressed without one. */
+const LIST_NAME_REQUIRED = 'Give the list a name — the reps will see it.'
 
 export function AdminLists() {
   const user = useAppStore((s) => s.user)
@@ -85,11 +88,20 @@ export function AdminLists() {
   const [selected, setSelected] = useState<string | null>(null)
   const current: LeadList | null = selected ? (leadLists[selected] ?? null) : null
 
-  // Lists arrive from IndexedDB a beat after the first render; pick one then.
+  /*
+    Nothing selected until somebody taps a list — the page used to open the
+    first one's map under the list on every visit. A list that disappears
+    (archived away, deleted elsewhere) closes its panel.
+  */
   useEffect(() => {
-    if (selected === null && rows.length > 0) setSelected(rows[0].id)
-    if (selected !== null && !leadLists[selected]) setSelected(rows[0]?.id ?? null)
-  }, [rows, selected, leadLists])
+    if (selected !== null && !leadLists[selected]) setSelected(null)
+  }, [selected, leadLists])
+  const detail = useRef<HTMLElement>(null)
+  const open = (id: string) => {
+    setSelected(id)
+    // On a phone the panel is below the list; bring it to the eye.
+    window.setTimeout(() => detail.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+  }
 
   const shown = useMemo(() => {
     if (!current) return []
@@ -150,11 +162,19 @@ export function AdminLists() {
   const toggleDraftRep = (id: string) =>
     setDraftReps((r) => (r.includes(id) ? r.filter((x) => x !== id) : [...r, id]))
 
-  const startDraw = () => {
-    setDraft({ points: [] })
-    setDraftName('')
-    setDraftDescription('')
-    setDraftReps([])
+  /*
+    Open or fold the Create section. Folding keeps the shape, the name and the
+    reps for when it is opened again; Start over discards the shape.
+  */
+  const draftStash = useRef<{ lat: number; lng: number }[] | null>(null)
+  const toggleCreate = () => {
+    if (draft) {
+      draftStash.current = draft.points.length ? draft.points : null
+      setDraft(null)
+      setDrawError(null)
+      return
+    }
+    setDraft({ points: draftStash.current ?? [] })
     setDrawError(null)
     setNotice(null)
     setSelected(null)
@@ -164,7 +184,7 @@ export function AdminLists() {
     if (!draft || draft.points.length < 3) return
     const name = draftName.trim()
     if (!name) {
-      setDrawError('Give the list a name — the reps will see it.')
+      setDrawError(LIST_NAME_REQUIRED)
       return
     }
     setCreating(true)
@@ -183,9 +203,14 @@ export function AdminLists() {
           : `Handed to ${made.repIds.map(repName).join(', ')}.`
       setNotice(`Created ${name} with ${n.toLocaleString()} lead${n === 1 ? '' : 's'}. ${who}`)
       setDraft(null)
+      draftStash.current = null
+      setDraftName('')
+      setDraftDescription('')
+      setDraftReps([])
       setRepFilter('')
       setShowArchived(false)
-      setSelected(made.id)
+      // Said at the top and in the list; its map opens when it is tapped.
+      setSelected(null)
     } catch (err) {
       setDrawError(explain(err, 'Could not create the list. Nothing was changed.'))
     } finally {
@@ -287,17 +312,179 @@ export function AdminLists() {
     <AdminPage
       title="Lists"
       description={`${liveCount} list${liveCount === 1 ? '' : 's'} · a list is a working set of leads handed to one rep or several — a territory is the ground one rep owns`}
-      actions={
-        draft ? (
-          <Button variant="secondary" onClick={() => setDraft(null)}>
-            Cancel
-          </Button>
-        ) : manager ? (
-          <Button onClick={startDraw}>New list</Button>
-        ) : null
-      }
     >
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
+      {/*
+        --- Create new list --------------------------------------------------
+        At the top, folded until wanted, the same as Territories: open, it is
+        the drawing tools, the map, then the details and Create. Folded, the
+        lists are the first thing on the page.
+      */}
+      {manager && (
+      <section className="mb-4 overflow-hidden card" data-testid="list-create">
+        <button
+          type="button"
+          onClick={toggleCreate}
+          aria-expanded={!!draft}
+          aria-controls="list-create-panel"
+          data-testid="list-create-toggle"
+          className="focusable flex min-h-[56px] w-full items-center gap-3 px-4 py-3 text-left"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-tint text-accent" aria-hidden>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold">Create new list</span>
+            <span className="block text-[12.5px] text-ink-mute">
+              {draft ? 'Outline the houses on the map, then name it' : 'Draw round a block of leads and hand it to reps'}
+            </span>
+          </span>
+          <svg
+            width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden
+            className={`shrink-0 text-ink-mute transition-transform ${draft ? 'rotate-180' : ''}`}
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+
+        {draft && (
+          <div id="list-create-panel" className="border-t border-line-soft">
+            <div className="px-4 py-3">
+              <p className="text-[13px] leading-snug text-ink-mute">
+                Tap the map to drop points. Every lead inside goes on the list; nothing changes who owns them.
+              </p>
+              {/* Fixed height: anything that grows here moves the map under the finger drawing on it. */}
+              <div className="mt-2 flex h-7 items-baseline gap-3 whitespace-nowrap">
+                <span className="nums text-[20px] font-semibold leading-none tracking-[-0.02em]">
+                  {inside.length.toLocaleString()}
+                </span>
+                <span className="text-[12.5px] text-ink-mute">lead{inside.length === 1 ? '' : 's'} inside</span>
+                <span className="nums ml-auto text-[12.5px] text-ink-mute">
+                  {draftArea > 0 ? `${draftArea < 10 ? draftArea.toFixed(1) : Math.round(draftArea)} sq mi` : '—'}
+                </span>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="whitespace-nowrap"
+                  disabled={draft.points.length === 0}
+                  onClick={() => setDraft((d) => (d ? { points: d.points.slice(0, -1) } : d))}
+                >
+                  Undo point
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="whitespace-nowrap"
+                  disabled={draft.points.length === 0}
+                  onClick={() => {
+                    draftStash.current = null
+                    setDraft({ points: [] })
+                  }}
+                >
+                  Start over
+                </Button>
+              </div>
+            </div>
+
+            <AllStarMap
+              className="h-[min(440px,55svh)] md:h-[480px]"
+              properties={allProperties}
+              draw={{
+                points: draft.points,
+                onAddPoint: (point) => setDraft((d) => (d ? { points: [...d.points, point] } : d)),
+                label: 'Outline a list on the map',
+              }}
+              position={null}
+              disableClustering={allProperties.length <= 25}
+              selectedId={null}
+              onSelect={() => {}}
+              key="draw"
+              initialCenter={view?.center}
+              initialZoom={view?.zoom}
+            />
+
+            <div className="space-y-4 px-4 py-4">
+              <Field
+                label="Name (required)"
+                value={draftName}
+                onChange={(e) => {
+                  setDraftName(e.target.value)
+                  if (drawError && e.target.value.trim()) setDrawError(null)
+                }}
+                required
+                aria-required="true"
+                placeholder="e.g. Storm re-knock — Cypress Ridge"
+                error={drawError === LIST_NAME_REQUIRED ? drawError : undefined}
+                data-testid="list-name"
+              />
+              <TextArea
+                label="Description"
+                rows={2}
+                value={draftDescription}
+                onChange={(e) => setDraftDescription(e.target.value)}
+                placeholder="Optional — what this push is for"
+              />
+              <fieldset>
+                <legend className="mb-1.5 text-[13px] font-medium text-ink-soft">Hand to</legend>
+                {repOptions.length === 0 ? (
+                  <p className="text-[13px] text-ink-mute">Nobody on the team yet — you can hand it out later.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {repOptions.map((r) => {
+                      const on = draftReps.includes(r.id)
+                      return (
+                        <label
+                          key={r.id}
+                          className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border px-3 text-[13px] lg:min-h-[36px] ${
+                            on ? 'border-brand-500 bg-brand-500/10 text-ink' : 'border-line text-ink-soft'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-brand-500"
+                            checked={on}
+                            onChange={() => toggleDraftRep(r.id)}
+                          />
+                          {r.name}
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </fieldset>
+
+              {/* A list only groups leads that already exist, so a new area
+                  reads 0 here. Say where the houses come from instead. */}
+              {draft.points.length >= 3 && inside.length === 0 && (
+                <p className="text-[13px] leading-snug text-ink-soft" data-testid="list-empty-hint">
+                  No leads inside this shape yet. A list only groups existing leads — to turn the houses here into leads, draw it under <span className="font-semibold">Territories</span>.
+                </p>
+              )}
+
+              <div>
+                {drawError && drawError !== LIST_NAME_REQUIRED && (
+                  <p role="alert" className="mb-3 rounded-field bg-bad-bg px-3 py-2 text-[13px] font-medium text-bad">
+                    {drawError}
+                  </p>
+                )}
+                <Button full disabled={draft.points.length < 3 || creating} onClick={() => void saveDraft()} data-testid="list-create-submit">
+                  {creating
+                    ? 'Creating…'
+                    : draft.points.length < 3
+                      ? 'Drop at least three points'
+                      : `Create with ${inside.length.toLocaleString()} lead${inside.length === 1 ? '' : 's'}`}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+      )}
+
+      <div className={`grid gap-4 ${!draft && current ? 'xl:grid-cols-[minmax(0,1fr)_460px]' : ''}`}>
         <div>
           {/* --- filters: a row that wraps, never scrolls -------------------- */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -332,7 +519,7 @@ export function AdminLists() {
           <DataList
             rows={rows}
             keyOf={(l) => l.id}
-            onRow={(l) => setSelected(l.id)}
+            onRow={(l) => open(l.id)}
             isSelected={(l) => selected === l.id}
             rowLabel={(l) => `Show ${l.name} on the map`}
             empty={
@@ -402,8 +589,9 @@ export function AdminLists() {
           {/* --- the selected list ------------------------------------------ */}
           {current && !draft && (
             <section
+              ref={detail}
               aria-label={`Edit ${current.name}`}
-              className="mt-4 card px-4 py-4"
+              className="mt-4 scroll-mt-4 card px-4 py-4"
               data-list-editor
             >
               <div className="grid gap-3 md:grid-cols-2">
@@ -492,155 +680,45 @@ export function AdminLists() {
         </div>
 
         {/* --- the map ------------------------------------------------------- */}
-        <div className="overflow-hidden card">
+        {/*
+          The selected list — its leads, its map. Only when one is tapped, so
+          the page is not carrying a map nobody asked for.
+        */}
+        {!draft && current && (
+        <div className="overflow-hidden card" data-testid="list-detail">
           <div className="flex items-baseline justify-between border-b border-line-soft px-4 py-3">
             <h2 className="text-sm font-semibold">
-              {draft ? 'Outline the list' : current ? current.name : 'Lists'}
+              {current.name}
             </h2>
-            <span className="nums text-xs text-ink-mute">
-              {draft
-                ? `${draft.points.length} point${draft.points.length === 1 ? '' : 's'}`
-                : `${shown.length} lead${shown.length === 1 ? '' : 's'}`}
+            <span className="flex items-baseline gap-3">
+              <span className="nums text-xs text-ink-mute">{`${shown.length} lead${shown.length === 1 ? '' : 's'}`}</span>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                aria-label="Close this list"
+                data-testid="list-detail-close"
+                className="focusable -my-3 -mr-2 grid h-11 w-11 place-items-center rounded-full text-ink-mute active:bg-surface-field"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
             </span>
           </div>
           {/* The same progress line the rep sees on their phone, for the same list. */}
-          {!draft && current && shown.length > 0 && (
+          {shown.length > 0 && (
             <p className="nums border-b border-line-soft px-4 py-2 text-[12.5px] text-ink-soft" data-testid="list-progress">
               {[`${shown.length} total`, ...tallyStatuses(shown).map((t) => `${t.count} ${STATUS_LABEL[t.status].toLowerCase()}`)].join(' · ')}
             </p>
           )}
 
-          {draft && (
-            <div className="border-b border-line-soft px-4 py-3">
-              <p className="text-[13px] leading-relaxed text-ink-mute">
-                Tap the map to drop a point. Three or more closes the shape — every
-                lead inside it goes on the list. Nothing changes who owns them.
-              </p>
-
-              {/* Fixed height: this panel sits above the map, and growing it moves
-                  the map under the finger that is drawing on it. */}
-              <div className="mt-3 flex h-8 items-baseline gap-4">
-                <span>
-                  <span className="nums text-[22px] font-semibold leading-none tracking-[-0.02em]">
-                    {inside.length.toLocaleString()}
-                  </span>
-                  <span className="ml-1.5 text-[12.5px] text-ink-mute">
-                    lead{inside.length === 1 ? '' : 's'} inside
-                  </span>
-                </span>
-                <span className="nums text-[12.5px] text-ink-mute">
-                  {draftArea > 0
-                    ? `${draftArea < 10 ? draftArea.toFixed(1) : Math.round(draftArea)} sq mi`
-                    : '—'}
-                </span>
-              </div>
-
-              <div className="mt-3 flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={draft.points.length === 0}
-                  onClick={() => setDraft((d) => (d ? { points: d.points.slice(0, -1) } : d))}
-                >
-                  Undo point
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={draft.points.length === 0}
-                  onClick={() => setDraft({ points: [] })}
-                >
-                  Start over
-                </Button>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                <Field
-                  label="Name"
-                  value={draftName}
-                  onChange={(e) => setDraftName(e.target.value)}
-                  placeholder="e.g. Storm re-knock — Cypress Ridge"
-                />
-                <TextArea
-                  label="Description"
-                  rows={2}
-                  value={draftDescription}
-                  onChange={(e) => setDraftDescription(e.target.value)}
-                  placeholder="Optional — what this push is for"
-                />
-                <fieldset>
-                  <legend className="mb-1.5 text-[13px] font-medium text-ink-soft">Hand to</legend>
-                  {repOptions.length === 0 ? (
-                    <p className="text-[13px] text-ink-mute">Nobody on the team yet — you can hand it out later.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {repOptions.map((r) => {
-                        const on = draftReps.includes(r.id)
-                        return (
-                          <label
-                            key={r.id}
-                            className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border px-3 text-[13px] lg:min-h-[36px] ${
-                              on ? 'border-brand-500 bg-brand-500/10 text-ink' : 'border-line text-ink-soft'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 accent-brand-500"
-                              checked={on}
-                              onChange={() => toggleDraftRep(r.id)}
-                            />
-                            {r.name}
-                          </label>
-                        )
-                      })}
-                    </div>
-                  )}
-                </fieldset>
-              </div>
-
-              <p
-                role="alert"
-                className={`mt-3 min-h-[18px] text-[13px] font-medium text-bad ${drawError ? '' : 'invisible'}`}
-              >
-                {drawError ?? ' '}
-              </p>
-
-              {/* A list only groups leads that already exist, so a new area
-                  reads 0 here. Say where the houses come from instead. */}
-              {draft.points.length >= 3 && inside.length === 0 && (
-                <p className="mt-3 text-[13px] leading-snug text-ink-soft" data-testid="list-empty-hint">
-                  No leads inside this shape yet. A list only groups existing leads — to turn the houses here into leads, draw it under <span className="font-semibold">Territories</span>.
-                </p>
-              )}
-
-              <Button
-                full
-                className="mt-4"
-                disabled={draft.points.length < 3 || creating}
-                onClick={() => void saveDraft()}
-              >
-                {creating
-                  ? 'Creating…'
-                  : draft.points.length < 3
-                    ? 'Drop at least three points'
-                    : `Create with ${inside.length.toLocaleString()} lead${inside.length === 1 ? '' : 's'}`}
-              </Button>
-            </div>
-          )}
-
-          {!draft && current && shown.length === 0 && (
+          {shown.length === 0 && (
             <p className="px-4 py-6 text-sm text-ink-mute">
               {current.leadIds.length === 0
                 ? 'This list is empty. Reps can add houses from the field, or draw a new one round an area.'
                 : 'None of the leads on this list have coordinates yet, so there is nothing to place on a map.'}
             </p>
           )}
-          {!draft && !current && rows.length === 0 && (
-            <p className="px-4 py-6 text-sm text-ink-mute">
-              Draw a list to see its leads here.
-            </p>
-          )}
-
           {/*
             The leads themselves, which this screen did not show.
 
@@ -659,7 +737,7 @@ export function AdminLists() {
             Same `DataList` the Leads console uses, so a row reads the same in
             both places and a phone gets cards instead of a broken table.
           */}
-          {!draft && current && shown.length > 0 && (
+          {shown.length > 0 && (
             <div className="max-h-[320px] overflow-y-auto border-b border-line-soft">
               <DataList
                 rows={shown}
@@ -718,16 +796,9 @@ export function AdminLists() {
 
           <AllStarMap
             className="h-[min(520px,60svh)] md:h-[520px]"
-            properties={draft ? allProperties : shown}
+            properties={shown}
             draw={
-              draft
-                ? {
-                    points: draft.points,
-                    onAddPoint: (point) =>
-                      setDraft((d) => (d ? { points: [...d.points, point] } : d)),
-                    label: 'Outline a list on the map',
-                  }
-                : current?.boundary && current.boundary.length >= 3
+              current.boundary && current.boundary.length >= 3
                   ? {
                       // Read-only: the saved shape, shown; a tap does nothing.
                       points: current.boundary,
@@ -740,11 +811,12 @@ export function AdminLists() {
             disableClustering={shown.length <= 25}
             selectedId={null}
             onSelect={() => {}}
-            key={draft ? 'draw' : (selected ?? 'all')}
+            key={selected ?? 'all'}
             initialCenter={view?.center}
             initialZoom={view?.zoom}
           />
         </div>
+        )}
       </div>
     </AdminPage>
   )
