@@ -1,0 +1,468 @@
+[
+ {
+  "id": "wa-clark",
+  "name": "Clark County, WA",
+  "state": "WA",
+  "kind": "script",
+  "script": "clark-wa.mjs",
+  "bbox": [
+   -122.8,
+   45.54,
+   -122.24,
+   45.98
+  ],
+  "publisher": "Clark County WA",
+  "licence": "Public, no-warranty disclaimer (credit: \u00a9 Clark County WA)",
+  "loaded": "2026-10-01"
+ },
+ {
+  "id": "wi-milwaukee",
+  "name": "City of Milwaukee, WI",
+  "state": "WI",
+  "kind": "script",
+  "script": "milwaukee.mjs",
+  "bbox": [
+   -88.065,
+   42.9205,
+   -87.868,
+   43.1925
+  ],
+  "publisher": "City of Milwaukee",
+  "licence": "CC BY (credit: \u00a9 City of Milwaukee)",
+  "loaded": "2026-09-30"
+ },
+ {
+  "id": "wi-eau-claire",
+  "name": "Eau Claire County, WI",
+  "state": "WI",
+  "kind": "script",
+  "script": "wisconsin-parcels.mjs",
+  "args": [
+   "--county",
+   "EAU CLAIRE"
+  ],
+  "bbox": [
+   -91.66,
+   44.59,
+   -90.92,
+   44.86
+  ],
+  "publisher": "Wisconsin State Cartographer's Office (V12 statewide parcels)",
+  "licence": "Public (credit: Product of the V12 Statewide Parcel Map Database Project, Wisconsin SCO, administered by WLIP at DOA)",
+  "loaded": "2026-10-01"
+ },
+ {
+  "id": "wi-dane",
+  "name": "Dane County, WI",
+  "state": "WI",
+  "kind": "script",
+  "script": "wisconsin-parcels.mjs",
+  "args": [
+   "--county",
+   "DANE"
+  ],
+  "bbox": [
+   -89.84,
+   42.84,
+   -89.0,
+   43.3
+  ],
+  "publisher": "Wisconsin State Cartographer's Office (V12 statewide parcels)",
+  "licence": "Public (credit: Product of the V12 Statewide Parcel Map Database Project, Wisconsin SCO, administered by WLIP at DOA)",
+  "loaded": "2026-10-01"
+ },
+ {
+  "id": "wi-kenosha",
+  "name": "Kenosha County, WI",
+  "state": "WI",
+  "kind": "script",
+  "script": "wisconsin-parcels.mjs",
+  "args": [
+   "--county",
+   "KENOSHA"
+  ],
+  "bbox": [
+   -88.31,
+   42.49,
+   -87.75,
+   42.67
+  ],
+  "publisher": "Wisconsin State Cartographer's Office (V12 statewide parcels)",
+  "licence": "Public (credit: Product of the V12 Statewide Parcel Map Database Project, Wisconsin SCO, administered by WLIP at DOA)",
+  "loaded": "2026-10-01"
+ },
+ {
+  "id": "ok-beckham",
+  "name": "Beckham County, OK",
+  "state": "OK",
+  "geoid": "40009",
+  "kind": "arcgis",
+  "layer": "https://services.arcgis.com/3xOwF6p0r7IHIjfn/arcgis/rest/services/NG911_Address_Points/FeatureServer/0",
+  "bbox": [
+   -100.0104,
+   35.0199,
+   -99.3502,
+   35.5189
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 11006,
+  "coverage": {
+   "before": 0,
+   "after": 91.9
+  }
+ },
+ {
+  "id": "ok-canadian",
+  "name": "Canadian County, OK",
+  "state": "OK",
+  "geoid": "40017",
+  "kind": "arcgis",
+  "layer": "https://services.arcgis.com/3xOwF6p0r7IHIjfn/arcgis/rest/services/NG911_Address_Points/FeatureServer/0",
+  "bbox": [
+   -98.3233,
+   35.3138,
+   -97.6614,
+   35.7361
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 25186,
+  "coverage": {
+   "before": 0.7,
+   "after": 28.6
+  }
+ },
+ {
+  "id": "ok-comanche",
+  "name": "Comanche County, OK",
+  "state": "OK",
+  "geoid": "40031",
+  "kind": "arcgis",
+  "layer": "https://services.arcgis.com/3xOwF6p0r7IHIjfn/arcgis/rest/services/NG911_Address_Points/FeatureServer/0",
+  "bbox": [
+   -98.8362,
+   34.3959,
+   -98.079,
+   34.8656
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 44789,
+  "coverage": {
+   "before": 0,
+   "after": 44.6
+  }
+ },
+ {
+  "id": "ok-cotton",
+  "name": "Cotton County, OK",
+  "state": "OK",
+  "geoid": "40033",
+  "kind": "arcgis",
+  "layer": "https://services.arcgis.com/3xOwF6p0r7IHIjfn/arcgis/rest/services/NG911_Address_Points/FeatureServer/0",
+  "bbox": [
+   -98.672,
+   34.0523,
+   -98.129,
+   34.5171
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 5112,
+  "coverage": {
+   "before": 0,
+   "after": 94.5
+  }
+ },
+ {
+  "id": "ok-jefferson",
+  "name": "Jefferson County, OK",
+  "state": "OK",
+  "geoid": "40067",
+  "kind": "arcgis",
+  "layer": "https://services.arcgis.com/3xOwF6p0r7IHIjfn/arcgis/rest/services/NG911_Address_Points/FeatureServer/0",
+  "bbox": [
+   -98.1492,
+   33.839,
+   -97.5268,
+   34.2998
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 4162,
+  "coverage": {
+   "before": 0,
+   "after": 93.5
+  }
+ },
+ {
+  "id": "ok-logan",
+  "name": "Logan County, OK",
+  "state": "OK",
+  "geoid": "40083",
+  "kind": "arcgis",
+  "layer": "https://services.arcgis.com/3xOwF6p0r7IHIjfn/arcgis/rest/services/NG911_Address_Points/FeatureServer/0",
+  "bbox": [
+   -97.6856,
+   35.7144,
+   -97.1305,
+   36.1747
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 12779,
+  "coverage": {
+   "before": 0,
+   "after": 32.5
+  }
+ },
+ {
+  "id": "ok-stephens",
+  "name": "Stephens County, OK",
+  "state": "OK",
+  "geoid": "40137",
+  "kind": "arcgis",
+  "layer": "https://services.arcgis.com/3xOwF6p0r7IHIjfn/arcgis/rest/services/NG911_Address_Points/FeatureServer/0",
+  "bbox": [
+   -98.1521,
+   34.2792,
+   -97.5523,
+   34.6917
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 7972,
+  "coverage": {
+   "before": 0.2,
+   "after": 48.2
+  }
+ },
+ {
+  "id": "ok-washita",
+  "name": "Washita County, OK",
+  "state": "OK",
+  "geoid": "40149",
+  "kind": "arcgis",
+  "layer": "https://services.arcgis.com/3xOwF6p0r7IHIjfn/arcgis/rest/services/NG911_Address_Points/FeatureServer/0",
+  "bbox": [
+   -99.3745,
+   35.0878,
+   -98.608,
+   35.4753
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 3679,
+  "coverage": {
+   "before": 12,
+   "after": 28.9
+  }
+ },
+ {
+  "id": "ga-douglas",
+  "name": "Douglas County, GA",
+  "state": "GA",
+  "geoid": "13097",
+  "kind": "arcgis",
+  "layer": "https://services.arcgis.com/S5A11uZvQ48OH97O/arcgis/rest/services/Douglas_County_Address_Points/FeatureServer/0",
+  "bbox": [
+   -84.9209,
+   33.5634,
+   -84.5679,
+   33.8164
+  ],
+  "publisher": "Douglas County, Georgia GIS",
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 60929,
+  "coverage": {
+   "before": 0,
+   "after": 94.7
+  }
+ },
+ {
+  "id": "ga-gwinnett",
+  "name": "Gwinnett County, GA",
+  "state": "GA",
+  "geoid": "13135",
+  "kind": "arcgis",
+  "layer": "https://services3.arcgis.com/RfpmnkSAQleRbndX/arcgis/rest/services/Address_Points/FeatureServer/16",
+  "bbox": [
+   -84.2871,
+   33.7428,
+   -83.7891,
+   34.1785
+  ],
+  "publisher": "GwinnettCountyGIS",
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 409771,
+  "coverage": {
+   "before": 9.7,
+   "after": 94.5
+  }
+ },
+ {
+  "id": "hi-honolulu",
+  "name": "Honolulu County, HI",
+  "state": "HI",
+  "geoid": "15003",
+  "kind": "arcgis",
+  "layer": "https://services.arcgis.com/tNJpAOha4mODLkXz/arcgis/rest/services/Cadastral_2020/FeatureServer/3",
+  "bbox": [
+   -158.2895,
+   21.2477,
+   -157.641,
+   21.7227
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 204982,
+  "coverage": {
+   "before": 0,
+   "after": 94.8
+  }
+ },
+ {
+  "id": "la-ascension",
+  "name": "Ascension Parish, LA",
+  "state": "LA",
+  "geoid": "22005",
+  "kind": "arcgis",
+  "layer": "https://services3.arcgis.com/MPDCWPaA1jcduAb1/arcgis/rest/services/AscensionGeneralBasic/FeatureServer/1",
+  "bbox": [
+   -91.1166,
+   30.0527,
+   -90.6219,
+   30.3569
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 64297,
+  "coverage": {
+   "before": 0,
+   "after": 89.9
+  }
+ },
+ {
+  "id": "mo-platte",
+  "name": "Platte County, MO",
+  "state": "MO",
+  "geoid": "29165",
+  "kind": "arcgis",
+  "layer": "https://services.arcgis.com/KP64F8Xif9MkUwD4/arcgis/rest/services/Address_Points/FeatureServer/0",
+  "bbox": [
+   -95.1129,
+   39.1431,
+   -94.5904,
+   39.5433
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 52490,
+  "coverage": {
+   "before": 6.9,
+   "after": 97.9
+  }
+ },
+ {
+  "id": "pa-berks",
+  "name": "Berks County, PA",
+  "state": "PA",
+  "geoid": "42011",
+  "kind": "arcgis",
+  "layer": "https://services3.arcgis.com/dGYe1jDYrTw1wwpc/arcgis/rest/services/Berks_County_SSAP_Public/FeatureServer/0",
+  "bbox": [
+   -76.4502,
+   40.1271,
+   -75.5197,
+   40.6873
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 164925,
+  "coverage": {
+   "before": 0,
+   "after": 95.1
+  }
+ },
+ {
+  "id": "pa-crawford",
+  "name": "Crawford County, PA",
+  "state": "PA",
+  "geoid": "42039",
+  "kind": "arcgis",
+  "layer": "https://services1.arcgis.com/CcJI8wbz22fo71LO/ArcGIS/rest/services/CivQuest_Core/FeatureServer/0",
+  "bbox": [
+   -80.5294,
+   41.4711,
+   -79.6021,
+   41.8609
+  ],
+  "publisher": null,
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 45430,
+  "coverage": {
+   "before": 0,
+   "after": 97.5
+  }
+ },
+ {
+  "id": "pa-lancaster",
+  "name": "Lancaster County, PA",
+  "state": "PA",
+  "geoid": "42071",
+  "kind": "arcgis",
+  "layer": "https://services1.arcgis.com/I6XnrlnguPDoEObn/arcgis/rest/services/Address_Points/FeatureServer/0",
+  "bbox": [
+   -76.7316,
+   39.7116,
+   -75.8634,
+   40.326
+  ],
+  "publisher": "Lancaster County GIS",
+  "licence": "Click here to view Disclaimer",
+  "loaded": "2026-10-01",
+  "addresses": 228900,
+  "coverage": {
+   "before": 0,
+   "after": 97.1
+  }
+ },
+ {
+  "id": "sc-florence",
+  "name": "Florence County, SC",
+  "state": "SC",
+  "geoid": "45041",
+  "kind": "arcgis",
+  "layer": "https://services3.arcgis.com/2qoTILPfhSLhTUPq/arcgis/rest/services/Florence_Address_Points_October_2016/FeatureServer/0",
+  "bbox": [
+   -80.0799,
+   33.7654,
+   -79.3048,
+   34.3152
+  ],
+  "publisher": "APD Urban Planning & Management LLC",
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-01",
+  "addresses": 65137,
+  "coverage": {
+   "before": 0,
+   "after": 91.5
+  }
+ }
+]
