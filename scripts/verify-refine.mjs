@@ -179,9 +179,9 @@ try {
   {
     const { ctx, page } = await signIn(/Ray Okafor/)
     await go(page, '/admin/territories')
-    await page.getByRole('button', { name: 'New territory' }).click()
+    await page.getByTestId('territory-create-toggle').click()
     await page.waitForTimeout(700)
-    const label = () => page.getByRole('button', { name: /Drop at least three points|Create with/ }).innerText()
+    const label = () => page.getByTestId('territory-create-submit').innerText()
     const before = await label()
     const [popup] = await Promise.all([
       page.waitForEvent('popup', { timeout: 4000 }).catch(() => null),
@@ -301,7 +301,7 @@ try {
       [`/property/${leadId}`, 'lead edit', async () => { await page.getByRole('button', { name: 'Edit details' }).first().click(); await page.waitForTimeout(600) }, '[role="dialog"]'],
       ['/leads', 'lead search', null],
       ['/admin/team', 'invite', async () => { await page.getByRole('button', { name: /Add team member/ }).first().click(); await page.waitForTimeout(600) }, '[role="dialog"]'],
-      ['/admin/territories', 'territory name', async () => { await page.getByRole('button', { name: 'New territory' }).click(); await page.waitForTimeout(600) }],
+      ['/admin/territories', 'territory name', async () => { await page.getByTestId('territory-create-toggle').click(); await page.waitForTimeout(600) }],
     ]
     for (const [path, name, open, scope] of forms) {
       await go(page, path)
