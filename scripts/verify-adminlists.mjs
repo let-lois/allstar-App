@@ -82,7 +82,7 @@ const ownersBefore = await page.evaluate(async () => {
 ok(Object.keys(ownersBefore).length > 0, `the demo has leads to draw round (${Object.keys(ownersBefore).length})`)
 
 /* --- draw one ------------------------------------------------------------- */
-await page.getByRole('button', { name: /New list/ }).click()
+await page.getByTestId('list-create-toggle').click()
 await page.waitForTimeout(700)
 const map = page.getByRole('application', { name: /Outline a list/ })
 ok((await map.count()) > 0, 'the map says it is outlining a list, not a territory')
@@ -129,6 +129,10 @@ ok((await row.count()) === 1, 'it appears in the table once')
 const rowText = await row.innerText()
 ok(new RegExp(`\\b${offered}\\b`).test(rowText), `the row shows ${offered} leads`)
 ok(/Dana Whitfield, Marcus Reyna/.test(rowText), 'the row names both reps')
+// No map opens by itself: the list's map appears when it is tapped.
+ok((await page.getByTestId('list-detail').count()) === 0, 'after creating, no map is open until a list is tapped')
+await row.click()
+await page.waitForTimeout(700)
 ok(new RegExp(`${offered} leads?\\s*$`, 'm').test(await page.locator('h2', { hasText: NAME }).locator('..').innerText()),
   'the map header shows the same count')
 // Progress by status, and it must add up: a tally that names statuses the
@@ -199,7 +203,7 @@ const stranger = REPS.find((n) => !ownerNames.includes(n))
 ok(!!stranger, `a rep who owns none of the leads inside exists (${stranger}; owners: ${ownerNames.join(', ') || 'nobody'})`)
 
 const NAME2 = 'Gate Same Block Again'
-await page.getByRole('button', { name: /New list/ }).click()
+await page.getByTestId('list-create-toggle').click()
 await page.waitForTimeout(700)
 const map2 = page.getByRole('application', { name: /Outline a list/ })
 await map2.scrollIntoViewIfNeeded()
@@ -341,7 +345,7 @@ await ctx.close()
   await rep.waitForTimeout(1500)
   const body = await text(rep)
   ok(/Not available for your role/i.test(body), 'rep: /admin/lists is refused by URL')
-  ok(!/New list/.test(body), 'rep: and the screen itself never rendered')
+  ok(!/Create new list/.test(body), 'rep: and the screen itself never rendered')
   await ctx2.close()
 }
 

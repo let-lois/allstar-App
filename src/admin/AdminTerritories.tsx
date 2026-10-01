@@ -135,12 +135,11 @@ export function AdminTerritories() {
       setDrawResult(g && !('error' in g) ? g : null)
       draftStash.current = null
       /*
-        Select what was just made. Without this the map left drawing mode with
-        no selection, reframed itself on every lead in the company, and the
-        patch that had just been drawn was nowhere on screen — which read as
-        the map jumping somewhere else the moment the work was saved.
+        Not selected: the result is said at the top, and the new territory is
+        in the list, one tap from its map. Opening a map nobody tapped is what
+        this page no longer does.
       */
-      setSelected(res.id)
+      setSelected(null)
       setDraft(null)
       setDraftName('')
       setDraftReps([])
@@ -172,13 +171,19 @@ export function AdminTerritories() {
     [unsorted, territories],
   )
 
-  const [selected, setSelected] = useState<string | null>(rows[0]?.id ?? null)
-
-  // The first render has no properties yet — they arrive from IndexedDB a beat
-  // later — so the initial selection is null and would otherwise stay null.
-  useEffect(() => {
-    if (selected === null && rows.length > 0) setSelected(rows[0].id)
-  }, [rows, selected])
+  /*
+    Nothing selected until somebody taps a territory. The page used to pick the
+    first one and open its map under the list, so every visit to Territories
+    carried a map nobody had asked for; now the list is the page, and a map
+    appears only for the territory being looked at or edited.
+  */
+  const [selected, setSelected] = useState<string | null>(null)
+  const detail = useRef<HTMLDivElement>(null)
+  const open = (id: string) => {
+    setSelected(id)
+    // On a phone the panel is below the list; bring it to the eye.
+    window.setTimeout(() => detail.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+  }
 
   /*
     Goes through `inTerritory` rather than comparing ids directly. Unassigned
@@ -657,13 +662,20 @@ export function AdminTerritories() {
         )}
       </section>
 
+      {/* What a delete did, above the list it changed — the panel it came
+          from has closed with the territory. */}
+      {removedNote && (
+        <p role="status" className="mb-3 card px-4 py-3 text-[13px] font-medium text-good" data-testid="territory-removed">
+          {removedNote}
+        </p>
+      )}
       <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-ink-mute">Territories</h2>
-      <div className={`grid gap-4 ${draft ? '' : 'xl:grid-cols-[minmax(0,1fr)_460px]'}`}>
+      <div className={`grid gap-4 ${!draft && selected ? 'xl:grid-cols-[minmax(0,1fr)_460px]' : ''}`}>
         <>
         <DataList
           rows={rows}
           keyOf={(t) => t.id}
-          onRow={(t) => setSelected(t.id)}
+          onRow={(t) => open(t.id)}
           isSelected={(t) => selected === t.id}
           rowLabel={(t) => `Show ${label(t.id)} on the map`}
           empty="No territories yet — they appear once leads carry one."
@@ -784,11 +796,11 @@ export function AdminTerritories() {
           delete. Out of the way while one is being drawn above, so the page
           never carries two maps.
         */}
-        {!draft && (
-        <div className="overflow-hidden card">
+        {!draft && selected && (
+        <div className="overflow-hidden card scroll-mt-4" ref={detail} data-testid="territory-detail">
           <div className="flex items-baseline justify-between border-b border-line-soft px-4 py-3">
             <h2 className="text-sm font-semibold">
-              {selected ? label(selected) : 'All territories'}
+              {label(selected)}
             </h2>
             <span className="flex items-baseline gap-3">
               {/*
@@ -796,7 +808,7 @@ export function AdminTerritories() {
                 territory, where they can be searched, sorted, reassigned and
                 moved in bulk; the map here and that list read the same rows.
               */}
-              {selected && (
+              {(
                 <a
                   href={`/admin/leads?territory=${selected === UNASSIGNED_TERRITORY ? 'none' : encodeURIComponent(selected)}`}
                   onClick={(e) => {
@@ -812,6 +824,15 @@ export function AdminTerritories() {
               <span className="nums text-xs text-ink-mute">
                 {`${shown.length} lead${shown.length === 1 ? '' : 's'}`}
               </span>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                aria-label="Close this territory"
+                data-testid="territory-detail-close"
+                className="focusable -my-3 -mr-2 grid h-11 w-11 place-items-center rounded-full text-ink-mute active:bg-surface-field"
+              >
+                <IconClose />
+              </button>
             </span>
           </div>
 
@@ -955,11 +976,6 @@ export function AdminTerritories() {
             </div>
           )}
 
-          {removedNote && (
-            <p role="status" className="border-b border-line-soft px-4 py-3 text-[13px] font-medium text-good">
-              {removedNote}
-            </p>
-          )}
 
           {shown.length === 0 && (
             <p className="px-4 py-6 text-sm text-ink-mute">

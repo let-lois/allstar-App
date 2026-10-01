@@ -545,6 +545,11 @@ function Row({ label, value }: { label: string; value: string }) {
  * meaning. The chevron is the only tell, and it points the way it behaves:
  * right for "this leaves the screen", down for "this opens in place".
  */
+/*
+  Plain rows in a card. They were `metal-row` buttons inside the card, and in
+  dark mode the row's own teal inset ring sat just inside the card's border —
+  a second, uneven blue line round every row.
+*/
 function MoreHref({ label, href }: { label: string; href: string }) {
   return (
     <div className="card overflow-hidden">
@@ -552,7 +557,7 @@ function MoreHref({ label, href }: { label: string; href: string }) {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="metal-row focusable flex min-h-tap w-full items-center justify-between gap-3 px-4 py-3 text-left text-[15px] font-medium"
+        className="focusable flex min-h-tap w-full items-center justify-between gap-3 px-4 py-3 text-left text-[15px] font-medium active:bg-surface-field"
       >
         {label}
         <span className="shrink-0 text-accent-strong">
@@ -568,7 +573,7 @@ function MoreLink({ label, onClick }: { label: string; onClick: () => void }) {
     <div className="card overflow-hidden">
       <button
         onClick={onClick}
-        className="metal-row focusable flex min-h-tap w-full items-center justify-between gap-3 px-4 py-3 text-left text-[15px] font-medium"
+        className="focusable flex min-h-tap w-full items-center justify-between gap-3 px-4 py-3 text-left text-[15px] font-medium active:bg-surface-field"
       >
         {label}
         {/* brand-700, not ink-faint: 5.6:1 on the teal face, where the grey was 2.1. */}

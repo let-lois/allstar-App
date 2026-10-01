@@ -545,12 +545,9 @@ to the build, which is the first identity check a tester sees.
 
 ### Prove which build you are holding
 
-- **On screen:** a small strip in the top-right corner reading
-  `BUILD: PREVIEW (not production) · CHANNEL: preview · RUNTIME: exposdk:57.0.0
-  · UPDATE: <8 chars or none> · EMBEDDED: yes/no`. It is rendered only when the
-  channel is one this project recognises as internal (the same rule that opens
-  the Web Inspector); **production build 3 shows nothing**. Its absence is
-  itself the answer.
+- **On screen:** nothing. The build strip that used to sit in the top-right
+  corner of preview builds was removed at the owner's request — it covered the
+  screen being tested. Use the TestFlight build number and the commands below.
 - **TestFlight app:** build number 4+ (production is 3) and the *What to Test*
   text.
 - **From a Mac:** `eas build:view <BUILD_ID>` → distribution `STORE`, channel
@@ -564,10 +561,11 @@ to the build, which is the first identity check a tester sees.
 Same command as §5.1 — `--branch preview --environment preview --clear-cache`.
 The build's channel is `preview`, runtime `exposdk:57.0.0`, platform iOS: a
 preview update matches all three and is downloaded on launch, applied on the
-next. The strip's `UPDATE:` changes from `none`/`EMBEDDED: yes` to the first
-eight characters of the group's update ID and `EMBEDDED: no`; match it against
-`eas update:list --branch preview`. `eas update:insights <GROUP_ID>` shows the
-launch from the server side.
+next (and the shell also checks on launch and on a return after five minutes
+away — see `apps/mobile/src/lib/ota.ts`). With the on-screen strip gone,
+`eas update:insights <GROUP_ID>` is how to see which phones have launched an
+update, from the server side; match the group against
+`eas update:list --branch preview`.
 
 ## 6. Device test order
 
@@ -594,7 +592,7 @@ Fastest feedback, and the console only exists here.
 - [ ] Flight line: open a lead on another continent — dashed line with a plane, whole arc framed
 
 **Drawing (console)**
-- [ ] `/admin/territories` → New territory → each tap places a white vertex handle
+- [ ] `/admin/territories` → Create new territory → each tap places a white vertex handle
 - [ ] Outline dashed under three points, filled at three
 - [ ] A tap **inside** the filled shape adds a vertex (does not get swallowed)
 - [ ] A tap **on a lead pin** while drawing adds a vertex (does not open the lead)

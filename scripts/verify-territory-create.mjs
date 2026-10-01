@@ -67,7 +67,7 @@ try {
     const { ctx, page } = await demoAdmin()
     const before = await listRows(page).count()
     ok(before > 0, 'Territories opens with the existing territories listed', `${before}`)
-    ok((await toggle(page).getAttribute('aria-expanded')) === 'false' && (await drawMap(page).count()) === 0, 'and the Create section folded, with no drawing map open')
+    ok((await toggle(page).getAttribute('aria-expanded')) === 'false' && (await page.locator('[role="application"]').count()) === 0, 'with the Create section folded and no map anywhere on the page')
     const t = await toggle(page).boundingBox()
     const firstRow = await listRows(page).first().boundingBox()
     ok(!!t && !!firstRow && t.y < firstRow.y, 'Create new territory sits above the list')
@@ -114,11 +114,20 @@ try {
     const created = page.getByTestId('territory-created')
     ok(new RegExp(`Created ${NAME}`).test(await created.innerText()), 'Create says the territory was created', (await created.innerText()).slice(0, 90))
     ok((await toggle(page).getAttribute('aria-expanded')) === 'false' && (await drawMap(page).count()) === 0, 'and folds the section away')
-    ok((await listRows(page).count()) === before + 1, 'the territory list is there, one longer', `${before} → ${await listRows(page).count()}`)
+    // The rows are the territories that hold leads, so a shape drawn over a
+    // whole small patch can take its leads and that row with them: the new
+    // territory is checked by name, not by the count going up one.
+    ok((await listRows(page).count()) > 0, 'the territory list is there', `${before} → ${await listRows(page).count()}`)
     ok((await page.getByRole('button', { name: `Show ${NAME} on the map` }).count()) === 1, 'with the new territory in it')
-    ok((await page.getByRole('heading', { name: NAME }).count()) === 1, 'shown on the map below the list, ready to edit')
+    ok((await page.getByTestId('territory-detail').count()) === 0 && (await page.locator('[role="application"]').count()) === 0, 'and no map is open until a territory is tapped')
+    await page.getByRole('button', { name: `Show ${NAME} on the map` }).click()
+    await page.waitForTimeout(800)
+    ok((await page.getByRole('heading', { name: NAME }).count()) === 1 && (await page.locator('[role="application"]').count()) === 1, 'tapping it opens its map, ready to edit')
     ok((await page.getByRole('button', { name: /^Rename$/ }).count()) === 1, 'where Rename, reps and Delete are, as before')
-    ok(new RegExp(repName.split(' ')[0]).test(await page.locator('body').innerText()), 'with the rep it was given', repName)
+    ok(new RegExp(repName.split(' ')[0]).test(await page.getByTestId('territory-detail').innerText()), 'with the rep it was given', repName)
+    await page.getByTestId('territory-detail-close').click()
+    await page.waitForTimeout(400)
+    ok((await page.getByTestId('territory-detail').count()) === 0, 'and Close puts the map away again')
     await ctx.close()
   }
 
