@@ -2,7 +2,7 @@ import { build } from 'esbuild'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Tiler, buildingRow, inUS, featureToTileRow, groupOverlaps, parseBbox, parseFieldMap, snapBoxToTiles, tileBounds, tileFor as tilerTileFor, toTileRow } from './lib/address-tiles.mjs'
+import { Tiler, buildingRow, canonStreet, inUS, featureToTileRow, groupOverlaps, parseBbox, parseFieldMap, snapBoxToTiles, tileBounds, tileFor as tilerTileFor, toTileRow } from './lib/address-tiles.mjs'
 
 /**
  * The houses inside a territory, made into leads — without a bucket or a database.
@@ -63,6 +63,16 @@ const ok = (cond, msg, extra = '') => {
   const tiles = [...tiler.entries()]
   ok(tiler.count === 2 && tiles.length === 1 && tiles[0].rows.length === 2, 'the same door twice is one row', `${tiler.count}`)
   ok(tiles[0].rows[0][0] === '12' && tiles[0].rows[1][0] === '14', 'rows come out in street then number order')
+  // Two sources, two spellings, one door: a county file beside Overture.
+  ok(canonStreet('NE 78TH ST') === canonStreet('Northeast 78th Street') && canonStreet('SE Rex St.') === canonStreet('Southeast Rex Street'), 'a county spelling and an Overture spelling of a street compare equal', canonStreet('NE 78TH ST'))
+  ok(canonStreet('NE 78th Ave') !== canonStreet('NE 78th St'), 'but an avenue and a street of the same number do not')
+  {
+    const both = new Tiler()
+    both.add(['1204', 'Northeast 78th Street', null, 'Vancouver', 'WA', '98665', -122.66, 45.67])
+    const second = both.add(['1204', 'NE 78TH ST', null, 'VANCOUVER', 'WA', '98665', -122.66001, 45.67001])
+    const third = both.add(['1206', 'NE 78TH ST', null, 'VANCOUVER', 'WA', '98665', -122.66002, 45.67])
+    ok(!second && third && both.count === 2, 'so a door already in Overture is not added again from the county, and its neighbour is', `${both.count}`)
+  }
   ok(groupOverlaps({ 'bbox.xmin': { min_value: -98 }, 'bbox.xmax': { max_value: -97.5 }, 'bbox.ymin': { min_value: 30 }, 'bbox.ymax': { max_value: 31 } }, parseBbox('-97.7,30.5,-97.6,30.6')), 'a row group whose box overlaps is read')
   ok(!groupOverlaps({ 'bbox.xmin': { min_value: -120 }, 'bbox.xmax': { max_value: -110 }, 'bbox.ymin': { min_value: 30 }, 'bbox.ymax': { max_value: 31 } }, parseBbox('-97.7,30.5,-97.6,30.6')), 'one that does not is skipped — that is what keeps a metro to a minute')
   ok(groupOverlaps({}, parseBbox('-97.7,30.5,-97.6,30.6')), 'a group with no statistics is read rather than assumed empty')
@@ -323,6 +333,29 @@ const named = (q, number, street) => {
   const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
   globalThis.fetch = realFetch
   ok(w.inserted.filter((r) => r.address1 === '30 Oak Ridge Dr').length === 1 && res.existed === 1, 'two rooftops that name one address make one lead', JSON.stringify(res))
+}
+
+{
+  // An address published at the curb, 30 m in front of its house: the house is
+  // named, not "a home with no address" that a Census estimate is invented for.
+  const w = fakeDb()
+  const curb = ['40', 'Inside St', null, 'Round Rock', 'TX', '78664', -97.6720, 30.5070]
+  w.env.ADDRESSES = roofBucket([curb], [[-97.6720, 30.50727, 'u'], [-97.6650, 30.5150, 'u']])
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  ok(res.created === 1 && res.withoutAddress === 1, 'a house whose address point is at the curb is named by it; only the house with nothing near is left unnamed', JSON.stringify({ created: res.created, withoutAddress: res.withoutAddress }))
+}
+
+{
+  // A complex: six units listed at one point, four buildings around it within
+  // 70 m. Every building belongs to the complex — none gets an estimate — and
+  // a house well beyond it still does.
+  const w = fakeDb()
+  const units = [1, 2, 3, 4, 5, 6].map((u) => ['200', 'Inside St', String(u), 'Round Rock', 'TX', '78664', -97.6700, 30.5100])
+  const around = [[-97.6700, 30.50955, 'u'], [-97.6700, 30.51045, 'u'], [-97.67052, 30.5100, 'u'], [-97.66948, 30.5100, 'u']]
+  w.env.ADDRESSES = roofBucket(units, [...around, [-97.6630, 30.5170, 'u']])
+  const res = await worker.generateLeadsForTerritory(w.env, MANAGER, 't_a')
+  ok(res.created === 6, 'the six units become six leads', `${res.created}`)
+  ok(res.withoutAddress === 1, 'the complex’s four buildings are its own, not four houses with no address; the far house still is', `${res.withoutAddress}`)
 }
 
 {

@@ -80,17 +80,37 @@ export class Near<T extends { lat: number; lng: number }> {
     if (!a) { a = []; this.cells.set(k, a) }
     a.push(p)
   }
-  /** The closest point within `metres`, or null. */
+  /**
+   * The closest point within `metres`, or null. Searches as many neighbouring
+   * cells as the radius needs — one ring covers ~39 m east–west at 45°N, so a
+   * wider question looks further rather than quietly missing what it asked for.
+   */
   nearest(at: LatLng, metres: number): T | null {
     const cy = Math.floor(at.lat / Near.STEP), cx = Math.floor(at.lng / Near.STEP)
+    const ry = Math.max(1, Math.ceil(metres / (Near.STEP * 110_574)))
+    const rx = Math.max(1, Math.ceil(metres / (Near.STEP * 111_320 * Math.max(0.2, Math.cos((at.lat * Math.PI) / 180)))))
     let best: T | null = null, bestD = Infinity
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -ry; dy <= ry; dy++) for (let dx = -rx; dx <= rx; dx++) {
       for (const p of this.cells.get(`${cy + dy}:${cx + dx}`) ?? []) {
         const d = metres_(at, p)
         if (d <= metres && d < bestD) { best = p; bestD = d }
       }
     }
     return best
+  }
+  /** Every point within `metres`, nearest first. */
+  within(at: LatLng, metres: number): T[] {
+    const cy = Math.floor(at.lat / Near.STEP), cx = Math.floor(at.lng / Near.STEP)
+    const ry = Math.max(1, Math.ceil(metres / (Near.STEP * 110_574)))
+    const rx = Math.max(1, Math.ceil(metres / (Near.STEP * 111_320 * Math.max(0.2, Math.cos((at.lat * Math.PI) / 180)))))
+    const out: { p: T; d: number }[] = []
+    for (let dy = -ry; dy <= ry; dy++) for (let dx = -rx; dx <= rx; dx++) {
+      for (const p of this.cells.get(`${cy + dy}:${cx + dx}`) ?? []) {
+        const d = metres_(at, p)
+        if (d <= metres) out.push({ p, d })
+      }
+    }
+    return out.sort((a, b) => a.d - b.d).map((x) => x.p)
   }
 }
 

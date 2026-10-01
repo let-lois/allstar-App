@@ -115,9 +115,33 @@ export function featureToTileRow(feature, map, defaults = {}) {
   return [number, street, get('unit') || null, get('city') || str(defaults.city), get('state') || str(defaults.state), get('zip') || str(defaults.zip), round(lng), round(lat)]
 }
 
+/*
+  A street name in one canonical spelling, for telling whether two sources
+  name the same door. Overture writes "Northeast 78th Street"; a county file
+  writes "NE 78TH ST". Compared as written, the two were two rows — and two
+  leads for one house once a territory was drawn over them.
+*/
+const DIRS = { north: 'n', south: 's', east: 'e', west: 'w', northeast: 'ne', northwest: 'nw', southeast: 'se', southwest: 'sw' }
+const TYPES = {
+  street: 'st', str: 'st', avenue: 'ave', av: 'ave', drive: 'dr', road: 'rd', lane: 'ln', court: 'ct', circle: 'cir',
+  boulevard: 'blvd', place: 'pl', trail: 'trl', parkway: 'pkwy', terrace: 'ter', highway: 'hwy', way: 'way',
+  loop: 'loop', square: 'sq', crossing: 'xing', point: 'pt', ridge: 'rdg', heights: 'hts', run: 'run', path: 'path',
+}
+export function canonStreet(street) {
+  return String(street ?? '')
+    .toLowerCase()
+    .replace(/[.,#]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => DIRS[w] ?? TYPES[w] ?? w)
+    .join(' ')
+}
+
 /**
  * Sort rows into tiles. Rows are de-duplicated on number+street+unit+zip
- * within a tile, since the same door can appear from two sources.
+ * within a tile, since the same door can appear from two sources; the street
+ * is compared in its canonical spelling (`canonStreet`), and the first source
+ * added — Overture, in a build — is the row that is kept.
  */
 export class Tiler {
   constructor() {
@@ -132,7 +156,7 @@ export class Tiler {
       t = { x, y, rows: [], seen: new Set() }
       this.tiles.set(key, t)
     }
-    const dedupe = `${tileRow[0]}|${tileRow[1]}|${tileRow[2] ?? ''}|${tileRow[5]}`.toLowerCase()
+    const dedupe = `${tileRow[0]}|${canonStreet(tileRow[1])}|${tileRow[2] ?? ''}|${String(tileRow[5] ?? '').slice(0, 5)}`.toLowerCase()
     if (t.seen.has(dedupe)) return false
     t.seen.add(dedupe)
     t.rows.push(tileRow)

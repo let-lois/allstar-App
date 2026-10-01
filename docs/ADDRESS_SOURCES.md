@@ -191,6 +191,7 @@ The first place GeoNames lists for a ZIP is used (29611 → Greenville,
 
 | Area | Source | Licence | Loaded | Result |
 |---|---|---|---|---|
+| Clark County, WA (Vancouver suburbs: Hazel Dell, Orchards, Salmon Creek, Battle Ground) | ClarkView_Public/SiteAddress on the county GIS server — `api/scripts/county/clark-wa.mjs` | Public, with the county's no-warranty disclaimer (credit: © Clark County WA) | 2026-10-01, 249,856 site addresses; 76,977 doors Overture lacked (the rest already there, kept as Overture's) | Hazel Dell sample went from 44% to 91% of homes named; Census estimates on it from 86 to 18 |
 | City of Milwaukee, WI | Master Address Index (residential rows, `RES_COM_FLAG = R`) placed at parcel centroids from the city's parcel layer — `api/scripts/county/milwaukee.mjs` | CC BY (credit: © City of Milwaukee) | 2026-09-30, 265,660 addresses | Sample blocks went from 0% to 98–99% published address points; 12–26 non-residential buildings per block left out |
 
 Wisconsin has no current statewide address file: the State Cartographer's
@@ -198,7 +199,26 @@ Office lists only the 2014 LinkWISCONSIN aggregation (2013 data, not
 maintained). Counties that publish are already in Overture (Madison 89%,
 Green Bay 93% measured), which is why Milwaukee was the Wisconsin gap.
 
-Rebuild when the city updates its data:
+Clark County places its points at the street frontage (a median 25–28 m
+from the house) and lists every unit of a complex at one point. Territory
+lead creation therefore lets each address point claim the nearest home within
+50 m, and a point holding several addresses claim that many buildings within
+80 m (at most 40), before deciding which homes have no address. Without it,
+those homes got a Census estimate on top of their real address.
+
+Rebuild Clark County when the county updates its data:
+
+    node scripts/county/clark-wa.mjs --out clark-wa.geojson
+    npm run addresses:build -- --bbox -122.80,45.54,-122.24,45.98 \
+      --geojson clark-wa.geojson --fields number=number,street=street,unit=unit,city=city,zip=zip \
+      --state WA --upload --account <id>
+
+Still to load (2026-10-01): Wisconsin's gaps — Eau Claire (0% published
+points), parts of Madison (48%), Kenosha (85%) — from the statewide parcel
+layer, whose host (`services3.arcgis.com`) is not yet reachable from the build
+environment.
+
+Rebuild Milwaukee when the city updates its data:
 
     node scripts/county/milwaukee.mjs --out milwaukee.geojson
     npm run addresses:build -- --bbox -88.0650,42.9205,-87.8680,43.1925 \
