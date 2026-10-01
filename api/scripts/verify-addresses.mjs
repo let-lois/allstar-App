@@ -67,6 +67,20 @@ const ok = (cond, msg, extra = '') => {
   ok(canonStreet('NE 78TH ST') === canonStreet('Northeast 78th Street') && canonStreet('SE Rex St.') === canonStreet('Southeast Rex Street'), 'a county spelling and an Overture spelling of a street compare equal', canonStreet('NE 78TH ST'))
   ok(canonStreet('NE 78th Ave') !== canonStreet('NE 78th St'), 'but an avenue and a street of the same number do not')
   {
+    // Wisconsin's statewide parcels, spelled the way Overture spells a street.
+    const wi = await import('./county/wisconsin-parcels.mjs')
+    const f = wi.toFeature({ ADDNUM: '950', PREFIX: 'N', STREETNAME: 'EMERY', STREETTYPE: 'STREET', SUFFIX: null, UNITTYPE: 'APT', UNITID: '2', PLACENAME: 'CITY OF EAU CLAIRE', ZIPCODE: '54701-1234', PROPCLASS: '1', LONGITUDE: -91.489, LATITUDE: 44.81 })
+    ok(f && f.properties.street === 'North Emery Street' && f.properties.city === 'Eau Claire' && f.properties.zip === '54701' && f.properties.unit === 'Apt 2', 'a Wisconsin parcel becomes a door with Overture-style street and town', JSON.stringify(f?.properties))
+    ok(canonStreet(f.properties.street) === canonStreet('N Emery St'), 'and matches the Overture row for the same door')
+    ok(wi.toFeature({ ADDNUM: '10', STREETNAME: 'MAIN', PROPCLASS: '2', LONGITUDE: -89, LATITUDE: 43 }) === null && wi.toFeature({ ADDNUM: '10', STREETNAME: 'MAIN', PROPCLASS: '2,3', LONGITUDE: -89, LATITUDE: 43 }) === null, 'a commercial-only parcel is left out')
+    ok(wi.toFeature({ ADDNUM: '10', STREETNAME: 'MAIN', PROPCLASS: '1,2', LONGITUDE: -89, LATITUDE: 43 }) !== null && wi.toFeature({ ADDNUM: '10', STREETNAME: 'MAIN', PROPCLASS: null, LONGITUDE: -89, LATITUDE: 43 }) !== null, 'a mixed or unclassed parcel is kept')
+    const zips = new Tiler()
+    zips.add(['5744', '80th Street', null, 'Kenosha', 'WI', '53142', -87.876658, 42.560014])
+    ok(zips.add(['5744', '80th St', null, 'Pleasant Prairie', 'WI', '53158', -87.877474, 42.560403]) === false, 'the same door under a municipal ZIP 75 m away is not a second row')
+    ok(zips.add(['5744', '80th Street', null, 'Somers', 'WI', '53144', -87.8730, 42.5600]) === true, 'but the same number and street 300 m away is another house')
+    ok(wi.toFeature({ ADDNUM: null, STREETNAME: 'MAIN', LONGITUDE: -89, LATITUDE: 43 }) === null, 'a parcel with no house number is left out')
+  }
+  {
     const both = new Tiler()
     both.add(['1204', 'Northeast 78th Street', null, 'Vancouver', 'WA', '98665', -122.66, 45.67])
     const second = both.add(['1204', 'NE 78TH ST', null, 'VANCOUVER', 'WA', '98665', -122.66001, 45.67001])
