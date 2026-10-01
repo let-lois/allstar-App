@@ -120,13 +120,12 @@ const DIAG_SRC = readFileSync(
 ok(!/process\.env/.test(DIAG_SRC), 'the diagnostic reads no environment variable')
 ok(!/EXPO_PUBLIC|GOOGLE|MAPTILER|token|secret/i.test(DIAG_SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')), 'and its code names no key, token or provider')
 
-// And the route renders it only under the same flag it hands the webview.
-ok(/const BUILD_DIAGNOSTIC = diagnosticLines\(__DEV__, \{/.test(route), 'the shell builds the strip from the channel')
-ok(/BUILD_DIAGNOSTIC\.length > 0 &&/.test(route), 'and renders it only when there is something to say')
-// Matched on the element, not the file: the route's own comment quotes the
-// attribute by name, and a regex that only wants the text somewhere would pass
-// with the comment intact and the attribute gone.
-ok(/<SafeAreaView pointerEvents="none"/.test(route), 'without ever taking a touch from the map beneath it')
+// And the shell no longer draws it at all. It sat in the top-right corner of
+// every preview and TestFlight build, over the screen people were testing,
+// and was taken off at the owner's request. The lines above still decide what
+// it would say, should it come back somewhere quieter.
+const routeCode = route.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\/.*$/gm, '')
+ok(!/diagnosticLines|BUILD_DIAGNOSTIC/.test(routeCode), 'the shell does not draw the build strip over the app')
 
 console.log('')
 if (fails.length) {

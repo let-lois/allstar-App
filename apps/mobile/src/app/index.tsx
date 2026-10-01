@@ -10,12 +10,11 @@ import * as Linking from 'expo-linking'
 import * as Updates from 'expo-updates'
 import * as WebBrowser from 'expo-web-browser'
 import { useCallback, useEffect, useRef } from 'react'
-import { AppState, BackHandler, Platform, SafeAreaView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { AppState, BackHandler, Platform, StyleSheet, View } from 'react-native'
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes'
 
 import AllStarWeb, { type AllStarWebRef } from '@/components/allstar-web'
 import type { ApiRequest, ApiResponse } from '@/lib/api-bridge'
-import { diagnosticLines } from '@/lib/build-diagnostic'
 import { contactUrlFor, destinationFor } from '@/lib/handoff'
 import { isInspectable } from '@/lib/inspectable'
 import { shouldApply, shouldCheck, type OtaMoment } from '@/lib/ota'
@@ -187,21 +186,6 @@ const DEV_SERVER_ORIGIN: string | null = __DEV__
  * configured, which that function treats as closed.
  */
 const WEBVIEW_INSPECTABLE = isInspectable(__DEV__, Updates.channel)
-
-/**
- * What this build is, for the builds we are allowed to ask.
- *
- * Read once for the same reason as the line above: none of it changes while
- * the app runs. Empty on production and on anything unrecognised — see
- * `lib/build-diagnostic.ts`, which makes that decision with the same function
- * the inspector uses, so the two cannot disagree about which builds are ours.
- */
-const BUILD_DIAGNOSTIC = diagnosticLines(__DEV__, {
-  channel: Updates.channel,
-  runtimeVersion: Updates.runtimeVersion,
-  updateId: Updates.updateId,
-  isEmbeddedLaunch: Updates.isEmbeddedLaunch,
-})
 
 /**
  * `file://` is the shell. Nothing else navigates this webview.
@@ -408,58 +392,10 @@ export default function Index() {
           style: styles.fill,
         }}
       />
-      {/*
-        Which build this is, on the builds it is safe to say.
-
-        `BUILD_DIAGNOSTIC` is empty on production and on every channel this
-        project does not recognise, so this renders nothing there — not an
-        empty box, nothing. `pointerEvents="none"` is load-bearing: the strip
-        sits over the map's top edge, and a view that swallowed a tap there
-        would be a bug reported as "the map ignores me near the top".
-
-        React Native's own `SafeAreaView`, not the safe-area-context hook: the
-        hook would run on every build, production included, and throw if no
-        provider were above it — a diagnostic that can take the shell down on
-        the one build it must never appear on is not a diagnostic. This view
-        clears the notch on iOS by itself; Android's status bar is handled by
-        the padding, since `SafeAreaView` is iOS-only there.
-      */}
-      {BUILD_DIAGNOSTIC.length > 0 && (
-        <SafeAreaView pointerEvents="none" style={styles.diagnosticArea}>
-          <View style={styles.diagnostic}>
-            {BUILD_DIAGNOSTIC.map((line) => (
-              <Text key={line} style={styles.diagnosticLine}>
-                {line}
-              </Text>
-            ))}
-          </View>
-        </SafeAreaView>
-      )}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  diagnosticArea: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    alignItems: 'flex-end',
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0,
-  },
-  diagnostic: {
-    marginTop: 4,
-    marginRight: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-  },
-  diagnosticLine: {
-    color: '#FFD166',
-    fontSize: 9,
-    lineHeight: 11,
-    fontVariant: ['tabular-nums'],
-  },
 })
