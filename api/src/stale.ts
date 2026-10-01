@@ -1,4 +1,5 @@
 import { propertyIdOf } from './mutation-target'
+import { bindChunks } from './d1'
 import type { Env, Mutation, SessionUser } from './types'
 
 /**
@@ -71,8 +72,7 @@ export async function snapshotUpdatedAt(
 
   const snapshot: UpdatedSnapshot = new Map()
   const list = [...ids]
-  for (let i = 0; i < list.length; i += 200) {
-    const slice = list.slice(i, i + 200)
+  for (const slice of bindChunks(list, 1)) {
     const holes = slice.map((_, n) => `?${n + 2}`).join(',')
     const rows = await env.DB.prepare(
       `SELECT id, updated_at FROM properties WHERE client_id = ?1 AND id IN (${holes})`,

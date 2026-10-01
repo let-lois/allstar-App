@@ -96,6 +96,8 @@ const ROUTES = {
   // The company's badge identity. Admin only, decided in company.ts.
   "/api/company|POST": { how: 'delegate', fn: 'updateCompany', file: 'company.ts' },
   "/api/audit|GET": { how: 'inline', guard: 'canInvite' },
+  // The failed-request log: the same office roles as the audit log.
+  "/api/errors|GET": { how: 'inline', guard: 'canInvite' },
   // Super admin alone: the payload describes the database's size over time, and
   // the database is every customer's rather than one company's.
   "/api/ops/backups|GET": { how: 'inline', guard: 'canSeeBackups' },
@@ -135,7 +137,8 @@ const ROUTES = {
   // purpose: whoever may destroy a lead is whoever may lift the block.
   "/api/leads/unblock|POST": { how: 'delegate', fn: 'unblockProperties', file: 'erase.ts' },
   // Leads out as a spreadsheet. Office roles, decided in export.ts.
-  "/api/leads/export.csv|GET": { how: 'delegate', fn: 'exportLeadsCsv', file: 'export.ts' },
+  // GET with filters, POST with an explicit set of ids; one handler, one guard.
+  "/api/leads/export.csv": { how: 'delegate', fn: 'exportLeadsCsv', file: 'export.ts' },
   /*
     Sync collisions. Managers included, unlike erasure — the record exists so
     that whoever runs the board day to day sees it, and admin-only would mean

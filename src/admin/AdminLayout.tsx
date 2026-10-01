@@ -52,7 +52,9 @@ const NAV: Item[] = [
   { to: '/admin/import', label: 'Import leads', roles: ['manager', 'client_admin', 'super_admin'] },
   { to: '/admin/audit', label: 'Activity log', roles: ['client_admin', 'super_admin'] },
   { to: '/admin/settings', label: 'Settings', roles: ['client_admin', 'super_admin'] },
-  { to: '/admin/clients', label: 'Clients', roles: ['super_admin'] },
+  // The label only: the path and the page component keep their old names, so
+  // nothing linked to /admin/clients breaks.
+  { to: '/admin/clients', label: 'Account', roles: ['super_admin'] },
 ]
 
 export const ADMIN_ROLES: Role[] = ['manager', 'client_admin', 'super_admin']

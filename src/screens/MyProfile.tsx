@@ -1,11 +1,12 @@
 import { useState } from 'react'
+import { describeError } from '../lib/errors'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
 import { Field } from '../components/ui/Input'
 import { BottomSheet } from '../components/ui/BottomSheet'
 import { AvatarPicker, AvatarRemove } from '../components/ui/AvatarPicker'
-import { ApiError, apiDeleteAccount, apiUpdateProfile } from '../lib/http'
+import { apiDeleteAccount, apiUpdateProfile } from '../lib/http'
 import { ROLE_LABEL } from '../lib/roles'
 import { liveToken } from '../lib/session'
 import { useAppStore } from '../store/useAppStore'
@@ -56,7 +57,7 @@ export function MyProfile() {
       await refreshMe()
       setSaved(true)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save just now. Try again when you have signal.')
+      setError(describeError(err, 'Could not save just now. Try again when you have signal.'))
     } finally {
       setBusy(false)
     }
@@ -145,7 +146,7 @@ function DeleteAccount() {
       await signOut()
       nav('/', { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete the account just now. Try again when you have signal.')
+      setError(describeError(err, 'Could not delete the account just now. Try again when you have signal.'))
       setBusy(false)
     }
   }

@@ -1,11 +1,12 @@
 import { Glyph } from '../components/ui/Glyph'
 import { toLocalInput } from '../lib/day'
 import { IconCheck } from '../components/nav/icons'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { OutcomeGrid } from '../components/visit/OutcomeGrid'
 import { NoteComposer } from '../components/visit/NoteComposer'
+import { VisitContact } from '../components/visit/VisitContact'
 import { PhotoStrip } from '../components/visit/PhotoStrip'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -56,6 +57,8 @@ export function VisitMode() {
   const [nextAt, setNextAt] = useState<number | undefined>()
   const [elapsed, setElapsed] = useState(0)
   const sync = useSync()
+  /** Saves a contact typed in the Details step but not yet saved; see VisitContact. */
+  const contactFlush = useRef<(() => Promise<void>) | null>(null)
 
   const photos = useMemo(
     () => Object.values(allPhotos).filter((p) => p.visitId === visitId),
@@ -123,6 +126,13 @@ export function VisitMode() {
     setFinishing(true)
     haptic('confirm')
     try {
+      // A number typed and not saved is still the rep's work: keep it. A failed
+      // contact save is shown on that card and never blocks finishing the visit.
+      try {
+        await contactFlush.current?.()
+      } catch {
+        /* reported by the card */
+      }
       if (noteBody.trim() || noteTags.length) {
         await addNote(property.id, noteBody.trim(), noteTags, visit.id)
       }
@@ -209,17 +219,29 @@ export function VisitMode() {
               size="lg"
               full
               variant="inverse"
-              onClick={() => nav('/map', { replace: true })}
+              data-testid="visit-done-map"
+              // The map opens on this house with its sheet up, not wherever the
+              // store's first lead happens to be (see lib/map-view).
+              onClick={() => nav(`/map?lead=${encodeURIComponent(property.id)}`, { replace: true })}
             >
               Back to map
             </Button>
           )}
-          <button
-            onClick={() => nav('/today', { replace: true })}
-            className="focusable min-h-tap w-full rounded-field text-[15px] font-semibold text-ink-soft active:bg-ink/10"
-          >
-            Back to Today
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              data-testid="visit-done-lead"
+              onClick={() => nav(`/property/${encodeURIComponent(property.id)}`, { replace: true })}
+              className="focusable min-h-tap w-full rounded-field text-[15px] font-semibold text-ink-soft active:bg-ink/10"
+            >
+              View lead
+            </button>
+            <button
+              onClick={() => nav('/today', { replace: true })}
+              className="focusable min-h-tap w-full rounded-field text-[15px] font-semibold text-ink-soft active:bg-ink/10"
+            >
+              Back to Today
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -325,6 +347,14 @@ export function VisitMode() {
                 {outcomeDef && <Glyph name={outcomeDef.icon} className="icon-sm" />}
                 {outcomeDef?.label}
               </p>
+            </Card>
+
+            <Card>
+              <VisitContact
+                property={property}
+                encourage={!!outcomeDef?.promptsFollowUp}
+                flushRef={contactFlush}
+              />
             </Card>
 
             {contact && (

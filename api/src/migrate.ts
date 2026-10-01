@@ -615,6 +615,34 @@ const MIGRATIONS: Migration[] = [
          WHERE geo_provider = 'geocodio' AND address_confidence IS NULL`,
     ],
   },
+  /*
+    Failed requests, kept where an administrator can read them.
+
+    A failure used to exist only as a line in the Worker's live log, which
+    nobody at the company can open, and as "Something went wrong" on the
+    screen. Each row here is one failed request, keyed by the same reference
+    the person was shown, with who it was, what they were doing and how many
+    records it involved — the message only, never a stack or a request body.
+  */
+  {
+    id: '026-error-log',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS error_log (
+         id         TEXT PRIMARY KEY,
+         client_id  TEXT,
+         user_id    TEXT,
+         at         INTEGER NOT NULL,
+         method     TEXT,
+         route      TEXT,
+         status     INTEGER NOT NULL,
+         operation  TEXT,
+         records    INTEGER,
+         message    TEXT,
+         ms         INTEGER
+       )`,
+      'CREATE INDEX IF NOT EXISTS error_log_by_client ON error_log(client_id, at DESC)',
+    ],
+  },
 ]
 
 async function hasColumn(

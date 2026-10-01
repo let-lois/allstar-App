@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { describeError } from '../lib/errors'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AdminPage, FilterBar } from './AdminLayout'
 import { IconFilter } from '../components/nav/icons'
@@ -18,6 +19,8 @@ import { DataList } from './DataList'
 import { AllStarMap } from '../components/map/AllStarMap'
 import { pointInPolygon } from '../lib/geo'
 import { VISITED_WINDOWS, matchesVisited, type VisitedWindow } from '../lib/leadFilter'
+import { FOLLOW_UP_FILTERS, matchesFollowUp, openTaskByLead, type FollowUpFilter } from '../lib/followups'
+import { APPOINTMENT_FILTERS, appointmentsByLead, byNextAppointment, matchesAppointment, type AppointmentFilter } from '../lib/appointments'
 
 /**
  * Every lead, from a desk.
@@ -91,7 +94,22 @@ function describeEraseFailure(err: unknown): { text: string; definite: boolean }
   return { text: 'Something went wrong part way through.', definite: false }
 }
 
-type SortKey = 'address' | 'status' | 'value' | 'recent'
+type SortKey = 'address' | 'status' | 'value' | 'recent' | 'appointment'
+
+/**
+ * The server takes at most 500 leads per bulk request (assign, move, status).
+ * A selection can now be every matching lead — thousands — so it goes in
+ * batches, and what happened is summed across them.
+ */
+const BULK_BATCH = 500
+async function inBatches<R>(ids: string[], run: (part: string[]) => Promise<R>): Promise<R[]> {
+  const out: R[] = []
+  for (let i = 0; i < ids.length; i += BULK_BATCH) out.push(await run(ids.slice(i, i + BULK_BATCH)))
+  return out
+}
+const sum = <R,>(xs: R[], f: (r: R) => number | undefined) => xs.reduce((n, r) => n + (f(r) ?? 0), 0)
+/** A failure the person can quote: the server's reference when it sent one. */
+const failed = describeError
 
 export default function AdminLeads() {
   const properties = useAppStore((s) => s.properties)
@@ -116,16 +134,24 @@ export default function AdminLeads() {
   // so the Territories page can open its own leads here as a list.
   const [territoryFilter, setTerritoryFilter] = useState<string>(() => params.get('territory') ?? 'all')
   const [visited, setVisited] = useState<VisitedWindow>('any')
+  const [apptFilter, setApptFilter] = useState<AppointmentFilter>('any')
+  const [followFilter, setFollowFilter] = useState<FollowUpFilter>('any')
+  const taskRows = useAppStore((s) => s.tasks)
+  const openTasks = useMemo(() => openTaskByLead(Object.values(taskRows)), [taskRows])
+  const appointmentRows = useAppStore((s) => s.appointments)
+  const appts = useMemo(() => appointmentsByLead(Object.values(appointmentRows)), [appointmentRows])
   // Phone only: whether the folded filters are open. Opened from a territory,
   // they start open, so the territory the manager came for is in view.
   const [filtersShown, setFiltersShown] = useState(() => params.has('territory'))
   const activeFilterCount =
-    Number(status !== 'all') + Number(repFilter !== 'all') + Number(territoryFilter !== 'all') + Number(visited !== 'any')
+    Number(status !== 'all') + Number(repFilter !== 'all') + Number(territoryFilter !== 'all') + Number(visited !== 'any') + Number(apptFilter !== 'any') + Number(followFilter !== 'any')
   const resetFilters = () => {
     setStatus('all')
     setRepFilter('all')
     setTerritoryFilter('all')
     setVisited('any')
+    setApptFilter('any')
+    setFollowFilter('any')
   }
   const [sort, setSort] = useState<SortKey>('address')
   const [shown, setShown] = useState(PAGE)
@@ -212,15 +238,18 @@ export default function AdminLeads() {
       this browser's. See leadFilter.ts.
     */
     if (visited !== 'any') list = list.filter((p) => matchesVisited(p, visited, timezone))
+    if (apptFilter !== 'any') list = list.filter((p) => matchesAppointment(appts.get(p.id), apptFilter))
+    if (followFilter !== 'any') list = list.filter((p) => matchesFollowUp(openTasks.get(p.id), followFilter, timezone))
 
     const sorted = [...list]
     if (sort === 'address') sorted.sort((a, b) => a.address1.localeCompare(b.address1))
     else if (sort === 'status') sorted.sort((a, b) => a.status.localeCompare(b.status))
     else if (sort === 'value')
       sorted.sort((a, b) => (b.opportunityValue ?? 0) - (a.opportunityValue ?? 0))
+    else if (sort === 'appointment') sorted.sort((a, b) => byNextAppointment(appts.get(a.id), appts.get(b.id)))
     else sorted.sort((a, b) => (b.lastVisitAt ?? 0) - (a.lastVisitAt ?? 0))
     return sorted
-  }, [properties, query, status, repFilter, territoryFilter, visited, sort, timezone])
+  }, [properties, query, status, repFilter, territoryFilter, visited, sort, timezone, apptFilter, appts, followFilter, openTasks])
 
   const page = rows.slice(0, shown)
 
@@ -283,10 +312,8 @@ export default function AdminLeads() {
     setError(null)
     setNotice(null)
     try {
-      const res = await apiAssignProperties(token, {
-        propertyIds: [...selected],
-        repId: assignTo || null,
-      })
+      const parts = await inBatches([...selected], (propertyIds) => apiAssignProperties(token, { propertyIds, repId: assignTo || null }))
+      const res = { assigned: sum(parts, (r) => r.assigned) }
       await refreshFromServer()
       setSelected(new Set())
       setNotice(
@@ -295,7 +322,7 @@ export default function AdminLeads() {
           : `${res.assigned} lead${res.assigned === 1 ? '' : 's'} unassigned.`,
       )
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save that. Nothing was changed.')
+      setError(failed(err, 'Could not save that. Nothing was changed.'))
     } finally {
       setBusy(false)
     }
@@ -312,49 +339,69 @@ export default function AdminLeads() {
     setError(null)
     setNotice(null)
     try {
-      const res = await apiMoveToTerritory(token, { propertyIds: [...selected], territoryId })
+      const parts = await inBatches([...selected], (propertyIds) => apiMoveToTerritory(token, { propertyIds, territoryId }))
+      const res = { moved: sum(parts, (r) => r.moved) }
       await refreshFromServer()
       setSelected(new Set())
       setTerritoryTo('')
       const n = `${res.moved} lead${res.moved === 1 ? '' : 's'}`
       setNotice(territoryId ? `${n} moved to ${territories[territoryId]?.name ?? 'that territory'}.` : `${n} taken out of every territory.`)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save that. Nothing was changed.')
+      setError(describeError(err, 'Could not save that. Nothing was changed.'))
     } finally {
       setBusy(false)
     }
   }
 
   /*
-    Leads out as a file, filtered the way the screen is.
+    Leads out as a file — exactly the leads the manager means.
 
-    The rep and status filters travel to the server, which writes the file from
-    the database rather than from what this browser holds — the notes a rep
-    typed this afternoon are on the server and not in this table. The search box
-    and the visited window do not travel: they are ways of finding a row on
-    screen, and a file "of the leads matching 'cedar'" is not a thing anyone
-    asked for. Demo mode has no server and so nothing to export.
+    Two scopes, both sent as the ids this screen produced, so the file is the
+    view and nothing else:
+      - "Export selected": the ticked leads.
+      - "Export all matching": every lead the current filters match (search,
+        status, rep, territory, visited, appointment, follow-up), across every
+        page — not only the hundred on screen.
+    This used to send just the rep and status filters, so a territory-filtered
+    view exported every lead in the company, and an empty view exported
+    everything assigned to the rep. An empty scope now exports nothing and says
+    so. The server writes the file from the database (today's notes included)
+    and checks every id against this company. Lists export from the Lists page.
   */
   const [exporting, setExporting] = useState(false)
-  async function exportCsv() {
+  async function exportCsv(scope: 'selected' | 'matching') {
     const token = liveToken()
     if (!token) {
       setError('Exporting needs a live account. The demo has no server to export from.')
       return
     }
+    const ids = scope === 'selected' ? [...selected] : rows.map((p) => p.id)
+    if (ids.length === 0) {
+      setError(scope === 'selected' ? 'Select some leads to export first.' : 'No leads match the current filters, so there is nothing to export.')
+      return
+    }
+    const label =
+      scope === 'selected'
+        ? 'selected'
+        : territoryFilter !== 'all' && territoryFilter !== 'none'
+          ? territories[territoryFilter]?.name ?? 'territory'
+          : territoryFilter === 'none'
+            ? 'no-territory'
+            : repFilter !== 'all' && repFilter !== 'unassigned'
+              ? nameOf(repFilter) ?? 'leads'
+              : 'leads'
     setExporting(true)
     setError(null)
     try {
-      const { blob, filename } = await apiExportLeadsCsv(token, {
-        rep: repFilter === 'all' ? null : repFilter,
-        status: status === 'all' ? null : status,
-      })
+      const { blob, filename } = await apiExportLeadsCsv(token, { ids, label })
       await saveFile(blob, filename)
     } catch (err) {
       setError(
-        err instanceof ApiError || err instanceof FileSaveUnsupported
-          ? err.message
-          : 'The export could not be produced. Try again.',
+        err instanceof ApiError
+          ? failed(err, '')
+          : err instanceof FileSaveUnsupported
+            ? err.message
+            : 'The export could not be produced. Try again.',
       )
     } finally {
       setExporting(false)
@@ -426,7 +473,8 @@ export default function AdminLeads() {
     setError(null)
     setNotice(null)
     try {
-      const res = await apiSetLeadStatus(token, { propertyIds: [...selected], status: statusTo })
+      const parts = await inBatches([...selected], (propertyIds) => apiSetLeadStatus(token, { propertyIds, status: statusTo }))
+      const res = { updated: sum(parts, (r) => r.updated), protectedDnc: sum(parts, (r) => r.protectedDnc) }
       await refreshFromServer()
       setSelected(new Set())
       const held = res.protectedDnc
@@ -436,7 +484,7 @@ export default function AdminLeads() {
         `${res.updated} lead${res.updated === 1 ? '' : 's'} set to ${STATUS_LABEL[statusTo]}.${held}`,
       )
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save that. Nothing was changed.')
+      setError(describeError(err, 'Could not save that. Nothing was changed.'))
     } finally {
       setBusy(false)
     }
@@ -554,15 +602,28 @@ export default function AdminLeads() {
       title="Leads"
       description={`${Object.keys(properties).length.toLocaleString()} in total · ${rows.length.toLocaleString()} matching`}
       actions={
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={exporting || mode !== 'live'}
-          onClick={() => void exportCsv()}
-          data-testid="export-csv"
-        >
-          {exporting ? 'Exporting…' : 'Export CSV'}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {selected.size > 0 && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={exporting || mode !== 'live'}
+              onClick={() => void exportCsv('selected')}
+              data-testid="export-selected"
+            >
+              {exporting ? 'Exporting…' : `Export ${selected.size.toLocaleString()} selected`}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={exporting || mode !== 'live' || rows.length === 0}
+            onClick={() => void exportCsv('matching')}
+            data-testid="export-csv"
+          >
+            {exporting ? 'Exporting…' : `Export ${rows.length.toLocaleString()} matching`}
+          </Button>
+        </div>
       }
     >
       <FilterBar>
@@ -684,6 +745,33 @@ export default function AdminLeads() {
           <option value="recent">Most recently visited</option>
           <option value="value">Highest value</option>
           <option value="status">By status</option>
+          <option value="appointment">Soonest appointment</option>
+        </select>
+        <select
+          value={apptFilter}
+          onChange={(e) => setApptFilter(e.target.value as AppointmentFilter)}
+          className="focusable min-h-[40px] rounded-field border border-line bg-surface px-2 text-sm"
+          aria-label="Appointment"
+          data-testid="leads-appointment-filter"
+        >
+          {APPOINTMENT_FILTERS.map((f) => (
+            <option key={f.key} value={f.key}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={followFilter}
+          onChange={(e) => setFollowFilter(e.target.value as FollowUpFilter)}
+          className="focusable min-h-[40px] rounded-field border border-line bg-surface px-2 text-sm"
+          aria-label="Follow-up"
+          data-testid="leads-followup-filter"
+        >
+          {FOLLOW_UP_FILTERS.map((f) => (
+            <option key={f.key} value={f.key}>
+              {f.label}
+            </option>
+          ))}
         </select>
         </div>
       </FilterBar>
@@ -719,6 +807,21 @@ export default function AdminLeads() {
           <span className="text-sm font-semibold" data-testid="bulk-count">
             {selected.size.toLocaleString()} selected
           </span>
+          {/*
+            "Select all" that means all: every lead the filters match, on every
+            page, not just the hundred loaded on screen.
+          */}
+          {selected.size < rows.length && (
+            <button
+              type="button"
+              data-testid="select-all-matching"
+              className="focusable text-sm font-semibold text-accent"
+              onClick={() => setSelected(new Set(rows.map((p) => p.id)))}
+            >
+              Select all {rows.length.toLocaleString()} matching
+            </button>
+          )}
+
           {/*
             Labelled, now that there are two dropdowns in this bar. Unlabelled
             it was identifiable only by position — fine for one control, and
@@ -1003,6 +1106,7 @@ export default function AdminLeads() {
                 ? {
                     points: lasso,
                     onAddPoint: (point) => setLasso((pts) => [...(pts ?? []), point]),
+                    onMovePoint: (i, point) => setLasso((pts) => (pts ? pts.map((p, n) => (n === i ? point : p)) : pts)),
                     label: 'Outline an area to select leads',
                   }
                 : undefined
@@ -1049,7 +1153,7 @@ export default function AdminLeads() {
           <input
             type="checkbox"
             checked={allOnPageSelected}
-            aria-label="Select everything shown"
+            aria-label="Select everything on this page"
             onChange={() =>
               setSelected((prev) => {
                 const next = new Set(prev)
@@ -1150,6 +1254,19 @@ export default function AdminLeads() {
                   : UNASSIGNED_LABEL}
               </span>
             ),
+          },
+          {
+            header: 'Appointment',
+            cell: (p) => {
+              const a = appts.get(p.id)
+              if (!a?.next) return <span className="text-ink-mute">{a?.last ? `Last ${relative(a.last.startsAt).toLowerCase()}` : '—'}</span>
+              return (
+                <span data-testid="lead-appointment-cell">
+                  {new Date(a.next.startsAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', ...(timezone ? { timeZone: timezone } : {}) })}
+                  {a.next.repId && a.next.repId !== p.assignedRepId && nameOf(a.next.repId) ? <span className="block text-[12px] text-ink-mute">with {nameOf(a.next.repId)}</span> : null}
+                </span>
+              )
+            },
           },
           {
             header: 'Last visit',

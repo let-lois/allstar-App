@@ -2,7 +2,7 @@ import { IconPhone, IconPlay } from '../nav/icons'
 import { useNavigate } from 'react-router-dom'
 import type { Property } from '../../types'
 import { STATUS_COLOR } from '../../data/outcomes'
-import { OutcomePill, ScoreBar, StatusPill } from '../ui/StatusPill'
+import { OutcomePill, StatusPill } from '../ui/StatusPill'
 import { SwipeRow } from '../ui/SwipeRow'
 import { distanceMiles, formatDistance, type Position } from '../../lib/geo'
 import { money, relative } from '../../lib/format'
@@ -147,7 +147,6 @@ export function PropertyRow({
             )}
           </span>
         </span>
-        <ScoreBar score={property.score} />
       </button>
     </SwipeRow>
   )

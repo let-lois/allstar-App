@@ -11,6 +11,7 @@ import {
 } from '../../lib/speech'
 import { haptic } from '../../lib/haptics'
 import { IconMic } from '../nav/icons'
+import { isNativeShell } from '../../lib/webview'
 
 interface Props {
   body: string
@@ -41,6 +42,17 @@ const ERROR_COPY: Record<DictationError, string> = {
     'Dictation isn’t available in this browser. Use the mic key on your keyboard instead.',
   unknown:
     'Dictation stopped. Try again, or use the mic key on your keyboard.',
+}
+
+/*
+  Inside the iPhone app the fix is in iPhone Settings, not a browser's: the app
+  asks once, and a "Don't Allow" stays until it is turned back on there.
+*/
+const BLOCKED_IN_APP =
+  'Microphone or Speech Recognition is turned off for All-Star. Turn both on in the iPhone Settings app, under All-Star, or use the mic key on your keyboard.'
+
+export function dictationErrorCopy(e: DictationError, inApp: boolean): string {
+  return e === 'blocked' && inApp ? BLOCKED_IN_APP : ERROR_COPY[e]
 }
 
 export function NoteComposer({ body, tags, onBody, onTags, placeholder }: Props) {
@@ -142,7 +154,7 @@ export function NoteComposer({ body, tags, onBody, onTags, placeholder }: Props)
       )}
       {!listening && error && (
         <p className="-mt-1 rounded-lg bg-warn-bg px-2.5 py-2 text-xs font-medium leading-relaxed text-warn">
-          {ERROR_COPY[error]}
+          {dictationErrorCopy(error, isNativeShell())}
         </p>
       )}
 

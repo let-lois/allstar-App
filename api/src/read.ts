@@ -54,6 +54,7 @@ export async function bootstrap(env: Env, user: SessionUser) {
     roster,
     erased,
     notes,
+    visits,
   ] = await Promise.all([
       env.DB.prepare(
         `SELECT * FROM properties WHERE properties.client_id = ?1 ${scope} ORDER BY address1`,
@@ -208,6 +209,28 @@ export async function bootstrap(env: Env, user: SessionUser) {
            JOIN properties p ON p.id = n.property_id
           WHERE p.client_id = ?1 ${isRep(user) ? `AND ${repScopeSql('p', '?2')}` : ''}
           ORDER BY n.created_at DESC LIMIT 3000`,
+      )
+        .bind(...bind([user.clientId]))
+        .all(),
+
+      /*
+        Completed visits, so a lead's history is the same on every device.
+
+        Like notes, bootstrap never sent these, so "Visit history" on a lead
+        listed only the visits knocked on *this* phone: a rep picking up a
+        teammate's door, or a manager opening it in the console, saw no visits
+        at all and read the house as never knocked. Scoped like properties, with
+        the person who knocked (`rep_id`) and how long it took, newest first and
+        capped for the same reason notes are.
+      */
+      env.DB.prepare(
+        `SELECT v.id, v.property_id, v.rep_id, v.started_at, v.ended_at, v.outcome, v.duration_ms,
+                v.start_lat, v.start_lng, v.start_accuracy, v.next_action_at, v.next_action_type
+           FROM visits v
+           JOIN properties p ON p.id = v.property_id
+          WHERE v.client_id = ?1 AND v.ended_at IS NOT NULL
+            ${isRep(user) ? `AND ${repScopeSql('p', '?2')}` : ''}
+          ORDER BY v.ended_at DESC LIMIT 5000`,
       )
         .bind(...bind([user.clientId]))
         .all(),
@@ -366,6 +389,22 @@ export async function bootstrap(env: Env, user: SessionUser) {
       tags: n.tags ? JSON.parse(String(n.tags)) : [],
       authorId: n.author_id,
       createdAt: n.created_at,
+    })),
+    visits: (visits.results as Record<string, unknown>[]).map((v) => ({
+      id: v.id,
+      propertyId: v.property_id,
+      repId: v.rep_id,
+      startedAt: v.started_at,
+      endedAt: v.ended_at ?? undefined,
+      outcome: v.outcome ?? undefined,
+      durationMs: v.duration_ms ?? undefined,
+      startLocation:
+        v.start_lat != null && v.start_lng != null
+          ? { lat: v.start_lat, lng: v.start_lng, accuracy: v.start_accuracy ?? undefined }
+          : undefined,
+      nextActionAt: v.next_action_at ?? undefined,
+      nextActionType: v.next_action_type ?? undefined,
+      photoIds: [],
     })),
     serverTime: Date.now(),
     /*

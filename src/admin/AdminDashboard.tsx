@@ -1,4 +1,5 @@
 import { Glyph } from '../components/ui/Glyph'
+import { dayKeyIn } from '../lib/day'
 import { IconChevron } from '../components/nav/icons'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -98,7 +99,10 @@ export function AdminDashboard() {
           label="Deals won"
           value={totals.sold.toLocaleString()}
           delta={totals.soldDelta}
-          sub={`${moneyFull(totals.closedValue)} closed`}
+          // Counted from visits recorded as Sold in this period. A lead set to
+          // Won by hand is in the pipeline's "won" count below, not here — the
+          // two answer different questions (docs/sales-data-audit.md).
+          sub={`${moneyFull(totals.closedValue)} closed · sold at the door`}
         />
       </div>
 
@@ -148,7 +152,7 @@ export function AdminDashboard() {
           <div className="mb-1 flex items-baseline justify-between">
             <h2 className="text-sm font-bold">Open pipeline</h2>
             <span className="nums text-xs font-semibold text-good">
-              {won.n} won · {moneyFull(won.value)}
+              {won.n} lead{won.n === 1 ? '' : 's'} marked Won · {moneyFull(won.value)}
             </span>
           </div>
           <p className="mb-3 text-xs text-ink-mute">
@@ -258,10 +262,15 @@ export function AdminDashboard() {
 
 function OutcomeMixCard() {
   const activity = useAppStore((s) => s.activity)
+  const tz = useAppStore((s) => s.timezone)
   const data = useMemo(() => {
     const counts = new Map<string, number>()
+    // Today's, on the company's calendar. This card said "today" and counted
+    // every visit the console had loaded, which on a busy week was days of them.
+    const today = dayKeyIn(Date.now(), tz)
     for (const ev of activity) {
       if (ev.type !== 'visit' || !ev.outcome) continue
+      if (dayKeyIn(ev.at, tz) !== today) continue
       counts.set(ev.outcome, (counts.get(ev.outcome) ?? 0) + 1)
     }
     return [...counts.entries()]
@@ -271,7 +280,7 @@ function OutcomeMixCard() {
         value: n,
       }))
       .sort((a, b) => b.value - a.value)
-  }, [activity])
+  }, [activity, tz])
 
   if (data.length === 0) {
     return <p className="text-sm text-ink-mute">No visits logged yet today.</p>

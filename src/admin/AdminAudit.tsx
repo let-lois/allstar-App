@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AdminPage, FilterBar } from './AdminLayout'
 import { Chip } from '../components/ui/Chip'
 import { Button } from '../components/ui/Button'
-import { apiAudit, type AuditRowDTO } from '../lib/http'
+import { apiAudit, apiErrors, type AuditRowDTO, type ErrorRowDTO } from '../lib/http'
+import { formatReference } from '../lib/errors'
 import { liveToken } from '../lib/session'
 import { useAppStore } from '../store/useAppStore'
 import { relative } from '../lib/format'
@@ -35,7 +36,7 @@ const GROUPS = [
     label: 'People',
     actions: ['user.invited', 'user.deactivated', 'user.reactivated', 'user.deleted'],
   },
-  { key: 'leads', label: 'Leads', actions: ['territory.assigned', 'territory.unassigned', 'territory.generated', 'territory.leads_moved', 'leads.imported', 'leads.exported'] },
+  { key: 'leads', label: 'Leads', actions: ['territory.created', 'territory.renamed', 'territory.deleted', 'territory.assigned', 'territory.unassigned', 'territory.generated', 'territory.leads_moved', 'leads.imported', 'leads.exported'] },
   {
     key: 'connections',
     label: 'Connections',
@@ -133,8 +134,13 @@ export default function AdminAudit() {
             {g.label}
           </Chip>
         ))}
+        <Chip size="sm" selected={group === 'errors'} onClick={() => setGroup('errors')}>
+          Errors
+        </Chip>
       </FilterBar>
 
+      {group === 'errors' ? <ErrorLog /> : (
+      <>
       <div className="overflow-hidden card">
         {entries.length === 0 && loading ? (
           <SkeletonRows rows={5} label="Loading the audit log…" className="p-5" testId="audit-loading" />
@@ -190,6 +196,8 @@ export default function AdminAudit() {
         Names are recorded as they read at the time, so an entry still says who deleted
         an account after that account is gone.
       </p>
+      </>
+      )}
     </AdminPage>
   )
 }
@@ -342,3 +350,59 @@ const roleWord = (r: string) =>
     client_admin: 'Client Admin',
     super_admin: 'Super Admin',
   })[r] ?? r
+
+/**
+ * Failed requests: when, who, what they were doing, how many records, and the
+ * reference they were shown. The message only — never a stack or a request
+ * body (see api/src/error-log.ts). Newest first; the last 100.
+ */
+function ErrorLog() {
+  const [rows, setRows] = useState<ErrorRowDTO[] | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+  useEffect(() => {
+    const token = liveToken()
+    if (!token) return
+    let off = false
+    apiErrors(token)
+      .then((r) => !off && setRows(r.errors))
+      .catch(() => !off && setFailed('The error log could not be loaded.'))
+    return () => {
+      off = true
+    }
+  }, [])
+  if (failed) return <p className="card p-5 text-sm text-bad">{failed}</p>
+  if (!rows) return <SkeletonRows rows={4} label="Loading errors…" className="card p-5" testId="errors-loading" />
+  if (rows.length === 0) {
+    return <p className="card p-8 text-center text-sm text-ink-mute" data-testid="errors-empty">No failed requests recorded. When something fails, it appears here with the reference the person was shown.</p>
+  }
+  return (
+    <div className="overflow-x-auto card" data-testid="errors-table">
+      <table className="w-full text-left text-sm">
+        <thead className="text-xs text-ink-mute">
+          <tr className="border-b border-line-soft">
+            <th className="px-4 py-2 font-semibold">When</th>
+            <th className="px-4 py-2 font-semibold">Action</th>
+            <th className="px-4 py-2 font-semibold">User</th>
+            <th className="px-4 py-2 font-semibold">Records</th>
+            <th className="px-4 py-2 font-semibold">Result</th>
+            <th className="px-4 py-2 font-semibold">Reference</th>
+            <th className="px-4 py-2 font-semibold">Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((e) => (
+            <tr key={e.reference} className="border-b border-line-soft align-top last:border-0">
+              <td className="whitespace-nowrap px-4 py-2 text-ink-mute">{new Date(e.at).toLocaleString()}</td>
+              <td className="px-4 py-2">{e.operation ?? `${e.method ?? ''} ${e.route ?? ''}`.trim()}</td>
+              <td className="px-4 py-2">{e.userName ?? '—'}</td>
+              <td className="px-4 py-2 nums">{e.records ?? '—'}</td>
+              <td className="px-4 py-2 nums">{e.status}</td>
+              <td className="whitespace-nowrap px-4 py-2 font-mono text-xs">{formatReference(e.reference)}</td>
+              <td className="px-4 py-2 text-ink-soft">{e.message ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}

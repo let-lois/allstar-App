@@ -1,4 +1,5 @@
 import { Glyph } from '../components/ui/Glyph'
+import { FOLLOW_UP_LABEL, followUpState } from '../lib/followups'
 import { useMemo, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
@@ -465,7 +466,9 @@ function TaskRow({ id }: { id: string }) {
   const nav = useNavigate()
   if (!task) return null
 
-  const overdue = task.dueAt < Date.now()
+  const tz = useAppStore((s) => s.timezone)
+  const state = followUpState(task.dueAt, tz)
+  const overdue = state === 'overdue'
 
   return (
     <li className="flex items-center">
@@ -486,7 +489,7 @@ function TaskRow({ id }: { id: string }) {
           <span
             className={`block text-[13px] ${overdue ? 'font-semibold text-warn' : 'text-ink-mute'}`}
           >
-            {overdue ? 'Overdue · ' : ''}
+            {state !== 'upcoming' ? `${FOLLOW_UP_LABEL[state]} · ` : ''}
             {relative(task.dueAt)}
           </span>
         </span>

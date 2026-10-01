@@ -1,4 +1,5 @@
 import type { Env, SessionUser } from './types'
+import { bindChunks } from './d1'
 
 /**
  * The reps on a territory.
@@ -11,11 +12,6 @@ import type { Env, SessionUser } from './types'
  * column sees a territory with reps and no `rep_id`.
  */
 
-const chunks = <T,>(xs: T[], n = 100): T[][] => {
-  const out: T[][] = []
-  for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n))
-  return out
-}
 
 /** Territory id → rep ids, oldest assignment first, for one tenant. */
 export async function territoryRepsFor(env: Env, clientId: string): Promise<Map<string, string[]>> {
@@ -46,6 +42,21 @@ export async function repsOf(env: Env, territoryId: string): Promise<string[]> {
   return res.results.map((r) => r.user_id)
 }
 
+/** The statements that add reps to a territory, for a caller that runs them in one batch. */
+export function territoryRepStatements(
+  env: Env,
+  actor: SessionUser,
+  territoryId: string,
+  repIds: string[],
+  now: number,
+): D1PreparedStatement[] {
+  return bindChunks(repIds, 3).map((part) =>
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO territory_reps (territory_id, user_id, assigned_at, assigned_by) VALUES ${part.map((_, n) => `(?1, ?${n + 4}, ?2, ?3)`).join(',')}`,
+    ).bind(territoryId, now, actor.id, ...part),
+  )
+}
+
 /** Add reps to a territory. Already-present rows are left alone. */
 export async function writeTerritoryReps(
   env: Env,
@@ -54,7 +65,7 @@ export async function writeTerritoryReps(
   repIds: string[],
   now: number,
 ): Promise<void> {
-  for (const part of chunks(repIds)) {
+  for (const part of bindChunks(repIds, 3)) {
     const values = part.map((_, n) => `(?1, ?${n + 4}, ?2, ?3)`).join(',')
     await env.DB.prepare(
       `INSERT OR IGNORE INTO territory_reps (territory_id, user_id, assigned_at, assigned_by) VALUES ${values}`,
@@ -89,7 +100,7 @@ export async function syncPrimaryRep(env: Env, clientId: string, territoryId: st
 /** Ids that are members of this company and active. */
 export async function activeTeamMembers(env: Env, clientId: string, ids: string[]): Promise<Set<string>> {
   const ok = new Set<string>()
-  for (const part of chunks(ids)) {
+  for (const part of bindChunks(ids, 1)) {
     const holes = part.map((_, n) => `?${n + 2}`).join(',')
     const res = await env.DB.prepare(
       `SELECT id FROM users WHERE client_id = ?1 AND active = 1 AND id IN (${holes})`,

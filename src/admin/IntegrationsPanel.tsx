@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
+import { describeError } from '../lib/errors'
 import { Button } from '../components/ui/Button'
 import { Field } from '../components/ui/Input'
 import {
-  ApiError,
   apiConnectGhl,
   apiDisconnectGhl,
   apiIntegrations,
@@ -105,7 +105,7 @@ export function IntegrationsPanel() {
       await load()
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.message : 'Could not connect. Nothing was saved.',
+        describeError(err, 'Could not connect. Nothing was saved.'),
       )
     } finally {
       setBusy(false)
@@ -129,7 +129,7 @@ export function IntegrationsPanel() {
           : 'Disconnected.',
       )
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not disconnect.')
+      setError(describeError(err, 'Could not disconnect.'))
     } finally {
       setBusy(false)
     }
@@ -251,7 +251,7 @@ export function IntegrationsPanel() {
                   const res = await apiGhlWebhook(t, false)
                   setHookUrl(res.url)
                 } catch (err) {
-                  setError(err instanceof ApiError ? err.message : 'Could not fetch the URL.')
+                  setError(describeError(err, 'Could not fetch the URL.'))
                 } finally {
                   setHookBusy(false)
                 }
@@ -273,7 +273,7 @@ export function IntegrationsPanel() {
                     setHookUrl(res.url)
                     setNotice('Rotated. Paste the new URL into GoHighLevel — the old one no longer works.')
                   } catch (err) {
-                    setError(err instanceof ApiError ? err.message : 'Could not rotate the URL.')
+                    setError(describeError(err, 'Could not rotate the URL.'))
                   } finally {
                     setHookBusy(false)
                   }
@@ -323,7 +323,7 @@ export function IntegrationsPanel() {
                 )
                 await load()
               } catch (err) {
-                setError(err instanceof ApiError ? err.message : 'Could not save the calendar.')
+                setError(describeError(err, 'Could not save the calendar.'))
               } finally {
                 setSavingCalendar(false)
               }

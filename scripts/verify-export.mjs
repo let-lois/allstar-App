@@ -55,7 +55,9 @@ await page.route('**/api/me', json(200, { user: ADMIN }))
 await page.route('**/api/users', json(200, { users: [{ id: 'u_rep_1', name: 'Marcus Vance', email: 'm@x.test', role: 'field_rep', active: true, pending: false }] }))
 await page.route('**/api/bootstrap', json(200, { ...EMPTY_BOOTSTRAP, properties: leads, leadLists: [LIST], team: [{ id: 'u_rep_1', name: 'Marcus Vance', role: 'field_rep', active: true }] }))
 await page.route('**/api/leads/export.csv**', async (route) => {
-  exportUrls.push(new URL(route.request().url()))
+  const u = new URL(route.request().url())
+  u.body = route.request().method() === 'POST' ? JSON.parse(route.request().postData() || '{}') : null
+  exportUrls.push(u)
   await route.fulfill({
     status: 200,
     headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="allstar-leads-2026-01-01.csv"' },
@@ -79,7 +81,8 @@ try {
   {
     const [download] = await Promise.all([page.waitForEvent('download', { timeout: 10_000 }), btn.click()])
     ok(exportUrls.length === 1, 'the button asks the server for the file')
-    ok(exportUrls[0]?.search === '', 'with no filter, when none is set', exportUrls[0]?.search)
+    // The exact leads in view, every page of them — not "everything the rep has".
+    ok(JSON.stringify((exportUrls[0]?.body?.ids ?? []).slice().sort()) === JSON.stringify(['p1', 'p2']), 'with no filter, every matching lead, by id', JSON.stringify(exportUrls[0]?.body))
     const name = download.suggestedFilename()
     ok(/^allstar-leads-\d{4}-\d{2}-\d{2}\.csv$/.test(name), 'saved under a name that says what and when', name)
     const path = await download.path()
@@ -92,15 +95,15 @@ try {
   await page.waitForTimeout(300)
   {
     const [download] = await Promise.all([page.waitForEvent('download', { timeout: 10_000 }), btn.click()])
-    ok(exportUrls[1]?.searchParams.get('status') === 'contacted', 'a status filter on screen narrows the file', exportUrls[1]?.search)
+    ok(JSON.stringify(exportUrls[1]?.body?.ids) === JSON.stringify(['p2']), 'a status filter on screen narrows the file to exactly what is shown', JSON.stringify(exportUrls[1]?.body))
     ok(!!download, 'and a file is still produced')
   }
   const repSelect = page.getByLabel('Assigned to')
   if ((await repSelect.count()) > 0) {
     await repSelect.first().selectOption('u_rep_1')
     await page.waitForTimeout(300)
-    await Promise.all([page.waitForEvent('download', { timeout: 10_000 }), btn.click()])
-    ok(exportUrls[2]?.searchParams.get('rep') === 'u_rep_1', 'so does the rep filter', exportUrls[2]?.search)
+    // Nobody is assigned u_rep_1 here, so nothing matches: no file, and the screen says so.
+    ok(await btn.isDisabled(), 'a filter that matches nothing exports nothing (the button is off)', String(await btn.isDisabled()))
   }
 
   /* --- one list, from the Lists page -------------------------------------- */

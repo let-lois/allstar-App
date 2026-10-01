@@ -30,6 +30,7 @@ import {
   type MapFilter,
 } from '../lib/leadFilter'
 import { FilterSheet } from '../components/map/FilterSheet'
+import { initialMapView, loadMapView, saveMapView, shouldJumpToFix, CLOSE_ZOOM } from '../lib/map-view'
 
 /**
  * How much of the screen the Add-lead sheet covers.
@@ -85,7 +86,22 @@ export function MapScreen() {
   const openList = filter.list ? leadLists[filter.list] : undefined
   const listIds = useMemo(() => new Set(openList?.leadIds ?? []), [openList])
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  /*
+    Where the map opens, chosen once per mount (lib/map-view): the lead a rep
+    has just come back from (`/map?lead=<id>`, sent by the end of a visit), the
+    view they last left, where they are, today's first stop, then the first
+    lead, and only then the fixed default. It used to be the first lead in the
+    store, whichever that was — Phoenix, for one company — on every return.
+  */
+  const [opening] = useState(() => {
+    const leadId = params.get('lead')
+    const lead = leadId ? properties[leadId] : undefined
+    const stop = route?.stops.length ? properties[route.stops[0].propertyId] : undefined
+    const firstLead = scoped.find((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+    const chosen = initialMapView({ lead, saved: loadMapView(), position, routeStop: stop, firstLead })
+    return { ...chosen, leadId: lead ? leadId : null }
+  })
+  const [selectedId, setSelectedId] = useState<string | null>(opening.leadId)
   /*
     The house a rep has just tapped, and the form that opens over it.
 
@@ -136,6 +152,25 @@ export function MapScreen() {
   */
   const [mapError, setMapError] = useState<GmapsError | null>(null)
   const mapHandle = useRef<MapHandle | null>(null)
+  /*
+    Remember the view as the rep leaves it, so the next mount — after a visit,
+    after the list, after an update reloads the app — opens there. And, when the
+    map opened on a guess because no location had come in yet, move to the rep
+    once it does, unless they have already moved the map themselves.
+  */
+  const userMoved = useRef(false)
+  const onViewChange = (v: { lat: number; lng: number; zoom: number; heading?: number; tilt?: number }) => {
+    const o = opening.view
+    if (Math.abs(v.lat - o.lat) > 1e-5 || Math.abs(v.lng - o.lng) > 1e-5 || Math.abs(v.zoom - o.zoom) > 0.01) userMoved.current = true
+    saveMapView(v)
+  }
+  const jumped = useRef(false)
+  useEffect(() => {
+    if (jumped.current || !position) return
+    if (!shouldJumpToFix(opening.source, userMoved.current)) return
+    jumped.current = true
+    mapHandle.current?.flyTo(position.lat, position.lng, CLOSE_ZOOM)
+  }, [position, opening.source])
 
   const isWide = useIsWide()
 
@@ -569,7 +604,14 @@ export function MapScreen() {
     selectedId,
     onSelect: setSelectedId,
     handleRef: mapHandle,
-    initialCenter: route?.stops.length ? properties[route.stops[0].propertyId] : undefined,
+    initialCenter: { lat: opening.view.lat, lng: opening.view.lng },
+    initialZoom: opening.view.zoom,
+    initialHeading: opening.view.heading,
+    initialTilt: opening.view.tilt,
+    // Follow the rep only when the map opened on them; a saved view, a lead or
+    // a route is somewhere the rep chose, and the first GPS fix must not undo it.
+    follow: opening.source === 'device',
+    onViewChange,
     /*
       Not while a lead's sheet is up. In that state a tap on the map means
       "close this", which is what it has always meant and what a rep expects —

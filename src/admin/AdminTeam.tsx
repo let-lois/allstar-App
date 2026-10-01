@@ -51,9 +51,13 @@ export function AdminTeam() {
   const [range, setRange] = useState<RangeKey>('14d')
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all')
+  // Team / office is a label on each person (users.team_id), not a hierarchy:
+  // filtering by it is all the Team page needs. '' means every office.
+  const [officeFilter, setOfficeFilter] = useState<string>('')
+  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'pending' | 'deactivated'>('all')
   const [attention, setAttention] = useState<Attention>('all')
   const [filtersShown, setFiltersShown] = useState(false)
-  const activeFilterCount = Number(roleFilter !== 'all') + (view === 'people' ? Number(attention !== 'all') : Number(range !== '14d'))
+  const activeFilterCount = Number(roleFilter !== 'all') + Number(officeFilter !== '') + Number(activeFilter !== 'all') + (view === 'people' ? Number(attention !== 'all') : Number(range !== '14d'))
   const [editingId, setEditingId] = useState<string | null>(null)
   const [inviting, setInviting] = useState(false)
 
@@ -96,10 +100,14 @@ export function AdminTeam() {
     return team.filter(
       (m) =>
         (roleFilter === 'all' || m.role === roleFilter) &&
+        (officeFilter === '' || (officeFilter === '__none' ? !m.teamName : m.teamName === officeFilter)) &&
+        (activeFilter === 'all' ||
+          (activeFilter === 'pending' ? !!m.pending : activeFilter === 'active' ? m.active && !m.pending : !m.active && !m.pending)) &&
         (attention === 'all' || needs(m).includes(attention)) &&
         (!q || m.name.toLowerCase().includes(q) || (m.email ?? '').toLowerCase().includes(q) || (m.teamName ?? '').toLowerCase().includes(q)),
     )
-  }, [team, query, roleFilter, attention])
+  }, [team, query, roleFilter, attention, officeFilter, activeFilter])
+  const offices = useMemo(() => [...new Set(team.map((m) => m.teamName).filter((n): n is string => !!n))].sort(), [team])
 
   const counts = useMemo(() => {
     const c: Record<Attention, number> = { all: team.length, invited: 0, setting_up: 0, badge: 0, inactive: 0 }
@@ -192,7 +200,7 @@ export function AdminTeam() {
       align: 'right' as const,
       cell: (m: TeamMember) => {
         const t = todayById.get(m.id)
-        return m.role === 'field_rep' && t ? `${t.done}/${t.total}` : '—'
+        return t && t.total > 0 ? `${t.done}/${t.total}` : m.role === 'field_rep' && t ? `${t.done}/${t.total}` : '—'
       },
     },
     {
@@ -200,7 +208,7 @@ export function AdminTeam() {
       align: 'right' as const,
       cell: (m: TeamMember) => {
         const r = rangeById.get(m.id)
-        return m.role === 'field_rep' && r ? r.knocks.toLocaleString() : '—'
+        return r ? r.knocks.toLocaleString() : '—'
       },
     },
     {
@@ -209,7 +217,7 @@ export function AdminTeam() {
       className: 'font-semibold',
       cell: (m: TeamMember) => {
         const r = rangeById.get(m.id)
-        return m.role === 'field_rep' && r ? `${r.contactRate}%` : '—'
+        return r ? `${r.contactRate}%` : '—'
       },
     },
     {
@@ -217,7 +225,7 @@ export function AdminTeam() {
       align: 'right' as const,
       cell: (m: TeamMember) => {
         const r = rangeById.get(m.id)
-        return m.role === 'field_rep' && r ? r.sold : '—'
+        return r ? r.sold : '—'
       },
     },
   ]
@@ -310,6 +318,33 @@ export function AdminTeam() {
             {r === 'all' ? 'All roles' : ROLE_LABEL[r]}
           </Chip>
         ))}
+        <select
+          value={officeFilter}
+          onChange={(e) => setOfficeFilter(e.target.value)}
+          aria-label="Team / office"
+          data-testid="team-office-filter"
+          className="focusable min-h-[40px] rounded-field border border-line bg-surface px-2 text-sm"
+        >
+          <option value="">Every team / office</option>
+          {offices.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+          <option value="__none">No team / office</option>
+        </select>
+        <select
+          value={activeFilter}
+          onChange={(e) => setActiveFilter(e.target.value as typeof activeFilter)}
+          aria-label="Account status"
+          data-testid="team-active-filter"
+          className="focusable min-h-[40px] rounded-field border border-line bg-surface px-2 text-sm"
+        >
+          <option value="all">Any status</option>
+          <option value="active">Active</option>
+          <option value="pending">Invite pending</option>
+          <option value="deactivated">Removed from team</option>
+        </select>
         <span className="mx-2 h-6 w-px bg-line" />
         {view === 'people' ? (
           (

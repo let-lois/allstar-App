@@ -4,7 +4,7 @@ import type { Property } from '../../types'
 import { useAppStore, useRepName } from '../../store/useAppStore'
 import { NOTE_TAGS } from '../../data/outcomes'
 import type { NoteTag } from '../../types'
-import { OutcomePill, ScoreBar, StatusPill } from '../ui/StatusPill'
+import { OutcomePill, StatusPill } from '../ui/StatusPill'
 import { CommActions } from './CommActions'
 import { Button } from '../ui/Button'
 import { distanceMiles, formatDistance, walkMinutes, type Position } from '../../lib/geo'
@@ -80,7 +80,6 @@ export function PropertyPeek({
               {cityLine(property)}
             </p>
           </div>
-          <ScoreBar score={property.score} />
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-2">

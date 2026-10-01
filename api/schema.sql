@@ -425,6 +425,22 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS audit_by_client_time ON audit_log(client_id, at DESC);
 
+-- Failed requests, by the reference the person was shown (migration 026).
+CREATE TABLE IF NOT EXISTS error_log (
+  id         TEXT PRIMARY KEY,
+  client_id  TEXT,
+  user_id    TEXT,
+  at         INTEGER NOT NULL,
+  method     TEXT,
+  route      TEXT,
+  status     INTEGER NOT NULL,
+  operation  TEXT,
+  records    INTEGER,
+  message    TEXT,
+  ms         INTEGER
+);
+CREATE INDEX IF NOT EXISTS error_log_by_client ON error_log(client_id, at DESC);
+
 -- Failed sign-in attempts, bucketed by email and by source address.
 --
 -- Password hashing is deliberately slow, which raises the cost of guessing but

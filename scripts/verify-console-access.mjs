@@ -295,7 +295,7 @@ for (const width of [390, 412]) {
   const links = await page.evaluate(() =>
     [...document.querySelectorAll('nav a')].map((a) => a.textContent.trim()),
   )
-  ok(!links.includes('Clients'), 'manager: no Clients section')
+  ok(!links.includes('Account'), 'manager: no Account section')
   ok(!links.includes('Settings'), 'manager: no Settings section')
   await ctx.close()
 }
@@ -318,7 +318,7 @@ for (const width of [390, 412]) {
   const RESTRICTED = [
     { path: '/admin/audit', allowed: ['client_admin', 'super_admin'], proof: /Activity log|Everything/i },
     { path: '/admin/settings', allowed: ['client_admin', 'super_admin'], proof: /Visit outcomes/i },
-    { path: '/admin/clients', allowed: ['super_admin'], proof: /One account, because/i },
+    { path: '/admin/clients', allowed: ['super_admin'], proof: /What this deployment holds/i },
   ]
   const WHO = [
     { role: 'manager', name: /Ray Okafor/ },
@@ -384,7 +384,7 @@ for (const width of [390, 412]) {
   const links = await page.evaluate(() =>
     [...document.querySelectorAll('nav a')].map((a) => a.textContent.trim()),
   )
-  ok(links.includes('Clients'), 'super admin: Clients section present')
+  ok(links.includes('Account'), 'super admin: Account section present')
   ok(links.includes('Settings'), 'super admin: Settings section present')
   await ctx.close()
 }

@@ -11,7 +11,7 @@ import { NoteComposer } from '../components/visit/NoteComposer'
 import { PhotoStrip } from '../components/visit/PhotoStrip'
 import { CommActions } from '../components/property/CommActions'
 import { StreetView } from '../components/property/StreetView'
-import { OutcomePill, ScoreBar, StatusPill } from '../components/ui/StatusPill'
+import { OutcomePill, StatusPill } from '../components/ui/StatusPill'
 import { distanceMiles, formatDistance, walkMinutes } from '../lib/geo'
 import { cityLine, moneyFull, relativeLower } from '../lib/format'
 import type { LeadStatus, NoteTag } from '../types'
@@ -177,7 +177,6 @@ export function PropertyDetail() {
                   .join(' · ')}
               </p>
             </div>
-            <ScoreBar score={property.score} />
           </div>
 
           {/*

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { describeError } from '../lib/errors'
 import { Button } from '../components/ui/Button'
 import { TeamBadge } from '../components/badge/TeamBadge'
 import { ApiError, apiConfirmBadge, apiMintBadge } from '../lib/http'
@@ -41,7 +42,7 @@ export function BadgeStep({ view, busy, error, post, goto }: StepProps) {
       .then((r) => alive && setBadge(r.badge))
       .catch((err) => {
         if (!alive) return
-        setMintError(err instanceof ApiError ? err.message : 'Could not create your badge just now.')
+        setMintError(describeError(err, 'Could not create your badge just now.'))
         if (err instanceof ApiError && err.status === 409) setNeedsName(true)
       })
       .finally(() => alive && setMinting(false))
@@ -60,7 +61,7 @@ export function BadgeStep({ view, busy, error, post, goto }: StepProps) {
       const moved = await post('badge')
       if (moved) void refreshMe()
     } catch (err) {
-      setMintError(err instanceof ApiError ? err.message : 'Could not confirm just now.')
+      setMintError(describeError(err, 'Could not confirm just now.'))
     } finally {
       setConfirming(false)
     }

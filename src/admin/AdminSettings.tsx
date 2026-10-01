@@ -1,9 +1,10 @@
 import { IconArrowDown, IconArrowUp } from '../components/nav/icons'
+import { describeError } from '../lib/errors'
 import { Glyph } from '../components/ui/Glyph'
 import { useEffect, useState } from 'react'
 import { AdminPage } from './AdminLayout'
 import { Button } from '../components/ui/Button'
-import { ApiError, apiSaveSettings } from '../lib/http'
+import { apiSaveSettings } from '../lib/http'
 import { liveToken } from '../lib/session'
 import { useAppStore } from '../store/useAppStore'
 import {
@@ -77,7 +78,7 @@ export function AdminSettings() {
       await refreshFromServer()
       setNotice('Saved. Reps pick this up the next time their phone syncs.')
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Nothing was changed.')
+      setError(describeError(err, 'Could not save. Nothing was changed.'))
     } finally {
       setSaving(false)
     }

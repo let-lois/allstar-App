@@ -8,6 +8,7 @@ import type {
   Task,
   Territory,
   LeadList,
+  Visit,
 } from '../types'
 import * as db from './db'
 import { purgeErased } from './erase-local'
@@ -126,6 +127,22 @@ export async function applyBootstrap(dto: BootstrapDTO, mergeOnly = false): Prom
     erased lead's notes go with the erasure below.
   */
   if (dto.notes?.length) await db.putAll('notes', dto.notes as Note[])
+
+  /*
+    Visits, merged the same way and for the same reason: this phone's own
+    visits — one in progress, or one finished but not yet sent — must survive.
+    A visit this phone already holds keeps what only the phone knows (its
+    photo ids, its pending flag) and takes nothing from the server's copy; one
+    it has never seen — a teammate's, or one from another device — is added,
+    so a lead's history is the same wherever it is opened.
+  */
+  if (dto.visits?.length) {
+    const incoming = dto.visits as Visit[]
+    const mine = await db.all<Visit>('visits')
+    const have = new Map(mine.map((v) => [v.id, v]))
+    const fresh = incoming.filter((v) => !have.has(v.id))
+    if (fresh.length) await db.putAll('visits', fresh)
+  }
 
   /*
     Erasures last, and the order is not arbitrary.

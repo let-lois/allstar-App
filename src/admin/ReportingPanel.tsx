@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { describeError } from '../lib/errors'
 import { Button } from '../components/ui/Button'
-import { ApiError, apiSetTimezone } from '../lib/http'
+import { apiSetTimezone } from '../lib/http'
 import { liveToken } from '../lib/session'
 import { useAppStore } from '../store/useAppStore'
 
@@ -96,7 +97,7 @@ export function ReportingPanel() {
       await refreshFromServer()
       setNotice('Saved. New work is counted on this calendar from now on.')
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Nothing was changed.')
+      setError(describeError(err, 'Could not save. Nothing was changed.'))
     } finally {
       setSaving(false)
     }

@@ -39,7 +39,9 @@ await page.waitForTimeout(2000)
 await page.goto(`${BASE}/leads`, { waitUntil: 'domcontentloaded' })
 await page.waitForTimeout(1500)
 await dismissTour(page)
-await page.getByTestId('lead-row').first().click()
+// A lead that is not already at Follow-up, which the status change below sets.
+// Not simply the first row: the list's order is not this test's to rely on.
+await page.getByTestId('lead-row').filter({ hasNotText: /Follow-up/ }).first().click()
 await page.waitForTimeout(1000)
 const propertyId = page.url().split('/property/')[1]?.split(/[?#]/)[0]
 ok(!!propertyId, 'a lead opens', propertyId)

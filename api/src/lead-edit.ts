@@ -1,4 +1,5 @@
 import { record } from './audit'
+import { bindChunks } from './d1'
 import { canImport } from './import'
 import { queueForCrm } from './integrations'
 import type { Env, SessionUser } from './types'
@@ -81,8 +82,7 @@ export async function setLeadStatus(
   */
   const guard = status === 'dnc' ? '' : "AND status != 'dnc'"
 
-  for (let i = 0; i < ids.length; i += 100) {
-    const chunk = ids.slice(i, i + 100)
+  for (const chunk of bindChunks(ids, 3)) {
     const holes = chunk.map((_, n) => `?${n + 4}`).join(',')
     // Returning the ids rather than counting them: the CRM queue below needs to
     // know *which* leads moved, and a count cannot say.
@@ -111,8 +111,7 @@ export async function setLeadStatus(
   if (status !== 'dnc') {
     const moved = new Set(changed)
     const missed = ids.filter((id) => !moved.has(id))
-    for (let i = 0; i < missed.length; i += 100) {
-      const chunk = missed.slice(i, i + 100)
+    for (const chunk of bindChunks(missed, 1)) {
       const holes = chunk.map((_, n) => `?${n + 2}`).join(',')
       const res = await env.DB.prepare(
         `SELECT COUNT(*) AS n FROM properties

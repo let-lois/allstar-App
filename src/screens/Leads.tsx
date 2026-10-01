@@ -18,11 +18,15 @@ import { IconSearch } from '../components/nav/icons'
 import type { LeadStatus, Property } from '../types'
 import { STATUS_LABEL } from '../data/outcomes'
 
-type Sort = 'nearest' | 'score' | 'recent' | 'value'
+/*
+  No "Best score": every lead's score is the 50 it was created with — nothing
+  computes one (docs/sales-data-audit.md) — so sorting by it was sorting by
+  nothing. It comes back when there is a real score to sort on.
+*/
+type Sort = 'nearest' | 'recent' | 'value'
 
 const SORTS: { key: Sort; label: string }[] = [
   { key: 'nearest', label: 'Nearest' },
-  { key: 'score', label: 'Best score' },
   { key: 'value', label: 'Value' },
   { key: 'recent', label: 'Recent' },
 ]
@@ -109,9 +113,8 @@ export function Leads() {
             .sort((a, b) => a.d - b.d)
             .map((x) => x.p)
         }
-        return rows.sort((a, b) => b.score - a.score)
-      case 'score':
-        return rows.sort((a, b) => b.score - a.score)
+        // No location yet: the order they are in, not a score that is 50 for all.
+        return rows
       case 'value':
         return rows.sort((a, b) => (b.opportunityValue ?? 0) - (a.opportunityValue ?? 0))
       case 'recent':

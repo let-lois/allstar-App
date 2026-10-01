@@ -389,6 +389,16 @@ export default function Index() {
             a training clip inside a screen should do.
           */
           allowsInlineMediaPlayback: true,
+          /*
+            Dictation in notes uses the page's own speech recognition, which
+            asks the webview for the microphone. The page is our own bundle,
+            loaded from a file URL, so the webview grants that request itself
+            and iOS shows its one system prompt for the microphone and for
+            speech recognition — both described in app.json. Without the two
+            Info.plist strings iOS refuses outright and the note said
+            "Microphone access is blocked" with nothing anybody could allow.
+          */
+          mediaCapturePermissionGrantType: 'grant',
           style: styles.fill,
         }}
       />
