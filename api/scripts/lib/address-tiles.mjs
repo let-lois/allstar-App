@@ -143,6 +143,13 @@ export function canonStreet(street) {
  * is compared in its canonical spelling (`canonStreet`), and the first source
  * added — Overture, in a build — is the row that is kept.
  */
+/** Two rows for one number, street and unit this close are one door. */
+export const SAME_DOOR_METRES = 150
+function metresApart(lng1, lat1, lng2, lat2) {
+  const k = Math.cos(((lat1 + lat2) / 2) * (Math.PI / 180))
+  return Math.hypot((lng2 - lng1) * k, lat2 - lat1) * 111_320
+}
+
 export class Tiler {
   constructor() {
     this.tiles = new Map()
@@ -153,12 +160,23 @@ export class Tiler {
     const key = `${x}/${y}`
     let t = this.tiles.get(key)
     if (!t) {
-      t = { x, y, rows: [], seen: new Set() }
+      t = { x, y, rows: [], seen: new Set(), near: new Map() }
       this.tiles.set(key, t)
     }
-    const dedupe = `${tileRow[0]}|${canonStreet(tileRow[1])}|${tileRow[2] ?? ''}|${String(tileRow[5] ?? '').slice(0, 5)}`.toLowerCase()
+    const door = `${tileRow[0]}|${canonStreet(tileRow[1])}|${tileRow[2] ?? ''}`.toLowerCase()
+    const dedupe = `${door}|${String(tileRow[5] ?? '').slice(0, 5)}`
     if (t.seen.has(dedupe)) return false
+    /*
+      The same door from a second source under another ZIP: Wisconsin parcels
+      give the municipality's ZIP (53158, Pleasant Prairie) where Overture
+      has the postal one (53142, Kenosha). Same number, street and unit a
+      short walk apart is one house, and the row already here is kept.
+    */
+    const spots = t.near.get(door)
+    if (spots?.some(([lng, lat]) => metresApart(lng, lat, tileRow[6], tileRow[7]) <= SAME_DOOR_METRES)) return false
     t.seen.add(dedupe)
+    if (spots) spots.push([tileRow[6], tileRow[7]])
+    else t.near.set(door, [[tileRow[6], tileRow[7]]])
     t.rows.push(tileRow)
     this.count++
     return true

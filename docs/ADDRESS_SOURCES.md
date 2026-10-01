@@ -192,12 +192,15 @@ The first place GeoNames lists for a ZIP is used (29611 → Greenville,
 | Area | Source | Licence | Loaded | Result |
 |---|---|---|---|---|
 | Clark County, WA (Vancouver suburbs: Hazel Dell, Orchards, Salmon Creek, Battle Ground) | ClarkView_Public/SiteAddress on the county GIS server — `api/scripts/county/clark-wa.mjs` | Public, with the county's no-warranty disclaimer (credit: © Clark County WA) | 2026-10-01, 249,856 site addresses; 76,977 doors Overture lacked (the rest already there, kept as Overture's) | Hazel Dell sample went from 44% to 91% of homes named; Census estimates on it from 86 to 18 |
+| Eau Claire, Dane (Madison) and Kenosha counties, WI | Version 12 Statewide Parcel Map Database (`Wisconsin_Statewide_Parcels_DB`), parcel site addresses at the parcel's point; parcels classed only commercial or manufacturing left out — `api/scripts/county/wisconsin-parcels.mjs` | Public (credit: Product of the Version 12 Statewide Parcel Map Database Project (V12), Wisconsin State Cartographer's Office, administered by WLIP at DOA) | 2026-10-01, 269,934 parcel addresses; 81,554 doors Overture lacked (35,794 Eau Claire, 40,244 Dane, 5,516 Kenosha) | Eau Claire samples from 0% to 99% and 65% of homes named; Madison from 48% to 96%; Kenosha unchanged at 86% (Overture already had the county's addresses) |
 | City of Milwaukee, WI | Master Address Index (residential rows, `RES_COM_FLAG = R`) placed at parcel centroids from the city's parcel layer — `api/scripts/county/milwaukee.mjs` | CC BY (credit: © City of Milwaukee) | 2026-09-30, 265,660 addresses | Sample blocks went from 0% to 98–99% published address points; 12–26 non-residential buildings per block left out |
 
-Wisconsin has no current statewide address file: the State Cartographer's
-Office lists only the 2014 LinkWISCONSIN aggregation (2013 data, not
-maintained). Counties that publish are already in Overture (Madison 89%,
-Green Bay 93% measured), which is why Milwaukee was the Wisconsin gap.
+Wisconsin has no statewide address-point file, but the V12 statewide parcel
+layer carries each parcel's site address, which fills the counties Overture
+lacks. The parcel ZIP is sometimes the municipality's rather than the postal
+one (53158 Pleasant Prairie for a 53142 Kenosha address), so the tile builder
+treats the same number, street and unit within 150 m as one door whatever the
+ZIP, and keeps the row it had first (Overture's).
 
 Clark County places its points at the street frontage (a median 25–28 m
 from the house) and lists every unit of a complex at one point. Territory
@@ -213,10 +216,14 @@ Rebuild Clark County when the county updates its data:
       --geojson clark-wa.geojson --fields number=number,street=street,unit=unit,city=city,zip=zip \
       --state WA --upload --account <id>
 
-Still to load (2026-10-01): Wisconsin's gaps — Eau Claire (0% published
-points), parts of Madison (48%), Kenosha (85%) — from the statewide parcel
-layer, whose host (`services3.arcgis.com`) is not yet reachable from the build
-environment.
+Rebuild the Wisconsin parcel counties when V13 is published (any county
+name the layer's CONAME field uses can be added to --county):
+
+    node scripts/county/wisconsin-parcels.mjs --county "EAU CLAIRE,DANE,KENOSHA" --out wi.geojson
+    F=number=number,street=street,unit=unit,city=city,zip=zip
+    npm run addresses:build -- --bbox -91.66,44.59,-90.92,44.86 --geojson wi.geojson --fields $F --state WI --upload --account <id>
+    npm run addresses:build -- --bbox -89.84,42.84,-89.00,43.30 --geojson wi.geojson --fields $F --state WI --upload --account <id>
+    npm run addresses:build -- --bbox -88.31,42.49,-87.75,42.67 --geojson wi.geojson --fields $F --state WI --upload --account <id>
 
 Rebuild Milwaukee when the city updates its data:
 
