@@ -106,6 +106,8 @@ const AUTH_CSS = `
     --accent: rgb(32 196 211); --accent-strong: rgb(127 224 239); --bad: #fca5a5;
     --quiet-face: rgb(255 255 255 / 0.1); --quiet-ink: #fff; --quiet-ring: rgb(32 196 211 / 0.4);
     --lift: 0 1px 2px rgb(0 0 0 / 0.28);
+    --field: rgba(0, 0, 0, 0.32); --field-ring: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+    --field-focus: inset 0 0 0 1px rgb(255 255 255 / 0.14), 0 0 0 2px #20c4d3;
   }
   @media (prefers-color-scheme: light) {
     :root {
@@ -116,6 +118,8 @@ const AUTH_CSS = `
       --accent: rgb(10 114 128); --accent-strong: rgb(6 88 98); --bad: rgb(185 28 28);
       --quiet-face: #fff; --quiet-ink: rgb(17 24 39); --quiet-ring: rgb(0 0 0 / 0.12);
       --lift: 0 1px 2px rgb(0 0 0 / 0.08);
+      --field: rgb(236 239 244); --field-ring: inset 0 0 0 1px rgb(203 213 225);
+      --field-focus: inset 0 0 0 1px rgb(10 114 128), 0 0 0 2px rgb(10 114 128 / 0.35);
     }
   }
   *, *::before, *::after { box-sizing: border-box; }
@@ -152,12 +156,12 @@ const AUTH_CSS = `
   .field { position: relative; display: block; margin-top: 6px; }
   input {
     display: block; width: 100%; height: 56px; margin: 0; padding: 0 16px; border: 0; border-radius: 14px;
-    background: rgba(0, 0, 0, 0.32); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+    background: var(--field); box-shadow: var(--field-ring);
     color: var(--ink); font: inherit; font-size: 16px; /* 16px or iOS zooms the page on focus */
     transition: box-shadow 150ms ease; -webkit-appearance: none; appearance: none;
   }
   input::placeholder { color: var(--ink-faint); opacity: 1; }
-  input:focus { outline: none; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14), 0 0 0 2px #20c4d3; }
+  input:focus { outline: none; box-shadow: var(--field-focus); }
   input[readonly] { color: var(--ink-mute); }
   .field input[type="password"], .field input[data-revealed] { padding-right: 76px; }
   .reveal {

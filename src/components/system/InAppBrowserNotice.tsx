@@ -55,7 +55,7 @@ export function InAppBrowserNotice({ tone = 'light' }: { tone?: 'light' | 'dark'
     <div
       role="alert"
       className={`shrink-0 px-3 py-2.5 text-xs ${
-        tone === 'dark' ? 'bg-warn/15 text-[#FDE68A]' : 'bg-warn-bg text-warn'
+        tone === 'dark' ? 'bg-warn/15 text-caution' : 'bg-warn-bg text-warn'
       }`}
     >
       <div className="mx-auto flex max-w-[600px] items-start gap-2.5">

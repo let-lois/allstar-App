@@ -141,6 +141,58 @@ try {
     }
   }
 
+  /* --- light theme: a field looks like a field, an error can be read ------ */
+  /*
+    Login's fields were black at 32% on the white card — mid-grey slabs — and
+    its errors #FCA5A5 pink at about 1.9:1. Both pages now take the light
+    theme's own fill and red; this holds them there, in both themes.
+  */
+  {
+    const lum = (rgb) => {
+      const [r, g, b] = rgb.match(/[\d.]+/g).slice(0, 3).map(Number).map((v) => {
+        v /= 255
+        return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+      })
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    const contrast = (a, b) => {
+      const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m)
+      return (x + 0.05) / (y + 0.05)
+    }
+    const read = (page) =>
+      page.evaluate(() => {
+        const card = document.querySelector('.card')
+        const input = card.querySelector('input[type="password"]')
+        const alert = card.querySelector('[role="alert"]')
+        return {
+          card: getComputedStyle(card).backgroundColor,
+          field: getComputedStyle(input).backgroundColor,
+          text: getComputedStyle(input).color,
+          alert: alert ? getComputedStyle(alert).color : null,
+        }
+      })
+    for (const colorScheme of ['light', 'dark']) {
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme, serviceWorkers: 'block' })
+      const login = await ctx.newPage()
+      await login.goto(BASE, { waitUntil: 'networkidle' })
+      await login.getByRole('button', { name: /^Sign in$/ }).click()
+      await login.waitForTimeout(200)
+      const inv = await ctx.newPage()
+      await inv.setContent(PAGES.error, { waitUntil: 'load' })
+      await inv.evaluate(() => document.activeElement?.blur?.())
+      await inv.waitForTimeout(250)
+      for (const [name, page] of [['Login', login], ['Create Account', inv]]) {
+        const m = await read(page)
+        const fieldOk = colorScheme === 'light' ? lum(m.field) > 0.7 : lum(m.field) < 0.05
+        ok(fieldOk && contrast(m.text, m.field) >= 7, `${colorScheme}: ${name}'s fields read as fields, with dark-on-light / light-on-dark type`, `${m.field}, text ${contrast(m.text, m.field).toFixed(1)}:1`)
+        ok(m.alert && contrast(m.alert, m.card) >= 4.5, `${colorScheme}: ${name}'s error text is readable on the card`, m.alert && `${m.alert} at ${contrast(m.alert, m.card).toFixed(1)}:1`)
+      }
+      const [a, b] = [await read(login), await read(inv)]
+      ok(a.field === b.field && a.alert === b.alert, `${colorScheme}: and the two pages still use the same field and error colours`, `${a.field} / ${b.field}; ${a.alert} / ${b.alert}`)
+      await ctx.close()
+    }
+  }
+
   /* --- every width, every state: nothing scrolls sideways ------------------ */
   for (const width of [320, 375, 390, 430, 768, 1024, 1366]) {
     const ctx = await browser.newContext({ viewport: { width, height: width < 700 ? 740 : 900 }, serviceWorkers: 'block' })

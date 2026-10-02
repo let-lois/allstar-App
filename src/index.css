@@ -1416,6 +1416,61 @@
 
 @layer components {
   /**
+   * The login's recessed field, on a light ground.
+   *
+   * `.field-sunk` is black at 32% over the card, which is a recess on the
+   * dark card and a slab of mid-grey on a white one — the sign-in form in
+   * the light theme read as three disabled boxes. Here it takes the light
+   * theme's own input fill and line instead, the same pair `.field` uses,
+   * and the focus ring the darker teal that shows on white. Autofill gets
+   * the light fill too: the dark rules above would otherwise paint a saved
+   * password back into a near-black box with white type.
+   */
+  :root[data-theme='light'] .field-sunk {
+    background: rgb(var(--surface-field));
+    box-shadow: inset 0 0 0 1px rgb(var(--line));
+  }
+  :root[data-theme='light'] .field-sunk:focus {
+    box-shadow: inset 0 0 0 1px rgb(var(--accent)), 0 0 0 2px rgb(var(--accent) / 0.35);
+  }
+  :root[data-theme='light'] .field-sunk:-webkit-autofill,
+  :root[data-theme='light'] .field-sunk:-webkit-autofill:hover,
+  :root[data-theme='light'] .field-sunk:-webkit-autofill:focus,
+  :root[data-theme='light'] .field-sunk:-webkit-autofill:active {
+    -webkit-text-fill-color: rgb(var(--ink));
+    caret-color: rgb(var(--ink));
+    -webkit-box-shadow: inset 0 0 0 1px rgb(var(--line)), inset 0 0 0 100px rgb(var(--surface-field));
+    box-shadow: inset 0 0 0 1px rgb(var(--line)), inset 0 0 0 100px rgb(var(--surface-field));
+  }
+  :root[data-theme='light'] .field-sunk:autofill {
+    -webkit-text-fill-color: rgb(var(--ink));
+    caret-color: rgb(var(--ink));
+    box-shadow: inset 0 0 0 1px rgb(var(--line)), inset 0 0 0 100px rgb(var(--surface-field));
+  }
+
+  /**
+   * Sign-in errors and warnings, readable in both themes.
+   *
+   * The login wrote its error as #FCA5A5 and its warnings as #FDE68A, picked
+   * for the near-black ground it used to have. On the light theme's white
+   * card that pink measures about 1.9:1 and the yellow about 1.3:1 — a wrong
+   * password announced in text almost nobody could read. Dark keeps exactly
+   * the old colours; light takes the theme's own red and amber.
+   */
+  .text-alert {
+    color: #fca5a5;
+  }
+  .text-caution {
+    color: #fde68a;
+  }
+  :root[data-theme='light'] .text-alert {
+    color: rgb(var(--bad));
+  }
+  :root[data-theme='light'] .text-caution {
+    color: rgb(var(--warn));
+  }
+
+  /**
    * The machined controls, on a light ground.
    *
    * `.metal` is built for a dark app: its shadow is tuned to read against

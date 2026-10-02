@@ -242,7 +242,7 @@ export function Login() {
           {sessionExpired && (
             <p
               role="status"
-              className="mb-4 rounded-field bg-warn/15 px-3 py-2.5 text-sm text-[#FDE68A] ring-1 ring-warn/25"
+              className="mb-4 rounded-field bg-warn/15 px-3 py-2.5 text-sm text-caution ring-1 ring-warn/25"
             >
               You were signed out. Anything you recorded is still saved on this
               phone and will upload once you sign back in.
@@ -298,7 +298,7 @@ export function Login() {
             </label>
 
             {error && (
-              <p role="alert" className="mt-3 text-sm font-medium text-[#FCA5A5]">
+              <p role="alert" className="mt-3 text-sm font-medium text-alert">
                 {error}
               </p>
             )}
@@ -355,7 +355,7 @@ export function Login() {
                 password.
               </p>
               {forgotError && (
-                <p role="alert" className="mt-2 text-sm font-medium text-[#FCA5A5]" data-testid="forgot-error">
+                <p role="alert" className="mt-2 text-sm font-medium text-alert" data-testid="forgot-error">
                   {forgotError}
                 </p>
               )}
@@ -475,7 +475,7 @@ export function Login() {
                 </span>
               </label>
               {joinError && (
-                <p role="alert" className="mt-3 text-sm font-medium text-[#FCA5A5]">
+                <p role="alert" className="mt-3 text-sm font-medium text-alert">
                   {joinError}
                 </p>
               )}
