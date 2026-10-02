@@ -119,7 +119,9 @@
     "verify:quote": "node scripts/verify-quote.mjs",
     "verify:overview": "node scripts/verify-overview.mjs",
     "verify:fieldpass": "node scripts/verify-fieldpass.mjs",
-    "verify:mapview": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-mapview.mjs"
+    "verify:mapview": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-mapview.mjs",
+    "verify:badgecrop": "node scripts/verify-badgecrop.mjs",
+    "verify:authpages": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-authpages.mjs"
   },
   "dependencies": {
     "@allstar/core": "*",

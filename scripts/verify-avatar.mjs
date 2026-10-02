@@ -68,6 +68,11 @@ await page.setInputFiles('input[type=file]', {
   mimeType: 'image/jpeg',
   buffer: jpeg,
 })
+// Picking opens the framing step; the photo is set only once it is saved.
+await page.getByTestId('photo-cropper').waitFor({ timeout: 8000 })
+ok((await page.locator('button[aria-label*="profile photo" i] img').count()) === 0, 'picking a photo opens the framing step and changes nothing yet')
+await page.getByTestId('crop-preview').click()
+await page.getByTestId('crop-save').click()
 await page.waitForTimeout(1200)
 
 const img = page.locator('button[aria-label*="profile photo" i] img')
@@ -97,8 +102,8 @@ const decoded = await page.evaluate(
   src,
 )
 ok(
-  decoded.w === 256 && decoded.h === 256,
-  `the avatar is re-encoded to 256x256 (got ${decoded.w}x${decoded.h})`,
+  decoded.w === 256 && decoded.h === 320,
+  `the avatar is re-encoded to 256x320, the badge's 4:5 (got ${decoded.w}x${decoded.h})`,
 )
 const bytes = Math.round((src.length - src.indexOf(',') - 1) * 0.75)
 ok(bytes > 0 && bytes < 64_000, `and stays under the server's ceiling (${bytes} bytes)`)

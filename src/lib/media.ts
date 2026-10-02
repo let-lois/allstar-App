@@ -17,10 +17,11 @@ const QUALITY = 0.72
  * other device. A 1600px portrait would be ~180KB of somebody else's face on a
  * rep's data plan, forty times over.
  *
- * 256px square is four times the largest place one is drawn, which is the
- * headroom a 3x screen needs and no more.
+ * 256px wide is four times the largest place one is drawn in a list, which is
+ * the headroom a 3x screen needs and no more. It is stored at the badge's 4:5
+ * (256 × 320, see `lib/photo-crop.ts`), framed by the rep in `PhotoCropper`;
+ * round avatars show its centre.
  */
-const AVATAR_EDGE = 256
 const AVATAR_QUALITY = 0.82
 
 export interface CompressedImage {
@@ -122,28 +123,78 @@ export function openLibrary(onFiles: (files: File[]) => void) {
 }
 
 
-/**
- * A square avatar, centre-cropped.
- *
- * Cropped rather than squashed, and cropped to the *centre* rather than the
- * top: phone cameras are held portrait and a top crop of a portrait photo is a
- * forehead. The centre is where a face is, on the shot people actually take.
- */
-export async function avatarFromFile(file: Blob): Promise<CompressedImage> {
-  const bitmap = await loadBitmap(file)
-  const edge = Math.min(bitmap.width, bitmap.height)
-  const sx = Math.round((bitmap.width - edge) / 2)
-  const sy = Math.round((bitmap.height - edge) / 2)
+/* --- the badge photo, framed by hand ------------------------------------- */
 
+/** Longest edge of the copy the cropper works from. */
+const CROP_SOURCE_EDGE = 2048
+
+export interface CropSource {
+  /** What the cropper draws from: the photo, upright, at most 2048px long. */
+  canvas: HTMLCanvasElement
+  /** An object URL of the same pixels, for the <img> the rep drags. Revoke it. */
+  url: string
+  w: number
+  h: number
+}
+
+/**
+ * Open a photo for framing.
+ *
+ * A 48MP iPhone photo is ~190MB decoded, which is more than iOS lets one
+ * canvas hold. It is decoded once, upright (EXIF honoured, as for every other
+ * photo here), drawn into a canvas no longer than 2048px, and the full-size
+ * decode is let go. 2048px is eight times the stored photo's width, so no
+ * amount of zoom the cropper allows runs out of detail.
+ */
+export async function cropSourceFromFile(file: Blob): Promise<CropSource> {
+  const bitmap = await loadBitmap(file)
+  const bw = bitmap.width
+  const bh = bitmap.height
+  if (!bw || !bh) throw new Error('Could not read image')
+  const k = Math.min(1, CROP_SOURCE_EDGE / Math.max(bw, bh))
+  const w = Math.max(1, Math.round(bw * k))
+  const h = Math.max(1, Math.round(bh * k))
   const canvas = document.createElement('canvas')
-  canvas.width = AVATAR_EDGE
-  canvas.height = AVATAR_EDGE
+  canvas.width = w
+  canvas.height = h
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Canvas unavailable')
-  ctx.drawImage(bitmap as CanvasImageSource, sx, sy, edge, edge, 0, 0, AVATAR_EDGE, AVATAR_EDGE)
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(bitmap as CanvasImageSource, 0, 0, w, h)
   if ('close' in bitmap) (bitmap as ImageBitmap).close()
+  const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.92))
+  if (!blob) throw new Error('Could not read image')
+  return { canvas, url: URL.createObjectURL(blob), w, h }
+}
 
-  const dataUrl = canvas.toDataURL('image/jpeg', AVATAR_QUALITY)
+/**
+ * The framed photo as the badge stores it: 256 × 320 JPEG.
+ *
+ * The server takes an avatar of at most 64,000 characters of data URL. A busy
+ * photo at the usual quality can come close at this size, so the quality steps
+ * down until it fits rather than the save failing on the server later, after
+ * the rep has walked away believing it worked.
+ */
+export function badgePhotoFromCrop(
+  source: CanvasImageSource,
+  rect: { sx: number; sy: number; sw: number; sh: number },
+  out: { w: number; h: number },
+): CompressedImage {
+  const canvas = document.createElement('canvas')
+  canvas.width = out.w
+  canvas.height = out.h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas unavailable')
+  ctx.imageSmoothingQuality = 'high'
+  // White under the photo, so a transparent PNG is not a black JPEG.
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, out.w, out.h)
+  ctx.drawImage(source, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, out.w, out.h)
+  let dataUrl = ''
+  for (const q of [AVATAR_QUALITY, 0.74, 0.66, 0.58, 0.5]) {
+    dataUrl = canvas.toDataURL('image/jpeg', q)
+    if (dataUrl.length <= 60_000) break
+  }
   const bytes = Math.round((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75)
-  return { dataUrl, width: AVATAR_EDGE, height: AVATAR_EDGE, bytes }
+  return { dataUrl, width: out.w, height: out.h, bytes }
 }
