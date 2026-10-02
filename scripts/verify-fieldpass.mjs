@@ -108,6 +108,9 @@ try {
     await page.waitForTimeout(800)
     const upd = mutations.filter((m) => m.kind === 'property.update' && m.payload?.id === WITH.id).pop()
     ok(upd && upd.payload.contacts?.length === 1 && upd.payload.contacts[0].phone === '(512) 555-7777' && upd.payload.contacts[0].id === 'c1', 'saving updates the lead’s own contact — the same record, not a second one', JSON.stringify(upd?.payload?.contacts))
+    /* Typed, then Continue instead of Save: the contact still reaches the lead. */
+    await page.getByTestId('visit-contact-email').fill('sam.new@example.com')
+    ok(/metal-brand/.test((await page.getByTestId('visit-contact-save').getAttribute('class')) ?? ''), 'the Save contact button is the brand’s primary button once something changed')
     // Finish the visit.
     for (let i = 0; i < 3; i++) {
       const next = page.getByRole('button', { name: /^(Next|Continue|Complete visit|Finish)/ }).last()
@@ -117,6 +120,8 @@ try {
       if ((await page.getByTestId('visit-done-lead').count()) > 0) break
     }
     ok((await page.getByTestId('visit-done-lead').count()) === 1, 'the end of a visit offers View lead')
+    const late = mutations.filter((m) => m.kind === 'property.update' && m.payload?.id === WITH.id).pop()
+    ok(late?.payload?.contacts?.[0]?.email === 'sam.new@example.com' && late.payload.contacts[0].phone === '(512) 555-7777', 'an email typed and not saved, then Continue, is still saved to the lead', JSON.stringify(late?.payload?.contacts))
     const done = mutations.find((m) => m.kind === 'visit.complete')
     ok(done && done.payload?.startedAt > 0 && done.payload?.endedAt >= done.payload?.startedAt && done.payload?.durationMs >= 0, 'start, end and duration go to the server with the visit', JSON.stringify({ s: done?.payload?.startedAt, e: done?.payload?.endedAt, d: done?.payload?.durationMs }))
     await page.getByTestId('visit-done-lead').click()

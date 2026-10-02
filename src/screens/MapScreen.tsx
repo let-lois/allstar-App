@@ -353,7 +353,7 @@ export function MapScreen() {
           : activeCount === 0 && filter.scope === 'route'
             ? 'Nothing on today’s route matches.'
           : activeCount === 0
-            ? 'Every lead of yours is finished — won, lost or Do Not Contact.'
+            ? 'Every lead of yours is finished — lost or Do Not Contact.'
             : 'No leads match these filters.'
 
   /*
