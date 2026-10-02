@@ -53,8 +53,8 @@ export function Avatar({
     face, and a list of grey circles waiting for photos that are not coming is
     worse than the coloured initials this has always shown.
 
-    `object-cover` because the source is already a centre-cropped square; this
-    only guards against an avatar that arrived from somewhere else.
+    `object-cover` because the photo is the badge's 4:5 portrait: the circle
+    shows its centre, which the cropper marks for the rep with a dashed ring.
   */
   if (src) {
     return (

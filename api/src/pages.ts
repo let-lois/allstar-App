@@ -10,6 +10,8 @@
  * their invite on the phone they'll be knocking with, standing in a truck.
  */
 
+import { LOGO_PNG_BASE64 } from './brand-logo'
+
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
@@ -75,6 +77,176 @@ function shell(title: string, body: string): Response {
   )
 }
 
+/* --- the sign-in look, for the invitation pages ------------------------- */
+
+/*
+  The invitation page is the first screen of the product an invited person
+  ever sees, and the next one is the app's Login. It used to be this file's
+  own navy-and-blue design with an "A" tile, so accepting an invitation felt
+  like a different product from signing in.
+
+  These rules are the Login screen's (src/screens/Login.tsx), copied as
+  values because the Worker has no Tailwind build: the same ground, the same
+  wordmark tile, the same 384px column, card, 56px fields, Show button and teal
+  primary. Every number below is the computed value of the matching Login
+  element, and `scripts/verify-authpages.mjs` measures both pages side by side
+  so they cannot quietly drift apart.
+
+  Dark is the default and light follows the phone — what Login does for anyone
+  who has not picked a theme in the app. This page is on the API's origin, so
+  it cannot read the app's stored choice; following the phone is the only
+  honest default.
+*/
+const AUTH_CSS = `
+  :root {
+    color-scheme: dark;
+    --ground: rgb(13 19 32); --ink: rgb(242 246 250); --ink-mute: rgb(147 162 184); --ink-faint: rgb(100 116 139);
+    --surface: rgb(21 29 46); --tint: rgb(12 39 49); --hairline: rgb(255 255 255 / 0.14);
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.28), 0 6px 18px rgb(0 0 0 / 0.22);
+    --accent: rgb(32 196 211); --accent-strong: rgb(127 224 239); --bad: #fca5a5;
+    --quiet-face: rgb(255 255 255 / 0.1); --quiet-ink: #fff; --quiet-ring: rgb(32 196 211 / 0.4);
+    --lift: 0 1px 2px rgb(0 0 0 / 0.28);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --ground: rgb(240 242 247); --ink: rgb(17 24 39); --ink-mute: rgb(90 105 125); --ink-faint: rgb(107 124 147);
+      --surface: #fff; --tint: rgb(224 246 249); --hairline: rgb(0 0 0 / 0.07);
+      --shadow-card: 0 1px 2px rgb(0 0 0 / 0.06), 0 6px 18px rgb(0 0 0 / 0.06);
+      --accent: rgb(10 114 128); --accent-strong: rgb(6 88 98); --bad: rgb(185 28 28);
+      --quiet-face: #fff; --quiet-ink: rgb(17 24 39); --quiet-ring: rgb(0 0 0 / 0.12);
+      --lift: 0 1px 2px rgb(0 0 0 / 0.08);
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; min-height: 100dvh; display: flex; flex-direction: column;
+    background: var(--ground); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px; line-height: 1.5; letter-spacing: -0.011em; -webkit-font-smoothing: antialiased;
+  }
+  /* Centred with auto margins, as on Login: a taller form scrolls from its top
+     instead of overflowing upward past where the page can scroll to. */
+  .pane {
+    flex: 1; display: flex; flex-direction: column;
+    padding: calc(32px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right))
+             calc(32px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
+  }
+  .col { width: 100%; max-width: 384px; margin: auto; }
+  .lockup { margin-bottom: 28px; text-align: center; }
+  .wordmark {
+    display: inline-flex; background: #fff; border-radius: 20px; padding: 12px 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.28), 0 6px 18px rgba(0,0,0,0.22);
+  }
+  .wordmark img { display: block; width: 204px; max-width: 100%; height: auto; }
+  h1 { margin: 20px 0 0; font-size: 23px; font-weight: 600; line-height: 1.25; letter-spacing: -0.02em; text-wrap: balance; }
+  .sub { margin: 8px 0 0; color: var(--ink-mute); font-size: 14px; line-height: 1.55; text-wrap: balance; }
+  .card {
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: 20px;
+    box-shadow: var(--shadow-card); padding: 20px;
+  }
+  label { display: block; }
+  label + label { margin-top: 14px; }
+  label > span:first-child { display: block; font-size: 13px; font-weight: 500; color: var(--ink-mute); }
+  .field { position: relative; display: block; margin-top: 6px; }
+  input {
+    display: block; width: 100%; height: 56px; margin: 0; padding: 0 16px; border: 0; border-radius: 14px;
+    background: rgba(0, 0, 0, 0.32); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+    color: var(--ink); font: inherit; font-size: 16px; /* 16px or iOS zooms the page on focus */
+    transition: box-shadow 150ms ease; -webkit-appearance: none; appearance: none;
+  }
+  input::placeholder { color: var(--ink-faint); opacity: 1; }
+  input:focus { outline: none; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14), 0 0 0 2px #20c4d3; }
+  input[readonly] { color: var(--ink-mute); }
+  .field input[type="password"], .field input[data-revealed] { padding-right: 76px; }
+  .reveal {
+    position: absolute; right: 6px; top: 6px; display: grid; place-items: center; width: 64px; height: 44px;
+    border: 0; border-radius: 14px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
+    line-height: 16px; letter-spacing: 0.025em; text-transform: uppercase;
+    background: var(--quiet-face); color: var(--quiet-ink); box-shadow: 0 0 0 1px var(--quiet-ring), var(--lift);
+  }
+  .primary {
+    display: grid; place-items: center; width: 100%; height: 56px; margin-top: 20px; border: 0; border-radius: 14px;
+    background: #0fa9b8; color: #111827; font: inherit; font-size: 17px; font-weight: 600; text-decoration: none;
+    cursor: pointer; box-shadow: 0 0 0 1px rgba(127, 224, 239, 0.5), var(--lift);
+    transition: box-shadow 140ms ease, filter 140ms ease;
+  }
+  .primary:active { box-shadow: 0 0 0 1px rgba(127, 224, 239, 0.5); filter: brightness(0.92); }
+  .primary:disabled { opacity: 0.6; }
+  .reveal:focus-visible, .primary:focus-visible, a:focus-visible { outline: 2px solid #20c4d3; outline-offset: 2px; }
+  .alert { margin: 12px 0 0; color: var(--bad); font-size: 14px; font-weight: 500; }
+  .status { margin: 0 0 4px; border-radius: 14px; background: var(--tint); padding: 10px 12px; font-size: 13.5px; line-height: 1.6; }
+  .card > .status + .primary { margin-top: 16px; }
+  .note { margin: 16px 0 0; color: var(--ink-mute); font-size: 13.5px; line-height: 1.6; }
+  .note a, .status a { color: var(--accent); font-weight: 600; }
+  .foot { margin: 32px 0 0; text-align: center; color: var(--ink-faint); font-size: 12.5px; line-height: 1.625; }
+  .links { margin: 12px 0 0; display: flex; justify-content: center; gap: 20px; font-size: 13px; font-weight: 500; }
+  .links a { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent-strong); text-decoration: none; }
+`
+
+/*
+  Show / Hide and the busy label, the two things Login does with script. The
+  form works without either: the browser still checks the fields and the
+  server still checks the pair.
+*/
+const AUTH_JS = `
+  document.querySelectorAll('[data-reveal]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var i = b.parentNode.querySelector('input'); var show = i.type === 'password';
+      i.type = show ? 'text' : 'password'; if (show) i.setAttribute('data-revealed', ''); else i.removeAttribute('data-revealed');
+      b.textContent = show ? 'Hide' : 'Show'; b.setAttribute('aria-pressed', String(show));
+    });
+  });
+  document.querySelectorAll('form[data-busy]').forEach(function (f) {
+    f.addEventListener('submit', function () {
+      var s = f.querySelector('button[type="submit"]'); if (!s) return;
+      setTimeout(function () { s.disabled = true; s.textContent = f.getAttribute('data-busy'); }, 0);
+    });
+  });
+`
+
+function authShell(title: string, o: { heading: string; sub?: string; card: string; foot?: string }): Response {
+  return new Response(
+    `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="rgb(13 19 32)" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="rgb(240 242 247)" media="(prefers-color-scheme: light)">
+<title>${escapeHtml(title)} · All Star</title>
+<style>${AUTH_CSS}</style>
+</head>
+<body><div class="pane"><main class="col">
+  <div class="lockup">
+    <div class="wordmark"><img src="data:image/png;base64,${LOGO_PNG_BASE64}" alt="Allstar Home Solutions" width="720" height="184"></div>
+    <h1>${o.heading}</h1>
+    ${o.sub ? `<p class="sub">${o.sub}</p>` : ''}
+  </div>
+  <div class="card">${o.card}</div>
+  ${o.foot ? `<p class="foot">${o.foot}</p>` : ''}
+  <p class="links"><a href="/support" target="_blank" rel="noopener noreferrer">Help &amp; support</a><a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a></p>
+</main></div>
+<script>${AUTH_JS}</script>
+</body>
+</html>`,
+    { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } },
+  )
+}
+
+const signInButton = (appUrl: string) =>
+  `<a class="primary" href="${escapeHtml(appUrl)}" data-testid="open-app">Go to sign in</a>`
+
+const passwordField = (o: { name: string; label: string; placeholder: string; autofocus?: boolean }) =>
+  `<label><span>${o.label}</span>
+     <span class="field">
+       <input name="${o.name}" type="password" required autocomplete="new-password" minlength="10"${o.autofocus ? ' autofocus' : ''}
+              placeholder="${o.placeholder}" enterkeyhint="${o.name === 'confirm' ? 'go' : 'next'}">
+       <button type="button" class="reveal" data-reveal aria-pressed="false">Show</button>
+     </span></label>`
+
 export function setupPage(opts: { error?: string; done?: boolean; appUrl: string }): Response {
   if (opts.done) {
     return shell(
@@ -135,41 +307,36 @@ export function invitePage(opts: {
     here is how a forwarded email becomes a way to lock the real owner out.
   */
   if (opts.invite?.alreadyActive) {
-    return shell(
-      'You already have an account',
-      `<div class="mark">A</div>
-       <h1>You're already set up</h1>
-       <div class="ok">This ${escapeHtml(opts.invite.clientName)} account already has a password.</div>
-       <p class="sub">Open <a href="${escapeHtml(opts.appUrl)}">${escapeHtml(opts.appUrl)}</a> and sign in with it.</p>
-       <p class="hint">Forgotten it? Ask your administrator for a reset link — this invitation cannot change it.</p>`,
-    )
+    return authShell('You already have an account', {
+      heading: "You're already set up",
+      card: `<p class="status" role="status">This ${escapeHtml(opts.invite.clientName)} account already has a password.
+             Sign in with it.</p>
+             ${signInButton(opts.appUrl)}
+             <p class="note">Forgotten it? Press <strong>Forgot password?</strong> on the sign-in screen, or ask your
+             administrator for a reset link. This invitation cannot change it.</p>`,
+    })
   }
 
   if (opts.done) {
-    return shell(
-      reset ? 'Password changed' : 'Password set',
-      `<div class="mark">A</div>
-       <h1>${reset ? 'Password changed' : "You're in"}</h1>
-       <div class="ok" data-state="done">${
-         reset ? 'Your new password is set. The old one no longer works.' : 'Your password is set.'
-       }</div>
-       <p class="sub">Open <a href="${escapeHtml(opts.appUrl)}">${escapeHtml(opts.appUrl)}</a> and sign in${reset ? ' with it' : ''}.</p>
-       <p class="hint">On a phone, use your browser's "Add to Home Screen" so Allstar opens
-       full-screen and works without signal.</p>`,
-    )
+    return authShell(reset ? 'Password changed' : 'Account created', {
+      heading: reset ? 'Password changed' : "You're in",
+      card: `<p class="status" role="status" data-state="done">${
+        reset ? 'Your new password is set. The old one no longer works.' : 'Your account is ready and your password is set.'
+      }</p>
+             ${signInButton(opts.appUrl)}
+             <p class="note">Or open <a href="${escapeHtml(opts.appUrl)}">${escapeHtml(opts.appUrl)}</a> and sign in${reset ? ' with it' : ''}.</p>`,
+      foot: `On a phone, use your browser's "Add to Home Screen" so Allstar opens full-screen and works without signal.`,
+    })
   }
 
   if (!opts.invite) {
-    return shell(
-      'Link unavailable',
-      `<div class="mark">A</div>
-       <h1>This link has expired</h1>
-       <p class="sub">Links here work once. A password reset lasts two days and an invitation seven,
-       and either stops working the moment a newer one is made.</p>
-       <p class="hint">Already have a password? Just open <a href="${escapeHtml(opts.appUrl)}">${escapeHtml(opts.appUrl)}</a>
-       and sign in. Forgotten it? Press <strong>Forgot password?</strong> on the sign-in screen for a fresh link,
-       or ask your administrator for one.</p>`,
-    )
+    return authShell('Link unavailable', {
+      heading: 'This link has expired',
+      sub: 'Links here work once. A password reset lasts two days and an invitation seven, and either stops working the moment a newer one is made.',
+      card: `${signInButton(opts.appUrl).replace('class="primary"', 'class="primary" style="margin-top:0"')}
+             <p class="note">Already have a password? Sign in with it. Forgotten it? Press <strong>Forgot password?</strong>
+             on the sign-in screen for a fresh link, or ask your administrator for one.</p>`,
+    })
   }
 
   /*
@@ -179,29 +346,23 @@ export function invitePage(opts: {
     is the sign-in they were already locked out of.
   */
   const first = escapeHtml(opts.invite.name.split(' ')[0] ?? '')
-  return shell(
-    reset ? 'Reset your password' : 'Set your password',
-    `<div class="mark">A</div>
-     <h1>${reset ? 'Reset your password' : `Welcome, ${first}`}</h1>
-     <p class="sub">${
-       reset
-         ? `Choose a new password for your ${escapeHtml(opts.invite.clientName)} account.`
-         : `Set a password for your ${escapeHtml(opts.invite.clientName)} account.`
-     }</p>
-     ${opts.error ? `<div class="err" role="alert">${escapeHtml(opts.error)}</div>` : ''}
-     <form method="POST" action="/invite/${escapeHtml(opts.token)}" data-kind="${reset ? 'reset' : 'invite'}">
+  const client = escapeHtml(opts.invite.clientName)
+  return authShell(reset ? 'Reset your password' : 'Create your account', {
+    heading: reset ? 'Reset your password' : 'Create your account',
+    sub: reset
+      ? `Choose a new password for your ${client} account.`
+      : `${first ? `Welcome, ${first}. ` : 'Welcome. '}Set a password for your ${client} account to get started.`,
+    card: `<form method="POST" action="/invite/${escapeHtml(opts.token)}" data-kind="${reset ? 'reset' : 'invite'}"
+                 data-busy="${reset ? 'Changing password…' : 'Creating your account…'}">
        <label><span>Email</span>
-         <input value="${escapeHtml(opts.invite.email)}" readonly autocomplete="username"></label>
-       <label><span>${reset ? 'New password' : 'Choose a password'}</span>
-         <input name="password" type="password" required autocomplete="new-password"
-                minlength="10" autofocus placeholder="At least 10 characters"></label>
-       <label><span>Type it again</span>
-         <input name="confirm" type="password" required autocomplete="new-password"
-                minlength="10" placeholder="The same password"></label>
-       <button type="submit">${reset ? 'Change password' : 'Set password'}</button>
-     </form>
-     <p class="hint">Only you will know this password. Nobody at your company can see it.</p>`,
-  )
+         <span class="field"><input value="${escapeHtml(opts.invite.email)}" readonly autocomplete="username" inputmode="email"></span></label>
+       ${passwordField({ name: 'password', label: reset ? 'New password' : 'Choose a password', placeholder: 'At least 10 characters', autofocus: true })}
+       ${passwordField({ name: 'confirm', label: 'Type it again', placeholder: 'The same password' })}
+       ${opts.error ? `<p class="alert" role="alert">${escapeHtml(opts.error)}</p>` : ''}
+       <button type="submit" class="primary">${reset ? 'Change password' : 'Create account'}</button>
+     </form>`,
+    foot: 'Only you will know this password. Nobody at your company can see it.',
+  })
 }
 
 /* --- privacy policy and support ------------------------------------------ */

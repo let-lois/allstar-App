@@ -1,8 +1,10 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Avatar } from './Avatar'
-import { avatarFromFile } from '../../lib/media'
+import { PhotoCropper } from './PhotoCropper'
+import { cropSourceFromFile, type CropSource } from '../../lib/media'
 import { useAppStore } from '../../store/useAppStore'
 import { haptic } from '../../lib/haptics'
+import { ROLE_LABEL } from '../../lib/roles'
 
 /**
  * The signed-in person's profile photo, and the control that sets it.
@@ -11,9 +13,13 @@ import { haptic } from '../../lib/haptics'
  * a second tap target for the thing the first one already looks like, and on a
  * phone the face is the biggest, most obviously tappable object on the screen.
  *
- * Everything happens on the device: pick, crop, compress, store, show. The
- * upload is a consequence, not a step — a rep in a stairwell sets their photo
- * and it is simply set, the same contract every other write in this app makes.
+ * Everything happens on the device: pick, frame, preview, save. The upload is
+ * a consequence, not a step — a rep in a stairwell sets their photo and it is
+ * simply set, the same contract every other write in this app makes.
+ *
+ * Framing is the rep's: the photo opens in `PhotoCropper` at the badge's 4:5
+ * shape, and nothing changes until they press Save. It used to be cut to a
+ * centred square on the spot, with no say in where.
  */
 export function AvatarPicker() {
   const user = useAppStore((s) => s.user)
@@ -21,6 +27,10 @@ export function AvatarPicker() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [source, setSource] = useState<CropSource | null>(null)
+
+  // The working copy is an object URL; let it go when it is replaced or closed.
+  useEffect(() => () => { if (source) URL.revokeObjectURL(source.url) }, [source])
 
   if (!user) return null
 
@@ -29,9 +39,7 @@ export function AvatarPicker() {
     setError(null)
     setBusy(true)
     try {
-      const img = await avatarFromFile(file)
-      await setMyAvatar(img.dataUrl)
-      haptic('tap')
+      setSource(await cropSourceFromFile(file))
     } catch {
       /*
         Named, not swallowed. A photo that silently fails to appear reads as the
@@ -45,6 +53,9 @@ export function AvatarPicker() {
       if (fileRef.current) fileRef.current.value = ''
     }
   }
+
+  const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.name
+  const company = user.company ?? { name: user.clientName, timezone: undefined }
 
   return (
     <>
@@ -112,6 +123,26 @@ export function AvatarPicker() {
         <p role="alert" className="mt-2 text-[12.5px] font-medium text-bad">
           {error}
         </p>
+      )}
+
+      {source && (
+        <PhotoCropper
+          source={source}
+          badge={{
+            badge: user.badge ?? null,
+            name,
+            title: user.jobTitle || ROLE_LABEL[user.role],
+            company,
+            avatarInitials: user.avatarInitials,
+          }}
+          onCancel={() => setSource(null)}
+          onReplace={() => fileRef.current?.click()}
+          onSave={async (dataUrl) => {
+            await setMyAvatar(dataUrl)
+            haptic('tap')
+            setSource(null)
+          }}
+        />
       )}
     </>
   )
