@@ -288,6 +288,15 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
 
   ok((await page.locator('text=/Import finished/').count()) > 0, 'the operator sees a result summary')
   ok((await page.locator('text=/New leads created/').count()) > 0, 'the summary reports what was created')
+  /* "See them on the map" opens the Leads map, filtered to the import’s territory. */
+  await page.getByTestId('import-see-map').click()
+  await page.waitForURL(/\/admin\/leads/, { timeout: 8000 }).catch(() => {})
+  await page.waitForTimeout(900)
+  {
+    const u = new URL(page.url())
+    ok(u.pathname === '/admin/leads' && u.searchParams.get('view') === 'map' && u.searchParams.get('territory') === 'terr_x', 'See them on the map opens the Leads map, filtered to the import’s territory', u.pathname + u.search)
+    ok((await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'map' }).getAttribute('aria-pressed')) === 'true', 'and the Leads page opens on its map, not the list')
+  }
 
   await ctx.close()
 }
@@ -406,6 +415,16 @@ async function signedInConsole(ctx, { withGeocode = true } = {}) {
   const after = (await body()).replace(/\s+/g, ' ')
   ok(/assigned\./i.test(after), 'and the operator is told it worked')
   ok(!/assigned to nobody/.test(after), 'the warning clears rather than lingering')
+
+  /* No territory named: "See them on the map" opens every lead on the Leads map. */
+  await page.getByTestId('import-see-map').click()
+  await page.waitForURL(/\/admin\/leads/, { timeout: 8000 }).catch(() => {})
+  await page.waitForTimeout(900)
+  {
+    const u = new URL(page.url())
+    ok(u.pathname === '/admin/leads' && u.searchParams.get('view') === 'map' && !u.searchParams.has('territory'), 'with no territory, See them on the map opens the Leads map unfiltered', u.pathname + u.search)
+    ok((await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'map' }).getAttribute('aria-pressed')) === 'true', 'on its map view')
+  }
 
   await ctx.close()
 }
