@@ -48,13 +48,13 @@ ok(/data-kind="reset"/.test(reset), 'the form is marked as a reset for anything 
 console.log('\n--- the invitation page, unchanged in spirit ---')
 const inviteView = { ...resetView, kind: 'invite' }
 const invite = await html(invitePage({ token: 't0k', invite: inviteView, appUrl: APP }))
-ok(/<h1>Welcome, Marcus<\/h1>/.test(invite), 'an invitation still welcomes the person by first name')
+ok(/<h1>Create your account<\/h1>/.test(invite) && /Welcome, Marcus\./.test(invite), 'an invitation still welcomes the person by first name')
 ok(/name="confirm"/.test(invite), 'and now asks for the password twice as well')
-ok(/Set password<\/button>/.test(invite), 'with its own button')
+ok(/>Create account<\/button>/.test(invite) && !/Change password/.test(invite), 'with its own button')
 
 console.log('\n--- what a mistake looks like ---')
 const wrong = await html(invitePage({ token: 't0k', invite: resetView, error: passwordPairError('longenough1', 'longenough2'), appUrl: APP }))
-ok(/<div class="err" role="alert">The two passwords do not match/.test(wrong), 'a mismatch is shown on the page, as an alert')
+ok(/<p class="alert" role="alert">The two passwords do not match/.test(wrong), 'a mismatch is shown on the page, as an alert')
 ok(/name="password"/.test(wrong), 'with the form still there to try again')
 const expired = await html(invitePage({ token: 'dead', appUrl: APP }))
 ok(/This link has expired/.test(expired), 'a dead token says so')
