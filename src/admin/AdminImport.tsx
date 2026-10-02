@@ -1219,7 +1219,21 @@ export default function AdminImport() {
 
           <div className="mt-5 flex gap-2">
             <Button onClick={reset}>Import another file</Button>
-            <Button variant="secondary" onClick={() => window.location.assign('/admin/territories')}>
+            {/*
+              The Leads map, not the Territories page. This used to open
+              Territories whatever the file did, and an import with no
+              territory named has nothing there to look at. With one, the map
+              opens filtered to it; without, it shows every lead.
+            */}
+            <Button
+              variant="secondary"
+              onClick={() =>
+                window.location.assign(
+                  `/admin/leads?view=map${result?.territoryId ? `&territory=${encodeURIComponent(result.territoryId)}` : ''}`,
+                )
+              }
+              data-testid="import-see-map"
+            >
               See them on the map
             </Button>
           </div>

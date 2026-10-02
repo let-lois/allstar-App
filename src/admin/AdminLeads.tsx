@@ -155,7 +155,8 @@ export default function AdminLeads() {
   }
   const [sort, setSort] = useState<SortKey>('address')
   const [shown, setShown] = useState(PAGE)
-  const [view, setView] = useState<'list' | 'map'>('list')
+  // `?view=map` opens on the map — the import screen's "See them on the map".
+  const [view, setView] = useState<'list' | 'map'>(() => (params.get('view') === 'map' ? 'map' : 'list'))
   /*
     The shape being drawn, or null when not drawing.
 
