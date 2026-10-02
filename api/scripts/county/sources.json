@@ -464,5 +464,49 @@
    "before": 0,
    "after": 91.5
   }
+ },
+ {
+  "id": "sc-lancaster",
+  "name": "Lancaster County, SC",
+  "state": "SC",
+  "geoid": "45057",
+  "kind": "arcgis",
+  "layer": "https://services3.arcgis.com/rJcpRneDUBgTeCT3/arcgis/rest/services/AddressPoints_LancCnty/FeatureServer/0",
+  "bbox": [
+   -80.9195,
+   34.4478,
+   -80.3984,
+   35.0864
+  ],
+  "publisher": "Lancaster County, SC (ArcGIS Online)",
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-03",
+  "addresses": 49188,
+  "coverage": {
+   "before": 0.2,
+   "after": 87.3
+  }
+ },
+ {
+  "id": "sc-colleton",
+  "name": "Colleton County, SC",
+  "state": "SC",
+  "geoid": "45029",
+  "kind": "arcgis",
+  "layer": "https://services1.arcgis.com/m0cnLGKdhwao8WvM/arcgis/rest/services/Address_Points/FeatureServer/0",
+  "bbox": [
+   -81.0923,
+   32.4607,
+   -80.2443,
+   33.1908
+  ],
+  "publisher": "Colleton County, SC (ArcGIS Online)",
+  "licence": "Public ArcGIS layer; no licence stated on its Hub record",
+  "loaded": "2026-10-03",
+  "addresses": 24332,
+  "coverage": {
+   "before": 0,
+   "after": 77.1
+  }
  }
 ]

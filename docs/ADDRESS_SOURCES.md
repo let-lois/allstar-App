@@ -266,6 +266,8 @@ with its layer, box, publisher and licence note.
 | Crawford County, PA | County GIS | 45,430 | 0% → 97.5% |
 | Lancaster County, PA | Lancaster County GIS | 228,900 | 0% → 97.1% |
 | Florence County, SC | APD Urban Planning & Management LLC | 65,137 | 0% → 91.5% |
+| Lancaster County, SC | Lancaster County, SC | 49,188 | 0.2% → 87.3% |
+| Colleton County, SC | Colleton County, SC | 24,332 | 0% → 77.1% |
 
 Oklahoma's rows come from the state's NG911 address layer, which covers rural
 and unincorporated areas more than cities; Oklahoma City (Oklahoma County)
