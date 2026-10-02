@@ -99,6 +99,11 @@ interface Props {
   className?: string
   initialCenter?: { lat: number; lng: number }
   initialZoom?: number
+  initialHeading?: number
+  initialTilt?: number
+  /** Accepted for parity with FieldMap; this renderer never follows the rep on its own. */
+  follow?: boolean
+  onViewChange?: (view: { lat: number; lng: number; zoom: number; heading?: number; tilt?: number }) => void
   disableClustering?: boolean
   handleRef?: React.MutableRefObject<MapHandle | null>
   /**
@@ -139,6 +144,7 @@ interface Props {
   draw?: {
     points: { lat: number; lng: number }[]
     onAddPoint: (point: { lat: number; lng: number }) => void
+    onMovePoint?: (index: number, point: { lat: number; lng: number }) => void
     /** What the drawing is for, announced to a screen reader. */
     label?: string
   }
@@ -289,6 +295,9 @@ export function GoogleFieldMap({
   draw,
   pick,
   onUnavailable,
+  initialHeading,
+  initialTilt,
+  onViewChange,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
@@ -319,6 +328,8 @@ export function GoogleFieldMap({
   onSelectRef.current = onSelect
   const onUnavailableRef = useRef(onUnavailable)
   onUnavailableRef.current = onUnavailable
+  const onViewChangeRef = useRef(onViewChange)
+  onViewChangeRef.current = onViewChange
   /*
     The picker, in a ref for the same reason and one more: the map's click
     listener is attached once at construction and must see whether picking is on
@@ -388,6 +399,8 @@ export function GoogleFieldMap({
           center: initialCenter ??
             (properties[0] ? { lat: properties[0].lat, lng: properties[0].lng } : { lat: 30.5083, lng: -97.6789 }),
           zoom: initialZoom ?? DEFAULT_ZOOM,
+          ...(initialHeading != null ? { heading: initialHeading } : {}),
+          ...(initialTilt != null ? { tilt: initialTilt } : {}),
           /*
             The same floor as the self-rendered map, from the shared contract.
 
@@ -459,6 +472,16 @@ export function GoogleFieldMap({
           the map library's own, and `clickableIcons: false` above already keeps
           Google's points of interest out of it.
         */
+        // Where the map came to rest, for the screen to remember (lib/map-view).
+        // 'idle' fires once a pan, zoom or fit has settled, not every frame.
+        mapRef.current.addListener('idle', () => {
+          const m = mapRef.current
+          const c = m?.getCenter()
+          const z = m?.getZoom()
+          if (!m || !c || z == null) return
+          onViewChangeRef.current?.({ lat: c.lat(), lng: c.lng(), zoom: z, heading: m.getHeading() ?? undefined, tilt: m.getTilt() ?? undefined })
+        })
+
         mapRef.current.addListener('click', (ev: google.maps.MapMouseEvent) => {
           const at = ev.latLng?.toJSON()
           if (!at) return
@@ -883,18 +906,34 @@ export function GoogleFieldMap({
         'marker',
       )) as google.maps.MarkerLibrary
       if (cancelled || !mapRef.current) return
-      vertexRef.current = coords.map(
-        (at) =>
-          new AdvancedMarkerElement({
-            map: mapRef.current,
-            position: at,
-            content: vertexElement(),
-            // Never a button. A handle that opened something on tap would eat
-            // the vertex a rep was placing next to it.
-            gmpClickable: false,
-            zIndex: DRAW_Z_VERTEX,
-          }),
-      )
+      const movable = !!drawRefProp.current?.onMovePoint
+      vertexRef.current = coords.map((at, i) => {
+        const marker = new AdvancedMarkerElement({
+          map: mapRef.current,
+          position: at,
+          content: vertexElement(),
+          // Never a button. A handle that opened something on tap would eat
+          // the vertex a rep was placing next to it.
+          gmpClickable: false,
+          // But a handle that can be dragged, when the drawer can move corners:
+          // pressing on the dot moves it, pressing anywhere else pans as before.
+          gmpDraggable: movable,
+          zIndex: DRAW_Z_VERTEX,
+        })
+        if (movable) {
+          // On release only: the overlay is rebuilt from the points, and
+          // rebuilding mid-drag would drop the marker out from under the finger.
+          marker.addListener('dragend', () => {
+            // A LatLng or a literal, depending on how it was last set.
+            const p = marker.position as unknown as { lat: number | (() => number); lng: number | (() => number) } | null
+            if (!p) return
+            const lat = typeof p.lat === 'function' ? p.lat() : p.lat
+            const lng = typeof p.lng === 'function' ? p.lng() : p.lng
+            drawRefProp.current?.onMovePoint?.(i, { lat, lng })
+          })
+        }
+        return marker
+      })
     })()
 
     return () => {

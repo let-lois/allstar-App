@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { describeError } from '../lib/errors'
 import { AdminPage } from './AdminLayout'
 import { fitZoom } from '../components/map/FieldMap'
 import { AllStarMap } from '../components/map/AllStarMap'
@@ -6,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { UNASSIGNED_TERRITORY, inTerritory, useTerritories } from './useAdminData'
 import { DataList } from './DataList'
-import { ApiError, type GeneratedLeads, apiAssignTerritory } from '../lib/http'
+import { type GeneratedLeads, apiAssignTerritory } from '../lib/http'
 import { liveToken } from '../lib/session'
 import { moneyFull } from '../lib/format'
 import { pointInPolygon, polygonAreaSqMiles } from '../lib/geo'
@@ -33,7 +34,8 @@ export function AdminTerritories() {
   const mode = useAppStore((s) => s.mode)
   const nav = useNavigate()
   const list = useMemo(() => Object.values(properties), [properties])
-  const unsorted = useTerritories(list)
+  const territoryIds = useMemo(() => Object.keys(territories), [territories])
+  const unsorted = useTerritories(list, territoryIds)
 
   /** A territory's name if we have one; otherwise something readable. */
   const label = (id: string) =>
@@ -145,7 +147,7 @@ export function AdminTerritories() {
       setDraftReps([])
     } catch (err) {
       setDrawError(
-        err instanceof ApiError ? err.message : 'Could not create the territory. Try again.',
+        describeError(err, 'Could not create the territory. Try again.'),
       )
     } finally {
       creating.current = false
@@ -250,7 +252,7 @@ export function AdminTerritories() {
       )
     } catch (err) {
       setAssignError(
-        err instanceof ApiError ? err.message : 'Could not save that. Nothing was changed.',
+        describeError(err, 'Could not save that. Nothing was changed.'),
       )
     } finally {
       setSaving(null)
@@ -319,7 +321,7 @@ export function AdminTerritories() {
       setRemovedNote(null)
     } catch (err) {
       setManageError(
-        err instanceof ApiError ? err.message : 'Could not rename that. Nothing was changed.',
+        describeError(err, 'Could not rename that. Nothing was changed.'),
       )
     } finally {
       setBusy(false)
@@ -338,7 +340,7 @@ export function AdminTerritories() {
       setRemovedNote(null)
     } catch (err) {
       setManageError(
-        err instanceof ApiError ? err.message : 'Could not look up the houses. Nothing was changed.',
+        describeError(err, 'Could not look up the houses. Nothing was changed.'),
       )
     } finally {
       setBusy(false)
@@ -365,7 +367,7 @@ export function AdminTerritories() {
       )
     } catch (err) {
       setManageError(
-        err instanceof ApiError ? err.message : 'Could not delete that. Nothing was changed.',
+        describeError(err, 'Could not delete that. Nothing was changed.'),
       )
     } finally {
       setBusy(false)
@@ -537,7 +539,25 @@ export function AdminTerritories() {
                 >
                   Start over
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto whitespace-nowrap"
+                  data-testid="territory-draw-cancel"
+                  // Cancel discards the drawing; folding the section keeps it.
+                  onClick={() => {
+                    draftStash.current = null
+                    setDraft(null)
+                    setDraftName('')
+                    setDrawError(null)
+                  }}
+                >
+                  Cancel
+                </Button>
               </div>
+              <p className="mt-2 text-[12.5px] text-ink-mute">
+                Tap the map to add a corner. Pan and zoom freely between taps; drag a corner to move it.
+              </p>
             </div>
 
             <AllStarMap
@@ -547,6 +567,8 @@ export function AdminTerritories() {
               draw={{
                 points: draft.points,
                 onAddPoint: (point) => setDraft((d) => (d ? { points: [...d.points, point] } : d)),
+                onMovePoint: (i, point) =>
+                  setDraft((d) => (d ? { points: d.points.map((p, n) => (n === i ? point : p)) } : d)),
               }}
               position={null}
               disableClustering={list.length <= 25}
@@ -724,13 +746,28 @@ export function AdminTerritories() {
                     ))}
                   </select>
                 ) : (
-                  <RepChips
-                    repIds={territories[t.id]?.repIds ?? (territories[t.id]?.repId ? [territories[t.id]!.repId!] : [])}
-                    options={repOptions}
-                    disabled={mode !== 'live' || saving !== null}
-                    onAdd={(repId) => void assign(t.id, repId, 'add')}
-                    onRemove={(repId) => void assign(t.id, repId, 'remove')}
-                  />
+                  /*
+                    Selects the territory, as a click on its row does, but
+                    without the row's scroll down to the map: on a desktop
+                    narrower than the two-column layout that scroll threw the
+                    page to the map every time somebody added or removed a
+                    rep, which read as the rep picker jumping away.
+                  */
+                  <div
+                    data-testid="territory-rep-cell"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelected(t.id)
+                    }}
+                  >
+                    <RepChips
+                      repIds={territories[t.id]?.repIds ?? (territories[t.id]?.repId ? [territories[t.id]!.repId!] : [])}
+                      options={repOptions}
+                      disabled={mode !== 'live' || saving !== null}
+                      onAdd={(repId) => void assign(t.id, repId, 'add')}
+                      onRemove={(repId) => void assign(t.id, repId, 'remove')}
+                    />
+                  </div>
                 ),
             },
             { header: 'Leads', align: 'right', cell: (t) => t.properties },
@@ -1046,11 +1083,9 @@ function RepChips({
   const nameOf = (id: string) => options.find((r) => r.id === id)?.name ?? 'Former team member'
   const free = options.filter((r) => !repIds.includes(r.id))
   return (
-    // Nothing here stops the click: using a territory's rep controls also
-    // selects that territory, so the map shows the patch being edited. The
-    // old single `<select>` swallowed its clicks, and once these chips grew
-    // wide enough to sit under the middle of the row — where a click on a
-    // table row lands — selecting a territory silently stopped working.
+    // Nothing here stops the click: the row's cell wraps this and selects the
+    // territory (without scrolling to its map), so using a territory's rep
+    // controls still shows which patch is being edited.
     <div className="flex flex-wrap items-center gap-1.5">
       {repIds.length === 0 && <span className="text-[13px] text-ink-mute">Nobody yet</span>}
       {repIds.map((id) => (

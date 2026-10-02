@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { describeError } from '../lib/errors'
 import { AdminPage } from './AdminLayout'
 import { DataList } from './DataList'
 import { fitZoom } from '../components/map/FieldMap'
@@ -34,7 +35,7 @@ type Draft = { points: { lat: number; lng: number }[] }
 /** What the server or the store said went wrong, in words a manager can act on. */
 function explain(err: unknown, fallback: string): string {
   if (err instanceof NetworkError) return 'That needs a connection. Try again when you are back online.'
-  if (err instanceof ApiError) return err.message
+  if (err instanceof ApiError) return describeError(err, fallback)
   if (err instanceof Error && err.message) return err.message
   return fallback
 }
@@ -395,6 +396,7 @@ export function AdminLists() {
               draw={{
                 points: draft.points,
                 onAddPoint: (point) => setDraft((d) => (d ? { points: [...d.points, point] } : d)),
+                onMovePoint: (i, point) => setDraft((d) => (d ? { points: d.points.map((p, n) => (n === i ? point : p)) } : d)),
                 label: 'Outline a list on the map',
               }}
               position={null}

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { describeError, formatReference } from '../lib/errors'
 import { AdminPage } from './AdminLayout'
 import { Button } from '../components/ui/Button'
 import {
@@ -12,6 +13,7 @@ import {
 } from '../lib/csv'
 import {
   ApiError,
+  NetworkError,
   apiAssignProperties,
   apiGeocode,
   apiImport,
@@ -204,7 +206,7 @@ export default function AdminImport() {
       await refreshFromServer()
     } catch (err) {
       setAssignError(
-        err instanceof ApiError ? err.message : 'Could not assign them. The leads are still there.',
+        describeError(err, 'Could not assign them. The leads are still there.'),
       )
     } finally {
       setAssigning(false)
@@ -435,17 +437,25 @@ export default function AdminImport() {
     setBusy('import')
     setError(null)
 
-    // Chunked to the server's per-request ceiling; the totals are summed so the
-    // operator sees one number rather than one per chunk.
-    const CHUNK = 500
-    const totals: ImportResultDTO = { created: 0, updated: 0, rejected: [] }
+    /*
+      In batches, each saved all-or-nothing by the server, and the totals summed
+      so the operator sees one number. A batch that fails no longer ends the
+      import: its rows are counted as failed, with the server's reference, and
+      the next batch goes on — one bad stretch of a thousand-row file does not
+      cost the other nine hundred. 250 a batch keeps each request well inside
+      the Worker's time, on a slow connection as much as a fast one.
+    */
+    const CHUNK = 250
+    const totals: ImportResultDTO = { created: 0, updated: 0, rejected: [], failed: [] }
     const blockedFound: { ref: string; address1: string; city?: string; state?: string; zip?: string }[] = []
     setProgress({ done: 0, total: importable.length })
 
     try {
       for (let i = 0; i < importable.length; i += CHUNK) {
         const chunk = importable.slice(i, i + CHUNK)
-        const res = await apiImport(token, {
+        let res: ImportResultDTO
+        try {
+        res = await apiImport(token, {
           rows: chunk.map((r) => ({
             ref: r.ref,
             address1: r.values.address1 ?? '',
@@ -472,6 +482,20 @@ export default function AdminImport() {
           assignRepId: assignRepId || undefined,
           territoryName: territoryName.trim() || undefined,
         })
+        } catch (err) {
+          // Signed out, or a request the server refuses outright: the next
+          // batch would fail the same way, so stop and say so.
+          if (err instanceof ApiError && (err.status === 401 || err.status === 403)) throw err
+          totals.failed!.push({
+            firstRef: chunk[0]?.ref ?? '',
+            lastRef: chunk[chunk.length - 1]?.ref ?? '',
+            rows: chunk.length,
+            message: err instanceof ApiError ? err.message : err instanceof NetworkError ? 'No connection to the server.' : 'The batch could not be saved.',
+            reference: err instanceof ApiError ? err.reference : undefined,
+          })
+          setProgress({ done: Math.min(i + CHUNK, importable.length), total: importable.length })
+          continue
+        }
         totals.created += res.created
         totals.updated += res.updated
         totals.rejected.push(...res.rejected)
@@ -494,6 +518,7 @@ export default function AdminImport() {
           }
         }
         totals.territoryId ??= res.territoryId
+        totals.territoryCreated ||= !!res.territoryCreated
         /*
           Summed across chunks, and left undefined when the server never sent it.
           A Worker predating territory matching returns nothing here, and adding
@@ -519,7 +544,11 @@ export default function AdminImport() {
       // Pull the new leads into the console's own view of the world.
       await refreshFromServer()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The import failed. Nothing was lost — try again.')
+      setError(
+        err instanceof ApiError
+          ? describeError(err, 'The import failed. Nothing was lost — try again.')
+          : 'The import failed. Nothing was lost — try again.',
+      )
     } finally {
       setBusy(null)
       setProgress(null)
@@ -568,7 +597,7 @@ export default function AdminImport() {
       setBlocked([])
       setUnblockReason('')
     } catch (err) {
-      setUnblockError(err instanceof ApiError ? err.message : 'That did not go through. Nothing was changed.')
+      setUnblockError(describeError(err, 'That did not go through. Nothing was changed.'))
     } finally {
       setUnblocking(false)
     }
@@ -915,6 +944,29 @@ export default function AdminImport() {
               tone={result.rejected.length + unplaced.length + noAddress.length ? 'warn' : 'muted'}
             />
           </div>
+          <p className="mt-3 text-[13px] text-ink-mute" data-testid="import-summary">
+            {(importable.length + unplaced.length + noAddress.length).toLocaleString()} rows in the file ·{' '}
+            {result.created.toLocaleString()} imported · {result.updated.toLocaleString()} updated ·{' '}
+            {result.rejected.filter((r) => /duplicate/i.test(r.reason)).length.toLocaleString()} duplicates ·{' '}
+            {unplaced.length.toLocaleString()} could not be placed on the map ·{' '}
+            {(result.failed ?? []).reduce((n, f) => n + f.rows, 0).toLocaleString()} failed
+          </p>
+          {(result.failed?.length ?? 0) > 0 && (
+            <div className="mt-4 rounded-card border border-bad/40 bg-bad/5 p-4" data-testid="import-failed" role="alert">
+              <p className="text-sm font-semibold text-bad">
+                {result.failed!.reduce((n, f) => n + f.rows, 0).toLocaleString()} rows were not saved. The rest of the file was.
+              </p>
+              <ul className="mt-2 space-y-1 text-[13px] text-ink-soft">
+                {result.failed!.map((f) => (
+                  <li key={f.firstRef}>
+                    Rows {f.firstRef}–{f.lastRef}: {f.message}
+                    {f.reference && <span className="font-mono"> Reference: {formatReference(f.reference)}</span>}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[13px] text-ink-mute">Importing the same file again is safe: rows already saved are updated, not duplicated.</p>
+            </div>
+          )}
 
           {/*
             The thing that otherwise goes unsaid.

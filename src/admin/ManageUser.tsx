@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
+import { describeError } from '../lib/errors'
 import { Button } from '../components/ui/Button'
 import {
-  ApiError,
   apiDeleteUser,
   apiFootprint,
   apiRegenerateBadge,
@@ -148,7 +148,7 @@ export function ManageUser({
       if (stay) refresh()
       else onChanged()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'That didn’t work. Nothing was changed.')
+      setError(describeError(err, 'That didn’t work. Nothing was changed.'))
     } finally {
       setBusy(null)
     }

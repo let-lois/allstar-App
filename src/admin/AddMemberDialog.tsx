@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
+import { describeError } from '../lib/errors'
 import { Button } from '../components/ui/Button'
 import {
-  ApiError,
   apiCreateTeam,
   apiInvite,
   apiTeams,
@@ -121,7 +121,7 @@ export function AddMemberDialog({
       setCreated(invite)
       onInvited()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not add them. Try again.')
+      setError(describeError(err, 'Could not add them. Try again.'))
     } finally {
       setBusy(false)
     }

@@ -99,6 +99,12 @@ function fakeDb({ properties = [], reps = ['u_rep'], names = [] } = {}) {
         }
         return api
       },
+      // D1 runs a batch as one transaction; here, in order, as the real one does.
+      async batch(stmts) {
+        const out = []
+        for (const st of stmts) out.push(await st.run())
+        return out
+      },
     },
   }
 }

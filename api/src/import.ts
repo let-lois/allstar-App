@@ -1,8 +1,9 @@
 import { record } from './audit'
+import { bindChunks } from './d1'
 import { parseBoundary, polygonAreaSqMiles, territoryFor, type TerritoryShape } from './geo'
 import { erasedAmong } from './erase'
 import type { Env, Role, SessionUser } from './types'
-import { writeTerritoryReps } from './territory-reps'
+import { territoryRepStatements } from './territory-reps'
 
 /**
  * Lead import.
@@ -73,6 +74,8 @@ export interface ImportResult {
   updated: number
   rejected: { ref: string; reason: string }[]
   territoryId?: string
+  /** This request made the named territory (no outline: a named group of these leads). */
+  territoryCreated?: boolean
   /**
    * How many leads landed in a drawn territory by their coordinates.
    *
@@ -174,6 +177,7 @@ export async function importProperties(
   }
 
   let territoryId: string | undefined
+  let newTerritory: { id: string; name: string } | null = null
   if (input.territoryName?.trim()) {
     const name = input.territoryName.trim()
     const existing = await env.DB.prepare(
@@ -184,18 +188,22 @@ export async function importProperties(
     if (existing) {
       territoryId = existing.id
     } else {
-      territoryId = `terr_${(await sha256Hex(`${user.clientId}:${name.toLowerCase()}`)).slice(0, 16)}`
-      const made = await env.DB.prepare(
-        `INSERT OR IGNORE INTO territories (id, client_id, name, rep_id) VALUES (?1,?2,?3,?4)`,
-      )
-        .bind(territoryId, user.clientId, name, assignRepId)
-        .run()
-      // `rep_id` is a mirror; who is on a territory lives in territory_reps,
-      // which is what decides whose phone sees its houses. Written together,
-      // the way drawing a territory writes them.
-      if (assignRepId && made.meta.changes) {
-        await writeTerritoryReps(env, user, territoryId, [assignRepId], Date.now())
-      }
+      /*
+        A new territory with this name and no outline — a named group of these
+        leads, to find and reassign as a unit — created in the same batch as
+        the rows below, so an import that writes nothing (every row rejected, or
+        a failure) leaves no empty territory behind in the filters.
+
+        The id is derived from the name so the next chunk of the same file
+        lands in the same territory. Unless that id is taken: a territory first
+        imported as "North" and since renamed keeps the id, and a later import
+        naming "North" again must make a new one, not pour its rows silently
+        into the renamed patch.
+      */
+      const derived = `terr_${(await sha256Hex(`${user.clientId}:${name.toLowerCase()}`)).slice(0, 16)}`
+      const taken = await env.DB.prepare('SELECT id FROM territories WHERE id = ?1').bind(derived).first<{ id: string }>()
+      territoryId = taken ? `terr_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}` : derived
+      newTerritory = { id: territoryId, name }
     }
   }
 
@@ -398,7 +406,21 @@ export async function importProperties(
   }
 
   if (statements.length === 0) {
-    return { created: 0, updated: 0, rejected, territoryId, territoryMatched, territoryUnmatched }
+    // Nothing written, so the named territory is not made either.
+    return { created: 0, updated: 0, rejected, territoryId: newTerritory ? undefined : territoryId, territoryMatched, territoryUnmatched }
+  }
+  if (newTerritory) {
+    // First in the batch: the rows reference it. `rep_id` is a mirror; who is on
+    // a territory lives in territory_reps, written alongside.
+    statements.unshift(
+      env.DB.prepare(`INSERT OR IGNORE INTO territories (id, client_id, name, rep_id) VALUES (?1,?2,?3,?4)`).bind(
+        newTerritory.id,
+        user.clientId,
+        newTerritory.name,
+        assignRepId,
+      ),
+      ...(assignRepId ? territoryRepStatements(env, user, newTerritory.id, [assignRepId], Date.now()) : []),
+    )
   }
 
   // Which ids already existed, asked *before* the write — afterwards there is no
@@ -415,6 +437,8 @@ export async function importProperties(
     updated: existingBefore,
     rejected,
     territoryId,
+    /** Whether this request made the named territory (no outline; a group of these leads). */
+    territoryCreated: !!newTerritory,
     territoryMatched,
     territoryUnmatched,
     /*
@@ -456,8 +480,7 @@ export async function importProperties(
 /** Chunked because SQLite caps bound parameters per statement. */
 async function countExisting(env: Env, clientId: string, ids: string[]): Promise<number> {
   let found = 0
-  for (let i = 0; i < ids.length; i += 100) {
-    const chunk = ids.slice(i, i + 100)
+  for (const chunk of bindChunks(ids, 1)) {
     const placeholders = chunk.map((_, n) => `?${n + 2}`).join(',')
     const res = await env.DB.prepare(
       `SELECT COUNT(*) AS n FROM properties WHERE client_id = ?1 AND id IN (${placeholders})`,

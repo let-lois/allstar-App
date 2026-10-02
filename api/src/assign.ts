@@ -1,4 +1,5 @@
 import type { Env, SessionUser } from './types'
+import { bindChunks } from './d1'
 import { record } from './audit'
 import { canImport } from './import'
 import {
@@ -63,8 +64,7 @@ export async function assignProperties(
   // Chunked because SQLite caps bound parameters per statement. The client_id
   // predicate is what keeps this inside the tenant — an id from anywhere else
   // simply matches nothing rather than being trusted.
-  for (let i = 0; i < ids.length; i += 100) {
-    const chunk = ids.slice(i, i + 100)
+  for (const chunk of bindChunks(ids, 3)) {
     const placeholders = chunk.map((_, n) => `?${n + 4}`).join(',')
     const res = await env.DB.prepare(
       `UPDATE properties SET assigned_rep_id = ?1, updated_at = ?2
@@ -115,8 +115,7 @@ export async function moveToTerritory(
 
   const now = Date.now()
   let moved = 0
-  for (let i = 0; i < ids.length; i += 100) {
-    const chunk = ids.slice(i, i + 100)
+  for (const chunk of bindChunks(ids, 3)) {
     const placeholders = chunk.map((_, n) => `?${n + 4}`).join(',')
     const res = await env.DB.prepare(
       `UPDATE properties SET territory_id = ?1, updated_at = ?2

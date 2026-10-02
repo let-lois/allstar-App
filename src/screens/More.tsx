@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { describeError } from '../lib/errors'
 import { API_URL } from '../lib/api-url'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
@@ -14,7 +15,7 @@ import { isForcedOffline, setForcedOffline } from '../lib/api'
 import { drain, listOutbox, retryFailed } from '../lib/sync'
 import { drainPhotos, retryFailedPhotos } from '../lib/photos'
 import { relative } from '../lib/format'
-import { ApiError, apiSetPassword } from '../lib/http'
+import { apiSetPassword } from '../lib/http'
 import { liveToken } from '../lib/session'
 import type { Mutation } from '../types'
 import { IconChevron, IconConsole, IconHelp } from '../components/nav/icons'
@@ -244,7 +245,7 @@ export function More() {
                       setPwMsg('Changed. Sign in again with the new one.')
                     } catch (err) {
                       setPwErr(
-                        err instanceof ApiError ? err.message : 'Could not change it. Try again.',
+                        describeError(err, 'Could not change it. Try again.'),
                       )
                     } finally {
                       setPwBusy(false)

@@ -74,11 +74,6 @@ export function AdminClients() {
       */}
       <BackupStatus />
 
-      <p className="mt-4 rounded-field bg-surface-sunk px-4 py-3 text-xs leading-relaxed text-ink-mute">
-        One account, because that is what this deployment holds and there is no endpoint that
-        would list others. Seats, revenue and per-customer health belong to a multi-tenant API
-        that does not exist yet; when it does, the numbers above become a row per account.
-      </p>
     </AdminPage>
   )
 }

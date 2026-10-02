@@ -32,7 +32,21 @@ export interface ExportFilter {
   listId?: string | null
   repId?: string | null
   status?: string | null
+  /** A territory id, or 'none' for leads in no territory. */
+  territoryId?: string | null
+  /**
+   * Exactly these leads, when given — the console's "Export selected" and
+   * "Export all matching" (its search, visited, appointment and follow-up
+   * filters live in the browser, so it sends the ids they produced). The other
+   * filters still apply on top, and every id is checked against this tenant.
+   */
+  ids?: string[] | null
+  /** What the file is of, for its name: "gaffney", "selected", a list name. */
+  label?: string | null
 }
+
+/** At most this many ids in one export request (a whole company is a few thousand). */
+export const MAX_EXPORT_IDS = 20000
 
 export type ExportResult =
   | { ok: true; csv: string; rows: number; filename: string }
@@ -103,6 +117,13 @@ export async function exportLeadsCsv(
   const listId = typeof filter.listId === 'string' && filter.listId ? filter.listId : null
   const repId = typeof filter.repId === 'string' && filter.repId ? filter.repId : null
   const status = typeof filter.status === 'string' && filter.status ? filter.status : null
+  const territoryId = typeof filter.territoryId === 'string' && filter.territoryId ? filter.territoryId : null
+  const pickIds = Array.isArray(filter.ids)
+    ? [...new Set(filter.ids.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 80))]
+    : null
+  if (pickIds && pickIds.length > MAX_EXPORT_IDS) {
+    return { ok: false, error: `Export at most ${MAX_EXPORT_IDS.toLocaleString()} leads at a time.`, status: 413 }
+  }
 
   /*
     The list, if named, must be this tenant's. Filtering through a list id from
@@ -134,6 +155,11 @@ export async function exportLeadsCsv(
     binds.push(listId)
     where.push(`p.id IN (SELECT property_id FROM lead_list_members WHERE list_id = ?${binds.length})`)
   }
+  if (territoryId === 'none') where.push('p.territory_id IS NULL')
+  else if (territoryId) {
+    binds.push(territoryId)
+    where.push(`p.territory_id = ?${binds.length}`)
+  }
 
   interface Row {
     id: string
@@ -153,19 +179,23 @@ export async function exportLeadsCsv(
     updated_at: number
     rep_name: string | null
   }
-  const leads = (
-    await env.DB.prepare(
-      `SELECT p.id, p.address1, p.city, p.state, p.zip, p.lat, p.lng, p.status, p.score,
+  const select = `SELECT p.id, p.address1, p.city, p.state, p.zip, p.lat, p.lng, p.status, p.score,
               p.opportunity_value, p.last_outcome, p.last_visit_at, p.next_action_at,
               p.next_action_label, p.updated_at, u.name AS rep_name
          FROM properties p
          LEFT JOIN users u ON u.id = p.assigned_rep_id
-        WHERE ${where.join(' AND ')}
-        ORDER BY p.address1, p.id`,
-    )
-      .bind(...binds)
-      .all<Row>()
-  ).results ?? []
+        WHERE ${where.join(' AND ')}`
+  /*
+    A chosen set of ids is read in chunks (D1's 100-parameter limit, see d1.ts)
+    and sorted here the way the single query sorts; no ids means the filters
+    alone decide, as before. An empty selection exports nothing — never
+    "everything", which is what the old console did when its view was empty.
+  */
+  const leads: Row[] = pickIds
+    ? (await inChunks<Row>(env, pickIds, (holes) => `${select} AND p.id IN (${holes})`, binds)).sort(
+        (a, b) => a.address1.localeCompare(b.address1) || a.id.localeCompare(b.id),
+      )
+    : ((await env.DB.prepare(`${select} ORDER BY p.address1, p.id`).bind(...binds).all<Row>()).results ?? [])
 
   const ids = leads.map((l) => l.id)
 
@@ -266,7 +296,8 @@ export async function exportLeadsCsv(
   const csv = lines.join('\r\n') + '\r\n'
 
   const day = new Date().toISOString().slice(0, 10)
-  const slug = (listName ?? 'leads').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'leads'
+  const label = typeof filter.label === 'string' && filter.label.trim() ? filter.label.trim().slice(0, 60) : null
+  const slug = (label ?? listName ?? 'leads').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'leads'
   const filename = `allstar-${slug}-${day}.csv`
 
   await record(env, actor, {
@@ -274,7 +305,7 @@ export async function exportLeadsCsv(
     targetType: listId ? 'list' : undefined,
     targetId: listId ?? undefined,
     targetLabel: `${leads.length} lead${leads.length === 1 ? '' : 's'}${listName ? ` from ${listName}` : ''}`,
-    detail: { rows: leads.length, listId, repId, status },
+    detail: { rows: leads.length, listId, repId, status, territoryId, selected: pickIds?.length ?? null, label },
   })
 
   return { ok: true, csv, rows: leads.length, filename }

@@ -1,4 +1,5 @@
 import { record } from './audit'
+import { bindChunks } from './d1'
 import { inside, parseBoundary, parsePolygon } from './territories'
 import type { Env, Role, SessionUser } from './types'
 
@@ -91,11 +92,6 @@ const ID_SHAPE = /^[A-Za-z0-9_-]{6,40}$/
 
 const newId = () => `ll_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`
 
-const chunks = <T,>(xs: T[], n = 100): T[][] => {
-  const out: T[][] = []
-  for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n))
-  return out
-}
 
 /* --- reading ---------------------------------------------------------------- */
 
@@ -128,7 +124,7 @@ export async function listsFor(env: Env, user: SessionUser): Promise<LeadListDTO
   const ids = lists.map((l) => String(l.id))
   const members = new Map<string, string[]>()
   const reps = new Map<string, string[]>()
-  for (const part of chunks(ids)) {
+  for (const part of bindChunks(ids, 0)) {
     const holes = part.map((_, n) => `?${n + 1}`).join(',')
     const [m, r] = await Promise.all([
       env.DB.prepare(`SELECT list_id, property_id FROM lead_list_members WHERE list_id IN (${holes})`)
@@ -183,7 +179,7 @@ const mayEdit = (user: SessionUser, list: { created_by: string | null }) =>
  */
 async function permittedProperties(env: Env, user: SessionUser, ids: string[]): Promise<Set<string>> {
   const ok = new Set<string>()
-  for (const part of chunks(ids)) {
+  for (const part of bindChunks(ids, 2)) {
     const holes = part.map((_, n) => `?${n + 3}`).join(',')
     const scope = isRep(user) ? `AND ${repScopeSql('p', '?2')}` : ''
     const res = await env.DB.prepare(
@@ -198,7 +194,7 @@ async function permittedProperties(env: Env, user: SessionUser, ids: string[]): 
 
 async function teamMembers(env: Env, clientId: string, ids: string[]): Promise<Set<string>> {
   const ok = new Set<string>()
-  for (const part of chunks(ids)) {
+  for (const part of bindChunks(ids, 1)) {
     const holes = part.map((_, n) => `?${n + 2}`).join(',')
     const res = await env.DB.prepare(
       `SELECT id FROM users WHERE client_id = ?1 AND active = 1 AND id IN (${holes})`,
@@ -327,7 +323,7 @@ export async function createList(
 }
 
 async function writeMembers(env: Env, actor: SessionUser, listId: string, ids: string[], now: number) {
-  for (const part of chunks(ids)) {
+  for (const part of bindChunks(ids, 3)) {
     const values = part.map((_, n) => `(?1, ?${n + 4}, ?2, ?3)`).join(',')
     await env.DB.prepare(
       `INSERT OR IGNORE INTO lead_list_members (list_id, property_id, added_at, added_by) VALUES ${values}`,
@@ -338,7 +334,7 @@ async function writeMembers(env: Env, actor: SessionUser, listId: string, ids: s
 }
 
 async function writeReps(env: Env, actor: SessionUser, listId: string, ids: string[], now: number) {
-  for (const part of chunks(ids)) {
+  for (const part of bindChunks(ids, 3)) {
     const values = part.map((_, n) => `(?1, ?${n + 4}, ?2, ?3)`).join(',')
     await env.DB.prepare(
       `INSERT OR IGNORE INTO lead_list_reps (list_id, user_id, assigned_at, assigned_by) VALUES ${values}`,
@@ -445,7 +441,7 @@ export async function updateMembers(
     added = ids.length
   }
   let removed = 0
-  for (const part of chunks(remove)) {
+  for (const part of bindChunks(remove, 1)) {
     const holes = part.map((_, n) => `?${n + 2}`).join(',')
     const res = await env.DB.prepare(
       `DELETE FROM lead_list_members WHERE list_id = ?1 AND property_id IN (${holes})`,

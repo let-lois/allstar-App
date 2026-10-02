@@ -34,13 +34,16 @@ export function AdminReports() {
   // used to resolve names straight from the seed, so a live company's reports
   // named five people who don't work there.
   const team = useAppStore((s) => s.team)
-  const reps = useMemo(() => team.filter((m) => m.role === 'field_rep'), [team])
-
   const scopedRep = repId === 'all' ? undefined : repId
   const totals = useRangeTotals(range, scopedRep)
   const series = useRangeSeries(range, scopedRep)
   const repRows = useRepRangeRows(range)
   const stats = useDailyStats()
+  // Everybody who knocked, not only the Field Rep label — see useRepRangeRows.
+  const reps = useMemo(() => {
+    const worked = new Set(stats.map((s) => s.repId))
+    return team.filter((m) => m.role === 'field_rep' || worked.has(m.id))
+  }, [team, stats])
 
   const rangeLabel = RANGES.find((r) => r.key === range)?.label ?? ''
 

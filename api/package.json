@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Allstar field sales API — Cloudflare Workers + D1 + R2",
+  "description": "Allstar field sales API \u2014 Cloudflare Workers + D1 + R2",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -61,7 +61,8 @@
     "smoke:lead-edit": "node scripts/smoke-lead-edit.mjs",
     "smoke:quote-sent": "node scripts/smoke-quote-sent.mjs",
     "smoke:manual-leads": "node scripts/smoke-manual-leads.mjs",
-    "smoke:account-delete": "node scripts/smoke-account-delete.mjs"
+    "smoke:account-delete": "node scripts/smoke-account-delete.mjs",
+    "smoke:scale": "node scripts/smoke-scale.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",

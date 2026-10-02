@@ -1,4 +1,5 @@
 import { record } from './audit'
+import { bindChunks } from './d1'
 import type { Env, SessionUser } from './types'
 
 /**
@@ -337,12 +338,12 @@ export async function erasedAmong(
   if (propertyIds.length === 0) return out
 
   /*
-    Chunked because SQLite has a bound-parameter ceiling and an import is not
-    bounded by anything except what somebody dragged onto the page. 200 is well
-    inside the limit and keeps the number of queries small.
+    Chunked because D1 binds at most 100 parameters per statement (see d1.ts)
+    and an import is not bounded by anything except what somebody dragged onto
+    the page. This was 200 — "well inside the limit" for SQLite, double D1's —
+    and it is what failed every import and territory of 100 or more houses.
   */
-  for (let i = 0; i < propertyIds.length; i += 200) {
-    const slice = propertyIds.slice(i, i + 200)
+  for (const slice of bindChunks(propertyIds, 1)) {
     const holes = slice.map((_, n) => `?${n + 2}`).join(',')
     const rows = await env.DB.prepare(
       `SELECT entity_id FROM deletions
@@ -406,8 +407,7 @@ export async function unblockProperties(
   let unblocked = 0
   // Chunked for the same reason `erasedAmong` is: an import is not bounded by
   // anything except what somebody dragged onto the page.
-  for (let i = 0; i < ids.length; i += 200) {
-    const slice = ids.slice(i, i + 200)
+  for (const slice of bindChunks(ids, 1)) {
     const marks = slice.map((_, n) => `?${n + 2}`).join(',')
     const res = await env.DB.prepare(
       `DELETE FROM deletions

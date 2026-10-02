@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { describeError } from '../lib/errors'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
@@ -78,7 +79,7 @@ export function MyBadge() {
       if (kind === 'renew') await apiRenewOwnBadge(token)
       await refreshMe()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not reach the server just now. Try again when you have signal.')
+      setError(describeError(err, 'Could not reach the server just now. Try again when you have signal.'))
       if (err instanceof ApiError && err.status === 409 && kind === 'mint') setNeedsName(true)
     } finally {
       setBusy(null)

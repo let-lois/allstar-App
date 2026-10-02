@@ -24,6 +24,12 @@ export interface RequestContext {
   method: string
   route: string
   started: number
+  /** Who, once the session is known — for the error log, never the response. */
+  clientId?: string
+  userId?: string
+  /** What the request was doing, in words ("leads.import"), and over how many records. */
+  operation?: string
+  records?: number
 }
 
 /** Short enough to read aloud over a phone, long enough not to collide in a day. */

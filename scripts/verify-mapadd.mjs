@@ -450,8 +450,8 @@ try {
         ok((await sections.count()) === 1, 'and carries the lead’s sections for when the sheet is dragged up')
         const stext = (await sections.count()) ? await sections.innerText() : ''
         ok(
-          ['Notes', 'Photos', 'Visit history', 'Activity', 'Lead details'].every((t) => stext.includes(t)),
-          'Notes, Photos, Visit history, Activity and Lead details',
+          ['Notes', 'Photos', 'Visit history', 'Activity', 'Property & assignment', 'Sales activity'].every((t) => stext.includes(t)),
+          'Notes, Photos, Visit history, Activity, Property & assignment and Sales activity',
           stext.replace(/\s+/g, ' ').slice(0, 90),
         )
         ok(!/^Lists\b/m.test(stext), 'but not a second Lists row under the compact one above')

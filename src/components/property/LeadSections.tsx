@@ -4,12 +4,13 @@ import { Button } from '../ui/Button'
 import { Glyph } from '../ui/Glyph'
 import { PhotoImage, PhotoStrip } from '../visit/PhotoStrip'
 import { ListMembership } from './ListMembership'
-import { useAppStore, useListsContaining } from '../../store/useAppStore'
-import { outcomeByCode } from '../../data/outcomes'
-import { relative, time } from '../../lib/format'
+import { useAppStore, useListsContaining, useQuoteSentAt } from '../../store/useAppStore'
+import { STATUS_LABEL, outcomeByCode } from '../../data/outcomes'
+import { duration, relative, time } from '../../lib/format'
 import { dayKeyIn, dayLabel } from '../../lib/day'
 import { syncPropertyPhotos } from '../../lib/photos'
 import { EmptyState } from '../ui/EmptyState'
+import { FOLLOW_UP_LABEL, followUpState } from '../../lib/followups'
 
 /**
  * Everything below the fold about a lead, as one grouped list.
@@ -24,7 +25,7 @@ import { EmptyState } from '../ui/EmptyState'
  * a compact list control above this) and what "Add note" should do.
  */
 
-export type LeadSection = 'appointments' | 'todo' | 'notes' | 'lists' | 'photos' | 'visits' | 'activity' | 'details'
+export type LeadSection = 'sales' | 'appointments' | 'todo' | 'notes' | 'lists' | 'photos' | 'visits' | 'activity' | 'details'
 
 export function LeadSections({
   propertyId,
@@ -83,7 +84,21 @@ export function LeadSections({
     }
     return by
   }, [photos, visits])
+  const quoteSentAt = useQuoteSentAt(propertyId)
   const timeline = useMemo(() => activity.filter((a) => a.propertyId === propertyId).slice(0, 20), [activity, propertyId])
+  // A rep id as a name, without a hook per row (see useRepName for the order).
+  const team = useAppStore((s) => s.team)
+  const roster = useAppStore((s) => s.roster)
+  const me = useAppStore((s) => s.user)
+  const territories = useAppStore((s) => s.territories)
+  const nameOf = (id?: string) =>
+    !id ? undefined : team.find((m) => m.id === id)?.name ?? roster.find((m) => m.id === id)?.name ?? (me?.id === id ? me.name : undefined)
+  // The note written on each visit, shown with that visit as well as in Notes.
+  const notesByVisit = useMemo(() => {
+    const by = new Map<string, typeof notes>()
+    for (const n of notes) if (n.visitId) by.set(n.visitId, [...(by.get(n.visitId) ?? []), n])
+    return by
+  }, [notes])
 
   /*
     Ask the server what photos it holds for this lead, whenever its Photos
@@ -106,8 +121,50 @@ export function LeadSections({
   if (!property) return null
   const show = (s: LeadSection) => !hide.includes(s)
 
+  /*
+    The sale at a glance, from the records that already exist — nothing here
+    is stored separately. Quote: an open "Send quote" to-do is scheduled, a
+    ticked one is sent (the "Quote sent" line in Activity); there is no
+    accepted or declined in the data. Sold: the lead's status, with the date of
+    the visit that recorded the sale when there is one.
+  */
+  const nextAppt = appointments.find((a) => a.startsAt >= Date.now())
+  const openQuote = todo.find((t) => t.kind === 'quote')
+  const openFollow = todo.find((t) => t.kind !== 'quote')
+  const soldVisit = visits.find((v) => v.outcome === 'sold')
+  const quoteText = openQuote
+    ? `Scheduled ${relative(openQuote.dueAt).toLowerCase()}`
+    : quoteSentAt
+      ? `Sent ${relative(quoteSentAt).toLowerCase()}`
+      : 'Not started'
+  const followText = openFollow
+    ? `${FOLLOW_UP_LABEL[followUpState(openFollow.dueAt, tz)]} · ${relative(openFollow.dueAt).toLowerCase()}`
+    : 'None open'
+  const soldText =
+    property.status === 'won'
+      ? soldVisit
+        ? `Won · ${dayLabel(dayKeyIn(soldVisit.startedAt, tz), { month: 'short', day: 'numeric' })}`
+        : 'Won'
+      : 'Not yet'
+
   return (
     <div className="panel" data-testid="lead-sections">
+      {show('sales') && (
+        <Collapsible flat title="Sales activity" defaultOpen>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[14px] sm:grid-cols-[repeat(2,minmax(0,240px))] sm:gap-x-8" data-testid="lead-sales">
+            <Detail label="Status" value={STATUS_LABEL[property.status] ?? property.status} />
+            <Detail
+              label="Next action"
+              value={property.nextActionLabel ? `${property.nextActionLabel}${property.nextActionAt ? ` · ${relative(property.nextActionAt).toLowerCase()}` : ''}` : 'None'}
+            />
+            <Detail label="Appointment" value={nextAppt ? `${dayLabel(dayKeyIn(nextAppt.startsAt, tz), { month: 'short', day: 'numeric' })} at ${time(nextAppt.startsAt)}` : 'None upcoming'} />
+            <Detail label="Quote" value={quoteText} />
+            <Detail label="Follow-up" value={followText} />
+            <Detail label="Sold" value={soldText} />
+          </dl>
+        </Collapsible>
+      )}
+
       {show('appointments') && appointments.length > 0 && (
         <Collapsible flat title="Appointments" count={appointments.length} defaultOpen>
           <ul className="space-y-3" data-testid="lead-appointments">
@@ -141,14 +198,15 @@ export function LeadSections({
         <Collapsible flat title="To do" count={todo.length} defaultOpen>
           <ul className="space-y-3" data-testid="lead-todo">
             {todo.map((t) => {
-              const overdue = t.dueAt < Date.now()
+              const state = followUpState(t.dueAt, tz)
+              const overdue = state === 'overdue'
               return (
                 <li key={t.id} className="flex items-start gap-3">
                   <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-ink/15" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-[14.5px] text-ink-soft">{t.title}</span>
                     <span className={`mt-0.5 block text-[12.5px] ${overdue ? 'font-semibold text-warn' : 'text-ink-mute'}`}>
-                      {overdue ? 'Overdue · ' : ''}
+                      {state !== 'upcoming' ? `${FOLLOW_UP_LABEL[state]} · ` : ''}
                       {relative(t.dueAt)}
                     </span>
                   </span>
@@ -156,6 +214,64 @@ export function LeadSections({
               )
             })}
           </ul>
+        </Collapsible>
+      )}
+
+      {show('visits') && (
+        <Collapsible flat title="Visit history" count={visits.length} defaultOpen={visits.length > 0}>
+          {visits.length === 0 ? (
+            <EmptyState compact testId="visits-empty" title="No visits yet" body="Each finished visit is recorded here, with its outcome and time." />
+          ) : (
+            <ul className="space-y-3.5" data-testid="visit-history">
+              {visits.map((v) => {
+                const def = outcomeByCode(v.outcome)
+                const who = nameOf(v.repId)
+                const visitNotes = notesByVisit.get(v.id) ?? []
+                const next =
+                  v.nextActionType && v.nextActionType !== 'none'
+                    ? `${NEXT_LABEL[v.nextActionType] ?? 'Next step'}${v.nextActionAt ? ` ${relative(v.nextActionAt).toLowerCase()}` : ''}`
+                    : null
+                return (
+                  <li key={v.id} className="flex items-start gap-3 border-b border-line-soft pb-3 last:border-0 last:pb-0" data-testid="visit-row">
+                    <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[13px]" aria-hidden>
+                      {def ? <Glyph name={def.icon} className="icon-xs" /> : '·'}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[14.5px] font-medium">{def?.label ?? 'Visit'}</span>
+                      <span className="block text-[12.5px] text-ink-mute">
+                        {dayLabel(dayKeyIn(v.startedAt, tz), { month: 'short', day: 'numeric' })} at {time(v.startedAt)}
+                        {v.durationMs != null && v.durationMs > 0 && <> · <span data-testid="visit-duration">{duration(v.durationMs)}</span></>}
+                        {who && ` · ${who}`}
+                        {v.startLocation && ' · location confirmed'}
+                      </span>
+                      {next && <span className="mt-0.5 block text-[12.5px] text-ink-soft">{next}</span>}
+                      {visitNotes.map((n) => (
+                        <span key={n.id} className="mt-1 block text-[13.5px] leading-snug text-ink-soft">
+                          {n.body}
+                          {n.tags.length > 0 && (
+                            <span className="ml-1 text-[12px] text-ink-mute">({n.tags.map((t) => t.replace(/_/g, ' ')).join(', ')})</span>
+                          )}
+                        </span>
+                      ))}
+                      {/* The photos taken on this visit, with the visit — not only in Photos above. */}
+                      {(photosByVisit.get(v.id)?.length ?? 0) > 0 && (
+                        <span className="mt-1.5 flex gap-1.5" data-testid="visit-photos">
+                          {photosByVisit.get(v.id)!.slice(0, 4).map((ph) => (
+                            <PhotoImage key={ph.id} photo={ph} alt="Visit photo" className="h-11 w-11 rounded-md object-cover" />
+                          ))}
+                          {photosByVisit.get(v.id)!.length > 4 && (
+                            <span className="grid h-11 w-11 place-items-center rounded-md bg-surface-field text-[12px] font-semibold text-ink-soft">
+                              +{photosByVisit.get(v.id)!.length - 4}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </Collapsible>
       )}
 
@@ -205,47 +321,6 @@ export function LeadSections({
         </Collapsible>
       )}
 
-      {show('visits') && (
-        <Collapsible flat title="Visit history" count={visits.length}>
-          {visits.length === 0 ? (
-            <EmptyState compact testId="visits-empty" title="No visits yet" body="Each finished visit is recorded here, with its outcome and time." />
-          ) : (
-            <ul className="space-y-3.5">
-              {visits.map((v) => {
-                const def = outcomeByCode(v.outcome)
-                return (
-                  <li key={v.id} className="flex items-center gap-3">
-                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-tint text-[13px]" aria-hidden>
-                      {def ? <Glyph name={def.icon} className="icon-xs" /> : '·'}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[14.5px] font-medium">{def?.label ?? 'Visit'}</span>
-                      <span className="block text-[12.5px] text-ink-mute">
-                        {dayLabel(dayKeyIn(v.startedAt, tz), { month: 'short', day: 'numeric' })} at {time(v.startedAt)}
-                        {v.startLocation && ' · location confirmed'}
-                      </span>
-                      {/* The photos taken on this visit, with the visit — not only in Photos above. */}
-                      {(photosByVisit.get(v.id)?.length ?? 0) > 0 && (
-                        <span className="mt-1.5 flex gap-1.5" data-testid="visit-photos">
-                          {photosByVisit.get(v.id)!.slice(0, 4).map((ph) => (
-                            <PhotoImage key={ph.id} photo={ph} alt="Visit photo" className="h-11 w-11 rounded-md object-cover" />
-                          ))}
-                          {photosByVisit.get(v.id)!.length > 4 && (
-                            <span className="grid h-11 w-11 place-items-center rounded-md bg-surface-field text-[12px] font-semibold text-ink-soft">
-                              +{photosByVisit.get(v.id)!.length - 4}
-                            </span>
-                          )}
-                        </span>
-                      )}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </Collapsible>
-      )}
-
       {show('activity') && (
         <Collapsible flat title="Activity" count={timeline.length}>
           {timeline.length === 0 ? (
@@ -267,14 +342,21 @@ export function LeadSections({
       )}
 
       {show('details') && (
-        <Collapsible flat title="Lead details">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[14px]">
-            <Detail label="Owner occupied" value={property.ownerOccupied ? 'Yes' : 'No'} />
-            <Detail label="Square feet" value={property.squareFeet ? property.squareFeet.toLocaleString() : '—'} />
-            <Detail label="Roof age" value={property.roofAgeYears ? `${property.roofAgeYears} yrs` : '—'} />
-            <Detail label="Lead score" value={String(property.score)} />
-            <Detail label="Territory" value={property.territoryId ?? '—'} />
-            <Detail label="Last visit" value={relative(property.lastVisitAt)} />
+        <Collapsible flat title="Property & assignment">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[14px] sm:grid-cols-[repeat(2,minmax(0,240px))] sm:gap-x-8" data-testid="lead-details">
+            <Detail label="Territory" value={property.territoryId ? territories[property.territoryId]?.name ?? 'Removed territory' : '—'} />
+            <Detail label="Assigned rep" value={property.assignedRepId ? nameOf(property.assignedRepId) ?? 'Former teammate' : 'Unassigned'} />
+            <Detail label="Last visit" value={property.lastVisitAt ? relative(property.lastVisitAt) : 'Never'} />
+            {/*
+              Only when somebody actually recorded it. Nothing in the app writes
+              this field, so on every live lead it was empty — and an empty field
+              printed as "No", a false statement on every house. Square feet,
+              roof age and the lead score are gone from this screen for the same
+              family of reasons: see docs/sales-data-audit.md.
+            */}
+            {property.ownerOccupied !== undefined && property.ownerOccupied !== null && (
+              <Detail label="Owner occupied" value={property.ownerOccupied ? 'Yes' : 'No'} />
+            )}
           </dl>
           {property.contacts.length > 1 && (
             <div className="mt-4">
@@ -292,6 +374,12 @@ export function LeadSections({
       )}
     </div>
   )
+}
+
+const NEXT_LABEL: Record<string, string> = {
+  follow_up: 'Follow-up',
+  appointment: 'Appointment',
+  quote: 'Send quote',
 }
 
 function Detail({ label, value }: { label: string; value: string }) {

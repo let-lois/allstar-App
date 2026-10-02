@@ -1,7 +1,8 @@
 import { record } from './audit'
+import { bindChunks } from './d1'
 import { EDGE_TOUCH_METRES, metresToEdge } from './geo'
 import { generateLeadsForTerritory, type Generated } from './addresses'
-import { activeTeamMembers, cleanRepIds, clearTerritoryReps, writeTerritoryReps } from './territory-reps'
+import { activeTeamMembers, cleanRepIds, clearTerritoryReps, territoryRepStatements } from './territory-reps'
 import type { Env, SessionUser } from './types'
 
 /**
@@ -134,13 +135,7 @@ export async function createTerritory(
   if (clash) return { error: 'A territory already has that name.', status: 409 }
 
   const id = `t_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`
-  await env.DB.prepare(
-    'INSERT INTO territories (id, client_id, name, rep_id, boundary) VALUES (?1,?2,?3,?4,?5)',
-  )
-    .bind(id, actor.clientId, name, repId, JSON.stringify(boundary))
-    .run()
   const createdAt = Date.now()
-  if (repIds.length) await writeTerritoryReps(env, actor, id, repIds, createdAt)
 
   /*
     Matched in the Worker rather than in SQL. SQLite has no point-in-polygon, and
@@ -165,24 +160,31 @@ export async function createTerritory(
     .filter((p) => inside(p, boundary) || (!p.territory_id && metresToEdge(p, boundary) <= EDGE_TOUCH_METRES))
     .map((p) => p.id)
 
+  /*
+    The territory, its reps and its claim on the leads inside, in one batch —
+    which D1 runs as a single transaction. These used to be separate writes, so
+    a claim that failed (it did, at 97 leads: see d1.ts) left a territory with
+    no leads: absent from the Territories page, which lists patches by their
+    leads, and still offered in every Territory filter. All or nothing now.
+  */
   const now = Date.now()
-  let assigned = 0
-  // Chunked for the same reason as the bulk assign: SQLite has a variable limit,
-  // and one statement per lead would be one round trip per lead.
-  for (let i = 0; i < ids.length; i += 100) {
-    const chunk = ids.slice(i, i + 100)
-    const holes = chunk.map((_, n) => `?${n + 5}`).join(',')
-    const res = await env.DB.prepare(
+  const claims = bindChunks(ids, 4).map((chunk) =>
+    env.DB.prepare(
       `UPDATE properties
           SET territory_id = ?1,
               assigned_rep_id = COALESCE(assigned_rep_id, ?2),
               updated_at = ?3
-        WHERE client_id = ?4 AND id IN (${holes})`,
-    )
-      .bind(id, claimFor, now, actor.clientId, ...chunk)
-      .run()
-    assigned += res.meta.changes ?? 0
-  }
+        WHERE client_id = ?4 AND id IN (${chunk.map((_, n) => `?${n + 5}`).join(',')})`,
+    ).bind(id, claimFor, now, actor.clientId, ...chunk),
+  )
+  const results = await env.DB.batch([
+    env.DB.prepare('INSERT INTO territories (id, client_id, name, rep_id, boundary) VALUES (?1,?2,?3,?4,?5)')
+      .bind(id, actor.clientId, name, repId, JSON.stringify(boundary)),
+    ...territoryRepStatements(env, actor, id, repIds, createdAt),
+    ...claims,
+  ])
+  let assigned = 0
+  for (const r of results.slice(results.length - claims.length)) assigned += r.meta.changes ?? 0
 
   await record(env, actor, {
     action: 'territory.created',
@@ -200,8 +202,19 @@ export async function createTerritory(
   */
   let generated: Created['generated']
   if (input.generate) {
-    const g = await generateLeadsForTerritory(env, actor, id)
-    generated = 'error' in g ? { error: g.error, code: g.code } : g
+    /*
+      The territory is saved by now, so a failure finding its houses is
+      reported beside it — "saved; Find addresses again" — never as a failed
+      creation, which is what sent managers to draw it a second time and meet
+      "a territory already has that name".
+    */
+    try {
+      const g = await generateLeadsForTerritory(env, actor, id)
+      generated = 'error' in g ? { error: g.error, code: g.code } : g
+    } catch (err) {
+      console.error(JSON.stringify({ event: 'territory.generate.failed', territoryId: id, error: String((err as Error)?.message ?? err) }))
+      generated = { error: 'The territory is saved, but looking up its houses failed. Press Find addresses to try again.', code: 'generate_failed' }
+    }
   }
 
   return { territory: { id, name, repIds }, assigned, generated }

@@ -15,7 +15,9 @@
         "NSCameraUsageDescription": "All-Star uses the camera so you can photograph a property from the door and attach it to the lead you are recording.",
         "NSPhotoLibraryUsageDescription": "All-Star lets you attach a photo you already took to a lead or to your team member profile.",
         "NSPhotoLibraryAddUsageDescription": "All-Star saves your team badge to your photos when you choose Save Image.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "All-Star uses the microphone when you tap the mic in a note, so you can dictate what happened at the door instead of typing it.",
+        "NSSpeechRecognitionUsageDescription": "All-Star turns what you dictate into note text. Nothing is saved until you review the note and save it yourself."
       }
     },
     "android": {
@@ -29,7 +31,8 @@
       "package": "com.allstarhomesolutions.allstar",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "RECORD_AUDIO"
       ]
     },
     "web": {

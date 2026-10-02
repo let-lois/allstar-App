@@ -108,6 +108,7 @@ const TESTS = [
   { script: 'smoke:team-model', kind: 'shared' },
   { script: 'smoke:observe', kind: 'shared' },
   { script: 'smoke:cors', kind: 'shared' },
+  { script: 'smoke:scale', kind: 'shared' },
 
   // --- hosted: brings its own Worker, its own port, its own database ----
   { script: 'smoke:photos', kind: 'hosted', port: 8799 },

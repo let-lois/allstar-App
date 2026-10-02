@@ -120,6 +120,20 @@ interface Props {
   initialCenter?: { lat: number; lng: number }
   /** Overrides the default field zoom — used to frame a whole territory. */
   initialZoom?: number
+  /** Google vector maps only; carried so a saved view comes back as it was left. */
+  initialHeading?: number
+  initialTilt?: number
+  /**
+   * Whether the map starts out following the rep's location. On by default —
+   * the field map's old behaviour. Off when the map opened somewhere on
+   * purpose (a saved view, a lead), or the first GPS fix would snap it away.
+   */
+  follow?: boolean
+  /**
+   * Told where the map is after the rep moves it (debounced), so the screen
+   * can remember the view across remounts. See lib/map-view.
+   */
+  onViewChange?: (view: { lat: number; lng: number; zoom: number; heading?: number; tilt?: number }) => void
   /**
    * Clustering exists so a rep isn't shown fifty overlapping dots they can't
    * distinguish while walking. In an office territory view the opposite is
@@ -154,6 +168,12 @@ interface Props {
   draw?: {
     points: { lat: number; lng: number }[]
     onAddPoint: (point: { lat: number; lng: number }) => void
+    /**
+     * Drag a corner already placed. When present, a press that starts on a
+     * vertex moves that vertex instead of panning the map; everywhere else the
+     * map still pans and zooms freely, and a tap still adds a corner.
+     */
+    onMovePoint?: (index: number, point: { lat: number; lng: number }) => void
     /**
      * What the drawing is for, announced to a screen reader.
      *
@@ -223,6 +243,8 @@ export function FieldMap({
   pathKind = 'route',
   draw,
   pick,
+  follow = true,
+  onViewChange,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -231,7 +253,7 @@ export function FieldMap({
     lng: initialCenter?.lng ?? properties[0]?.lng ?? -97.6789,
     zoom: initialZoom ?? 16,
   }))
-  const [followMe, setFollowMe] = useState(true)
+  const [followMe, setFollowMe] = useState(follow)
   const [layer, setLayer] = useState<LayerId>(() => loadLayer())
   const hasTiles = useTilesAvailable()
 
@@ -255,6 +277,16 @@ export function FieldMap({
       setView((v) => ({ ...v, lat: position.lat, lng: position.lng }))
     }
   }, [position, followMe])
+
+  // Where the map is, for the screen to remember. Debounced: a pan is dozens
+  // of frames, and only where it came to rest is worth writing down.
+  const onViewChangeRef = useRef(onViewChange)
+  onViewChangeRef.current = onViewChange
+  useEffect(() => {
+    if (!onViewChangeRef.current) return
+    const t = window.setTimeout(() => onViewChangeRef.current?.({ lat: view.lat, lng: view.lng, zoom: view.zoom }), 400)
+    return () => window.clearTimeout(t)
+  }, [view.lat, view.lng, view.zoom])
 
   const scale = TILE * 2 ** view.zoom
   const centerWorld = useMemo(() => project(view.lat, view.lng), [view.lat, view.lng])
@@ -375,6 +407,8 @@ export function FieldMap({
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const pinchStart = useRef<{ dist: number; zoom: number } | null>(null)
   const panMoved = useRef(0)
+  /** The corner being dragged, while a press that began on one is held. */
+  const dragVertex = useRef<number | null>(null)
   /**
    * Did this gesture ever have two fingers on the map?
    *
@@ -453,6 +487,11 @@ export function FieldMap({
       : null
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    // A press on a corner of the shape being drawn picks the corner up.
+    dragVertex.current =
+      hit?.dataset.marker === 'vertex' && draw?.onMovePoint && pointers.current.size === 1
+        ? Number(hit.dataset.index ?? -1)
+        : null
     // Only the first finger starts a fresh gesture. Resetting on the second
     // was how a pinch arrived at release claiming to have travelled nowhere.
     if (pointers.current.size === 1) {
@@ -486,12 +525,26 @@ export function FieldMap({
     const dy = cur.y - prev.y
     panMoved.current += Math.abs(dx) + Math.abs(dy)
     if (panMoved.current > 6) setFollowMe(false)
+    if (dragVertex.current != null && dragVertex.current >= 0 && draw?.onMovePoint) {
+      const box = boxRef.current?.getBoundingClientRect()
+      if (box) draw.onMovePoint(dragVertex.current, toLatLng(cur.x - box.left, cur.y - box.top))
+      return
+    }
     panBy(dx, dy)
   }
 
   const onPointerUp = (e: React.PointerEvent) => {
     pointers.current.delete(e.pointerId)
     if (pointers.current.size < 2) pinchStart.current = null
+    // Putting a corner down is the end of a drag, never a tap that adds one.
+    if (dragVertex.current != null) {
+      const moved = panMoved.current >= 6
+      dragVertex.current = null
+      if (moved || pointers.current.size > 0) {
+        downMarker.current = null
+        return
+      }
+    }
 
     // A drag is never a tap. Anything under ~6px of travel counts as one, which
     // tolerates the wobble of tapping while walking. Nor is a pinch — see
@@ -506,6 +559,9 @@ export function FieldMap({
 
     const hit = downMarker.current
     downMarker.current = null
+    // A tap on a corner that is already there is not another corner on top of
+    // it: that is how a shape picked up a duplicate vertex nobody could see.
+    if (hit?.kind === 'vertex') return
 
     /*
       What this tap is for. The whole precedence — draw, then pick, then the
@@ -954,15 +1010,18 @@ export function FieldMap({
               strokeDasharray={drawClosed(drawn.pts) ? undefined : '6 5'}
             />
             {drawn.pts.map((p, i) => (
-              <circle
-                key={i}
-                cx={p.x}
-                cy={p.y}
-                r={DRAW_VERTEX_RADIUS}
-                fill={DRAW_VERTEX_FILL}
-                stroke={DRAW_STROKE}
-                strokeWidth={DRAW_STROKE_WIDTH}
-              />
+              <g key={i} data-marker={draw?.onMovePoint ? 'vertex' : undefined} data-index={i} className={draw?.onMovePoint ? 'cursor-grab' : undefined}>
+                {/* A finger-sized target around the dot, so a corner can be picked up on a phone. */}
+                {draw?.onMovePoint && <rect x={p.x - 18} y={p.y - 18} width={36} height={36} fill="transparent" />}
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={DRAW_VERTEX_RADIUS}
+                  fill={DRAW_VERTEX_FILL}
+                  stroke={DRAW_STROKE}
+                  strokeWidth={DRAW_STROKE_WIDTH}
+                />
+              </g>
             ))}
           </g>
         )}

@@ -175,7 +175,17 @@ export function useRepRangeRows(range: RangeKey): RepRangeRow[] {
   const stats = useDailyStats()
   const tz = useAppStore((s) => s.timezone)
   const team = useAppStore((s) => s.team)
-  const reps = useMemo(() => team.filter((m) => m.role === 'field_rep'), [team])
+  /*
+    Everybody who knocked, not everybody with the Field Rep label. Visits are
+    counted against the person who recorded them (daily_stats.rep_id is the
+    signed-in user who did the visit); filtering by role dropped a manager or
+    an owner who worked doors, so their visits were in the totals and nowhere
+    in the per-person rows. Field reps with no activity still show, at zero.
+  */
+  const reps = useMemo(() => {
+    const worked = new Set(stats.map((s) => s.repId))
+    return team.filter((m) => m.role === 'field_rep' || worked.has(m.id))
+  }, [team, stats])
   return useMemo(() => {
     const days = RANGES.find((r) => r.key === range)?.days ?? 30
     const start = rangeStart(days, tz)
@@ -265,9 +275,18 @@ export function inTerritory(p: Property, territoryId: string | null): boolean {
   return p.territoryId === territoryId
 }
 
-export function useTerritories(properties: Property[]): TerritoryRow[] {
+export function useTerritories(properties: Property[], known: readonly string[] = []): TerritoryRow[] {
   return useMemo(() => {
     const map = new Map<string, Property[]>()
+    /*
+      Every territory that exists, with or without leads. This list used to be
+      built from the leads alone, so a territory with none — a creation whose
+      claim failed, or one whose leads had all moved — was missing here while
+      every Territory filter still offered it: a ghost nobody could find to
+      delete. The territories table is the source of truth; an empty one shows
+      with 0 leads.
+    */
+    for (const id of known) map.set(id, [])
     for (const p of properties) {
       const t = p.territoryId ?? UNASSIGNED_TERRITORY
       const arr = map.get(t)
@@ -301,7 +320,8 @@ export function useTerritories(properties: Property[]): TerritoryRow[] {
         }
       })
       .sort((a, b) => a.id.localeCompare(b.id))
-  }, [properties])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [properties, known.join('|')])
 }
 
 /**

@@ -341,30 +341,55 @@ export function apiPushMutations(
  */
 export async function apiExportLeadsCsv(
   token: string,
-  params: { list?: string | null; listName?: string | null; rep?: string | null; status?: string | null },
+  params: {
+    list?: string | null
+    listName?: string | null
+    rep?: string | null
+    status?: string | null
+    territory?: string | null
+    /** Exactly these leads ("Export selected", "Export all matching"). Sent in the body. */
+    ids?: string[] | null
+    /** What the file is of, for its name: a territory, "selected", a list. */
+    label?: string | null
+  },
 ): Promise<{ blob: Blob; filename: string }> {
-  const q = new URLSearchParams()
-  if (params.list) q.set('list', params.list)
-  if (params.rep) q.set('rep', params.rep)
-  if (params.status) q.set('status', params.status)
-  const res = await fetch(`${API_URL}/api/leads/export.csv${q.size ? `?${q}` : ''}`, {
-    headers: { authorization: `Bearer ${token}` },
-  })
+  const scope = {
+    ...(params.list ? { list: params.list } : {}),
+    ...(params.rep ? { rep: params.rep } : {}),
+    ...(params.status ? { status: params.status } : {}),
+    ...(params.territory ? { territory: params.territory } : {}),
+    ...(params.label ? { label: params.label } : {}),
+  }
+  const q = new URLSearchParams(scope)
+  const res = params.ids
+    ? await fetch(`${API_URL}/api/leads/export.csv`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ ...scope, ids: params.ids }),
+      })
+    : await fetch(`${API_URL}/api/leads/export.csv${q.size ? `?${q}` : ''}`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
   if (!res.ok) {
     let message = 'The export could not be produced.'
+    let reference: string | undefined
     try {
-      const body = (await res.json()) as { error?: string }
+      const body = (await res.json()) as { error?: string; reference?: string }
       if (body.error) message = body.error
+      reference = body.reference
     } catch {
       /* not JSON */
     }
-    throw new ApiError(res.status, message)
+    throw new ApiError(res.status, message, undefined, reference)
   }
   const blob = await res.blob()
-  const day = new Date().toISOString().slice(0, 10)
-  const slug =
-    (params.listName ?? 'leads').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'leads'
-  return { blob, filename: `allstar-${slug}-${day}.csv` }
+  return { blob, filename: exportFilename(params.label ?? params.listName ?? null) }
+}
+
+/** allstar-<scope>-YYYY-MM-DD.csv — the same name the server writes. */
+export function exportFilename(label: string | null, day = new Date().toISOString().slice(0, 10)): string {
+  const slug = (label ?? 'leads').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'leads'
+  return `allstar-${slug}-${day}.csv`
 }
 
 export function apiUploadPhoto(token: string, photoId: string, blob: Blob) {
@@ -547,6 +572,25 @@ export function apiAudit(token: string, opts: { limit?: number; before?: number 
   if (opts.before) q.set('before', String(opts.before))
   const suffix = q.toString() ? `?${q}` : ''
   return request<{ entries: AuditRowDTO[] }>(`/api/audit${suffix}`, { token })
+}
+
+/** One failed request, as the console's error log shows it (api/src/error-log.ts). */
+export interface ErrorRowDTO {
+  reference: string
+  at: number
+  userId: string | null
+  userName: string | null
+  method: string | null
+  route: string | null
+  status: number
+  operation: string | null
+  records: number | null
+  message: string | null
+  ms: number | null
+}
+
+export function apiErrors(token: string, limit = 100) {
+  return request<{ errors: ErrorRowDTO[] }>(`/api/errors?limit=${limit}`, { token })
 }
 
 /* --- the admin's per-person actions -------------------------------------- */
@@ -1070,6 +1114,14 @@ export interface ImportResultDTO {
   updated: number
   rejected: { ref: string; reason: string }[]
   territoryId?: string
+  /** Whether the import made the named territory (no outline; a named group of these leads). */
+  territoryCreated?: boolean
+  /**
+   * Batches the server could not save, kept by the console rather than the
+   * server: each batch is all-or-nothing, so these rows were not written, and
+   * the rest of the file still was. The reference finds the error in the logs.
+   */
+  failed?: { firstRef: string; lastRef: string; rows: number; message: string; reference?: string }[]
   /**
    * Leads that landed in a drawn territory by their coordinates.
    *
@@ -1170,6 +1222,8 @@ export interface BootstrapDTO {
    * same reason as `team`: an older Worker does not send it.
    */
   notes?: unknown[]
+  /** Completed visits on leads this person can see (newer servers only). */
+  visits?: unknown[]
   /**
    * Names and initials for everyone on the account — enough to label a rep id.
    *

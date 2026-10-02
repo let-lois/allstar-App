@@ -89,6 +89,7 @@ import { BUILT_AT, COMMIT, DIRTY } from './version'
 import { BACKUP_CRON, BackupNotConfigured, canSeeBackups, latestBackup, runBackup } from './backup'
 import { eraseProperties, eraseProperty, unblockProperties } from './erase'
 import { exportLeadsCsv } from './export'
+import { persistError, readErrors } from './error-log'
 import { setLeadStatus } from './lead-edit'
 import { canReviewConflicts, listConflicts, reviewConflict } from './stale'
 import { applyInbound, clientForSecret, webhookSecret } from './crm-inbound'
@@ -855,6 +856,8 @@ export default {
       /* --- everything below needs a session ------------------------------ */
       const user = await requireUser(req, env)
       if (!user) return json({ error: 'Not signed in.' }, 401, cors)
+      ctx.clientId = user.clientId
+      ctx.userId = user.id
 
       if (path === '/api/me') {
         // Same fallback as sign-in: a failed migration must not make "who am I"
@@ -983,6 +986,8 @@ export default {
       if (path === '/api/mutations' && req.method === 'POST') {
         const body = (await req.json().catch(() => ({}))) as { mutations?: Mutation[] }
         const mutations = Array.isArray(body.mutations) ? body.mutations : []
+        ctx.operation = 'sync'
+        ctx.records = mutations.length
         if (mutations.length === 0) return json({ results: [] }, 200, cors)
         // Bounded so a rep returning from a long dead zone doesn't send a batch
         // that exceeds the Worker's time limit and fails as a whole.
@@ -1269,11 +1274,21 @@ export default {
         the quoting rules and the one-row-per-lead shape. A file rather than
         JSON, because the person asking is about to open it in a spreadsheet.
       */
-      if (path === '/api/leads/export.csv' && req.method === 'GET') {
+      if (path === '/api/leads/export.csv' && (req.method === 'GET' || req.method === 'POST')) {
+        // GET with filters in the query; POST when the scope is a set of ids,
+        // which can be thousands long and does not belong in a URL.
+        const body = req.method === 'POST' ? ((await req.json().catch(() => ({}))) as Record<string, unknown>) : {}
+        ctx.operation = 'leads.export'
+        if (Array.isArray(body.ids)) ctx.records = body.ids.length
+        const pick = (k: string) =>
+          typeof body[k] === 'string' ? (body[k] as string) : url.searchParams.get(k)
         const result = await exportLeadsCsv(env, user, {
-          listId: url.searchParams.get('list'),
-          repId: url.searchParams.get('rep'),
-          status: url.searchParams.get('status'),
+          listId: pick('list'),
+          repId: pick('rep'),
+          status: pick('status'),
+          territoryId: pick('territory'),
+          label: pick('label'),
+          ids: Array.isArray(body.ids) ? (body.ids as string[]) : null,
         })
         if (!result.ok) return json({ error: result.error }, result.status, cors)
         return new Response(result.csv, {
@@ -1489,6 +1504,13 @@ export default {
       //
       // Read-only by design. There is no endpoint that deletes from it, because
       // a log the accused can edit is not evidence.
+      /* --- failed requests, for the office ---------------------------------- */
+      if (path === '/api/errors' && req.method === 'GET') {
+        if (!canInvite(user)) return json({ error: 'Not permitted.' }, 403, cors)
+        const limit = Number(url.searchParams.get('limit') ?? 100)
+        return json({ errors: await readErrors(env, user, Number.isFinite(limit) ? limit : 100) }, 200, cors)
+      }
+
       if (path === '/api/audit' && req.method === 'GET') {
         if (!canInvite(user)) return json({ error: 'Not permitted.' }, 403, cors)
         const limit = Number(url.searchParams.get('limit') ?? 100)
@@ -1772,6 +1794,8 @@ export default {
       // Selected leads into a territory, or out of every territory (territoryId null).
       if (path === '/api/properties/territory' && req.method === 'POST') {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        ctx.operation = 'leads.move_territory'
+        ctx.records = Array.isArray(body.propertyIds) ? body.propertyIds.length : 0
         const result = await moveToTerritory(env, user, {
           propertyIds: Array.isArray(body.propertyIds) ? (body.propertyIds as string[]) : [],
           territoryId: typeof body.territoryId === 'string' && body.territoryId ? body.territoryId : null,
@@ -1782,6 +1806,8 @@ export default {
 
       if (path === '/api/properties/assign' && req.method === 'POST') {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        ctx.operation = 'leads.assign'
+        ctx.records = Array.isArray(body.propertyIds) ? body.propertyIds.length : 0
         const result = await assignProperties(env, user, {
           propertyIds: Array.isArray(body.propertyIds) ? (body.propertyIds as string[]) : [],
           repId: typeof body.repId === 'string' && body.repId ? body.repId : null,
@@ -1800,6 +1826,8 @@ export default {
       */
       if (path === '/api/leads/status' && req.method === 'POST') {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        ctx.operation = 'leads.status'
+        ctx.records = Array.isArray(body.propertyIds) ? body.propertyIds.length : 0
         const result = await setLeadStatus(env, user, {
           propertyIds: Array.isArray(body.propertyIds) ? (body.propertyIds as string[]) : [],
           status: typeof body.status === 'string' ? body.status : '',
@@ -1826,6 +1854,7 @@ export default {
 
       if (path === '/api/territories' && req.method === 'POST') {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        ctx.operation = 'territory.create'
         // Passed through unvalidated on purpose: `createTerritory` owns the
         // checks, because it is the thing that has to be safe when the shape
         // arrives from somewhere other than our own console.
@@ -1854,6 +1883,7 @@ export default {
       {
         const m = /^\/api\/territories\/([A-Za-z0-9_-]{1,40})\/leads$/.exec(path)
         if (m && req.method === 'POST') {
+          ctx.operation = 'territory.find_addresses'
           const result = await generateLeadsForTerritory(env, user, m[1]!)
           if ('error' in result) return json({ error: result.error, code: result.code }, result.status, cors)
           return json(result, 200, cors)
@@ -1890,6 +1920,8 @@ export default {
 
       if (path === '/api/lists' && req.method === 'POST') {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        ctx.operation = 'list.create'
+        ctx.records = Array.isArray(body.propertyIds) ? body.propertyIds.length : 0
         const result = await createList(env, user, body)
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 201, cors)
@@ -1968,6 +2000,8 @@ export default {
       if (path === '/api/import/properties' && req.method === 'POST') {
         if (!canImport(user)) return json({ error: 'Not permitted.' }, 403, cors)
         const body = (await req.json().catch(() => ({}))) as ImportInput
+        ctx.operation = 'leads.import'
+        ctx.records = Array.isArray(body.rows) ? body.rows.length : 0
         const result = await importProperties(env, user, body)
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 200, cors)
@@ -2086,6 +2120,8 @@ export default {
       // They can act on a reference — it turns "it broke" into a log query.
       logUnhandled(ctx, err)
       noteFailure()
+      // Readable in the console's error log under the same reference (error-log.ts).
+      await persistError(env, ctx, 500, err instanceof Error ? err.message : String(err))
       return new Response(
         JSON.stringify({ error: 'Something went wrong.', reference: ctx.id }),
         {
