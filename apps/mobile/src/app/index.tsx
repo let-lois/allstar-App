@@ -16,6 +16,7 @@ import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTyp
 import AllStarWeb, { type AllStarWebRef } from '@/components/allstar-web'
 import type { ApiRequest, ApiResponse } from '@/lib/api-bridge'
 import { contactUrlFor, destinationFor } from '@/lib/handoff'
+import { HAS_NATIVE_DICTATION, dictationStart, dictationStop, forwardDictationEvents } from '@/lib/dictation'
 import { isInspectable } from '@/lib/inspectable'
 import { shouldApply, shouldCheck, type OtaMoment } from '@/lib/ota'
 
@@ -263,6 +264,9 @@ export default function Index() {
     return () => sub.remove()
   }, [])
 
+  // The phone's speech results, to the note being dictated. See `lib/dictation.ts`.
+  useEffect(() => forwardDictationEvents((event) => shell.current?.dictationEvent(JSON.stringify(event))), [])
+
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (!canGoBack.current) return false
@@ -279,6 +283,8 @@ export default function Index() {
         apiFetch={apiFetch}
         openExternal={openExternal}
         onCanGoBack={onCanGoBack}
+        dictationStart={HAS_NATIVE_DICTATION ? dictationStart : undefined}
+        dictationStop={HAS_NATIVE_DICTATION ? dictationStop : undefined}
         dom={{
           /*
             `react-native-webview`, not Expo's own `@expo/dom-webview`, which is
@@ -390,7 +396,8 @@ export default function Index() {
           */
           allowsInlineMediaPlayback: true,
           /*
-            Dictation in notes uses the page's own speech recognition, which
+            Note dictation now goes through the phone's recogniser (see
+            `lib/dictation.ts`); this stays for anything else on the page that
             asks the webview for the microphone. The page is our own bundle,
             loaded from a file URL, so the webview grants that request itself
             and iOS shows its one system prompt for the microphone and for

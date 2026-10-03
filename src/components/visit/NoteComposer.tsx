@@ -5,6 +5,7 @@ import { useNoteTemplates } from '../../lib/useSettings'
 import { Chip } from '../ui/Chip'
 import {
   dictate,
+  dictationMode,
   speechSupported,
   type Dictation,
   type DictationError,
@@ -61,7 +62,9 @@ export function NoteComposer({ body, tags, onBody, onTags, placeholder }: Props)
   const [error, setError] = useState<DictationError | null>(null)
   const dictation = useRef<Dictation | null>(null)
   const baseText = useRef('')
+  const field = useRef<HTMLTextAreaElement>(null)
   const supported = speechSupported()
+  const [keyboardHint, setKeyboardHint] = useState(false)
   const templates = useNoteTemplates()
 
   useEffect(() => () => dictation.current?.stop(), [])
@@ -73,6 +76,17 @@ export function NoteComposer({ body, tags, onBody, onTags, placeholder }: Props)
       return
     }
     setError(null)
+    /*
+      An app build without the phone's recogniser: the web one would say
+      "Listening" and type nothing. Open the keyboard on the note instead and
+      say where its mic is — that one types straight into the field.
+    */
+    if (dictationMode() === 'keyboard') {
+      setKeyboardHint(true)
+      field.current?.focus()
+      haptic('tap')
+      return
+    }
     baseText.current = body ? `${body.trim()} ` : ''
     const d = dictate({
       onInterim: setInterim,
@@ -121,6 +135,7 @@ export function NoteComposer({ body, tags, onBody, onTags, placeholder }: Props)
 
       <div className="relative">
         <textarea
+          ref={field}
           value={listening && interim ? `${body} ${interim}`.trim() : body}
           onChange={(e) => onBody(e.target.value)}
           rows={4}
@@ -151,6 +166,11 @@ export function NoteComposer({ body, tags, onBody, onTags, placeholder }: Props)
       </div>
       {listening && (
         <p className="-mt-1 text-xs font-medium text-bad">Listening — speak now</p>
+      )}
+      {keyboardHint && !listening && !error && (
+        <p className="-mt-1 rounded-lg bg-surface-tint px-2.5 py-2 text-xs font-medium leading-relaxed text-ink" data-testid="dictation-keyboard-hint">
+          Tap the microphone key on your keyboard (bottom row) and speak — it types straight into the note.
+        </p>
       )}
       {!listening && error && (
         <p className="-mt-1 rounded-lg bg-warn-bg px-2.5 py-2 text-xs font-medium leading-relaxed text-warn">
