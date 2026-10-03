@@ -14,6 +14,9 @@
  *     no mic). They must reach the rep as words, not as a dead button.
  */
 
+import type { ShellBridge, ShellDictationEvent } from './external'
+import { isNativeShell } from './webview'
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type AnySpeechRecognition = any
 
@@ -22,8 +25,33 @@ function ctor(): AnySpeechRecognition | null {
   return (w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null) as AnySpeechRecognition | null
 }
 
+function nativeDictation(): ShellBridge['dictation'] | undefined {
+  return typeof window !== 'undefined' ? window.__allstarShell?.dictation : undefined
+}
+
+/**
+ * Which dictation this page can actually do.
+ *
+ * - `native`: inside the phone app, through the phone's own recogniser.
+ * - `web`: a browser with the Web Speech API.
+ * - `keyboard`: inside an app build without the native recogniser. Reported
+ *   from an iPhone: the webview's `webkitSpeechRecognition` exists, asks for
+ *   the microphone, says "Listening" — and never delivers a word, because iOS
+ *   does not return speech results to a web page inside an app. So it is not
+ *   offered there; the keyboard's own mic key is, and it does work.
+ * - `none`: nothing at all.
+ */
+export type DictationMode = 'native' | 'web' | 'keyboard' | 'none'
+
+export function dictationMode(): DictationMode {
+  if (nativeDictation()) return 'native'
+  if (isNativeShell()) return 'keyboard'
+  return ctor() ? 'web' : 'none'
+}
+
+/** Whether to show the mic at all. In `keyboard` mode it shows, and explains. */
 export function speechSupported(): boolean {
-  return ctor() !== null
+  return dictationMode() !== 'none'
 }
 
 export type DictationError =
@@ -58,6 +86,104 @@ function classify(code: string): DictationError {
 /** How many auto-restarts before we assume the engine isn't going to cooperate. */
 const MAX_RESTARTS = 30
 
+/*
+  Dictation through the phone app's own recogniser.
+
+  The same contract as the browser path below: `onInterim` with the words not
+  yet settled, `onFinal` with everything settled so far, and a restart when
+  the recogniser ends a session on its own (a pause, the end of an utterance)
+  until the rep taps stop. Results arrive as `allstar-dictation` events posted
+  by the shell; each one carries the transcript of the current utterance.
+*/
+function dictateNative(
+  native: NonNullable<ShellBridge['dictation']>,
+  opts: {
+    onInterim: (text: string) => void
+    onFinal: (text: string) => void
+    onError: (error: DictationError) => void
+    onStop: () => void
+  },
+): Dictation {
+  const lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US'
+  let finished = false
+  let restarts = 0
+  let committed = ''
+  let current = ''
+
+  const cleanup = () => window.removeEventListener('allstar-dictation', onEvent as EventListener)
+  const finish = () => {
+    if (finished) return
+    finished = true
+    cleanup()
+    opts.onStop()
+  }
+  const fail = (code: string) => {
+    if (finished) return
+    opts.onError(classify(code))
+    void native.stop().catch(() => {})
+    finish()
+  }
+  const start = () =>
+    native
+      .start({ lang })
+      .then((r) => {
+        if (!r?.ok) fail(r?.error ?? 'unknown')
+      })
+      .catch(() => fail('unknown'))
+
+  function onEvent(e: CustomEvent<ShellDictationEvent>) {
+    const ev = e.detail
+    if (finished || !ev) return
+    if (ev.type === 'result') {
+      const text = ev.transcript.trim()
+      if (text) restarts = 0
+      if (ev.isFinal) {
+        if (text) committed = `${committed}${text} `
+        current = ''
+        opts.onInterim('')
+      } else {
+        current = text
+        opts.onInterim(current)
+      }
+      const full = committed.trim()
+      if (full) opts.onFinal(full)
+    } else if (ev.type === 'error') {
+      if (ev.error === 'no-speech' || ev.error === 'aborted') return
+      fail(ev.error)
+    } else if (ev.type === 'end') {
+      // An utterance left unfinished when the session ended is still the rep's words.
+      if (current) {
+        committed = `${committed}${current} `
+        current = ''
+        opts.onInterim('')
+        opts.onFinal(committed.trim())
+      }
+      if (restarts >= MAX_RESTARTS) {
+        finish()
+        return
+      }
+      restarts += 1
+      window.setTimeout(() => {
+        if (!finished) void start()
+      }, 250)
+    }
+  }
+
+  window.addEventListener('allstar-dictation', onEvent as EventListener)
+  void start()
+  return {
+    stop: () => {
+      if (finished) return
+      if (current) {
+        committed = `${committed}${current} `
+        opts.onFinal(committed.trim())
+      }
+      void native.stop().catch(() => {})
+      finish()
+    },
+  }
+}
+
 export function dictate(opts: {
   onInterim: (text: string) => void
   onFinal: (text: string) => void
@@ -65,6 +191,11 @@ export function dictate(opts: {
   /** Fired once, when dictation is genuinely over. */
   onStop: () => void
 }): Dictation | null {
+  const native = nativeDictation()
+  if (native) return dictateNative(native, opts)
+  // Inside an app without the native recogniser the web API starts and never
+  // answers — see `dictationMode`. The composer offers the keyboard instead.
+  if (isNativeShell()) return null
   const Rec = ctor()
   if (!Rec) return null
 

@@ -28,7 +28,7 @@ import { apply, readChoice } from '@web/lib/theme'
 import { API_URL } from '@web/lib/http'
 import '@web/index.css'
 import { installApiProxy, type ApiRequest, type ApiResponse } from '@/lib/api-bridge'
-import type { ShellBridge } from '@web/lib/external'
+import type { ShellBridge, ShellDictationEvent } from '@web/lib/external'
 
 /*
   The page box, which Expo's wrapper HTML leaves half-specified.
@@ -121,9 +121,18 @@ function ownTheScreen() {
 */
 apply(readChoice())
 
+/** What a handle method may be called with: JSON values only (`expo/dom` does not export the name). */
+type HandleArg = Parameters<DOMImperativeFactory[string]>[number]
+
 export interface AllStarWebRef extends DOMImperativeFactory {
   /** Go back one screen inside the web app. See `BackBridge`. */
   goBack: () => void
+  /**
+   * A speech-recognition event from the phone, for the note being dictated,
+   * as JSON (the handle carries JSON values only). Re-posted as an
+   * `allstar-dictation` window event; see `web/lib/speech.ts`.
+   */
+  dictationEvent: (eventJson: HandleArg) => void
 }
 
 /**
@@ -183,6 +192,8 @@ export default function AllStarWeb({
   apiFetch,
   openExternal,
   onCanGoBack,
+  dictationStart,
+  dictationStop,
   ref,
 }: {
   apiFetch: (req: ApiRequest) => Promise<ApiResponse>
@@ -190,6 +201,9 @@ export default function AllStarWeb({
   openExternal?: (url: string) => Promise<{ ok: boolean }>
   /** Native action: told whenever going back becomes possible or impossible. */
   onCanGoBack?: (canGoBack: boolean) => Promise<void>
+  /** Native actions: the phone's own speech recognition, for note dictation. */
+  dictationStart?: (opts: { lang: string }) => Promise<{ ok: boolean; error?: string }>
+  dictationStop?: () => Promise<void>
   ref?: Ref<AllStarWebRef>
   dom?: import('expo/dom').DOMProps
 }) {
@@ -205,6 +219,17 @@ export default function AllStarWeb({
   if (openExternal) {
     const w = window as Window & { __allstarShell?: ShellBridge }
     w.__allstarShell = { ...w.__allstarShell, openExternal }
+  }
+  /*
+    Dictation goes through the phone too. iOS lets a page inside an app start
+    `webkitSpeechRecognition` — permission prompt, "Listening" and all — and
+    then never returns a word, so the web app uses the phone's recogniser
+    whenever this is here. Builds without it leave it unset, and the note
+    composer falls back to the keyboard's mic key.
+  */
+  if (dictationStart && dictationStop) {
+    const w = window as Window & { __allstarShell?: ShellBridge }
+    w.__allstarShell = { ...w.__allstarShell, dictation: { start: dictationStart, stop: dictationStop } }
   }
 
   /*
@@ -222,6 +247,16 @@ export default function AllStarWeb({
     (): AllStarWebRef => ({
       goBack: () => {
         goBack.current?.()
+      },
+      dictationEvent: (eventJson: HandleArg) => {
+        if (typeof eventJson !== 'string') return
+        let detail: ShellDictationEvent
+        try {
+          detail = JSON.parse(eventJson) as ShellDictationEvent
+        } catch {
+          return
+        }
+        window.dispatchEvent(new CustomEvent('allstar-dictation', { detail }))
       },
     }),
     [],

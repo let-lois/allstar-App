@@ -22,7 +22,23 @@
 export interface ShellBridge {
   /** Resolves `{ ok: false }` when the phone had nothing that could open it. */
   openExternal?: (url: string) => Promise<{ ok: boolean }>
+  /**
+   * The phone's own speech recognition, for note dictation. See `lib/speech.ts`.
+   *
+   * Present only in app builds that carry the native module (build 9 on);
+   * results come back as `allstar-dictation` window events.
+   */
+  dictation?: {
+    start: (opts: { lang: string }) => Promise<{ ok: boolean; error?: string }>
+    stop: () => Promise<void>
+  }
 }
+
+/** What the native recogniser reports, delivered as an `allstar-dictation` window event. */
+export type ShellDictationEvent =
+  | { type: 'result'; transcript: string; isFinal: boolean }
+  | { type: 'error'; error: string }
+  | { type: 'end' }
 
 declare global {
   interface Window {
