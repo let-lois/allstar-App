@@ -185,11 +185,15 @@ export const UNFILTERED_MAP: MapFilter = {
 }
 
 /**
- * Where the map opens: this rep's open work, on today's route if they have one.
+ * Where the map opens: this rep's open work, plus the houses already sold, on
+ * today's route if they have one.
  *
- * `open` rather than `any` because a rep's map is a work queue and won, lost
- * and Do Not Contact are not work — the last of those especially, which must
- * never arrive on a rep's screen except by name.
+ * `open` rather than `any` because a rep's map is a work queue and lost and
+ * Do Not Contact are not work — the second especially, which must never
+ * arrive on a rep's screen except by name. Sold houses stay, in their own
+ * colour: reported from the field, a dot that vanished the moment a sale was
+ * recorded read as the lead being lost, and on a street a sold house is
+ * exactly what the rep wants to point at next door.
  */
 export const DEFAULT_MAP_FILTER: MapFilter = {
   scope: 'all',
@@ -273,5 +277,8 @@ export function matchesMapFilter(
 
   if (filter.status.kind === 'any') return true
   if (filter.status.kind === 'some') return filter.status.set.includes(property.status)
-  return isOpenStatus(property.status)
+  // `open`: the work still to do, and the houses sold — see DEFAULT_MAP_FILTER.
+  // Not on the nobody-home list: a sold door handed back as a missed knock is
+  // how a rep ends up knocking on a customer's door.
+  return isOpenStatus(property.status) || (property.status === 'won' && !filter.noAnswerOnly)
 }

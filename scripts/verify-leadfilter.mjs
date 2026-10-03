@@ -224,12 +224,14 @@ const shows = (property, over = {}, opts = {}) =>
   ok(activeFilterCount(UNFILTERED_MAP) === 0, 'and "All" reads as no filters on')
 }
 
-/* --- the default is open work, and nothing finished --------------------- */
+/* --- the default is open work and sold houses, nothing else finished ---- */
 {
   ok(shows(lead({ status: 'new' })), 'by default a new lead is on the map')
   ok(shows(lead({ status: 'follow_up' })), 'and one waiting on a follow-up')
-  const closed = ['won', 'lost', 'dnc'].filter((s) => shows(lead({ status: s })))
-  ok(closed.length === 0, 'and nothing already finished', closed.length ? closed.join(', ') : 'none of won/lost/dnc')
+  // Reported from the field: marking a house Sold made its dot vanish.
+  ok(shows(lead({ status: 'won' })), 'and a sold house keeps its dot')
+  const closed = ['lost', 'dnc'].filter((s) => shows(lead({ status: s })))
+  ok(closed.length === 0, 'but nothing lost or Do Not Contact', closed.length ? closed.join(', ') : 'neither lost nor dnc')
 }
 
 /* --- Do Not Contact only ever by name ----------------------------------- */

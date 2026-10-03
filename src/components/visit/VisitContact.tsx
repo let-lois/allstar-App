@@ -75,6 +75,15 @@ export function VisitContact({
     }
   }, [flushRef])
 
+  /*
+    Leaving the step is a save too. This card lives on the Details step, and
+    Continue unmounts it — which took the flush above with it, so a rep who
+    typed a number and pressed Continue instead of Save lost it at Complete.
+    Reported from the field as a contact that "didn't take". `save` returns
+    early when nothing changed, so this costs nothing on an untouched card.
+  */
+  useEffect(() => () => void saveRef.current().catch(() => {}), [])
+
   useEffect(() => {
     if (dirty && state === 'saved') setState('idle')
   }, [dirty, state])
@@ -143,7 +152,13 @@ export function VisitContact({
           data-testid="visit-contact-save"
           onClick={() => void save()}
           disabled={state === 'saving'}
-          className="focusable min-h-tap w-full rounded-field bg-ink/[0.06] text-[15px] font-semibold text-ink active:bg-ink/10 disabled:opacity-60"
+          /*
+            The brand's primary button, not a grey one. It only appears once
+            something has changed, and as a grey bar it read as decoration —
+            reps typed a number and moved on. Continue saves it anyway (above);
+            this makes saving now the obvious move.
+          */
+          className="metal metal-brand press focusable min-h-tap w-full rounded-field text-[15px] font-semibold disabled:opacity-60"
         >
           {state === 'saving' ? 'Saving…' : 'Save contact to lead'}
         </button>

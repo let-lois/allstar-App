@@ -151,7 +151,7 @@ export function FilterSheet({
               ? 'Only the ones you have picked. Tap them off to go back.'
               : filter.status.kind === 'any'
                 ? 'Everything, finished leads included.'
-                : 'Everything still open — not won, lost or Do Not Contact.'
+                : 'Everything still open, plus sold houses — not lost or Do Not Contact.'
           }
         >
           {/*
@@ -167,7 +167,7 @@ export function FilterSheet({
               selected={filter.status.kind === 'open'}
               onClick={() => onChange({ ...filter, status: { kind: 'open' } })}
             >
-              Open leads
+              Open + sold
             </Chip>
             <Chip
               size="sm"

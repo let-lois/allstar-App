@@ -345,8 +345,10 @@ try {
             const store = tx.objectStore('properties')
             const all = store.getAll()
             all.onsuccess = () => {
+              // Lost rather than won: sold houses stay on the map by default
+              // now, in their own colour, so an all-sold territory is not empty.
               for (const row of all.result) {
-                row.status = 'won'
+                row.status = 'lost'
                 store.put(row)
               }
             }
@@ -359,7 +361,7 @@ try {
     await page.reload({ waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(2000)
     const worked = await page.getByTestId('no-matches').innerText()
-    ok(/finished/i.test(worked), 'a territory that is all won says it is finished', worked.replace(/\s+/g, ' ').slice(0, 70))
+    ok(/finished/i.test(worked), 'a territory that is all lost says it is finished', worked.replace(/\s+/g, ' ').slice(0, 70))
     ok(
       !/no leads on this device/i.test(worked),
       'and does not claim the office has sent them nothing',
