@@ -464,9 +464,11 @@ function TaskRow({ id }: { id: string }) {
   const property = useAppStore((s) => (task?.propertyId ? s.properties[task.propertyId] : undefined))
   const toggleTask = useAppStore((s) => s.toggleTask)
   const nav = useNavigate()
+  // Every hook before the early return: a follow-up removed while Today is
+  // open would otherwise render with one hook fewer and unmount the app.
+  const tz = useAppStore((s) => s.timezone)
   if (!task) return null
 
-  const tz = useAppStore((s) => s.timezone)
   const state = followUpState(task.dueAt, tz)
   const overdue = state === 'overdue'
 
