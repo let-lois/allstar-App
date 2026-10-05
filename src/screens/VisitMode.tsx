@@ -1,5 +1,4 @@
 import { Glyph } from '../components/ui/Glyph'
-import { toLocalInput } from '../lib/day'
 import { IconCheck } from '../components/nav/icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -10,6 +9,7 @@ import { VisitContact } from '../components/visit/VisitContact'
 import { PhotoStrip } from '../components/visit/PhotoStrip'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { DateTimeField } from '../components/ui/DateTimeField'
 import { OutcomePill } from '../components/ui/StatusPill'
 import { CommActions } from '../components/property/CommActions'
 import { outcomeByCode } from '../data/outcomes'
@@ -482,17 +482,7 @@ export function VisitMode() {
                     </button>
                   ))}
                 </div>
-                <label className="block">
-                  <span className="eyebrow">Or pick a time</span>
-                  <input
-                    type="datetime-local"
-                    value={nextAt ? toLocalInput(nextAt) : ''}
-                    onChange={(e) =>
-                      setNextAt(e.target.value ? new Date(e.target.value).getTime() : undefined)
-                    }
-                    className="field mt-1.5 h-[52px]"
-                  />
-                </label>
+                <DateTimeField label="Or pick a time" value={nextAt} onChange={setNextAt} testId="visit-pick-time" />
                 {nextAt && (
                   <p className="text-[13px] text-ink-mute">
                     Scheduled for {new Date(nextAt).toLocaleDateString('en-US', {

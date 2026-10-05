@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { toLocalInput } from '../lib/day'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { Button } from '../components/ui/Button'
 import { Card, SectionHeader } from '../components/ui/Card'
 import { Field } from '../components/ui/Input'
+import { DateTimeField } from '../components/ui/DateTimeField'
 import { useAppStore } from '../store/useAppStore'
 import { distanceMiles } from '../lib/geo'
 import { haptic } from '../lib/haptics'
@@ -149,15 +149,9 @@ export function ScheduleNew() {
               </button>
             ))}
           </div>
-          <label className="mt-4 block">
-            <span className="eyebrow">Or pick exactly</span>
-            <input
-              type="datetime-local"
-              value={toLocalInput(when)}
-              onChange={(e) => e.target.value && setWhen(new Date(e.target.value).getTime())}
-              className="field mt-1.5 h-[52px]"
-            />
-          </label>
+          <div className="mt-4">
+            <DateTimeField label="Or pick exactly" value={when} onChange={(at) => at && setWhen(at)} testId="schedule-pick-time" />
+          </div>
         </Card>
 
         {/* --- details ---------------------------------------------------- */}

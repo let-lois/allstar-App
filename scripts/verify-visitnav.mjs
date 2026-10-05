@@ -172,10 +172,15 @@ try {
     await page.waitForTimeout(400)
     const m = await page.evaluate((W) => {
       const pane = document.querySelector('.scroll-pane')
-      const input = document.querySelector('input[type="datetime-local"]')
-      const card = input?.closest('.card') ?? input?.parentElement
+      const input = document.querySelector('[data-testid="visit-pick-time"]')
+      const box = input.parentElement
+      const card = box.closest('.card') ?? box.parentElement
+      // Anything drawn past the screen. The native input is skipped on purpose:
+      // it is forced wider than the card above, as WebKit draws it, and the
+      // point is that it is clipped by its box and moves nothing.
       const out = []
       for (const el of document.querySelectorAll('body *')) {
+        if (el === input) continue
         const b = el.getBoundingClientRect()
         if (b.width && b.height && (b.right > W + 0.5 || b.left < -0.5)) out.push(`${el.tagName.toLowerCase()} ${Math.round(b.left)}–${Math.round(b.right)}`)
       }
@@ -183,14 +188,19 @@ try {
       pane.scrollLeft = 50
       const moved = pane.scrollLeft !== before
       pane.scrollLeft = 0
+      const bb = box.getBoundingClientRect()
+      const cb = card.getBoundingClientRect()
       return {
         out,
         doc: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         paneOverflow: pane.scrollWidth - pane.clientWidth,
         moved,
         ox: getComputedStyle(pane).overflowX,
-        inputW: Math.round(input.getBoundingClientRect().width),
-        cardW: Math.round(card.getBoundingClientRect().width),
+        nativeW: Math.round(input.getBoundingClientRect().width),
+        boxIn: bb.left >= cb.left - 0.5 && bb.right <= cb.right + 0.5,
+        boxW: Math.round(bb.width),
+        cardW: Math.round(cb.width),
+        clips: getComputedStyle(box).overflow === 'hidden',
         bar: (() => {
           const b = document.querySelector('.app-shell > .shrink-0.bg-surface')?.getBoundingClientRect()
           return b ? { l: Math.round(b.left), r: Math.round(b.right) } : null
@@ -198,10 +208,23 @@ try {
       }
     }, viewport.width)
     ok(m.out.length === 0, `${label}: nothing on the step extends past the screen`, m.out.slice(0, 3).join(', ') || 'none')
-    ok(m.inputW < m.cardW, `${label}: the time field fits inside its card even with WebKit's minimum width`, `${m.inputW} in ${m.cardW}`)
+    ok(m.boxIn && m.clips, `${label}: the time field's box sits inside its card, and clips the native picker drawn ${m.nativeW}px wide`, `${m.boxW} in ${m.cardW}`)
     ok(m.paneOverflow <= 0 && m.doc <= 0, `${label}: no horizontal overflow on the step or the page`, `${m.paneOverflow}/${m.doc}`)
     ok(!m.moved && m.ox === 'hidden', `${label}: the step cannot be scrolled sideways`, `overflow-x ${m.ox}`)
     ok(m.bar && m.bar.l >= 0 && m.bar.r <= viewport.width, `${label}: the bottom action bar stays inside the screen`, m.bar && `${m.bar.l}–${m.bar.r}`)
+    // Tapping the field is what slid the step on the phone: focusing it must not.
+    await page.getByTestId('visit-pick-time').focus()
+    await page.waitForTimeout(200)
+    const after = await page.evaluate(() => ({
+      pane: document.querySelector('.scroll-pane').scrollLeft,
+      h1: Math.round([...document.querySelectorAll('h2')].find((h) => /What's next here/.test(h.textContent))?.getBoundingClientRect().left ?? -1),
+    }))
+    ok(after.pane === 0 && after.h1 >= 12, `${label}: focusing the time field does not slide the step`, `scrollLeft ${after.pane}, heading at ${after.h1}px`)
+    // Choosing a time still sets it.
+    await page.getByTestId('visit-pick-time').fill('2026-10-10T10:00')
+    await page.waitForTimeout(200)
+    const said = await page.locator('body').innerText()
+    ok(/Scheduled for Sat, Oct 10 at 10:00/.test(said) && /Oct 10/.test(await page.getByTestId('visit-pick-time').locator('xpath=..').innerText()), `${label}: picking a time shows it in the field and below`, said.match(/Scheduled for[^\n]*/)?.[0])
     // Buttons readable and tappable.
     const tiny = await page.evaluate(() => [...document.querySelectorAll('.scroll-pane button')].filter((b) => { const r = b.getBoundingClientRect(); return r.height && (r.height < 44 || r.width < 44) }).length)
     ok(tiny === 0, `${label}: every choice is at least 44px both ways`, tiny)
