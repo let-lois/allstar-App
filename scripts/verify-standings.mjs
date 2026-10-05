@@ -217,7 +217,23 @@ if (tied.length > 0) {
     word on screen would be right and every number would be wrong.
   */
   const weekPts = (weekText.match(/(\d[\d,]*)\s*pts/g) ?? []).join('|')
-  ok(weekPts !== todayPts, 'and the scores are a week’s, not today’s relabelled')
+  /*
+    On the first day of a week, the week *is* today and the two boards are
+    rightly identical — this check failed every Sunday. Then the Month board
+    stands in: it holds more days than today on any date but the 1st, and
+    proves the same thing, that switching moves the numbers rather than
+    relabelling them.
+  */
+  let movedPts = weekPts !== todayPts
+  if (!movedPts) {
+    await page.getByRole('button', { name: 'Month', exact: true }).click()
+    await page.waitForTimeout(900)
+    const monthPts = ((await page.locator('body').innerText()).match(/(\d[\d,]*)\s*pts/g) ?? []).join('|')
+    movedPts = monthPts !== todayPts || new Date().getDate() === 1
+    await page.getByRole('button', { name: 'Week', exact: true }).click()
+    await page.waitForTimeout(600)
+  }
+  ok(movedPts, 'and the scores are a week’s, not today’s relabelled')
 
   await page.getByRole('button', { name: 'Today', exact: true }).click()
   await page.waitForTimeout(900)

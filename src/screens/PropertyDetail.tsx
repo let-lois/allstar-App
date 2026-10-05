@@ -79,6 +79,12 @@ export function PropertyDetail() {
     })
   }, [params, propertyId, startVisit, nav])
 
+  // One note per tap: a quick double tap on Save wrote the note twice.
+  // Above the early return below: a hook after it is one fewer hook the
+  // moment this lead leaves the device, and React unmounts the app (#300).
+  const savingNote = useRef(false)
+  const [noteBusy, setNoteBusy] = useState(false)
+
   if (!property) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
@@ -129,9 +135,6 @@ export function PropertyDetail() {
     }
   }
 
-  // One note per tap: a quick double tap on Save wrote the note twice.
-  const savingNote = useRef(false)
-  const [noteBusy, setNoteBusy] = useState(false)
   const saveNote = async () => {
     if (savingNote.current) return
     savingNote.current = true

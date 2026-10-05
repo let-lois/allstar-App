@@ -2,7 +2,7 @@ import { Glyph } from '../components/ui/Glyph'
 import { toLocalInput } from '../lib/day'
 import { IconCheck } from '../components/nav/icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { OutcomeGrid } from '../components/visit/OutcomeGrid'
 import { NoteComposer } from '../components/visit/NoteComposer'
@@ -41,6 +41,7 @@ const STEPS: { key: Step; label: string }[] = [
 export function VisitMode() {
   const { visitId } = useParams<{ visitId: string }>()
   const nav = useNavigate()
+  const location = useLocation()
 
   const visit = useAppStore((s) => (visitId ? s.visits[visitId] : undefined))
   const property = useAppStore((s) => (visit ? s.properties[visit.propertyId] : undefined))
@@ -82,11 +83,31 @@ export function VisitMode() {
     return stop ? properties[stop.propertyId] : undefined
   }, [route, properties, visit])
 
+  /*
+    Every hook above this line, none below it.
+
+    `finishing` used to be declared further down, after the early return for
+    a visit that no longer exists. Exiting a visit with no outcome discards
+    it, the store drops it, and the next render took that early return with
+    one hook fewer — React threw (#300) and unmounted the whole app. On a
+    phone that was a blank screen with no way out but closing the app:
+    reported as "the X on Today's route breaks navigation".
+  */
+  // Held while the visit is being saved, so a second tap cannot start a
+  // second save — the store guards it too; this keeps the button honest.
+  const [finishing, setFinishing] = useState(false)
+  /** Set by the X; one exit per visit, however many times it is tapped. */
+  const exiting = useRef(false)
+  const [leaving, setLeaving] = useState(false)
+
   if (!visit || !property) {
+    // Mid-exit the visit is expected to be gone: draw nothing for the frame
+    // before the navigation lands rather than a "no longer available" flash.
+    if (leaving) return <div className="app-shell bg-surface-sunk" />
     return (
       <div className="app-shell items-center justify-center p-8 text-center">
         <p className="text-ink-mute">This visit is no longer available.</p>
-        <Button className="mt-4" onClick={() => nav('/today')}>
+        <Button className="mt-4" onClick={() => nav('/today', { replace: true })}>
           Back to Today
         </Button>
       </div>
@@ -118,9 +139,6 @@ export function VisitMode() {
     }
   }
 
-  // Held while the visit is being saved, so a second tap cannot start a
-  // second save — the store guards it too; this keeps the button honest.
-  const [finishing, setFinishing] = useState(false)
   const finish = async () => {
     if (finishing) return
     setFinishing(true)
@@ -144,15 +162,34 @@ export function VisitMode() {
     }
   }
 
+  /*
+    The X. Back to where the visit was started from — Today, the map, the
+    lead — when there is such a screen, and to Today when there is not: a
+    visit opened as the first screen of the session (a cold start, a
+    restored app) has nothing behind it, and `nav(-1)` there did nothing at
+    all. `location.key` is "default" exactly for that first entry, in the
+    browser's router and in the app's in-memory one alike.
+
+    Once only: a double tap used to run the store action twice and step
+    back twice, past the screen the rep came from.
+  */
   const cancel = async () => {
-    if (visit.outcome) {
-      // Outcome already recorded — leave it as a completed visit rather than
-      // silently discarding real work.
-      await completeVisit(visit.id)
-    } else {
-      await abandonVisit(visit.id)
+    if (exiting.current) return
+    exiting.current = true
+    setLeaving(true)
+    const canGoBack = location.key !== 'default'
+    try {
+      if (visit.outcome) {
+        // Outcome already recorded — leave it as a completed visit rather than
+        // silently discarding real work.
+        await completeVisit(visit.id)
+      } else {
+        await abandonVisit(visit.id)
+      }
+    } finally {
+      if (canGoBack) nav(-1)
+      else nav('/today', { replace: true })
     }
-    nav(-1)
   }
 
   /* --- completed ---------------------------------------------------------- */
@@ -392,7 +429,7 @@ export function VisitMode() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-2.5">
               {(
                 [
                   { key: 'none', label: 'Nothing', icon: null },
@@ -409,7 +446,7 @@ export function VisitMode() {
                     if (o.key !== 'none' && !nextAt) setNextAt(defaultFollowUp())
                   }}
                   aria-pressed={nextType === o.key}
-                  className={`press focusable flex min-h-[80px] flex-col items-center justify-center gap-1.5 rounded-card text-[15px] font-semibold transition-shadow ${
+                  className={`press focusable flex min-h-[80px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-card px-2 text-center text-[15px] font-semibold transition-shadow ${
                     nextType === o.key
                       ? 'bg-brand-600 text-white shadow-raise'
                       : 'bg-surface text-ink ring-1 ring-line active:bg-surface-field'
@@ -426,7 +463,7 @@ export function VisitMode() {
             {nextType !== 'none' && (
               <Card className="space-y-3.5">
                 <p className="text-[15px] font-semibold">When?</p>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-2.5">
                   {quickWhen().map((w) => (
                     <button
                       key={w.label}
@@ -435,7 +472,7 @@ export function VisitMode() {
                         setNextAt(w.at)
                       }}
                       aria-pressed={nextAt === w.at}
-                      className={`press focusable min-h-[52px] rounded-field text-[14px] font-semibold transition-colors ${
+                      className={`press focusable min-h-[52px] min-w-0 rounded-field px-2 text-[14px] font-semibold transition-colors ${
                         nextAt === w.at
                           ? 'bg-surface-tint text-accent-strong ring-2 ring-brand-500'
                           : 'bg-surface text-ink ring-1 ring-line active:bg-surface-field'

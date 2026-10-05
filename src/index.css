@@ -420,6 +420,44 @@
   .scroll-pane {
     @apply flex-1 overflow-y-auto overscroll-contain;
     -webkit-overflow-scrolling: touch;
+    /*
+      Vertical only. `overflow-y: auto` quietly makes the other axis `auto`
+      too, so one child a pixel too wide turned a pane into a sideways
+      scroller — on an iPhone that is a horizontal bounce and the scroll
+      indicator showing as a small bar at the bottom-right. Clipping was
+      already happening on both axes; this only stops the sideways scroll.
+      It is not the fix for a too-wide child (see the date input rule
+      below) — it stops the next one from moving the page.
+    */
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
+
+  /*
+   * Date and time inputs, sized by their box.
+   *
+   * WebKit gives a native `datetime-local` / `date` / `time` input an
+   * intrinsic minimum width wider than a 320–375px card's content box, and
+   * `width: 100%` does not override it. On an iPhone the "Or pick a time"
+   * field on the visit's "What's next here?" step pushed past its card and
+   * made the whole step scroll sideways. Dropping the native appearance and
+   * the minimum lets it take the width it is given; the picker that opens on
+   * tap is unchanged. The value is left-aligned, as WebKit otherwise centres
+   * it once the appearance is gone.
+   */
+  input[type='datetime-local'],
+  input[type='date'],
+  input[type='time'] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+  }
+  input[type='datetime-local']::-webkit-date-and-time-value,
+  input[type='date']::-webkit-date-and-time-value,
+  input[type='time']::-webkit-date-and-time-value {
+    text-align: left;
   }
 
   /*
