@@ -122,6 +122,7 @@
     "verify:mapview": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-mapview.mjs",
     "verify:visitnav": "node scripts/verify-visitnav.mjs",
     "verify:dictation": "node scripts/verify-dictation.mjs",
+    "verify:deals": "node scripts/verify-deals.mjs",
     "verify:badgecrop": "node scripts/verify-badgecrop.mjs",
     "verify:authpages": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-authpages.mjs"
   },

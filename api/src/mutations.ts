@@ -1,4 +1,3 @@
-import { dayKeyIn, dayRangeIn } from './day'
 import { erasedAmong } from './erase'
 import { propertyIdOf } from './mutation-target'
 import { queueForCrm } from './integrations'
@@ -6,6 +5,7 @@ import { noteIfStale, snapshotUpdatedAt } from './stale'
 import { createList, repScopeSql, setReps, updateList, updateMembers } from './lists'
 import { canImport } from './import'
 import { parseBoundary, polygonAreaSqMiles, territoryFor, type TerritoryShape } from './geo'
+import { cancelDeal, recomputeDailyStats, syncDealToStatus, updateDeal, winDeal } from './deals'
 
 /** The statuses a person may set by hand; the same list the office's bulk change allows. */
 const SETTABLE_STATUSES = new Set(['new', 'contacted', 'follow_up', 'working', 'appointment', 'quoted', 'won', 'lost', 'dnc'])
@@ -286,6 +286,24 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
           endedAt,
         )
         .run()
+
+      /*
+        The sale follows the lead's status. A Sold visit opens it — at the plan
+        the rep picked at the door, if they picked one — and an outcome that
+        moves a sold lead somewhere else cancels it, so "Won" and "has a sale"
+        never disagree. Before the roll-up, which reads the sale's value.
+      */
+      if (outcome === 'sold') {
+        await winDeal(env, user, {
+          propertyId,
+          repId: user.id,
+          wonAt: endedAt,
+          planId: str(obj(p.deal).planId),
+          visitId: id,
+        })
+      } else if (nextStatus) {
+        await cancelDeal(env, user, propertyId)
+      }
 
       await bumpDailyStats(env, user, endedAt, outcome, propertyId)
 
@@ -713,10 +731,10 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
       if (!SETTABLE_STATUSES.has(status)) throw new Error('property.status: not a lead status')
       await assertMayEditProperty(env, user, id)
       const before = await env.DB.prepare(
-        'SELECT status FROM properties WHERE id = ?1 AND client_id = ?2',
+        'SELECT status, assigned_rep_id FROM properties WHERE id = ?1 AND client_id = ?2',
       )
         .bind(id, user.clientId)
-        .first<{ status: string }>()
+        .first<{ status: string; assigned_rep_id: string | null }>()
       if (!before) throw new Error('property not found in this account')
       if (before.status === 'dnc' && status !== 'dnc' && !canImport(user)) {
         throw new Error('This lead is marked Do Not Contact. Ask the office to lift that.')
@@ -740,9 +758,33 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
       )
         .bind(m.id, user.clientId, id, user.id, `Status set to ${STATUS_WORDS[status] ?? status} (was ${STATUS_WORDS[before.status] ?? before.status})`, at)
         .run()
+      // Won by hand is still a sale — the lead's rep's, or whoever marked it.
+      await syncDealToStatus(env, user, id, status, { repId: before.assigned_rep_id ?? user.id, wonAt: at })
       // A status changed by hand reaches the CRM the same way a rep's outcome
       // does — including a manual Do Not Contact.
       await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
+      return
+    }
+
+    /*
+      A sale changed after the door: a different plan, by anyone who may edit
+      the lead, or a different value, by a manager with a reason. The rules
+      are in deals.ts; the activity line is what a manager reads later to see
+      why a number moved.
+    */
+    case 'deal.update': {
+      const propertyId = str(p.propertyId)
+      if (!propertyId) throw new Error('deal.update: missing propertyId')
+      await assertMayEditProperty(env, user, propertyId)
+      const summary = await updateDeal(env, user, { propertyId, planId: p.planId, value: p.value, reason: p.reason })
+      if (!summary) return
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO activity
+           (id, client_id, property_id, rep_id, type, summary, at)
+         VALUES (?1,?2,?3,?4,'deal',?5,?6)`,
+      )
+        .bind(m.id, user.clientId, propertyId, user.id, summary, Date.now())
+        .run()
       return
     }
 
@@ -914,10 +956,8 @@ async function assertPropertyInTenant(
 }
 
 /**
- * Keep the reporting roll-up current as visits land.
- *
- * Recomputed from the visits table rather than incremented, so a replayed or
- * out-of-order batch converges on the truth instead of drifting.
+ * Keep the reporting roll-up current as visits land. The recompute itself is
+ * in deals.ts, because a sale changed after the fact moves the same row.
  */
 async function bumpDailyStats(
   env: Env,
@@ -927,90 +967,8 @@ async function bumpDailyStats(
   propertyId: string,
 ): Promise<void> {
   if (!outcome) return
-  /*
-    The company's calendar, not the server's. This used to cut the day in UTC,
-    which put a Texas crew's evening doors into tomorrow's row while their own
-    phones counted them as today — two answers to "which day is this", neither
-    of them an error.
-
-    The range comes from `dayRangeIn` rather than start + 24h, because a day
-    with a clock change in it is 23 or 25 hours long and a fixed day would drop
-    an hour of work on one date a year and double-count an hour on another.
-  */
-  const day = dayKeyIn(at, user.timezone)
-  const id = `${user.id}:${day}`
-  const [dayStart, dayEnd] = dayRangeIn(day, user.timezone)
-
-  const agg = await env.DB.prepare(
-    `SELECT COUNT(*) AS knocks,
-            SUM(CASE WHEN outcome IN ('interested','appointment','quote_requested','sold') THEN 1 ELSE 0 END) AS conversations,
-            SUM(CASE WHEN outcome = 'appointment' THEN 1 ELSE 0 END) AS appointments,
-            SUM(CASE WHEN outcome = 'quote_requested' THEN 1 ELSE 0 END) AS quotes,
-            SUM(CASE WHEN outcome = 'sold' THEN 1 ELSE 0 END) AS sold
-       FROM visits
-      WHERE rep_id = ?1 AND ended_at >= ?2 AND ended_at < ?3 AND outcome IS NOT NULL`,
-  )
-    .bind(user.id, dayStart, dayEnd)
-    .first<Record<string, number>>()
-
-  /*
-    Money closed on this day, and nothing else.
-
-    This used to ask "what has this rep won, ever" — no date bound at all, on a
-    row that is scoped to one day — and then wrap the answer in a check on the
-    triggering visit's outcome. Two things followed. Every day's row held the
-    rep's career total, so `useRangeTotals` summing the column across a window
-    turned one $10k sale into roughly $10k times days-worked. And because the
-    last write of the day won the upsert, a day whose final logged door went
-    badly stored 0 instead. Not a cumulative series with a known correction —
-    noise that skewed high, on the one console figure a manager quotes out loud.
-
-    So it is the same shape as the aggregate above: bounded to this day, read
-    from the visits that actually happened, and independent of which visit
-    triggered the recompute. It also now matches what the field app computes for
-    today in `teamStats.revenue`, so the console and the phone stop answering
-    the same question differently.
-  */
-  const value =
-    (
-      await env.DB.prepare(
-        `SELECT COALESCE(SUM(p.opportunity_value), 0) AS v
-           FROM visits v
-           JOIN properties p ON p.id = v.property_id
-          WHERE v.rep_id = ?1
-            AND v.ended_at >= ?2 AND v.ended_at < ?3
-            AND v.outcome = 'sold'`,
-      )
-        .bind(user.id, dayStart, dayEnd)
-        .first<{ v: number }>()
-    )?.v ?? 0
   void propertyId
-
-  await env.DB.prepare(
-    `INSERT INTO daily_stats
-       (id, client_id, rep_id, day, knocks, conversations, appointments, quotes, sold, pipeline_value)
-     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
-     ON CONFLICT(id) DO UPDATE SET
-       knocks = excluded.knocks,
-       conversations = excluded.conversations,
-       appointments = excluded.appointments,
-       quotes = excluded.quotes,
-       sold = excluded.sold,
-       pipeline_value = excluded.pipeline_value`,
-  )
-    .bind(
-      id,
-      user.clientId,
-      user.id,
-      day,
-      agg?.knocks ?? 0,
-      agg?.conversations ?? 0,
-      agg?.appointments ?? 0,
-      agg?.quotes ?? 0,
-      agg?.sold ?? 0,
-      value,
-    )
-    .run()
+  await recomputeDailyStats(env, user.clientId, user.id, user.timezone, at)
 }
 
 /**

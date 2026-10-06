@@ -643,6 +643,74 @@ const MIGRATIONS: Migration[] = [
       'CREATE INDEX IF NOT EXISTS error_log_by_client ON error_log(client_id, at DESC)',
     ],
   },
+  /*
+    Plans and deals.
+
+    Every dollar in the app used to come from one imported column, and nothing
+    in the app could set it: a lead sold at the door was worth whatever the
+    spreadsheet said, or nothing. Now the office keeps a price list, a rep picks
+    the plan when a door says yes, and the sale is a row of its own with its
+    value, its rep and the moment it was won. A manager may override the value,
+    with a reason that is kept.
+
+    Backfilled from the leads already marked Won, at their imported value, with
+    the rep and time of their latest Sold visit where there is one — so no
+    closed money disappears from a report the day this ships.
+  */
+  {
+    id: '027-plans-deals',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS plans (
+         id          TEXT PRIMARY KEY,
+         client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+         name        TEXT NOT NULL,
+         value       INTEGER NOT NULL DEFAULT 0,
+         active      INTEGER NOT NULL DEFAULT 1,
+         sort        INTEGER NOT NULL DEFAULT 0,
+         created_at  INTEGER NOT NULL,
+         updated_at  INTEGER NOT NULL
+       )`,
+      'CREATE INDEX IF NOT EXISTS plans_by_client ON plans(client_id, sort)',
+      `CREATE TABLE IF NOT EXISTS deals (
+         id                  TEXT PRIMARY KEY,
+         client_id           TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+         property_id         TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+         rep_id              TEXT REFERENCES users(id) ON DELETE SET NULL,
+         plan_id             TEXT REFERENCES plans(id) ON DELETE SET NULL,
+         plan_name           TEXT,
+         plan_value          INTEGER,
+         value               INTEGER NOT NULL DEFAULT 0,
+         value_overridden_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+         override_reason     TEXT,
+         status              TEXT NOT NULL DEFAULT 'won',
+         won_at              INTEGER NOT NULL,
+         visit_id            TEXT,
+         created_at          INTEGER NOT NULL,
+         updated_at          INTEGER NOT NULL
+       )`,
+      'CREATE INDEX IF NOT EXISTS deals_by_client_won ON deals(client_id, status, won_at)',
+      'CREATE INDEX IF NOT EXISTS deals_by_rep_won ON deals(rep_id, won_at)',
+      'CREATE UNIQUE INDEX IF NOT EXISTS deals_by_property ON deals(property_id)',
+      `INSERT OR IGNORE INTO deals
+         (id, client_id, property_id, rep_id, value, status, won_at, visit_id, created_at, updated_at)
+       SELECT 'deal_' || p.id, p.client_id, p.id,
+              COALESCE(
+                (SELECT v.rep_id FROM visits v WHERE v.property_id = p.id AND v.outcome = 'sold'
+                  ORDER BY v.ended_at DESC LIMIT 1),
+                p.assigned_rep_id),
+              COALESCE(p.opportunity_value, 0), 'won',
+              COALESCE(
+                (SELECT MAX(v.ended_at) FROM visits v WHERE v.property_id = p.id AND v.outcome = 'sold'),
+                p.updated_at,
+                CAST(strftime('%s','now') AS INTEGER) * 1000),
+              (SELECT v.id FROM visits v WHERE v.property_id = p.id AND v.outcome = 'sold'
+                ORDER BY v.ended_at DESC LIMIT 1),
+              CAST(strftime('%s','now') AS INTEGER) * 1000,
+              CAST(strftime('%s','now') AS INTEGER) * 1000
+         FROM properties p
+        WHERE p.status = 'won'`,
+    ],
+  },
 ]
 
 async function hasColumn(

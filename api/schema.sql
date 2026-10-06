@@ -337,6 +337,49 @@ CREATE TABLE IF NOT EXISTS daily_stats (
 );
 CREATE INDEX IF NOT EXISTS daily_stats_by_client_day ON daily_stats(client_id, day);
 
+/* --- plans and deals ----------------------------------------------------- */
+
+-- What the company sells, and at what price. The office keeps the list; a rep
+-- picks one when a door says yes. Never deleted, only retired (`active = 0`),
+-- because a deal from last spring still has to say which plan it was.
+CREATE TABLE IF NOT EXISTS plans (
+  id          TEXT PRIMARY KEY,
+  client_id   TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  value       INTEGER NOT NULL DEFAULT 0,   -- whole dollars, like opportunity_value
+  active      INTEGER NOT NULL DEFAULT 1,
+  sort        INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS plans_by_client ON plans(client_id, sort);
+
+-- One sale per lead: the money closed, when, by whom, on which plan. Keyed
+-- `deal_<property id>`, so a lead re-won after a cancellation reuses its row
+-- rather than counting twice. `value` is the plan's price unless a manager
+-- overrode it, in which case who and why are kept beside it. The rep is SET
+-- NULL rather than cascaded: a rep leaving does not un-sell their houses.
+CREATE TABLE IF NOT EXISTS deals (
+  id                  TEXT PRIMARY KEY,
+  client_id           TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  property_id         TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+  rep_id              TEXT REFERENCES users(id) ON DELETE SET NULL,
+  plan_id             TEXT REFERENCES plans(id) ON DELETE SET NULL,
+  plan_name           TEXT,                 -- as it was called when sold
+  plan_value          INTEGER,              -- the plan's price when chosen
+  value               INTEGER NOT NULL DEFAULT 0,
+  value_overridden_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  override_reason     TEXT,
+  status              TEXT NOT NULL DEFAULT 'won',  -- won | cancelled
+  won_at              INTEGER NOT NULL,
+  visit_id            TEXT,
+  created_at          INTEGER NOT NULL,
+  updated_at          INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS deals_by_client_won ON deals(client_id, status, won_at);
+CREATE INDEX IF NOT EXISTS deals_by_rep_won ON deals(rep_id, won_at);
+CREATE UNIQUE INDEX IF NOT EXISTS deals_by_property ON deals(property_id);
+
 /* --- idempotency --------------------------------------------------------- */
 
 -- The client's outbox retries on every reconnect, and a retry after a response

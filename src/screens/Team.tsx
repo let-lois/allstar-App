@@ -12,6 +12,7 @@ import { outcomeByCode } from '../data/outcomes'
 import { money, relative, telHref } from '../lib/format'
 import { IconPhone } from '../components/nav/icons'
 import { startOfToday } from '../lib/day'
+import { leadValue } from '@allstar/core/deals'
 
 /**
  * Team view for managers on a phone.
@@ -154,9 +155,9 @@ export function Team() {
                             <span className="min-w-0 flex-1 truncate text-ink-soft">
                               {ev.summary}
                             </span>
-                            {p?.opportunityValue != null && (
+                            {leadValue(p) != null && (
                               <span className="nums shrink-0 text-[13px] font-medium text-ink-soft">
-                                {money(p.opportunityValue)}
+                                {money(leadValue(p))}
                               </span>
                             )}
                             <span className="shrink-0 text-[12.5px] text-ink-mute">

@@ -9,6 +9,7 @@ import { money, relative } from '../../lib/format'
 import { homeownerContact } from '../../lib/contact'
 import { COULD_NOT_OPEN, openExternal } from '../../lib/external'
 import { useAppStore, useQuoteSentAt } from '../../store/useAppStore'
+import { leadValue } from '@allstar/core/deals'
 
 /**
  * Dense list row, ~84px tall.
@@ -122,9 +123,9 @@ export function PropertyRow({
           <span className="mt-1 flex items-center gap-2 text-[13px] text-ink-mute">
             <span className="truncate">{contact?.name ?? 'No contact on file'}</span>
             {/* Green is reserved for won. An open opportunity is a number. */}
-            {property.opportunityValue && (
+            {!!leadValue(property) && (
               <span className="nums shrink-0 font-medium text-ink-soft">
-                {money(property.opportunityValue)}
+                {money(leadValue(property))}
               </span>
             )}
             {/*

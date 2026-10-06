@@ -204,7 +204,7 @@ try {
   ok(text.includes('\r\n'), 'with CRLF line ends')
   const rows = parseCsv(text)
   const header = rows[0]
-  const want = ['lead_id','address','city','state','zip','lat','lng','status','name','phone','email','assigned_rep','lists','score','opportunity_value','last_outcome','last_visit','next_action','notes','first_activity','updated']
+  const want = ['lead_id','address','city','state','zip','lat','lng','status','name','phone','email','assigned_rep','lists','score','opportunity_value','sale_plan','sale_value','won_at','last_outcome','last_visit','next_action','notes','first_activity','updated']
   ok(JSON.stringify(header) === JSON.stringify(want), 'the header names every column, in order', header.join(','))
   const data = rows.slice(1)
   ok(data.length === 3, 'three leads, three rows — the lead on two lists is one row', `${data.length}`)

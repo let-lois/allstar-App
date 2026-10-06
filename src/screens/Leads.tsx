@@ -17,6 +17,7 @@ import { distanceMiles } from '../lib/geo'
 import { IconSearch } from '../components/nav/icons'
 import type { LeadStatus, Property } from '../types'
 import { STATUS_LABEL } from '../data/outcomes'
+import { leadValue } from '@allstar/core/deals'
 
 /*
   No "Best score": every lead's score is the 50 it was created with — nothing
@@ -116,7 +117,7 @@ export function Leads() {
         // No location yet: the order they are in, not a score that is 50 for all.
         return rows
       case 'value':
-        return rows.sort((a, b) => (b.opportunityValue ?? 0) - (a.opportunityValue ?? 0))
+        return rows.sort((a, b) => (leadValue(b) ?? 0) - (leadValue(a) ?? 0))
       case 'recent':
         return rows.sort((a, b) => (b.lastVisitAt ?? 0) - (a.lastVisitAt ?? 0))
     }

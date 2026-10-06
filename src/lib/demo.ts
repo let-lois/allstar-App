@@ -52,6 +52,7 @@ async function writeSeed(bundle: SeedBundle) {
     db.putAll('tasks', bundle.tasks),
     db.putAll('activity', bundle.activity),
     db.putAll('dailyStats', bundle.dailyStats),
+    db.metaSet('allstar.plans', bundle.plans),
   ])
   await db.metaSet(SEED_DAY_KEY, bundle.day)
 }

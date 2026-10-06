@@ -114,6 +114,7 @@ const TESTS = [
   { script: 'smoke:photos', kind: 'hosted', port: 8799 },
   { script: 'smoke:integrations', kind: 'hosted', port: 8801 },
   { script: 'smoke:money', kind: 'hosted', port: 8803 },
+  { script: 'smoke:deals', kind: 'hosted', port: 8840 },
   { script: 'smoke:daybreak', kind: 'hosted', port: 8804 },
   { script: 'smoke:crm-push', kind: 'hosted', port: 8811 },
   { script: 'smoke:crm-inbound', kind: 'hosted', port: 8821 },

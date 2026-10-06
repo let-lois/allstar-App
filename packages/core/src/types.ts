@@ -165,6 +165,40 @@ export interface Property {
   addressSource?: string
   /** From Overture's building class where one was matched; undefined is not known. */
   residentialStatus?: 'RESIDENTIAL' | 'COMMERCIAL' | 'UNKNOWN'
+  /** The sale, on a lead that is Won. Absent on every other lead. */
+  deal?: Deal
+}
+
+/**
+ * One plan on the company's price list. Whole dollars, like `opportunityValue`.
+ * Retired plans (`active: false`) stay listed so old sales can still name them,
+ * but are not offered for a new one.
+ */
+export interface Plan {
+  id: string
+  name: string
+  value: number
+  active: boolean
+  sort: number
+}
+
+/**
+ * A lead's sale: what it was worth, on which plan, by whom and when.
+ *
+ * `value` is the chosen plan's price, or the lead's imported estimate until a
+ * plan is chosen, or — when a manager overrode it — whatever they set, with
+ * who and why beside it.
+ */
+export interface Deal {
+  repId?: string
+  planId?: string
+  planName?: string
+  /** The plan's price when it was chosen; a later reprice does not move it. */
+  planValue?: number
+  value: number
+  overriddenBy?: string
+  overrideReason?: string
+  wonAt: number
 }
 
 export type NoteTag =
@@ -264,6 +298,8 @@ export interface Visit {
   nextActionAt?: number
   nextActionType?: 'follow_up' | 'appointment' | 'quote' | 'none'
   durationMs?: number
+  /** The plan picked at the door when the outcome is Sold; none means "the office will set it". */
+  planId?: string
   pending?: boolean
 }
 
@@ -405,7 +441,7 @@ export interface ActivityEvent {
   propertyId?: string
   repId: string
   /** `quote` is a Send-quote to-do ticked off: the record that a quote went out. */
-  type: 'visit' | 'note' | 'photo' | 'call' | 'sms' | 'appointment' | 'status' | 'quote'
+  type: 'visit' | 'note' | 'photo' | 'call' | 'sms' | 'appointment' | 'status' | 'quote' | 'deal'
   summary: string
   at: number
   outcome?: OutcomeCode
@@ -462,6 +498,8 @@ export type MutationKind =
   | 'list.update'
   | 'list.members'
   | 'list.reps'
+  /** A sale changed after the door: another plan, or a manager's value with a reason. */
+  | 'deal.update'
 
 export interface Mutation {
   id: string

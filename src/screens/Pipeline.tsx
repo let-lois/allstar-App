@@ -8,6 +8,7 @@ import { PIPELINE_STAGES, STATUS_LABEL } from '../data/outcomes'
 import { money, moneyFull, relativeLower } from '../lib/format'
 import { IconChevron } from '../components/nav/icons'
 import type { LeadStatus } from '../types'
+import { leadValue } from '@allstar/core/deals'
 
 /**
  * Pipeline.
@@ -30,7 +31,7 @@ export function Pipeline() {
       const bucket = map.get(p.status)
       if (!bucket) continue
       bucket.count += 1
-      bucket.value += p.opportunityValue ?? 0
+      bucket.value += leadValue(p) ?? 0
     }
     return map
   }, [properties])
@@ -39,7 +40,7 @@ export function Pipeline() {
     () =>
       properties
         .filter((p) => p.status === stage)
-        .sort((a, b) => (b.opportunityValue ?? 0) - (a.opportunityValue ?? 0)),
+        .sort((a, b) => (leadValue(b) ?? 0) - (leadValue(a) ?? 0)),
     [properties, stage],
   )
 
@@ -151,9 +152,9 @@ export function Pipeline() {
                         a rep the pipeline is money in the bank. It is a number,
                         so it is set as one.
                       */}
-                      {p.opportunityValue != null && (
+                      {leadValue(p) != null && (
                         <span className="nums shrink-0 text-[15px] font-semibold text-ink">
-                          {money(p.opportunityValue)}
+                          {money(leadValue(p))}
                         </span>
                       )}
                       <span className="shrink-0 text-ink-faint">

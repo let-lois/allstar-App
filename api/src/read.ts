@@ -1,4 +1,5 @@
 import { readSettings } from './settings'
+import { listPlans } from './deals'
 import { dayKeyIn } from './day'
 import { readMe } from './me'
 import type { Env, SessionUser } from './types'
@@ -272,6 +273,40 @@ export async function bootstrap(env: Env, user: SessionUser) {
   // no signal must still see the outcome labels their company chose.
   const settings = await readSettings(env, user.clientId)
 
+  /*
+    Each Won lead's sale, and the company's price list.
+
+    Read apart from the batch above and allowed to fail: both tables arrived by
+    migration, and a database where that migration has not run yet must still
+    bootstrap — with no sales on the leads, which is what it had before.
+  */
+  const [deals, plans] = await Promise.all([
+    env.DB.prepare(
+      `SELECT d.* FROM deals d JOIN properties p ON p.id = d.property_id
+        WHERE d.client_id = ?1 AND d.status = 'won' ${isRep(user) ? `AND ${repScopeSql('p', '?2')}` : ''}`,
+    )
+      .bind(...bind([user.clientId]))
+      .all()
+      .then((r) => r.results as Record<string, unknown>[])
+      .catch(() => [] as Record<string, unknown>[]),
+    listPlans(env, user.clientId).catch(() => []),
+  ])
+  const dealByProperty = new Map(
+    deals.map((d) => [
+      String(d.property_id),
+      {
+        repId: d.rep_id ?? undefined,
+        planId: d.plan_id ?? undefined,
+        planName: d.plan_name ?? undefined,
+        planValue: d.plan_value ?? undefined,
+        value: Number(d.value ?? 0),
+        overriddenBy: d.value_overridden_by ?? undefined,
+        overrideReason: d.override_reason ?? undefined,
+        wonAt: Number(d.won_at),
+      },
+    ]),
+  )
+
   return {
     /*
       The whole person, not the session's eight fields. The phone re-reads its
@@ -312,7 +347,9 @@ export async function bootstrap(env: Env, user: SessionUser) {
       addressSource: p.address_source ?? undefined,
       residentialStatus: p.residential_status ?? undefined,
       contacts: contactsByProperty.get(String(p.id)) ?? [],
+      deal: dealByProperty.get(String(p.id)),
     })),
+    plans,
     routes: (routes.results as Record<string, unknown>[]).map((r) => ({
       id: r.id,
       repId: r.rep_id,

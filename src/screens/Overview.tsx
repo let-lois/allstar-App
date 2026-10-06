@@ -17,6 +17,7 @@ import { IconChevron } from '../components/nav/icons'
 import { ROLE_LABEL } from '../lib/roles'
 import type { Role } from '../types'
 import { startOfToday, todayLabel } from '../lib/day'
+import { leadValue } from '@allstar/core/deals'
 
 /**
  * Overview for the office roles on a phone.
@@ -57,9 +58,9 @@ export function Overview({ role }: { role: Role }) {
   const stats = useMemo(() => {
     const rows = Object.values(properties)
     const open = rows.filter((p) => isOpenStatus(p.status))
-    const openValue = open.reduce((s, p) => s + (p.opportunityValue ?? 0), 0)
+    const openValue = open.reduce((s, p) => s + (leadValue(p) ?? 0), 0)
     const won = rows.filter((p) => p.status === 'won')
-    const wonValue = won.reduce((s, p) => s + (p.opportunityValue ?? 0), 0)
+    const wonValue = won.reduce((s, p) => s + (leadValue(p) ?? 0), 0)
     const conversations = todayVisits.filter(
       (v) =>
         v.outcome &&

@@ -91,6 +91,7 @@ import { eraseProperties, eraseProperty, unblockProperties } from './erase'
 import { exportLeadsCsv } from './export'
 import { persistError, readErrors } from './error-log'
 import { setLeadStatus } from './lead-edit'
+import { createPlan, listPlans, updatePlan } from './deals'
 import { canReviewConflicts, listConflicts, reviewConflict } from './stale'
 import { applyInbound, clientForSecret, webhookSecret } from './crm-inbound'
 import {
@@ -1202,6 +1203,29 @@ export default {
         })
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         return json(result, 200, cors)
+      }
+
+      /* --- the price list --------------------------------------------------- */
+      //
+      // Readable by anyone signed in — a rep picks from it at the door — and
+      // changed only by managers and administrators (deals.ts says so).
+      if (path === '/api/plans' && req.method === 'GET') {
+        return json({ plans: await listPlans(env, user.clientId) }, 200, cors)
+      }
+      if (path === '/api/plans' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await createPlan(env, user, body)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        await recordAudit(env, user, { action: 'plan.created', targetType: 'plan', targetId: result.id, targetLabel: result.name, detail: { value: result.value } })
+        return json({ plan: result }, 201, cors)
+      }
+      const planMatch = /^\/api\/plans\/([A-Za-z0-9_-]{1,64})$/.exec(path)
+      if (planMatch && req.method === 'PATCH') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const result = await updatePlan(env, user, decodeURIComponent(planMatch[1]), body)
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        await recordAudit(env, user, { action: 'plan.updated', targetType: 'plan', targetId: result.id, targetLabel: result.name, detail: body })
+        return json({ plan: result }, 200, cors)
       }
 
       /* --- a company's own CRM ---------------------------------------------- */

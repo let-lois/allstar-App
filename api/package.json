@@ -48,6 +48,7 @@
     "smoke:erase": "node scripts/smoke-erase.mjs",
     "smoke:stale": "node scripts/smoke-stale.mjs",
     "smoke:money": "node scripts/smoke-closed-value.mjs",
+    "smoke:deals": "node scripts/smoke-deals.mjs",
     "db:rebuild-closed": "node scripts/rebuild-closed-value.mjs",
     "smoke:daybreak": "node scripts/smoke-daybreak.mjs",
     "db:rebuild-stats": "node scripts/rebuild-daily-stats.mjs",

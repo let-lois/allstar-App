@@ -12,6 +12,7 @@ import { moneyFull, relativeLower, cityLine } from '../../lib/format'
 import { ListMembership } from './ListMembership'
 import { PropertyImage } from './StreetView'
 import { LeadSections } from './LeadSections'
+import { leadValue } from '@allstar/core/deals'
 
 /**
  * The map's property sheet — map → tap pin → this → action, in two taps.
@@ -150,10 +151,10 @@ export function PropertyPeek({
               : 'Not assigned to anyone yet'}
           </p>
         </div>
-        {property.opportunityValue != null && (
+        {leadValue(property) != null && (
           <div className="shrink-0 text-right">
             <p className="nums font-semibold text-good">
-              {moneyFull(property.opportunityValue)}
+              {moneyFull(leadValue(property))}
             </p>
             <p className="text-[11px] text-ink-mute">Opportunity</p>
           </div>

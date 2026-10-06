@@ -75,14 +75,14 @@ function sql(command) {
   still counts the old way, which would be a second bug dressed as a fix. When
   the day boundary itself is corrected, every column re-buckets together.
 */
+// Money closed is the sales won that day that still stand (see api/src/deals.ts).
 const CORRECT = `
-  SELECT COALESCE(SUM(p.opportunity_value), 0)
-    FROM visits v
-    JOIN properties p ON p.id = v.property_id
-   WHERE v.rep_id = d.rep_id
-     AND v.outcome = 'sold'
-     AND v.ended_at >= CAST(strftime('%s', d.day || ' 00:00:00') AS INTEGER) * 1000
-     AND v.ended_at <  CAST(strftime('%s', d.day || ' 00:00:00') AS INTEGER) * 1000 + 86400000
+  SELECT COALESCE(SUM(s.value), 0)
+    FROM deals s
+   WHERE s.rep_id = d.rep_id
+     AND s.status = 'won'
+     AND s.won_at >= CAST(strftime('%s', d.day || ' 00:00:00') AS INTEGER) * 1000
+     AND s.won_at <  CAST(strftime('%s', d.day || ' 00:00:00') AS INTEGER) * 1000 + 86400000
 `
 
 console.log(`${local ? 'local' : 'PRODUCTION'} database, ${apply ? 'APPLYING' : 'dry run'}\n`)

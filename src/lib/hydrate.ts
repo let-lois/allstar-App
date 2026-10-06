@@ -87,6 +87,9 @@ export async function applyBootstrap(dto: BootstrapDTO, mergeOnly = false): Prom
   // same wipe rules as everything else without needing a table of one row.
   if (dto.settings) await db.metaSet('allstar.settings', dto.settings)
   if (dto.timezone) await db.metaSet('allstar.timezone', dto.timezone)
+  // The price list rides with settings: small, no history, needed offline at
+  // the door. Absent (an older Worker) leaves what the phone already had.
+  if (dto.plans) await db.metaSet('allstar.plans', dto.plans)
 
   /*
     The roster, same treatment and for the same reason as settings: it is one
@@ -200,4 +203,5 @@ export async function wipeCachedData(): Promise<void> {
   // account on a shared phone.
   await db.metaSet('allstar.settings', undefined)
   await db.metaSet('allstar.timezone', undefined)
+  await db.metaSet('allstar.plans', undefined)
 }

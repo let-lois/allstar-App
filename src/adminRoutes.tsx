@@ -29,6 +29,7 @@ const screens = {
   AdminAudit: lazy(() => import('./admin/AdminAudit')),
   AdminLeads: lazy(() => import('./admin/AdminLeads')),
   AdminSettings: lazy(() => import('./admin/AdminSettings').then((m) => ({ default: m.AdminSettings }))),
+  AdminPlans: lazy(() => import('./admin/AdminPlans')),
   AdminClients: lazy(() => import('./admin/AdminClients').then((m) => ({ default: m.AdminClients }))),
 }
 
