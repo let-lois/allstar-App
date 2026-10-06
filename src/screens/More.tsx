@@ -1,3 +1,4 @@
+import { isStoreBuild } from '../lib/external'
 import { useEffect, useState } from 'react'
 import { describeError } from '../lib/errors'
 import { API_URL } from '../lib/api-url'
@@ -269,6 +270,7 @@ export function More() {
             */}
             <MoreLink label="Show the tutorial again" onClick={() => void replayTour()} />
             <MoreHref label="Privacy policy" href={`${API_URL}/privacy`} />
+            <MoreHref label="Terms of use" href={`${API_URL}/terms`} />
           </MoreGroup>
 
           <section className="section">
@@ -429,6 +431,8 @@ export function More() {
           </Collapsible>
 
           {/* --- field testing ------------------------------------------- */}
+          {/* A testing aid, so not in the App Store build. */}
+          {!isStoreBuild() && (
           <Collapsible title="Field testing">
             <label className="flex min-h-tap items-center justify-between gap-3">
               <span className="min-w-0">
@@ -514,6 +518,7 @@ export function More() {
               </div>
             )}
           </Collapsible>
+          )}
 
           {/* The last row, in the destructive colour, with its confirmation. */}
           <SignOutButton row />

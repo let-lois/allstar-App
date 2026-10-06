@@ -189,6 +189,13 @@ const DEV_SERVER_ORIGIN: string | null = __DEV__
 const WEBVIEW_INSPECTABLE = isInspectable(__DEV__, Updates.channel)
 
 /**
+ * A store build is every build that is not one of ours — the same rule, the
+ * other way round. The web app hides its testing aids (the demo, "Simulate no
+ * signal") there; TestFlight and preview builds keep them.
+ */
+const STORE_BUILD = !WEBVIEW_INSPECTABLE
+
+/**
  * `file://` is the shell. Nothing else navigates this webview.
  *
  * `about:` is allowed because a webview issues `about:blank` on its own during
@@ -285,6 +292,7 @@ export default function Index() {
         onCanGoBack={onCanGoBack}
         dictationStart={HAS_NATIVE_DICTATION ? dictationStart : undefined}
         dictationStop={HAS_NATIVE_DICTATION ? dictationStop : undefined}
+        storeBuild={STORE_BUILD}
         dom={{
           /*
             `react-native-webview`, not Expo's own `@expo/dom-webview`, which is

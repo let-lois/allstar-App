@@ -125,6 +125,11 @@ try {
     ok(/Delete your account/.test(text) && /Google Maps Platform/.test(text) && /help@example\.com/.test(text), 'it says how to delete an account, who data is shared with, and where to write')
     const s = await (await fetch(`${BASE}/support`)).text()
     ok(/mailto:help@example\.com/.test(s) && /Forgot password/.test(s), 'the support page gives the support address and the common answers')
+    const t = await fetch(`${BASE}/terms`)
+    const terms = await t.text()
+    ok(t.status === 200 && /text\/html/.test(t.headers.get('content-type') ?? ''), 'the terms of use are a public page too, for the App Store listing')
+    ok(/Licensed Application End User License Agreement/.test(terms) && /Do Not Contact/.test(terms) && /help@example\.com/.test(terms), "they name Apple's licence, the contact rules and where to write")
+    ok(/href="\/terms"/.test(text) && /href="\/terms"/.test(s), 'and the privacy and support pages link to them')
   }
 
   await call('/setup', {

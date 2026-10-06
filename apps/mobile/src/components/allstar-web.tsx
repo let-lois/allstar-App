@@ -194,6 +194,7 @@ export default function AllStarWeb({
   onCanGoBack,
   dictationStart,
   dictationStop,
+  storeBuild,
   ref,
 }: {
   apiFetch: (req: ApiRequest) => Promise<ApiResponse>
@@ -204,6 +205,8 @@ export default function AllStarWeb({
   /** Native actions: the phone's own speech recognition, for note dictation. */
   dictationStart?: (opts: { lang: string }) => Promise<{ ok: boolean; error?: string }>
   dictationStop?: () => Promise<void>
+  /** A store build: the web app hides its testing aids. See `isStoreBuild` in `web/lib/external.ts`. */
+  storeBuild?: boolean
   ref?: Ref<AllStarWebRef>
   dom?: import('expo/dom').DOMProps
 }) {
@@ -230,6 +233,10 @@ export default function AllStarWeb({
   if (dictationStart && dictationStop) {
     const w = window as Window & { __allstarShell?: ShellBridge }
     w.__allstarShell = { ...w.__allstarShell, dictation: { start: dictationStart, stop: dictationStop } }
+  }
+  if (storeBuild) {
+    const w = window as Window & { __allstarShell?: ShellBridge }
+    w.__allstarShell = { ...w.__allstarShell, storeBuild: true }
   }
 
   /*

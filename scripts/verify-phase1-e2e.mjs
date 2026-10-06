@@ -487,6 +487,7 @@ try {
     await rep.goto(`${APP}/more`, { waitUntil: 'domcontentloaded' })
     await settle(rep, 1500)
     ok((await rep.getByRole('link', { name: 'Privacy policy' }).getAttribute('href'))?.endsWith('/privacy') === true, 'More links the privacy policy')
+    ok((await rep.getByRole('link', { name: 'Terms of use' }).getAttribute('href'))?.endsWith('/terms') === true, 'and the terms of use')
     ok((await rep.getByRole('link', { name: 'All Star Help', exact: true }).getAttribute('href')) === 'https://help.allstarhomesolutions.com', 'and All Star Help (the Help Center)')
     await rep.getByRole('button', { name: 'Delete account' }).click()
     await settle(rep, 1200)
