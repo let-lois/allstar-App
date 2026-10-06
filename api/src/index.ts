@@ -104,7 +104,7 @@ import {
 } from './integrations'
 import { checkLoginRate, clearFailures, recordFailure } from './ratelimit'
 import { directions } from './directions'
-import { invitePage, setupPage, privacyPage, supportPage } from './pages'
+import { invitePage, setupPage, privacyPage, supportPage, termsPage } from './pages'
 import { bootstrap } from './read'
 import type { Env, Mutation, Role, SessionUser } from './types'
 
@@ -401,6 +401,7 @@ export default {
       // Public pages App Store Connect and the app link to.
       if (path === '/privacy' && req.method === 'GET') return privacyPage({ supportEmail: env.SUPPORT_EMAIL })
       if (path === '/support' && req.method === 'GET') return supportPage({ supportEmail: env.SUPPORT_EMAIL })
+      if (path === '/terms' && req.method === 'GET') return termsPage({ supportEmail: env.SUPPORT_EMAIL })
 
       if (path === '/setup') {
         if (req.method === 'GET') {

@@ -427,6 +427,7 @@ export function privacyPage(opts: { supportEmail?: string }): Response {
 <p>The app is for working adults and is not directed to children under 16.</p>
 <h2>Contact</h2>
 <p>Questions or requests: ${contact}.</p>
+<p><a href="/terms">Terms of Use</a></p>
 </div>`)
 }
 
@@ -447,6 +448,51 @@ ${email
 <li><b>Map or location not working:</b> check that location access is allowed for All Star in your phone's Settings.</li>
 <li><b>Verify a representative:</b> scan the QR code on their badge.</li>
 </ul>
-<p><a href="/privacy">Privacy Policy</a></p>
+<p><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a></p>
+</div>`)
+}
+
+/*
+  Terms of Use, for the App Store listing's Terms field and the app's links.
+  Plain language, written from what the service actually is: a company's
+  internal field tool, with accounts the company issues. The App Store licence
+  itself is Apple's standard one, which this page names rather than replaces.
+  Like the privacy policy, counsel should review the wording before release.
+*/
+export function termsPage(opts: { supportEmail?: string }): Response {
+  const contact = opts.supportEmail
+    ? `<a href="mailto:${escapeHtml(opts.supportEmail)}">${escapeHtml(opts.supportEmail)}</a>`
+    : 'the office of the company that gave you your account'
+  return docShell('Terms of Use', `
+<div class="mark">A</div>
+<h1>Terms of Use</h1>
+<p class="sub">All Star field app · effective October 6, 2026</p>
+<div class="doc">
+<p>All Star is a field sales tool that a company ("your company") provides to its team. By signing in you agree to these terms. If you do not agree, do not use the app.</p>
+<h2>Your account</h2>
+<ul>
+<li>Accounts are created by your company, which decides who has access and what each person can do.</li>
+<li>Keep your password to yourself and tell your company if you think someone else has used your account.</li>
+<li>You can delete your own account at any time: More → Edit profile → Delete my account.</li>
+</ul>
+<h2>Using the app</h2>
+<ul>
+<li>Use the app only for your company's work, and only as your company allows.</li>
+<li>Follow the law when you contact people, including do-not-call, do-not-knock and solicitation rules where you work. Respect every Do Not Contact request; the app records them so they are kept.</li>
+<li>Enter information honestly. Visits, outcomes and locations are records your company relies on.</li>
+<li>Do not try to reach data you were not given, interfere with the service, or copy the app.</li>
+</ul>
+<h2>Data</h2>
+<p>Leads, visits and other work records belong to your company. How personal information is handled is explained in the <a href="/privacy">Privacy Policy</a>.</p>
+<h2>Licence</h2>
+<p>If you installed the app from Apple's App Store, your use of the app is also governed by Apple's <a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/">Licensed Application End User License Agreement</a>. Where it and these terms differ about the app itself, Apple's agreement applies.</p>
+<h2>Availability and changes</h2>
+<p>We work to keep the service running and your data safe, but the app is provided "as is", without guarantees that it will always be available or error-free. Maps, addresses and locations come from third-party and public sources and may be inaccurate — check before you rely on them. We may update the app and these terms; continuing to use the app after a change means you accept it.</p>
+<h2>Ending access</h2>
+<p>Your company can end your access at any time, and access ends if your company stops using All Star. Access may also be suspended for misuse.</p>
+<h2>Liability</h2>
+<p>To the extent the law allows, All Star is not liable for indirect or consequential losses, or for losses caused by inaccurate map or address data, lost signal, or how your company uses the service.</p>
+<h2>Contact</h2>
+<p>Questions: ${contact}.</p>
 </div>`)
 }

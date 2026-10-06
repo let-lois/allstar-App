@@ -20,6 +20,13 @@
  */
 
 export interface ShellBridge {
+  /**
+   * True in an App Store / Play Store build: the production channel, or any
+   * channel the shell does not recognise as an internal one. Testing aids —
+   * the demo, "Simulate no signal" — are hidden there. Absent in a browser and
+   * in shells from before this existed, which keep showing them.
+   */
+  storeBuild?: boolean
   /** Resolves `{ ok: false }` when the phone had nothing that could open it. */
   openExternal?: (url: string) => Promise<{ ok: boolean }>
   /**
@@ -77,4 +84,9 @@ export async function openExternal(url: string): Promise<boolean> {
   // OS without unloading the page.
   window.location.href = url
   return true
+}
+
+/** Whether this is the store build of the phone app; see `ShellBridge.storeBuild`. */
+export function isStoreBuild(): boolean {
+  return typeof window !== 'undefined' && window.__allstarShell?.storeBuild === true
 }

@@ -1,3 +1,4 @@
+import { isStoreBuild } from '../lib/external'
 import { useEffect, useState } from 'react'
 import { API_URL } from '../lib/api-url'
 import { HELP_URL } from '../lib/help'
@@ -98,6 +99,7 @@ export function Login() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showDemo, setShowDemo] = useState(false)
+  const storeBuild = isStoreBuild()
 
   /*
     Forgot password?, on the screen where people discover they have.
@@ -498,6 +500,9 @@ export function Login() {
           )}
 
           {/* --- the demo, kept alongside rather than behind a flag --------- */}
+          {/* Not in the App Store build: sample data has no place in the shipped app. */}
+          {!storeBuild && (
+          <>
           <div className="mt-8 flex items-center gap-3">
             <span className="h-px flex-1 bg-line" />
             <span className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-mute">
@@ -546,6 +551,8 @@ export function Login() {
               </ul>
             </>
           )}
+          </>
+          )}
 
           </div>
 
@@ -556,6 +563,7 @@ export function Login() {
           <p className="mt-3 flex justify-center gap-5 text-[13px] font-medium">
             <a href={HELP_URL} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Help &amp; support</a>
             <a href={`${API_URL}/privacy`} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Privacy policy</a>
+            <a href={`${API_URL}/terms`} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Terms</a>
           </p>
         </div>
       </div>
