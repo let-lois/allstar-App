@@ -9,7 +9,7 @@ import { money, relative } from '../../lib/format'
 import { homeownerContact } from '../../lib/contact'
 import { COULD_NOT_OPEN, openExternal } from '../../lib/external'
 import { useAppStore, useQuoteSentAt } from '../../store/useAppStore'
-import { leadValue } from '@allstar/core/deals'
+import { leadPlanName, leadValue } from '@allstar/core/deals'
 
 /**
  * Dense list row, ~84px tall.
@@ -126,6 +126,12 @@ export function PropertyRow({
             {!!leadValue(property) && (
               <span className="nums shrink-0 font-medium text-ink-soft">
                 {money(leadValue(property))}
+              </span>
+            )}
+            {/* The plan it is being sold, when it has one — short, never wraps. */}
+            {leadPlanName(property) && (
+              <span className="max-w-[40%] shrink-0 truncate font-medium text-ink-soft" data-testid="row-plan">
+                {leadPlanName(property)}
               </span>
             )}
             {/*

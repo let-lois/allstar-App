@@ -92,6 +92,7 @@ export type AuditAction =
   /** The price list: a plan added, renamed, repriced, retired or restored. */
   | 'plan.created'
   | 'plan.updated'
+  | 'plan.deleted'
 
 export interface AuditEntry {
   action: AuditAction

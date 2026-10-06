@@ -291,6 +291,7 @@ export async function bootstrap(env: Env, user: SessionUser) {
       .catch(() => [] as Record<string, unknown>[]),
     listPlans(env, user.clientId).catch(() => []),
   ])
+  const planById = new Map(plans.map((pl) => [pl.id, { id: pl.id, name: pl.name, value: pl.value }]))
   const dealByProperty = new Map(
     deals.map((d) => [
       String(d.property_id),
@@ -348,6 +349,8 @@ export async function bootstrap(env: Env, user: SessionUser) {
       residentialStatus: p.residential_status ?? undefined,
       contacts: contactsByProperty.get(String(p.id)) ?? [],
       deal: dealByProperty.get(String(p.id)),
+      // The plan this lead is being sold, as it stands on the price list now.
+      plan: p.plan_id ? planById.get(String(p.plan_id)) : undefined,
     })),
     plans,
     routes: (routes.results as Record<string, unknown>[]).map((r) => ({

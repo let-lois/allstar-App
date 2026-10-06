@@ -14,14 +14,14 @@ import { liveToken } from '../lib/session'
 import { FileSaveUnsupported, saveFile } from '../lib/download'
 import { PIPELINE_STAGES, STATUS_COLOR, STATUS_LABEL, outcomeByCode } from '../data/outcomes'
 import { money, relative } from '../lib/format'
-import type { LeadStatus } from '../types'
+import type { LeadStatus, Property } from '../types'
 import { DataList } from './DataList'
 import { AllStarMap } from '../components/map/AllStarMap'
 import { pointInPolygon } from '../lib/geo'
 import { VISITED_WINDOWS, matchesVisited, type VisitedWindow } from '../lib/leadFilter'
 import { FOLLOW_UP_FILTERS, matchesFollowUp, openTaskByLead, type FollowUpFilter } from '../lib/followups'
 import { APPOINTMENT_FILTERS, appointmentsByLead, byNextAppointment, matchesAppointment, type AppointmentFilter } from '../lib/appointments'
-import { leadValue } from '@allstar/core/deals'
+import { leadPlanName, leadValue } from '@allstar/core/deals'
 
 /**
  * Every lead, from a desk.
@@ -109,11 +109,15 @@ async function inBatches<R>(ids: string[], run: (part: string[]) => Promise<R>):
   return out
 }
 const sum = <R,>(xs: R[], f: (r: R) => number | undefined) => xs.reduce((n, r) => n + (f(r) ?? 0), 0)
+/** The plan a lead is on, for filtering: its sale's when sold, its own otherwise. */
+const leadPlanId = (p: Property): string | undefined => (p.status === 'won' && p.deal ? p.deal.planId : p.plan?.id)
+
 /** A failure the person can quote: the server's reference when it sent one. */
 const failed = describeError
 
 export default function AdminLeads() {
   const properties = useAppStore((s) => s.properties)
+  const plans = useAppStore((s) => s.plans)
   const territories = useAppStore((s) => s.territories)
   const team = useAppStore((s) => s.team)
   const mode = useAppStore((s) => s.mode)
@@ -137,6 +141,8 @@ export default function AdminLeads() {
   const [visited, setVisited] = useState<VisitedWindow>('any')
   const [apptFilter, setApptFilter] = useState<AppointmentFilter>('any')
   const [followFilter, setFollowFilter] = useState<FollowUpFilter>('any')
+  // 'any', 'none' (no plan), or a plan id: the plan the lead is on — its sale's when sold.
+  const [planFilter, setPlanFilter] = useState<string>('any')
   const taskRows = useAppStore((s) => s.tasks)
   const openTasks = useMemo(() => openTaskByLead(Object.values(taskRows)), [taskRows])
   const appointmentRows = useAppStore((s) => s.appointments)
@@ -145,7 +151,7 @@ export default function AdminLeads() {
   // they start open, so the territory the manager came for is in view.
   const [filtersShown, setFiltersShown] = useState(() => params.has('territory'))
   const activeFilterCount =
-    Number(status !== 'all') + Number(repFilter !== 'all') + Number(territoryFilter !== 'all') + Number(visited !== 'any') + Number(apptFilter !== 'any') + Number(followFilter !== 'any')
+    Number(status !== 'all') + Number(repFilter !== 'all') + Number(territoryFilter !== 'all') + Number(visited !== 'any') + Number(apptFilter !== 'any') + Number(followFilter !== 'any') + Number(planFilter !== 'any')
   const resetFilters = () => {
     setStatus('all')
     setRepFilter('all')
@@ -242,6 +248,7 @@ export default function AdminLeads() {
     if (visited !== 'any') list = list.filter((p) => matchesVisited(p, visited, timezone))
     if (apptFilter !== 'any') list = list.filter((p) => matchesAppointment(appts.get(p.id), apptFilter))
     if (followFilter !== 'any') list = list.filter((p) => matchesFollowUp(openTasks.get(p.id), followFilter, timezone))
+    if (planFilter !== 'any') list = list.filter((p) => (leadPlanId(p) ?? 'none') === planFilter)
 
     const sorted = [...list]
     if (sort === 'address') sorted.sort((a, b) => a.address1.localeCompare(b.address1))
@@ -251,7 +258,7 @@ export default function AdminLeads() {
     else if (sort === 'appointment') sorted.sort((a, b) => byNextAppointment(appts.get(a.id), appts.get(b.id)))
     else sorted.sort((a, b) => (b.lastVisitAt ?? 0) - (a.lastVisitAt ?? 0))
     return sorted
-  }, [properties, query, status, repFilter, territoryFilter, visited, sort, timezone, apptFilter, appts, followFilter, openTasks])
+  }, [properties, query, status, repFilter, territoryFilter, visited, sort, timezone, apptFilter, appts, followFilter, openTasks, planFilter])
 
   const page = rows.slice(0, shown)
 
@@ -775,6 +782,21 @@ export default function AdminLeads() {
             </option>
           ))}
         </select>
+        <select
+          value={planFilter}
+          onChange={(e) => setPlanFilter(e.target.value)}
+          className="focusable min-h-[40px] rounded-field border border-line bg-surface px-2 text-sm"
+          aria-label="Plan"
+          data-testid="leads-plan-filter"
+        >
+          <option value="any">Any plan</option>
+          <option value="none">No plan</option>
+          {plans.map((pl) => (
+            <option key={pl.id} value={pl.id}>
+              {pl.name}
+            </option>
+          ))}
+        </select>
         </div>
       </FilterBar>
 
@@ -1206,6 +1228,15 @@ export default function AdminLeads() {
             cell: (p) =>
               leadValue(p) ? (
                 <span className="nums font-semibold">{money(leadValue(p))}</span>
+              ) : (
+                <span className="text-ink-mute">—</span>
+              ),
+          },
+          {
+            header: 'Plan',
+            cell: (p) =>
+              leadPlanName(p) ? (
+                <span className="text-sm" data-testid="lead-row-plan">{leadPlanName(p)}</span>
               ) : (
                 <span className="text-ink-mute">—</span>
               ),

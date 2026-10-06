@@ -21,6 +21,7 @@ export function AdminPlans() {
   const properties = useAppStore((s) => s.properties)
   const createPlan = useAppStore((s) => s.createPlan)
   const updatePlan = useAppStore((s) => s.updatePlan)
+  const deletePlan = useAppStore((s) => s.deletePlan)
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -30,6 +31,12 @@ export function AdminPlans() {
     () => [...plans].sort((a, b) => Number(b.active) - Number(a.active) || a.sort - b.sort || a.name.localeCompare(b.name)),
     [plans],
   )
+  // How many open leads carry each plan, so a delete can say what it touches.
+  const onLeads = useMemo(() => {
+    const by = new Map<string, number>()
+    for (const p of Object.values(properties)) if (p.plan && !(p.status === 'won' && p.deal)) by.set(p.plan.id, (by.get(p.plan.id) ?? 0) + 1)
+    return by
+  }, [properties])
   // How much each plan has sold, from the sales on the leads this console holds.
   const sold = useMemo(() => {
     const by = new Map<string, { n: number; value: number }>()
@@ -119,7 +126,14 @@ export function AdminPlans() {
         ) : (
           <ul className="mt-3 divide-y divide-line-soft" data-testid="plans-list">
             {sorted.map((p) => (
-              <PlanRow key={p.id} plan={p} sold={sold.by.get(p.id)} onSave={updatePlan} />
+              <PlanRow
+                key={p.id}
+                plan={p}
+                sold={sold.by.get(p.id)}
+                leads={onLeads.get(p.id) ?? 0}
+                onSave={updatePlan}
+                onDelete={deletePlan}
+              />
             ))}
           </ul>
         )}
@@ -137,13 +151,19 @@ export function AdminPlans() {
 function PlanRow({
   plan,
   sold,
+  leads,
   onSave,
+  onDelete,
 }: {
   plan: Plan
   sold?: { n: number; value: number }
+  /** Open leads carrying this plan. */
+  leads: number
   onSave: (id: string, patch: Partial<Pick<Plan, 'name' | 'value' | 'active'>>) => Promise<Plan>
+  onDelete: (id: string) => Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const [name, setName] = useState(plan.name)
   const [price, setPrice] = useState(String(plan.value))
   const [busy, setBusy] = useState(false)
@@ -206,7 +226,7 @@ function PlanRow({
               {sold ? ` · ${sold.n} sold · ${moneyFull(sold.value)}` : ' · none sold yet'}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="secondary" disabled={busy} onClick={() => setEditing(true)} data-testid="plan-edit">
               Edit
             </Button>
@@ -218,6 +238,46 @@ function PlanRow({
               data-testid="plan-toggle"
             >
               {plan.active ? 'Retire' : 'Restore'}
+            </Button>
+            <Button size="sm" variant="danger" disabled={busy} onClick={() => setConfirming(true)} data-testid="plan-delete">
+              Delete
+            </Button>
+          </div>
+        </div>
+      )}
+      {/*
+        Said before it happens, in numbers: which leads lose the plan, and that
+        sales already made keep it. Retire is the gentler choice and is named.
+      */}
+      {confirming && !editing && (
+        <div className="mt-3 rounded-lg bg-bad-bg px-3 py-3 text-sm" role="alertdialog" aria-label={`Delete ${plan.name}?`} data-testid="plan-delete-confirm">
+          <p className="font-semibold text-bad">Delete {plan.name}?</p>
+          <p className="mt-1 text-ink-soft">
+            {leads > 0 ? `${leads} open ${leads === 1 ? 'lead goes' : 'leads go'} back to no plan. ` : ''}
+            {sold?.n ? `${sold.n} ${sold.n === 1 ? 'sale keeps' : 'sales keep'} the plan's name and price. ` : ''}
+            This cannot be undone. To stop offering it but keep it on record, use Retire instead.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                setError(null)
+                try {
+                  await onDelete(plan.id)
+                } catch (err) {
+                  setError(describeError(err, 'Could not delete the plan.'))
+                  setBusy(false)
+                }
+              }}
+              data-testid="plan-delete-yes"
+            >
+              {busy ? 'Deleting…' : 'Delete plan'}
+            </Button>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => setConfirming(false)}>
+              Cancel
             </Button>
           </div>
         </div>

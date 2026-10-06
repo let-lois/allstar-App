@@ -192,6 +192,9 @@ CREATE TABLE IF NOT EXISTS properties (
   address_confidence TEXT,
   address_source     TEXT,          -- 'overture', 'census_tiger', 'geocodio', …
   residential_status TEXT,          -- RESIDENTIAL | COMMERCIAL | UNKNOWN; null = not known
+  -- The plan this lead is being sold (migration 028). What an open lead is
+  -- worth in the pipeline, and the plan its sale takes when it is won.
+  plan_id            TEXT REFERENCES plans(id) ON DELETE SET NULL,
   updated_at         INTEGER NOT NULL
 );
 -- The rep's bootstrap query is "my properties" — this is the index it rides.

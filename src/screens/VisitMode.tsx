@@ -394,8 +394,9 @@ export function VisitMode() {
                 <h2 className="mb-3 text-[15px] font-semibold">Which plan?</h2>
                 <PlanPicker
                   plans={plans}
-                  value={visit.planId}
-                  onChange={(id) => void setVisitPlan(visit.id, id)}
+                  // The lead's own plan until the rep picks; "Not sure" is null.
+                  value={visit.planId === undefined ? property.plan?.id : visit.planId ?? undefined}
+                  onChange={(id) => void setVisitPlan(visit.id, id ?? null)}
                   estimate={property.opportunityValue}
                 />
               </Card>

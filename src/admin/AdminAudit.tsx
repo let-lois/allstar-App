@@ -36,7 +36,7 @@ const GROUPS = [
     label: 'People',
     actions: ['user.invited', 'user.deactivated', 'user.reactivated', 'user.deleted'],
   },
-  { key: 'leads', label: 'Leads', actions: ['territory.created', 'territory.renamed', 'territory.deleted', 'territory.assigned', 'territory.unassigned', 'territory.generated', 'territory.leads_moved', 'leads.imported', 'leads.exported', 'plan.created', 'plan.updated'] },
+  { key: 'leads', label: 'Leads', actions: ['territory.created', 'territory.renamed', 'territory.deleted', 'territory.assigned', 'territory.unassigned', 'territory.generated', 'territory.leads_moved', 'leads.imported', 'leads.exported', 'plan.created', 'plan.updated', 'plan.deleted'] },
   {
     key: 'connections',
     label: 'Connections',
@@ -65,6 +65,7 @@ const WEIGHT: Record<string, 'high' | 'medium' | 'low'> = {
   'territory.leads_moved': 'low',
   'leads.imported': 'low',
   'leads.exported': 'medium',
+  'plan.deleted': 'medium',
   // A geocoding key is a customer's own billable credential, and switching
   // provider changes where every future lead's coordinates come from — and
   // whose terms they arrive under. Worth stopping on, short of an access change.
@@ -287,6 +288,13 @@ function describe(e: AuditRowDTO): React.ReactNode {
         <>
           {who} added the plan {target}
           {typeof d.value === 'number' ? ` at ${moneyFull(d.value)}` : ''}
+        </>
+      )
+    case 'plan.deleted':
+      return (
+        <>
+          {who} deleted the plan {target}
+          {typeof d.leads === 'number' && d.leads > 0 ? ` (${d.leads} lead${d.leads === 1 ? '' : 's'} went back to no plan)` : ''}
         </>
       )
     case 'plan.updated':

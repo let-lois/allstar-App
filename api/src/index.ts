@@ -91,7 +91,7 @@ import { eraseProperties, eraseProperty, unblockProperties } from './erase'
 import { exportLeadsCsv } from './export'
 import { persistError, readErrors } from './error-log'
 import { setLeadStatus } from './lead-edit'
-import { createPlan, listPlans, updatePlan } from './deals'
+import { createPlan, deletePlan, listPlans, updatePlan } from './deals'
 import { canReviewConflicts, listConflicts, reviewConflict } from './stale'
 import { applyInbound, clientForSecret, webhookSecret } from './crm-inbound'
 import {
@@ -1227,6 +1227,12 @@ export default {
         if ('error' in result) return json({ error: result.error }, result.status, cors)
         await recordAudit(env, user, { action: 'plan.updated', targetType: 'plan', targetId: result.id, targetLabel: result.name, detail: body })
         return json({ plan: result }, 200, cors)
+      }
+      if (planMatch && req.method === 'DELETE') {
+        const result = await deletePlan(env, user, decodeURIComponent(planMatch[1]))
+        if ('error' in result) return json({ error: result.error }, result.status, cors)
+        await recordAudit(env, user, { action: 'plan.deleted', targetType: 'plan', targetId: result.id, targetLabel: result.name, detail: { leads: result.leads, sales: result.sales } })
+        return json(result, 200, cors)
       }
 
       /* --- a company's own CRM ---------------------------------------------- */

@@ -4,14 +4,21 @@ import type { Deal, Plan, Property } from './types'
  * What a lead is worth, in whole dollars, for every screen that adds money up.
  *
  * A Won lead is worth its sale — the plan's price, or what a manager set it
- * to. Every other lead is worth its imported estimate, which is the only
- * figure an open lead has. One function, so the pipeline, the map card, the
- * leaderboard and the console cannot disagree about the same house.
+ * to. Any other lead is worth the plan it is being sold, if it has one, and
+ * otherwise its imported estimate. One function, so the pipeline, the map
+ * card, the leaderboard and the console cannot disagree about the same house.
  */
-export function leadValue(p: Pick<Property, 'status' | 'deal' | 'opportunityValue'> | null | undefined): number | undefined {
+export function leadValue(p: Pick<Property, 'status' | 'deal' | 'opportunityValue' | 'plan'> | null | undefined): number | undefined {
   if (!p) return undefined
   if (p.status === 'won' && p.deal) return p.deal.value
-  return p.opportunityValue
+  return p.plan?.value ?? p.opportunityValue
+}
+
+/** The plan a lead is on, for display: its sale's on a sold lead, its own otherwise. */
+export function leadPlanName(p: Pick<Property, 'status' | 'deal' | 'plan'> | null | undefined): string | undefined {
+  if (!p) return undefined
+  if (p.status === 'won' && p.deal) return p.deal.planName
+  return p.plan?.name
 }
 
 /** The plans a rep may pick for a new sale, in the office's order. */
@@ -37,11 +44,13 @@ export function canSetDealValue(role: string | null | undefined): boolean {
  * imported estimate until a plan is chosen.
  */
 export function dealOnWin(
-  lead: Pick<Property, 'deal' | 'opportunityValue'>,
+  lead: Pick<Property, 'deal' | 'opportunityValue' | 'plan'>,
   plans: Plan[],
-  opts: { planId?: string; repId?: string; at: number },
+  opts: { planId?: string | null; repId?: string; at: number },
 ): Deal {
-  const plan = plans.find((p) => p.id === opts.planId && p.active)
+  // Undefined: the lead's own plan. Null: none, said out loud.
+  const wanted = opts.planId === undefined ? lead.plan?.id : opts.planId
+  const plan = plans.find((p) => p.id === wanted && p.active)
   const existing = lead.deal
   if (existing) {
     if (!plan || plan.id === existing.planId) return existing

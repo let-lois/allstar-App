@@ -184,7 +184,7 @@ try {
   ok(!!rep.token, 'a field rep can sign in')
 
   await stop()
-  const leads = { a: 9_000, b: 7_000, c: 11_000, d: 5_000, e: 4_000, old: 6_500 }
+  const leads = { a: 9_000, b: 7_000, c: 11_000, d: 5_000, e: 4_000, f: 3_000, g: 2_000, h: 1_500, old: 6_500 }
   for (const [k, v] of Object.entries(leads)) {
     d1(`INSERT INTO properties (id, client_id, address1, lat, lng, status, score, opportunity_value, assigned_rep_id, updated_at)
         VALUES ('p_${k}','${clientId}','${k} Plan St',30.51,-97.67,'${k === 'old' ? 'won' : 'working'}',50,${v},'${rep.id}',${k === 'old' ? OLD_DAY : DAY_A})`)
@@ -300,6 +300,45 @@ try {
   const header = csv.split('\r\n')[0].split(',')
   const row = csv.split('\r\n').find((l) => l.startsWith('p_a,'))?.split(',') ?? []
   ok(row[header.indexOf('sale_plan')] === 'Premium' && row[header.indexOf('sale_value')] === '24000', 'the export carries the sale', `${row[header.indexOf('sale_plan')]} ${row[header.indexOf('sale_value')]}`)
+
+  /* --- a plan on a lead that is not sold yet ----------------------------- */
+  r = await push(rep.token, 'property.plan', { id: 'p_f', planId: STD })
+  let f = await prop(rep.token, 'p_f')
+  ok(r?.status === 'applied' && f?.plan?.id === STD && f?.plan?.value === 16_000, 'a rep can put an open lead on a plan', JSON.stringify(f?.plan))
+  ok(!f?.deal, 'which does not make it a sale')
+  ok((await boot(admin)).activity.some((e) => e.propertyId === 'p_f' && /Plan set to Standard/.test(e.summary)), "and the lead's activity says so")
+  r = await push(rep.token, 'property.plan', { id: 'p_f', planId: PRE })
+  ok(r?.status !== 'applied' && (await prop(admin, 'p_f'))?.plan?.id === STD, 'a retired plan cannot be put on a lead', r?.status)
+
+  // Sold with no plan picked at the door: the sale takes the lead's plan.
+  await push(rep.token, 'property.plan', { id: 'p_g', planId: STD })
+  await visit(rep.token, 'p_g', DAY_B, 'sold')
+  const g = await prop(admin, 'p_g')
+  ok(g?.deal?.planId === STD && g?.deal?.value === 16_000, "a lead sold without a plan picked is sold on the plan it carries", g?.deal?.value)
+  // "Not sure" said out loud at the door: no plan, the estimate counts.
+  await push(rep.token, 'property.plan', { id: 'p_h', planId: STD })
+  await visit(rep.token, 'p_h', DAY_B, 'sold', { deal: { planId: null } })
+  const h = await prop(admin, 'p_h')
+  ok(!h?.deal?.planId && h?.deal?.value === leads.h, '"Not sure" at the door means no plan, even on a lead that had one', h?.deal?.value)
+  // Choosing a plan for a sold lead from the lead moves the sale onto it.
+  await push(rep.token, 'property.plan', { id: 'p_h', planId: STD })
+  ok((await prop(admin, 'p_h'))?.deal?.value === 16_000, "putting a sold lead on a plan moves its sale onto that plan's price")
+  r = await push(rep.token, 'property.plan', { id: 'p_f', planId: null })
+  f = await prop(admin, 'p_f')
+  ok(r?.status === 'applied' && !f?.plan, 'and a lead can be taken off its plan')
+  await push(rep.token, 'property.plan', { id: 'p_f', planId: STD })
+
+  /* --- deleting a plan --------------------------------------------------- */
+  ok((await j(call(`/api/plans/${STD}`, { method: 'DELETE' }, rep.token))).status === 403, 'a rep cannot delete a plan')
+  const del = await j(call(`/api/plans/${STD}`, { method: 'DELETE' }, admin))
+  ok(del.status === 200 && del.body.leads >= 1 && del.body.sales >= 1, 'the office can delete one, and is told what it touched', JSON.stringify(del.body))
+  const after = await boot(admin)
+  ok(!(after.plans ?? []).some((pl) => pl.id === STD), 'it is gone from the price list')
+  f = after.properties.find((p) => p.id === 'p_f')
+  ok(!f?.plan, 'leads that carried it go back to no plan')
+  const gAfter = after.properties.find((p) => p.id === 'p_g')
+  ok(gAfter?.deal?.planName === 'Standard' && gAfter?.deal?.value === 16_000 && !gAfter?.deal?.planId, 'a sale made on it keeps its name and price', JSON.stringify(gAfter?.deal))
+  ok((await j(call(`/api/plans/${STD}`, { method: 'DELETE' }, admin))).status === 404, 'and deleting it twice says there is no such plan')
 } finally {
   await stop().catch(() => {})
   rmSync(CONFIG, { force: true })

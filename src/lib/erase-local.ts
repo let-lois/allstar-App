@@ -87,7 +87,7 @@ async function purgeStore<T extends { id: string; propertyId?: string }>(
  */
 function targetOf(m: Mutation): string {
   const p = (m.payload ?? {}) as Record<string, unknown>
-  if (m.kind === 'property.status') return typeof p.id === 'string' ? p.id : ''
+  if (m.kind === 'property.status' || m.kind === 'property.plan') return typeof p.id === 'string' ? p.id : ''
   return typeof p.propertyId === 'string' ? p.propertyId : ''
 }
 
