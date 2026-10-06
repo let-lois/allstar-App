@@ -21,6 +21,7 @@ import { pointInPolygon } from '../lib/geo'
 import { VISITED_WINDOWS, matchesVisited, type VisitedWindow } from '../lib/leadFilter'
 import { FOLLOW_UP_FILTERS, matchesFollowUp, openTaskByLead, type FollowUpFilter } from '../lib/followups'
 import { APPOINTMENT_FILTERS, appointmentsByLead, byNextAppointment, matchesAppointment, type AppointmentFilter } from '../lib/appointments'
+import { leadValue } from '@allstar/core/deals'
 
 /**
  * Every lead, from a desk.
@@ -246,7 +247,7 @@ export default function AdminLeads() {
     if (sort === 'address') sorted.sort((a, b) => a.address1.localeCompare(b.address1))
     else if (sort === 'status') sorted.sort((a, b) => a.status.localeCompare(b.status))
     else if (sort === 'value')
-      sorted.sort((a, b) => (b.opportunityValue ?? 0) - (a.opportunityValue ?? 0))
+      sorted.sort((a, b) => (leadValue(b) ?? 0) - (leadValue(a) ?? 0))
     else if (sort === 'appointment') sorted.sort((a, b) => byNextAppointment(appts.get(a.id), appts.get(b.id)))
     else sorted.sort((a, b) => (b.lastVisitAt ?? 0) - (a.lastVisitAt ?? 0))
     return sorted
@@ -1203,8 +1204,8 @@ export default function AdminLeads() {
             phone: 'trailing',
             align: 'right',
             cell: (p) =>
-              p.opportunityValue ? (
-                <span className="nums font-semibold">{money(p.opportunityValue)}</span>
+              leadValue(p) ? (
+                <span className="nums font-semibold">{money(leadValue(p))}</span>
               ) : (
                 <span className="text-ink-mute">—</span>
               ),

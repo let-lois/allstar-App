@@ -4,6 +4,7 @@ import { rangeStart } from '../lib/day'
 import { isOpenStatus } from '../data/outcomes'
 import { useAppStore } from '../store/useAppStore'
 import type { DailyStat, LeadStatus, Property } from '../types'
+import { leadValue } from '@allstar/core/deals'
 
 /**
  * Reporting data for the office console.
@@ -233,13 +234,13 @@ export function useFunnel(properties: Property[]) {
     let won = { n: 0, value: 0 }
     for (const p of properties) {
       if (p.status === 'won') {
-        won = { n: won.n + 1, value: won.value + (p.opportunityValue ?? 0) }
+        won = { n: won.n + 1, value: won.value + (leadValue(p) ?? 0) }
         continue
       }
       const bucket = counts.get(p.status)
       if (!bucket) continue
       bucket.n += 1
-      bucket.value += p.opportunityValue ?? 0
+      bucket.value += leadValue(p) ?? 0
     }
     return { counts, won }
   }, [properties])
@@ -313,10 +314,10 @@ export function useTerritories(properties: Property[], known: readonly string[] 
           coverage: rows.length ? Math.round((knocked / rows.length) * 100) : 0,
           openValue: rows
             .filter((p) => isOpenStatus(p.status))
-            .reduce((a, p) => a + (p.opportunityValue ?? 0), 0),
+            .reduce((a, p) => a + (leadValue(p) ?? 0), 0),
           wonValue: rows
             .filter((p) => p.status === 'won')
-            .reduce((a, p) => a + (p.opportunityValue ?? 0), 0),
+            .reduce((a, p) => a + (leadValue(p) ?? 0), 0),
         }
       })
       .sort((a, b) => a.id.localeCompare(b.id))

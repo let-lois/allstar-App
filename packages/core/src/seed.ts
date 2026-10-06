@@ -1,4 +1,5 @@
 import type {
+  Plan,
   ActivityEvent,
   Appointment,
   Contact,
@@ -219,7 +220,19 @@ export interface SeedBundle {
   tasks: Task[]
   activity: ActivityEvent[]
   dailyStats: DailyStat[]
+  /** The demo company's price list. */
+  plans: Plan[]
 }
+
+/**
+ * A price list for the demo. Placeholder names and prices — a real company
+ * enters its own in the console's Plans page.
+ */
+export const DEMO_PLANS: Plan[] = [
+  { id: 'plan_demo_starter', name: 'Starter', value: 8_000, active: true, sort: 0 },
+  { id: 'plan_demo_standard', name: 'Standard', value: 15_000, active: true, sort: 1 },
+  { id: 'plan_demo_premium', name: 'Premium', value: 24_000, active: true, sort: 2 },
+]
 
 /** Weeks of history for the office console's trend and comparison charts. */
 const HISTORY_DAYS = 30
@@ -467,6 +480,26 @@ export function buildSeed(now = Date.now()): SeedBundle {
     })
   }
 
+  /*
+    Every Won lead in the demo has its sale, on a plan, so the deal card, the
+    pipeline's won money and the console's Plans page have something real to
+    show. Picked by position rather than by `rand()`: drawing more numbers here
+    would shift every value the seed draws after it.
+  */
+  let nth = 0
+  for (const p of properties) {
+    if (p.status !== 'won') continue
+    const plan = DEMO_PLANS[nth++ % DEMO_PLANS.length]
+    p.deal = {
+      repId: p.assignedRepId,
+      planId: plan.id,
+      planName: plan.name,
+      planValue: plan.value,
+      value: plan.value,
+      wonAt: p.lastVisitAt ?? now - 3 * 86_400_000,
+    }
+  }
+
   return {
     day: today,
     territories,
@@ -476,6 +509,7 @@ export function buildSeed(now = Date.now()): SeedBundle {
     tasks,
     activity,
     dailyStats,
+    plans: DEMO_PLANS,
   }
 }
 

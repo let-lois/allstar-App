@@ -6,7 +6,7 @@ import { apiAudit, apiErrors, type AuditRowDTO, type ErrorRowDTO } from '../lib/
 import { formatReference } from '../lib/errors'
 import { liveToken } from '../lib/session'
 import { useAppStore } from '../store/useAppStore'
-import { relative } from '../lib/format'
+import { moneyFull, relative } from '../lib/format'
 import { STATUS } from './charts/tokens'
 import { SkeletonRows } from '../components/ui/Skeleton'
 
@@ -36,7 +36,7 @@ const GROUPS = [
     label: 'People',
     actions: ['user.invited', 'user.deactivated', 'user.reactivated', 'user.deleted'],
   },
-  { key: 'leads', label: 'Leads', actions: ['territory.created', 'territory.renamed', 'territory.deleted', 'territory.assigned', 'territory.unassigned', 'territory.generated', 'territory.leads_moved', 'leads.imported', 'leads.exported'] },
+  { key: 'leads', label: 'Leads', actions: ['territory.created', 'territory.renamed', 'territory.deleted', 'territory.assigned', 'territory.unassigned', 'territory.generated', 'territory.leads_moved', 'leads.imported', 'leads.exported', 'plan.created', 'plan.updated'] },
   {
     key: 'connections',
     label: 'Connections',
@@ -282,6 +282,20 @@ function describe(e: AuditRowDTO): React.ReactNode {
       return <>{who} switched address lookup to {target}</>
     // A file left the building. Medium, because that is the one shape of the
     // data that cannot be taken back.
+    case 'plan.created':
+      return (
+        <>
+          {who} added the plan {target}
+          {typeof d.value === 'number' ? ` at ${moneyFull(d.value)}` : ''}
+        </>
+      )
+    case 'plan.updated':
+      return (
+        <>
+          {who} {d.active === false ? 'retired' : d.active === true ? 'restored' : 'changed'} the plan {target}
+          {typeof d.value === 'number' ? ` (price ${moneyFull(d.value)})` : ''}
+        </>
+      )
     case 'leads.exported':
       return (
         <>

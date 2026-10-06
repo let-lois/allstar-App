@@ -3,6 +3,7 @@ import { useAppStore } from './useAppStore'
 import { onBoard } from '../data/leaderboard'
 import { startOfToday } from '../lib/day'
 import type { ActivityEvent, Property, Route, TeamMember } from '../types'
+import { leadValue } from '@allstar/core/deals'
 
 /**
  * Per-rep performance for the manager and admin views.
@@ -90,7 +91,7 @@ function statsFor(
   const pipelineToday = mine.reduce((sum, ev) => {
     if (ev.outcome !== 'sold' && ev.outcome !== 'quote_requested') return sum
     const p = ev.propertyId ? properties[ev.propertyId] : undefined
-    return sum + (p?.opportunityValue ?? 0)
+    return sum + (leadValue(p) ?? 0)
   }, 0)
   const interested = mine.filter((a) => a.outcome === 'interested').length
   const appointments = mine.filter((a) => a.outcome === 'appointment').length
@@ -110,7 +111,7 @@ function statsFor(
   const sold = mine.filter((a) => a.outcome === 'sold')
   const revenue = sold.reduce((sum, ev) => {
     const p = ev.propertyId ? properties[ev.propertyId] : undefined
-    return sum + (p?.opportunityValue ?? 0)
+    return sum + (leadValue(p) ?? 0)
   }, 0)
 
   return {

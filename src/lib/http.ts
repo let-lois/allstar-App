@@ -1,4 +1,4 @@
-import type { BadgeInfo, BadgeStatus, LeadStatus, OnboardingStatus, OnboardingStep, Role } from '../types'
+import type { BadgeInfo, BadgeStatus, LeadStatus, OnboardingStatus, OnboardingStep, Plan, Role } from '../types'
 
 /**
  * The API client.
@@ -1251,6 +1251,12 @@ export interface BootstrapDTO {
    * the old server for as long as the two are out of step.
    */
   timezone?: string
+  /**
+   * The company's price list. Optional for the same reason `team` is: a Worker
+   * from before plans existed does not send it, and "no plans" is the honest
+   * reading of its absence.
+   */
+  plans?: Plan[]
   serverTime: number
 }
 
@@ -1267,6 +1273,15 @@ export function apiSetTimezone(token: string, timezone: string) {
     body: { timezone },
     token,
   })
+}
+
+/** The office's price list: add a plan, or rename, reprice, retire or restore one. */
+export function apiCreatePlan(token: string, plan: { name: string; value: number }) {
+  return request<{ plan: Plan }>('/api/plans', { method: 'POST', body: plan, token })
+}
+
+export function apiUpdatePlan(token: string, id: string, patch: Partial<Pick<Plan, 'name' | 'value' | 'active' | 'sort'>>) {
+  return request<{ plan: Plan }>(`/api/plans/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch, token })
 }
 
 export function apiSaveSettings(token: string, settings: unknown) {

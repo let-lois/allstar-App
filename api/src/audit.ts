@@ -89,6 +89,9 @@ export type AuditAction =
   | 'leads.bulk_erased'
   | 'leads.unblocked'
   | 'leads.exported'
+  /** The price list: a plan added, renamed, repriced, retired or restored. */
+  | 'plan.created'
+  | 'plan.updated'
 
 export interface AuditEntry {
   action: AuditAction
@@ -103,6 +106,7 @@ export interface AuditEntry {
     | 'lead'
     | 'team'
     | 'company'
+    | 'plan'
   targetId?: string
   /** The name as it read at the time. Never resolved later. */
   targetLabel?: string

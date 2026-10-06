@@ -31,6 +31,7 @@ export interface AdminScreens {
   AdminImport: ComponentType
   AdminAudit: ComponentType
   AdminSettings: ComponentType
+  AdminPlans: ComponentType
   AdminClients: ComponentType
 }
 
@@ -73,6 +74,7 @@ export function adminRouteTree(s: AdminScreens) {
         <Route path="import" element={<s.AdminImport />} />
         <Route path="audit" element={<s.AdminAudit />} />
         <Route path="settings" element={<s.AdminSettings />} />
+        <Route path="plans" element={<s.AdminPlans />} />
         <Route path="clients" element={<s.AdminClients />} />
       </Route>
     </>

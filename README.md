@@ -419,16 +419,14 @@ neither can be counted twice. Sum the whole range including today's history row
 and a synced morning appears twice; drop the live day and an unsynced one
 vanishes. `verify:periods` fails on both.
 
-### Money stays out of a week
+### Money in a week
 
-`daily_stats.pipelineValue` is not a daily figure. It holds a running lifetime
-total of everything the rep has ever won, stamped onto whichever day the write
-happened, so adding it across a week produces a number with no meaning. A period
-board therefore carries no revenue at all, and the revenue award suppresses
-itself — an award nobody can earn beats one handed out on a wrong number.
-
-*(The console does sum that column, which is a real bug in the money figures on
-Dashboard and Reports. It is on the list, and it is not this screen's to fix.)*
+`daily_stats.pipeline_value` (sent as `closedValue`) is money closed that day:
+the sales a rep won on it that still stand, at each sale's value — the plan's
+price, a manager's override, or the lead's estimate until a plan is chosen (see
+`docs/sales-data-audit.md`). It once held a running lifetime total, which made
+a week's sum meaningless; it is a real daily figure now, so summing it across a
+period is the period's revenue.
 
 ### The week starts on Sunday
 

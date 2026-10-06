@@ -68,6 +68,9 @@ export const EXPORT_COLUMNS = [
   'lists',
   'score',
   'opportunity_value',
+  'sale_plan',
+  'sale_value',
+  'won_at',
   'last_outcome',
   'last_visit',
   'next_action',
@@ -178,12 +181,17 @@ export async function exportLeadsCsv(
     next_action_label: string | null
     updated_at: number
     rep_name: string | null
+    sale_plan: string | null
+    sale_value: number | null
+    won_at: number | null
   }
   const select = `SELECT p.id, p.address1, p.city, p.state, p.zip, p.lat, p.lng, p.status, p.score,
               p.opportunity_value, p.last_outcome, p.last_visit_at, p.next_action_at,
-              p.next_action_label, p.updated_at, u.name AS rep_name
+              p.next_action_label, p.updated_at, u.name AS rep_name,
+              d.plan_name AS sale_plan, d.value AS sale_value, d.won_at
          FROM properties p
          LEFT JOIN users u ON u.id = p.assigned_rep_id
+         LEFT JOIN deals d ON d.property_id = p.id AND d.status = 'won'
         WHERE ${where.join(' AND ')}`
   /*
     A chosen set of ids is read in chunks (D1's 100-parameter limit, see d1.ts)
@@ -283,6 +291,9 @@ export async function exportLeadsCsv(
         csvField((listsOf.get(l.id) ?? []).join('; '), true),
         csvField(l.score),
         csvField(l.opportunity_value ?? ''),
+        csvField(l.sale_plan ?? '', true),
+        csvField(l.sale_value ?? ''),
+        csvField(iso(l.won_at)),
         csvField(l.last_outcome ?? '', true),
         csvField(iso(l.last_visit_at)),
         csvField(l.next_action_label ? `${iso(l.next_action_at).slice(0, 10)} ${l.next_action_label}`.trim() : '', true),

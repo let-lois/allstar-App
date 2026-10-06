@@ -1,3 +1,4 @@
+import { syncDealToStatus } from './deals'
 import { record } from './audit'
 import { bindChunks } from './d1'
 import { canImport } from './import'
@@ -64,6 +65,7 @@ export async function setLeadStatus(
   const now = Date.now()
   let updated = 0
   const changed: string[] = []
+  const repOf = new Map<string, string | null>()
 
   /*
     Do Not Contact is never overwritten, and this is the rule the whole endpoint
@@ -89,13 +91,16 @@ export async function setLeadStatus(
     const res = await env.DB.prepare(
       `UPDATE properties SET status = ?1, updated_at = ?2
         WHERE client_id = ?3 AND id IN (${holes}) ${guard}
-        RETURNING id`,
+        RETURNING id, assigned_rep_id`,
     )
       .bind(status, now, actor.clientId, ...chunk)
-      .all<{ id: string }>()
+      .all<{ id: string; assigned_rep_id: string | null }>()
     const rows = res.results ?? []
     updated += rows.length
-    for (const r of rows) changed.push(r.id)
+    for (const r of rows) {
+      changed.push(r.id)
+      repOf.set(r.id, r.assigned_rep_id)
+    }
   }
 
   /*
@@ -132,6 +137,15 @@ export async function setLeadStatus(
     the batch. It does mean a large correction spends a large number of CRM
     calls, which is worth an operator knowing before they select everything.
   */
+  /*
+    The sale follows the status here too: leads set to Won open one (credited
+    to the lead's rep, or to whoever made the change when it has none), and
+    leads moved off Won cancel theirs. Already-won leads keep the sale they had.
+  */
+  for (const id of changed) {
+    await syncDealToStatus(env, actor, id, status, { repId: repOf.get(id) ?? actor.id, wonAt: now })
+  }
+
   for (const id of changed) {
     await queueForCrm(env, actor.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
   }

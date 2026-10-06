@@ -23,6 +23,7 @@ import {
 import { SyncConflictsPanel } from './SyncConflictsPanel'
 import { STATUS_LABEL, outcomeByCode } from '../data/outcomes'
 import { money, moneyFull, relative } from '../lib/format'
+import { leadValue } from '@allstar/core/deals'
 
 /**
  * Console dashboard — the "is the business working?" screen.
@@ -243,9 +244,9 @@ export function AdminDashboard() {
                 </span>
                 <span className="min-w-0 flex-1 truncate">{ev.summary}</span>
                 <span className="shrink-0 text-xs text-ink-mute">{def?.label}</span>
-                {p?.opportunityValue != null && (
+                {leadValue(p) != null && (
                   <span className="nums shrink-0 text-xs font-semibold text-good">
-                    {money(p.opportunityValue)}
+                    {money(leadValue(p))}
                   </span>
                 )}
                 <span className="w-20 shrink-0 text-right text-xs text-ink-mute">

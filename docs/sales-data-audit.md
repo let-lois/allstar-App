@@ -66,27 +66,50 @@ field.
 
 ## Pipeline and deal value
 
-Every dollar figure traces back to **one column**: `properties.opportunity_value`.
+**Built (Option C):** a price list, and a sale of its own on every Won lead.
 
-| Screen | Value | Path |
-|---|---|---|
-| Dashboard "Deals won … $X closed", rep table "Closed", Reports "Closed" | Money closed per day | `daily_stats.pipeline_value` ← `bumpDailyStats` (`api/src/mutations.ts`): SUM of `opportunity_value` of the leads with a Sold visit that day ← bootstrap `closedValue` |
-| Dashboard "Open pipeline" per stage, "won $" | Sum by status | `opportunity_value` of loaded leads, in the browser (`useAdminData.ts`) |
-| Territories open / won value, Leads "Value" column and sort, lead / map sheet / row value, mobile Overview and Pipeline, Team "Pipeline", Standings revenue | Same column | In the browser |
-| CSV export `opportunity_value` | Same column | `api/src/export.ts` |
+- **Plans** (`plans` table): name, price in whole dollars, active. Kept by
+  managers and administrators in the console under **Plans**. A plan is retired,
+  never deleted, so old sales still name it. Repricing a plan changes what the
+  next sale on it is worth; sales already made keep the price they were made at.
+- **Sales** (`deals` table, one row per lead, `deal_<property id>`): value,
+  plan (id, name, and price at the time), rep, `won_at`, and — when a manager
+  overrode it — who and why.
+- **Opening a sale.** Any route to Won opens one: a Sold visit (the rep picks
+  the plan at the door, or "Not sure — office sets it"), Won set by hand, or
+  the office's bulk status change. Value = the plan's price; with no plan yet,
+  the lead's imported `opportunity_value` (so nothing that read a figure before
+  reads $0 now). A second Sold visit on a sold lead is not a second sale.
+- **Changing a sale.** Anyone who may edit the lead can move it onto another
+  plan (it takes that price). Only a manager or administrator can set a
+  different value, and must give a reason; both are recorded on the sale and as
+  a line in the lead's activity.
+- **Closing a sale.** A lead leaving Won (another outcome, a hand-set status,
+  the bulk change) cancels its sale, which takes its money off the day it was
+  won. Sold again later, it reopens with a new `won_at`.
+- **"Won" for reporting** is now: status `won`, which always has exactly one
+  standing sale, with its `won_at` and rep. The visit-Sold count stays as
+  "sold at the door" (`daily_stats.sold`).
 
-**Who writes `opportunity_value`: only the CSV import** (column "Estimated
-value", also matched by `value`, `amount`, `dealvalue`, `opportunityvalue` —
-so a generic "value" or a home-value column becomes the deal value). Nothing
-else writes it: not manual or map leads, not the CRM inbound webhook, not any
-editor in the app. It is not sent to GoHighLevel. The demo's figures are random
-placeholders. **For a live account, every dollar figure is whatever the
-imported spreadsheets carried, or $0.** Nothing assigns a value to a Sold lead,
-and this pass does not either.
+Where the money shows:
 
-`api/scripts/rebuild-closed-value.mjs` buckets days in UTC while the Worker now
-uses the company's timezone — running it would move money to different days.
-Prefer `rebuild-daily-stats.mjs`.
+| Screen | Value |
+|---|---|
+| Dashboard "… closed", rep table "Closed", Reports "Closed", Standings revenue | `daily_stats.pipeline_value` = SUM of standing sales won that day by that rep (`recomputeDailyStats`, `api/src/deals.ts`) |
+| Pipeline "won", Territories won value, Leads "Value", lead / map / row value, Overview, Team | `leadValue()` (`packages/core/src/deals.ts`): the sale's value on a Won lead, the imported estimate on every other lead |
+| CSV export | `opportunity_value` (estimate) plus `sale_plan`, `sale_value`, `won_at` |
+
+Open leads are still valued only by the imported estimate — the only figure an
+open lead has. Leads that were already Won when this shipped were backfilled
+(migration `027-plans-deals`) at their imported value, credited to the rep and
+time of their latest Sold visit (or the assigned rep and last update).
+
+`api/scripts/rebuild-daily-stats.mjs` and `rebuild-closed-value.mjs` now read
+money from the sales too. Prefer `rebuild-daily-stats.mjs`: the other buckets
+days in UTC.
+
+Still not built: quote amounts, Accepted / Declined quotes, and pushing the
+sale to GoHighLevel.
 
 ## Product / plan / opportunity — readiness
 
@@ -100,7 +123,7 @@ unused `integration_links.kind` value.
 | B. Select plan → default value | A `plans` table (name, monthly price, term, active) per company; Sold asks for the plan; value derived | Consistent reporting; needs the real plan list |
 | C. Plan → default value + authorised override | B, plus an override field allowed for managers (or reps) with the reason recorded | Most accurate; most to build |
 
-**Recommendation:** C, built as a `deals` table — `id, property_id, rep_id,
+**Chosen and built: C** (see above). The original recommendation: C, built as a `deals` table — `id, property_id, rep_id,
 plan_id, value, value_overridden_by, status (open / won / lost / cancelled),
 won_at, created_at` — written when Sold is recorded, with
 `properties.opportunity_value` kept as the imported estimate. That gives Won a

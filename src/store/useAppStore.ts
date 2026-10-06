@@ -19,7 +19,9 @@ import type {
   Visit,
   LeadList,
   Contact,
+  Deal,
   LeadStatus,
+  Plan,
 } from '../types'
 import * as db from '../lib/db'
 import { purgeErased } from '../lib/erase-local'
@@ -44,6 +46,8 @@ import {
   type SessionUserDTO,
   apiGenerateTerritoryLeads,
   type GeneratedLeads,
+  apiCreatePlan,
+  apiUpdatePlan,
 } from '../lib/http'
 import { canSee, leadIdsViaLists, listsContaining, listsFor, withMembers, territoryIdsFor } from '../lib/leadLists'
 import { applyBootstrap, leadListFromDTO, outboxPending, wipeCachedData } from '../lib/hydrate'
@@ -58,7 +62,8 @@ import {
   userFromDTO,
 } from '../lib/session'
 import { OUTCOME_TO_STATUS, STATUS_LABEL } from '../data/outcomes'
-import { dayKey } from '../lib/format'
+import { dayKey, moneyFull } from '../lib/format'
+import { canSetDealValue, dealOnWin, onPlan } from '@allstar/core/deals'
 import { pointInPolygon } from '../lib/geo'
 import { getPosition, type Position } from '../lib/geo'
 import type { ClientSettings } from '../lib/settings'
@@ -118,6 +123,8 @@ interface AppState {
   leadLists: Record<string, LeadList>
   /** How this company has customised the field app. Empty means defaults. */
   settings: ClientSettings
+  /** The company's price list, retired plans included (they name old sales). */
+  plans: Plan[]
   /**
    * The company's reporting calendar, as the server sees it.
    *
@@ -320,6 +327,16 @@ interface AppState {
     at?: number,
   ) => Promise<void>
   completeVisit: (visitId: string) => Promise<void>
+  /** The plan picked at the door for a Sold visit; undefined is "the office will set it". */
+  setVisitPlan: (visitId: string, planId: string | undefined) => Promise<void>
+  /**
+   * Change a sale after the door: another plan, or — a manager only, with a
+   * reason — another value. The server checks both rules again.
+   */
+  updateDeal: (propertyId: string, change: { planId: string } | { value: number; reason: string }) => Promise<void>
+  /** The office's price list. Live: through the API, then cached. Demo: on this device. */
+  createPlan: (input: { name: string; value: number }) => Promise<Plan>
+  updatePlan: (id: string, patch: Partial<Pick<Plan, 'name' | 'value' | 'active' | 'sort'>>) => Promise<Plan>
   abandonVisit: (visitId: string) => Promise<void>
 
   createAppointment: (input: Omit<Appointment, 'id' | 'repId'>) => Promise<string>
@@ -433,6 +450,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   team: [],
   roster: [],
   settings: {},
+  plans: [],
   timezone: '',
   activeVisitId: null,
 
@@ -571,6 +589,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         db.all<DailyStat>('dailyStats'),
       ])
     const settings = (await db.metaGet<ClientSettings>('allstar.settings')) ?? {}
+    const plans = (await db.metaGet<Plan[]>('allstar.plans')) ?? []
     const timezone = (await db.metaGet<string>('allstar.timezone')) ?? ''
     /*
       The profile photo, keyed by user id rather than folded into the session.
@@ -647,6 +666,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             }))
           : seedTeam(mode),
       settings,
+      plans,
       timezone,
       activeVisitId: openVisit?.id ?? null,
     })
@@ -1082,6 +1102,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       territories: {},
       team: [],
       settings: {},
+      plans: [],
       activeVisitId: null,
     })
   },
@@ -1197,8 +1218,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const statusChange = patch.status && patch.status !== current.status ? patch.status : undefined
+    // Won by hand is a sale too; leaving Won ends it. The server does the same.
+    const deal = statusChange
+      ? statusChange === 'won'
+        ? dealOnWin(current, get().plans, { repId: current.assignedRepId ?? get().user?.id, at: Date.now() })
+        : undefined
+      : current.deal
     const next: Property = {
       ...current,
+      deal,
       ...(address1 !== undefined ? { address1 } : {}),
       ...(patch.city !== undefined ? { city: patch.city.trim() } : {}),
       ...(patch.state !== undefined ? { state: patch.state.trim() } : {}),
@@ -1446,6 +1474,17 @@ export const useAppStore = create<AppState>((set, get) => ({
                 : 'Follow up'
             : undefined,
       }
+      /*
+        The sale follows the outcome, as it does on the server: Sold opens it
+        (at the plan picked at the door, if one was), and an outcome that moves
+        a sold lead elsewhere closes it.
+      */
+      const nextStatus = visit.outcome ? OUTCOME_TO_STATUS[visit.outcome] : undefined
+      if (visit.outcome === 'sold') {
+        updatedProp.deal = dealOnWin(prop, get().plans, { planId: visit.planId, repId: visit.repId, at: endedAt })
+      } else if (nextStatus && nextStatus !== 'won') {
+        updatedProp.deal = undefined
+      }
       await db.put('properties', updatedProp)
     }
 
@@ -1522,8 +1561,92 @@ export const useAppStore = create<AppState>((set, get) => ({
     await enqueue('visit.complete', {
       ...finished,
       nextActionLabel: updatedProp?.nextActionLabel,
+      ...(visit.outcome === 'sold' ? { deal: { planId: visit.planId } } : {}),
     })
     await get().advanceRoute(visit.propertyId)
+  },
+
+  async setVisitPlan(visitId, planId) {
+    const visit = get().visits[visitId]
+    if (!visit) return
+    const updated: Visit = { ...visit, planId }
+    await db.put('visits', updated)
+    set((s) => ({ visits: { ...s.visits, [visitId]: updated } }))
+  },
+
+  async updateDeal(propertyId, change) {
+    const current = get().properties[propertyId]
+    if (!current?.deal || current.status !== 'won') throw new Error('This lead has no sale to change. Mark it Won first.')
+    let deal: Deal
+    let summary: string
+    let sent: Record<string, unknown> = change
+    if ('planId' in change) {
+      const plan = get().plans.find((p) => p.id === change.planId && p.active)
+      if (!plan) throw new Error('That plan is not on the price list.')
+      if (plan.id === current.deal.planId) return
+      deal = { ...current.deal, ...onPlan(plan) }
+      summary = `Sale plan set to ${plan.name} (${moneyFull(plan.value)})`
+    } else {
+      const user = get().user
+      if (!canSetDealValue(user?.role)) throw new Error('Only a manager can change what a sale is worth.')
+      const value = Math.round(change.value)
+      if (!Number.isFinite(value) || value < 0 || value > 10_000_000) throw new Error('Enter a value between $0 and $10,000,000.')
+      const reason = change.reason.trim().slice(0, 200)
+      if (!reason) throw new Error('Say why the value is being changed.')
+      deal = { ...current.deal, value, overriddenBy: user?.id, overrideReason: reason }
+      summary = `Sale value set to ${moneyFull(value)} (was ${moneyFull(current.deal.value)}): ${reason}`
+      sent = { value, reason }
+    }
+    const next: Property = { ...current, deal }
+    await db.put('properties', next)
+    set((s) => ({ properties: { ...s.properties, [propertyId]: next } }))
+    // Keyed by the mutation id, as the server keys its row, so a merge does
+    // not show the change twice.
+    const mutationId = await enqueue('deal.update', { propertyId, ...sent })
+    const event: ActivityEvent = {
+      id: mutationId,
+      propertyId,
+      repId: get().user?.id ?? '',
+      type: 'deal',
+      summary,
+      at: Date.now(),
+    }
+    await db.put('activity', event)
+    set((s) => ({ activity: [event, ...s.activity] }))
+  },
+
+  async createPlan(input) {
+    const name = input.name.trim()
+    if (!name) throw new Error('Give the plan a name.')
+    let plan: Plan
+    if (get().mode === 'live') {
+      const token = liveToken()
+      if (!token) throw new Error('Sign in again to change the price list.')
+      plan = (await apiCreatePlan(token, { name, value: input.value })).plan
+    } else {
+      plan = { id: uid('plan'), name, value: Math.round(input.value), active: true, sort: get().plans.length }
+    }
+    const plans = [...get().plans, plan]
+    await db.metaSet('allstar.plans', plans)
+    set({ plans })
+    return plan
+  },
+
+  async updatePlan(id, patch) {
+    let plan: Plan
+    if (get().mode === 'live') {
+      const token = liveToken()
+      if (!token) throw new Error('Sign in again to change the price list.')
+      plan = (await apiUpdatePlan(token, id, patch)).plan
+    } else {
+      const was = get().plans.find((p) => p.id === id)
+      if (!was) throw new Error('No such plan.')
+      plan = { ...was, ...patch }
+    }
+    const plans = get().plans.map((p) => (p.id === id ? plan : p))
+    await db.metaSet('allstar.plans', plans)
+    set({ plans })
+    return plan
   },
 
   async abandonVisit(visitId) {

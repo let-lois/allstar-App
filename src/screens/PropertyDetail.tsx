@@ -16,6 +16,7 @@ import { distanceMiles, formatDistance, walkMinutes } from '../lib/geo'
 import { cityLine, moneyFull, relativeLower } from '../lib/format'
 import type { LeadStatus, NoteTag } from '../types'
 import { NOTE_TAGS, STATUS_LABEL } from '../data/outcomes'
+import { leadValue } from '@allstar/core/deals'
 
 /**
  * Lead / property profile.
@@ -227,9 +228,9 @@ export function PropertyDetail() {
                 {NOTE_TAGS.find((n) => n.tag === t)?.label ?? t}
               </span>
             ))}
-            {property.opportunityValue != null && (
+            {leadValue(property) != null && (
               <span className="nums rounded-full bg-good-bg px-2.5 py-1 text-[11.5px] font-bold text-good">
-                {moneyFull(property.opportunityValue)}
+                {moneyFull(leadValue(property))}
               </span>
             )}
           </div>

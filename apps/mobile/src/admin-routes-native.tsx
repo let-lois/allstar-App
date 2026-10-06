@@ -33,6 +33,7 @@ import AdminImport from '@web/admin/AdminImport'
 import AdminAudit from '@web/admin/AdminAudit'
 import AdminLeads from '@web/admin/AdminLeads'
 import { AdminSettings } from '@web/admin/AdminSettings'
+import { AdminPlans } from '@web/admin/AdminPlans'
 import { AdminClients } from '@web/admin/AdminClients'
 
 const screens = {
@@ -46,6 +47,7 @@ const screens = {
   AdminAudit,
   AdminLeads,
   AdminSettings,
+  AdminPlans,
   AdminClients,
 }
 

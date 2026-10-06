@@ -7,6 +7,7 @@ import { OutcomeGrid } from '../components/visit/OutcomeGrid'
 import { NoteComposer } from '../components/visit/NoteComposer'
 import { VisitContact } from '../components/visit/VisitContact'
 import { PhotoStrip } from '../components/visit/PhotoStrip'
+import { PlanPicker } from '../components/visit/PlanPicker'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { DateTimeField } from '../components/ui/DateTimeField'
@@ -49,7 +50,8 @@ export function VisitMode() {
   const allPhotos = useAppStore((s) => s.photos)
   const route = useAppStore((s) => s.route)
   const properties = useAppStore((s) => s.properties)
-  const { recordOutcome, addNote, setNextAction, completeVisit, abandonVisit } = useAppStore()
+  const { recordOutcome, addNote, setNextAction, completeVisit, abandonVisit, setVisitPlan } = useAppStore()
+  const plans = useAppStore((s) => s.plans)
 
   const [step, setStep] = useState<Step>('outcome')
   const [noteBody, setNoteBody] = useState('')
@@ -385,6 +387,19 @@ export function VisitMode() {
                 {outcomeDef?.label}
               </p>
             </Card>
+
+            {/* A yes at the door: which plan, so the sale is worth its price. */}
+            {visit.outcome === 'sold' && (
+              <Card as="section" data-testid="visit-plan">
+                <h2 className="mb-3 text-[15px] font-semibold">Which plan?</h2>
+                <PlanPicker
+                  plans={plans}
+                  value={visit.planId}
+                  onChange={(id) => void setVisitPlan(visit.id, id)}
+                  estimate={property.opportunityValue}
+                />
+              </Card>
+            )}
 
             <Card>
               <VisitContact

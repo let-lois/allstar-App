@@ -30,8 +30,8 @@ import { fileURLToPath } from 'node:url'
  * summary first. Take a backup: `npm run backup`, proved by `npm run
  * verify:restore`.
  *
- * A rep with no visits at all on a day gets no row, which is what the old
- * writer did too — the table has always been "days something happened".
+ * A rep with no visits and no sales on a day gets no row, which is what the
+ * Worker does too — the table has always been "days something happened".
  */
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -76,11 +76,14 @@ if (clients.length === 0) {
 }
 
 const visits = sql(`
-  SELECT v.client_id, v.rep_id, v.ended_at, v.outcome,
-         COALESCE(p.opportunity_value, 0) AS value
+  SELECT v.client_id, v.rep_id, v.ended_at, v.outcome
     FROM visits v
-    LEFT JOIN properties p ON p.id = v.property_id
    WHERE v.outcome IS NOT NULL AND v.ended_at IS NOT NULL
+`)
+// Money closed comes from the sales, on the day each was won (api/src/deals.ts).
+const deals = sql(`
+  SELECT client_id, rep_id, won_at, value FROM deals
+   WHERE status = 'won' AND rep_id IS NOT NULL
 `)
 
 const GOOD = new Set(['interested', 'appointment', 'quote_requested', 'sold'])
@@ -103,10 +106,20 @@ for (const v of visits) {
   if (GOOD.has(v.outcome)) row.conversations += 1
   if (v.outcome === 'appointment') row.appointments += 1
   if (v.outcome === 'quote_requested') row.quotes += 1
-  if (v.outcome === 'sold') {
-    row.sold += 1
-    row.value += Number(v.value)
+  if (v.outcome === 'sold') row.sold += 1
+}
+for (const s of deals) {
+  const day = dayKeyIn(Number(s.won_at), tzOf.get(s.client_id))
+  const key = `${s.rep_id}:${day}`
+  let row = want.get(key)
+  if (!row) {
+    row = {
+      id: key, client_id: s.client_id, rep_id: s.rep_id, day,
+      knocks: 0, conversations: 0, appointments: 0, quotes: 0, sold: 0, value: 0,
+    }
+    want.set(key, row)
   }
+  row.value += Number(s.value)
 }
 
 const existing = sql(`

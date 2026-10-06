@@ -4,6 +4,7 @@ import { Button } from '../ui/Button'
 import { Glyph } from '../ui/Glyph'
 import { PhotoImage, PhotoStrip } from '../visit/PhotoStrip'
 import { ListMembership } from './ListMembership'
+import { SaleSection } from './SaleSection'
 import { useAppStore, useListsContaining, useQuoteSentAt } from '../../store/useAppStore'
 import { STATUS_LABEL, outcomeByCode } from '../../data/outcomes'
 import { duration, relative, time } from '../../lib/format'
@@ -140,10 +141,12 @@ export function LeadSections({
   const followText = openFollow
     ? `${FOLLOW_UP_LABEL[followUpState(openFollow.dueAt, tz)]} · ${relative(openFollow.dueAt).toLowerCase()}`
     : 'None open'
+  // The sale's own moment when it has one; the Sold visit's otherwise.
+  const wonAt = property.deal?.wonAt ?? soldVisit?.startedAt
   const soldText =
     property.status === 'won'
-      ? soldVisit
-        ? `Won · ${dayLabel(dayKeyIn(soldVisit.startedAt, tz), { month: 'short', day: 'numeric' })}`
+      ? wonAt
+        ? `Won · ${dayLabel(dayKeyIn(wonAt, tz), { month: 'short', day: 'numeric' })}`
         : 'Won'
       : 'Not yet'
 
@@ -164,6 +167,8 @@ export function LeadSections({
           </dl>
         </Collapsible>
       )}
+
+      {show('sales') && property.status === 'won' && property.deal && <SaleSection property={property} nameOf={nameOf} />}
 
       {show('appointments') && appointments.length > 0 && (
         <Collapsible flat title="Appointments" count={appointments.length} defaultOpen>
