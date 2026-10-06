@@ -1219,7 +1219,7 @@ export default {
         await recordAudit(env, user, { action: 'plan.created', targetType: 'plan', targetId: result.id, targetLabel: result.name, detail: { value: result.value } })
         return json({ plan: result }, 201, cors)
       }
-      const planMatch = path.match(/^\/api\/plans\/([^/]+)$/)
+      const planMatch = /^\/api\/plans\/([A-Za-z0-9_-]{1,64})$/.exec(path)
       if (planMatch && req.method === 'PATCH') {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
         const result = await updatePlan(env, user, decodeURIComponent(planMatch[1]), body)

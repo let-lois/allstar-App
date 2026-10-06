@@ -86,6 +86,8 @@ const ROUTES = {
   "/api/mutations|POST": { how: 'session' },
   // The field app needs the company's outcome labels to draw its buttons.
   "/api/settings|GET": { how: 'session' },
+  // The price list: every rep reads it to pick a plan at the door.
+  "/api/plans|GET": { how: 'session' },
 
   "/api/invites|POST": { how: 'inline', guard: 'canInvite' },
   "/api/users|GET": { how: 'inline', guard: 'canImport' },
@@ -153,6 +155,7 @@ const ROUTES = {
   "/api/geocoders/active|POST": { how: 'inline', guard: 'canManageIntegrations' },
 
   "/api/settings|POST": { how: 'delegate', fn: 'writeSettings', file: 'settings.ts' },
+  "/api/plans|POST": { how: 'delegate', fn: 'createPlan', file: 'deals.ts' },
   "/api/settings/timezone|POST": { how: 'delegate', fn: 'writeTimezone', file: 'settings.ts' },
   "/api/properties/assign|POST": { how: 'delegate', fn: 'assignProperties', file: 'assign.ts' },
   "/api/properties/territory|POST": { how: 'delegate', fn: 'moveToTerritory', file: 'assign.ts' },
@@ -254,6 +257,12 @@ const REGEX_ROUTES = {
     handler region actually calls each of them rather than something else with
     a similar name.
   */
+  // Rename, reprice, retire or restore one plan. deals.ts decides the role.
+  '/^\\/api\\/plans\\/([A-Za-z0-9_-]{1,64})$/': {
+    match: "/^\\/api\\/plans\\/([A-Za-z0-9_-]{1,64})$/.exec(path)",
+    delegates: ['updatePlan'],
+    file: 'deals.ts',
+  },
   // Resend or cancel somebody's invitation. Both delegate to invites.ts.
   '/^\\/api\\/invites\\/([A-Za-z0-9_-]{1,40})\\/(resend|revoke)$/': {
     match: "/^\\/api\\/invites\\/([A-Za-z0-9_-]{1,40})\\/(resend|revoke)$/.exec(path)",
@@ -429,6 +438,13 @@ for (const route of found) {
       [...src.matchAll(/(\/\^[^\n]*?\/)\.(?:test|exec)\(path\)/g)].map((m) => m[1]),
     ),
   ]
+  /*
+    And `path.match(/…/)`, the third way to write the same thing. The plans
+    route was first written that way and this gate looked straight past it; it
+    is refused rather than enumerated, so there stay two spellings to check.
+  */
+  const byMatch = [...src.matchAll(/path\.match\(\s*\/\^/g)].length
+  ok(byMatch === 0, `no route is matched with path.match(…), which this gate would not see (${byMatch})`)
   ok(
     byStartsWith.length + byRegex.length > 0,
     `dynamic routes were found (${[...byStartsWith, ...byRegex].join(', ')})`,

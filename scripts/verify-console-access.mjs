@@ -275,11 +275,11 @@ for (const width of [390, 412]) {
   const tree = read('../src/admin/routeTree.tsx')
   const metro = strip(read('../apps/mobile/metro.config.js'))
   const screens = [...tree.matchAll(/^\s{2}(Admin[A-Za-z]+): ComponentType$/gm)].map((m) => m[1])
-  ok(screens.length === 11, 'the shared route table names eleven console screens', screens.join(', '))
+  ok(screens.length === 12, 'the shared route table names twelve console screens (Plans is the twelfth)', screens.join(', '))
   ok(!/import\(/.test(native), 'the phone module has no dynamic import for Metro to split into a chunk')
   ok(/adminRouteTree\(screens\)/.test(native) && /adminRouteTree\(screens\)/.test(web), 'browser and phone both build their routes from adminRouteTree')
   const missing = screens.filter((n) => !new RegExp(`import (\\{ ${n} \\}|${n}) from '@web/admin/${n}'`).test(native))
-  ok(missing.length === 0, 'and the phone imports every one of those screens', missing.join(', ') || 'all eleven')
+  ok(missing.length === 0, 'and the phone imports every one of those screens', missing.join(', ') || 'all twelve')
   ok(
     /path\.join\(WEB_SRC, 'adminRoutes\.tsx'\), path\.join\(SELF_SRC, 'admin-routes-native\.tsx'\)/.test(metro) && !/admin-routes-stub/.test(metro),
     'Metro swaps the lazy routes for the static ones — and no longer for a stub',
