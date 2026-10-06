@@ -711,6 +711,29 @@ const MIGRATIONS: Migration[] = [
         WHERE p.status = 'won'`,
     ],
   },
+  /*
+    A plan on every lead, not only on a sold one.
+
+    The price list existed, but a plan could only be chosen at the moment a
+    door said yes — the office could not say "this house is being sold the
+    Premium plan" beforehand, and the pipeline had nothing but imported
+    estimates to count. This is the plan a lead is being sold: what an open
+    lead is worth, and the plan its sale takes when it is won. Deleting a plan
+    clears it from the leads that had it (SET NULL); sales keep the plan's
+    name and price as they were when sold.
+  */
+  {
+    id: '028-lead-plan',
+    statements: [
+      {
+        sql: 'ALTER TABLE properties ADD COLUMN plan_id TEXT REFERENCES plans(id) ON DELETE SET NULL',
+        skipIfColumn: { table: 'properties', column: 'plan_id' },
+      },
+      // Leads already sold on a plan carry it, so the two agree from day one.
+      `UPDATE properties SET plan_id = (SELECT d.plan_id FROM deals d WHERE d.property_id = properties.id AND d.status = 'won')
+        WHERE plan_id IS NULL AND EXISTS (SELECT 1 FROM deals d WHERE d.property_id = properties.id AND d.status = 'won' AND d.plan_id IS NOT NULL)`,
+    ],
+  },
 ]
 
 async function hasColumn(

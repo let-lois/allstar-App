@@ -65,6 +65,10 @@ async function planOf(env: Env, clientId: string, planId: string | null | undefi
  * A lead already sold keeps its sale, its rep and its moment — a second Sold
  * visit is not a second sale — but a plan chosen now is applied to it, because
  * "which plan" is often settled after the door.
+ *
+ * `planId`: a plan id picks that plan; `null` is "no plan" said out loud (the
+ * rep tapped "Not sure"); left out, the sale takes the plan the lead already
+ * carries, if any.
  */
 export async function winDeal(
   env: Env,
@@ -72,10 +76,20 @@ export async function winDeal(
   opts: { propertyId: string; repId: string | null; wonAt: number; planId?: string | null; visitId?: string | null },
 ): Promise<void> {
   const existing = await dealOf(env, user.clientId, opts.propertyId)
+  const lead = await env.DB.prepare('SELECT opportunity_value AS v, plan_id FROM properties WHERE id = ?1 AND client_id = ?2')
+    .bind(opts.propertyId, user.clientId)
+    .first<{ v: number | null; plan_id: string | null }>()
+  const wanted = opts.planId === undefined ? lead?.plan_id ?? null : opts.planId
   // Only an active plan may be chosen; a retired one stays on old sales only.
-  const plan = await planOf(env, user.clientId, opts.planId)
+  const plan = await planOf(env, user.clientId, wanted)
   const chosen = plan && plan.active ? plan : null
   const now = Date.now()
+  // The lead carries the plan its sale is on, so the two never disagree.
+  if (chosen && chosen.id !== lead?.plan_id) {
+    await env.DB.prepare('UPDATE properties SET plan_id = ?2 WHERE id = ?1 AND client_id = ?3')
+      .bind(opts.propertyId, chosen.id, user.clientId)
+      .run()
+  }
 
   if (existing?.status === 'won') {
     if (!chosen || chosen.id === existing.plan_id) return
@@ -90,12 +104,13 @@ export async function winDeal(
     return
   }
 
-  let value = chosen?.value
-  if (value == null) {
-    const p = await env.DB.prepare('SELECT opportunity_value AS v FROM properties WHERE id = ?1 AND client_id = ?2')
+  const value = chosen?.value ?? lead?.v ?? 0
+  // "Not sure" said at the door on a lead that had a plan: the new sale has
+  // none, and the lead follows it rather than keep claiming one.
+  if (opts.planId === null && lead?.plan_id) {
+    await env.DB.prepare('UPDATE properties SET plan_id = NULL WHERE id = ?1 AND client_id = ?2')
       .bind(opts.propertyId, user.clientId)
-      .first<{ v: number | null }>()
-    value = p?.v ?? 0
+      .run()
   }
   await env.DB.prepare(
     `INSERT INTO deals
@@ -193,6 +208,9 @@ export async function updateDeal(
     )
       .bind(existing.id, plan.id, plan.name, plan.value, now)
       .run()
+    await env.DB.prepare('UPDATE properties SET plan_id = ?2, updated_at = ?3 WHERE id = ?1 AND client_id = ?4')
+      .bind(input.propertyId, plan.id, now, user.clientId)
+      .run()
     summary = `Sale plan set to ${plan.name} (${dollars(plan.value)})`
   } else {
     throw new Error('Nothing to change on this sale.')
@@ -200,6 +218,39 @@ export async function updateDeal(
 
   await recomputeDailyStats(env, user.clientId, existing.rep_id, user.timezone, existing.won_at)
   return summary
+}
+
+/**
+ * The plan a lead is being sold — on any lead, sold or not.
+ *
+ * What an open lead is worth in the pipeline, and the plan its sale takes when
+ * it is won. On a lead already sold it moves the sale onto the plan too (the
+ * plan's price, any manager's override cleared), exactly as changing the
+ * sale's plan does. `null` clears it; a sale already made keeps its plan.
+ *
+ * Returns the activity line, or '' when nothing changed; throws, in words.
+ */
+export async function setLeadPlan(env: Env, user: SessionUser, propertyId: string, planId: string | null): Promise<string> {
+  const lead = await env.DB.prepare('SELECT plan_id, status FROM properties WHERE id = ?1 AND client_id = ?2')
+    .bind(propertyId, user.clientId)
+    .first<{ plan_id: string | null; status: string }>()
+  if (!lead) throw new Error('property not found in this account')
+  const plan = planId ? await planOf(env, user.clientId, planId) : null
+  if (planId && (!plan || !plan.active)) throw new Error('That plan is not on the price list.')
+  if ((plan?.id ?? null) === lead.plan_id) return ''
+  const before = lead.plan_id ? await planOf(env, user.clientId, lead.plan_id) : null
+  await env.DB.prepare('UPDATE properties SET plan_id = ?2, updated_at = ?3 WHERE id = ?1 AND client_id = ?4')
+    .bind(propertyId, plan?.id ?? null, Date.now(), user.clientId)
+    .run()
+  if (plan && lead.status === 'won') {
+    const sale = await dealOf(env, user.clientId, propertyId)
+    if (sale?.status === 'won' && sale.plan_id !== plan.id) {
+      await updateDeal(env, user, { propertyId, planId: plan.id })
+    }
+  }
+  return plan
+    ? `Plan set to ${plan.name} (${dollars(plan.value)})`
+    : `Plan cleared${before ? ` (was ${before.name})` : ''}`
 }
 
 const dollars = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`
@@ -294,6 +345,35 @@ export async function updatePlan(env: Env, user: SessionUser, id: string, body: 
     .first<Record<string, unknown>>()
   if (!row) return { error: 'No such plan.', status: 404 }
   return toPlan(row)
+}
+
+/**
+ * Take a plan off the price list for good.
+ *
+ * Retiring keeps a plan's name on everything that used it; deleting is for a
+ * plan that should never have been there (a typo, a test). Leads that carried
+ * it go back to no plan, so they fall back to their estimate in the pipeline.
+ * Sales made on it keep its name and price as they were when sold — a delete
+ * does not unsell anything or change what was closed.
+ */
+export async function deletePlan(
+  env: Env,
+  user: SessionUser,
+  id: string,
+): Promise<{ id: string; name: string; leads: number; sales: number } | Failure> {
+  if (!canImport(user)) return { error: 'Not permitted.', status: 403 }
+  const plan = await planOf(env, user.clientId, id)
+  if (!plan) return { error: 'No such plan.', status: 404 }
+  // Cleared by hand as well as by the foreign key, so the counts are exact and
+  // nothing depends on how the database was configured.
+  const leads = await env.DB.prepare('UPDATE properties SET plan_id = NULL WHERE plan_id = ?1 AND client_id = ?2')
+    .bind(id, user.clientId)
+    .run()
+  const sales = await env.DB.prepare('UPDATE deals SET plan_id = NULL WHERE plan_id = ?1 AND client_id = ?2')
+    .bind(id, user.clientId)
+    .run()
+  await env.DB.prepare('DELETE FROM plans WHERE id = ?1 AND client_id = ?2').bind(id, user.clientId).run()
+  return { id, name: plan.name, leads: leads.meta.changes ?? 0, sales: sales.meta.changes ?? 0 }
 }
 
 /* --- the reporting roll-up ------------------------------------------------ */

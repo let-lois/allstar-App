@@ -5,7 +5,7 @@ import { noteIfStale, snapshotUpdatedAt } from './stale'
 import { createList, repScopeSql, setReps, updateList, updateMembers } from './lists'
 import { canImport } from './import'
 import { parseBoundary, polygonAreaSqMiles, territoryFor, type TerritoryShape } from './geo'
-import { cancelDeal, recomputeDailyStats, syncDealToStatus, updateDeal, winDeal } from './deals'
+import { cancelDeal, recomputeDailyStats, setLeadPlan, syncDealToStatus, updateDeal, winDeal } from './deals'
 
 /** The statuses a person may set by hand; the same list the office's bulk change allows. */
 const SETTABLE_STATUSES = new Set(['new', 'contacted', 'follow_up', 'working', 'appointment', 'quoted', 'won', 'lost', 'dnc'])
@@ -294,11 +294,14 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
         never disagree. Before the roll-up, which reads the sale's value.
       */
       if (outcome === 'sold') {
+        // A plan id picks it; null is "Not sure" said out loud; no key at all
+        // (an older phone) lets the sale take the plan the lead carries.
+        const deal = obj(p.deal)
         await winDeal(env, user, {
           propertyId,
           repId: user.id,
           wonAt: endedAt,
-          planId: str(obj(p.deal).planId),
+          planId: 'planId' in deal ? str(deal.planId) : undefined,
           visitId: id,
         })
       } else if (nextStatus) {
@@ -763,6 +766,26 @@ async function applyOne(env: Env, user: SessionUser, m: Mutation): Promise<void>
       // A status changed by hand reaches the CRM the same way a rep's outcome
       // does — including a manual Do Not Contact.
       await queueForCrm(env, user.clientId, 'contact.upsert', { propertyId: id }, `contact:${id}`)
+      return
+    }
+
+    /*
+      The plan a lead is being sold, on any lead — before the door says yes,
+      or after. Anyone who may edit the lead. Rules in deals.ts.
+    */
+    case 'property.plan': {
+      const propertyId = str(p.id)
+      if (!propertyId) throw new Error('property.plan: missing id')
+      await assertMayEditProperty(env, user, propertyId)
+      const summary = await setLeadPlan(env, user, propertyId, str(p.planId))
+      if (!summary) return
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO activity
+           (id, client_id, property_id, rep_id, type, summary, at)
+         VALUES (?1,?2,?3,?4,'deal',?5,?6)`,
+      )
+        .bind(m.id, user.clientId, propertyId, user.id, summary, Date.now())
+        .run()
       return
     }
 

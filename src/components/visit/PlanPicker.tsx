@@ -17,6 +17,8 @@ export function PlanPicker({
   onChange,
   estimate,
   allowUnset = true,
+  unsetLabel = 'Not sure',
+  unsetSub = 'Office sets it',
 }: {
   plans: Plan[]
   value: string | undefined
@@ -25,6 +27,9 @@ export function PlanPicker({
   estimate?: number
   /** Offer "the office will set it". Off when changing an existing sale's plan. */
   allowUnset?: boolean
+  /** The words on that option, when it means something else (a lead with no plan). */
+  unsetLabel?: string
+  unsetSub?: string
 }) {
   const offered = activePlans(plans)
   if (!offered.length) {
@@ -57,7 +62,7 @@ export function PlanPicker({
     <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-2.5" data-testid="plan-picker">
       {offered.map((p) => option(p.id, value === p.id, () => onChange(p.id), p.name, moneyFull(p.value)))}
       {allowUnset &&
-        option('unset', !value, () => onChange(undefined), 'Not sure', 'Office sets it')}
+        option('unset', !value, () => onChange(undefined), unsetLabel, unsetSub)}
     </div>
   )
 }

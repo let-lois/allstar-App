@@ -260,7 +260,7 @@ const REGEX_ROUTES = {
   // Rename, reprice, retire or restore one plan. deals.ts decides the role.
   '/^\\/api\\/plans\\/([A-Za-z0-9_-]{1,64})$/': {
     match: "/^\\/api\\/plans\\/([A-Za-z0-9_-]{1,64})$/.exec(path)",
-    delegates: ['updatePlan'],
+    delegates: ['updatePlan', 'deletePlan'],
     file: 'deals.ts',
   },
   // Resend or cancel somebody's invitation. Both delegate to invites.ts.

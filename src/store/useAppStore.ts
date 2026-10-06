@@ -47,6 +47,7 @@ import {
   apiGenerateTerritoryLeads,
   type GeneratedLeads,
   apiCreatePlan,
+  apiDeletePlan,
   apiUpdatePlan,
 } from '../lib/http'
 import { canSee, leadIdsViaLists, listsContaining, listsFor, withMembers, territoryIdsFor } from '../lib/leadLists'
@@ -328,7 +329,11 @@ interface AppState {
   ) => Promise<void>
   completeVisit: (visitId: string) => Promise<void>
   /** The plan picked at the door for a Sold visit; undefined is "the office will set it". */
-  setVisitPlan: (visitId: string, planId: string | undefined) => Promise<void>
+  setVisitPlan: (visitId: string, planId: string | null) => Promise<void>
+  /** The plan a lead is being sold, on any lead; null clears it. Moves a sold lead's sale onto it too. */
+  setLeadPlan: (propertyId: string, planId: string | null) => Promise<void>
+  /** Take a plan off the price list for good. Leads on it go back to no plan; sales keep its name. */
+  deletePlan: (id: string) => Promise<void>
   /**
    * Change a sale after the door: another plan, or — a manager only, with a
    * reason — another value. The server checks both rules again.
@@ -1482,6 +1487,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       const nextStatus = visit.outcome ? OUTCOME_TO_STATUS[visit.outcome] : undefined
       if (visit.outcome === 'sold') {
         updatedProp.deal = dealOnWin(prop, get().plans, { planId: visit.planId, repId: visit.repId, at: endedAt })
+        // The lead carries the plan its sale is on, as the server records it.
+        const onPlan = get().plans.find((pl) => pl.id === updatedProp!.deal?.planId)
+        if (onPlan) updatedProp.plan = { id: onPlan.id, name: onPlan.name, value: onPlan.value }
+        // "Not sure" on a new sale: the lead drops its plan, as on the server.
+        else if (visit.planId === null && !prop.deal) updatedProp.plan = undefined
       } else if (nextStatus && nextStatus !== 'won') {
         updatedProp.deal = undefined
       }
@@ -1580,12 +1590,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     let deal: Deal
     let summary: string
     let sent: Record<string, unknown> = change
+    let leadPlan = current.plan
     if ('planId' in change) {
       const plan = get().plans.find((p) => p.id === change.planId && p.active)
       if (!plan) throw new Error('That plan is not on the price list.')
       if (plan.id === current.deal.planId) return
       deal = { ...current.deal, ...onPlan(plan) }
       summary = `Sale plan set to ${plan.name} (${moneyFull(plan.value)})`
+      leadPlan = { id: plan.id, name: plan.name, value: plan.value }
     } else {
       const user = get().user
       if (!canSetDealValue(user?.role)) throw new Error('Only a manager can change what a sale is worth.')
@@ -1597,7 +1609,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       summary = `Sale value set to ${moneyFull(value)} (was ${moneyFull(current.deal.value)}): ${reason}`
       sent = { value, reason }
     }
-    const next: Property = { ...current, deal }
+    const next: Property = { ...current, deal, plan: leadPlan }
     await db.put('properties', next)
     set((s) => ({ properties: { ...s.properties, [propertyId]: next } }))
     // Keyed by the mutation id, as the server keys its row, so a merge does
@@ -1613,6 +1625,58 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     await db.put('activity', event)
     set((s) => ({ activity: [event, ...s.activity] }))
+  },
+
+  async setLeadPlan(propertyId, planId) {
+    const current = get().properties[propertyId]
+    if (!current) throw new Error('That lead is no longer on this phone.')
+    const plan = planId ? get().plans.find((p) => p.id === planId && p.active) : undefined
+    if (planId && !plan) throw new Error('That plan is not on the price list.')
+    if ((plan?.id ?? undefined) === current.plan?.id) return
+    const next: Property = {
+      ...current,
+      plan: plan ? { id: plan.id, name: plan.name, value: plan.value } : undefined,
+      // A sold lead's sale moves onto the plan too, as on the server.
+      ...(plan && current.status === 'won' && current.deal && current.deal.planId !== plan.id
+        ? { deal: { ...current.deal, ...onPlan(plan) } }
+        : {}),
+    }
+    await db.put('properties', next)
+    set((s) => ({ properties: { ...s.properties, [propertyId]: next } }))
+    const mutationId = await enqueue('property.plan', { id: propertyId, planId: plan?.id ?? null })
+    const event: ActivityEvent = {
+      id: mutationId,
+      propertyId,
+      repId: get().user?.id ?? '',
+      type: 'deal',
+      summary: plan ? `Plan set to ${plan.name} (${moneyFull(plan.value)})` : `Plan cleared${current.plan ? ` (was ${current.plan.name})` : ''}`,
+      at: Date.now(),
+    }
+    await db.put('activity', event)
+    set((s) => ({ activity: [event, ...s.activity] }))
+  },
+
+  async deletePlan(id) {
+    if (get().mode === 'live') {
+      const token = liveToken()
+      if (!token) throw new Error('Sign in again to change the price list.')
+      await apiDeletePlan(token, id)
+    }
+    const plans = get().plans.filter((p) => p.id !== id)
+    await db.metaSet('allstar.plans', plans)
+    // Leads on it go back to no plan; a sale keeps the plan's name and price.
+    const touched = Object.values(get().properties)
+      .filter((p) => p.plan?.id === id || p.deal?.planId === id)
+      .map((p) => ({
+        ...p,
+        plan: p.plan?.id === id ? undefined : p.plan,
+        deal: p.deal?.planId === id ? { ...p.deal, planId: undefined } : p.deal,
+      }))
+    if (touched.length) await db.putAll('properties', touched)
+    set((s) => ({
+      plans,
+      properties: touched.length ? { ...s.properties, ...Object.fromEntries(touched.map((p) => [p.id, p])) } : s.properties,
+    }))
   },
 
   async createPlan(input) {
@@ -1645,7 +1709,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     const plans = get().plans.map((p) => (p.id === id ? plan : p))
     await db.metaSet('allstar.plans', plans)
-    set({ plans })
+    // Leads on it show its new name and price (sales keep theirs).
+    const touched = Object.values(get().properties)
+      .filter((p) => p.plan?.id === id)
+      .map((p) => ({ ...p, plan: { id: plan.id, name: plan.name, value: plan.value } }))
+    if (touched.length) await db.putAll('properties', touched)
+    set((s) => ({
+      plans,
+      properties: touched.length ? { ...s.properties, ...Object.fromEntries(touched.map((p) => [p.id, p])) } : s.properties,
+    }))
     return plan
   },
 

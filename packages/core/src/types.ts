@@ -167,6 +167,12 @@ export interface Property {
   residentialStatus?: 'RESIDENTIAL' | 'COMMERCIAL' | 'UNKNOWN'
   /** The sale, on a lead that is Won. Absent on every other lead. */
   deal?: Deal
+  /**
+   * The plan this lead is being sold, as it stands on the price list now —
+   * on any lead, sold or not. What an open lead is worth in the pipeline, and
+   * the plan its sale takes when it is won.
+   */
+  plan?: Pick<Plan, 'id' | 'name' | 'value'>
 }
 
 /**
@@ -298,8 +304,11 @@ export interface Visit {
   nextActionAt?: number
   nextActionType?: 'follow_up' | 'appointment' | 'quote' | 'none'
   durationMs?: number
-  /** The plan picked at the door when the outcome is Sold; none means "the office will set it". */
-  planId?: string
+  /**
+   * The plan picked at the door when the outcome is Sold. Undefined: the
+   * lead's own plan, if it has one. Null: "Not sure — office sets it".
+   */
+  planId?: string | null
   pending?: boolean
 }
 
@@ -500,6 +509,8 @@ export type MutationKind =
   | 'list.reps'
   /** A sale changed after the door: another plan, or a manager's value with a reason. */
   | 'deal.update'
+  /** The plan a lead is being sold, on any lead. */
+  | 'property.plan'
 
 export interface Mutation {
   id: string

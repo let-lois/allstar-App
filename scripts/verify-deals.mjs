@@ -135,6 +135,38 @@ try {
     await ctx.close()
   }
 
+  /* ===== a plan on a lead that is not sold yet ========================== */
+  {
+    const { ctx, page } = await demo(/Dana Whitfield/)
+    await ctx.setOffline(true)
+    const open = (await store(page, 'properties')).find((p) => !['won', 'dnc', 'lost'].includes(p.status) && !p.plan)
+    await go(page, `/property/${open.id}`)
+    await page.waitForTimeout(1200)
+    await dismissTour(page)
+    ok((await page.getByTestId('lead-plan').count()) === 1, 'an open lead has a Plan section', open.status)
+    ok(/No plan yet/.test(await text(page.getByTestId('lead-plan-name'))), 'saying it has none yet')
+    await page.getByTestId('lead-plan-change').click()
+    await page.waitForTimeout(500)
+    const sheet = page.getByTestId('lead-plan-sheet')
+    ok(/No plan/.test(await text(sheet.getByTestId('plan-option-unset'))), 'the choice includes "No plan"')
+    await sheet.getByTestId('plan-option-plan_demo_premium').click()
+    await sheet.getByTestId('lead-plan-save').click()
+    await page.waitForTimeout(800)
+    ok(/Premium[\s\S]*\$24,000/.test(await text(page.getByTestId('lead-plan-name'))), 'the lead is on the plan, with its price', await text(page.getByTestId('lead-plan-name')))
+    ok(/\$24,000/.test(await page.locator('body').innerText()), "and is worth the plan's price on its card")
+    const sent = (await store(page, 'outbox')).find((m) => m.kind === 'property.plan' && m.payload?.id === open.id)
+    ok(sent?.payload?.planId === 'plan_demo_premium', 'sent to the office as the lead\'s plan', JSON.stringify(sent?.payload))
+    // Sold at the door: the picker starts on the lead's plan.
+    await page.getByRole('button', { name: /Start visit/ }).first().click()
+    await page.waitForURL(/\/visit\//, { timeout: 8000 })
+    await page.waitForTimeout(500)
+    await page.getByRole('button', { name: /^Sold/ }).first().click()
+    await page.waitForTimeout(500)
+    ok((await page.getByTestId('plan-option-plan_demo_premium').getAttribute('aria-pressed')) === 'true', "Sold starts on the plan the lead is already on")
+    ok((await noSideways(page)) === '', 'no sideways scroll', await noSideways(page))
+    await ctx.close()
+  }
+
   /* ===== a manager overrides a value, with a reason ===================== */
   {
     const { ctx, page } = await demo(/Ray Okafor/)
@@ -180,8 +212,34 @@ try {
     await page.waitForTimeout(500)
     ok(/Starter\s*Retired/.test(await text(page.getByTestId('plans-list'))), 'and retires one, which stays listed')
     ok((await noSideways(page)) === '', `${viewport.width}px: the page does not scroll sideways`, await noSideways(page))
+    // Delete: asked first, in numbers, and the plan is gone.
+    await rows.filter({ hasText: 'Gold' }).getByTestId('plan-delete').click()
+    await page.waitForTimeout(300)
+    ok((await page.getByTestId('plan-delete-confirm').count()) === 1, `${viewport.width}px: Delete asks first`)
+    await page.getByTestId('plan-delete-yes').click()
+    await page.waitForTimeout(600)
+    ok((await rows.count()) === 3 && !/Gold/.test(await text(page.getByTestId('plans-list'))), 'and removes the plan', await rows.count())
     if (viewport.width === 1280) {
       ok((await page.getByRole('link', { name: 'Plans' }).count()) > 0, 'Plans is in the console menu')
+      // The Leads table names each lead's plan and filters by it.
+      await page.getByRole('link', { name: 'Leads' }).first().click()
+      await page.waitForTimeout(1500)
+      ok((await page.locator('th', { hasText: /^Plan$/ }).count()) === 1, 'the console Leads table has a Plan column')
+      const filter = page.getByTestId('leads-plan-filter')
+      if (!(await filter.isVisible())) await page.getByRole('button', { name: /Filters/ }).first().click().catch(() => {})
+      await filter.selectOption({ label: 'Standard' })
+      await page.waitForTimeout(600)
+      const shown = await page.getByTestId('lead-row-plan').allInnerTexts()
+      ok(shown.length > 0 && shown.every((t) => t === 'Standard'), 'and filtering by a plan shows only its leads', `${shown.length} rows`)
+      // Deleting a plan with sales on it: the sales keep its name.
+      await page.goto(`${BASE}/admin/plans`, { waitUntil: 'domcontentloaded' })
+      await page.waitForTimeout(1200)
+      await rows.filter({ hasText: 'Standard' }).getByTestId('plan-delete').click()
+      ok(/sales? keeps?/.test(await text(page.getByTestId('plan-delete-confirm'))), 'deleting a plan that has sales says the sales keep it')
+      await page.getByTestId('plan-delete-yes').click()
+      await page.waitForTimeout(600)
+      const kept = (await store(page, 'properties')).filter((p) => p.deal?.planName === 'Standard')
+      ok(kept.length > 0 && kept.every((p) => !p.deal.planId), 'and they do', kept.length)
     }
     await ctx.close()
   }

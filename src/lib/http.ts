@@ -1284,6 +1284,10 @@ export function apiUpdatePlan(token: string, id: string, patch: Partial<Pick<Pla
   return request<{ plan: Plan }>(`/api/plans/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch, token })
 }
 
+export function apiDeletePlan(token: string, id: string) {
+  return request<{ id: string; name: string; leads: number; sales: number }>(`/api/plans/${encodeURIComponent(id)}`, { method: 'DELETE', token })
+}
+
 export function apiSaveSettings(token: string, settings: unknown) {
   return request<{ ok: true; settings: Record<string, unknown> }>('/api/settings', {
     method: 'POST',

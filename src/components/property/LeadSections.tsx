@@ -5,6 +5,7 @@ import { Glyph } from '../ui/Glyph'
 import { PhotoImage, PhotoStrip } from '../visit/PhotoStrip'
 import { ListMembership } from './ListMembership'
 import { SaleSection } from './SaleSection'
+import { LeadPlanSection } from './LeadPlanSection'
 import { useAppStore, useListsContaining, useQuoteSentAt } from '../../store/useAppStore'
 import { STATUS_LABEL, outcomeByCode } from '../../data/outcomes'
 import { duration, relative, time } from '../../lib/format'
@@ -168,7 +169,12 @@ export function LeadSections({
         </Collapsible>
       )}
 
-      {show('sales') && property.status === 'won' && property.deal && <SaleSection property={property} nameOf={nameOf} />}
+      {show('sales') &&
+        (property.status === 'won' && property.deal ? (
+          <SaleSection property={property} nameOf={nameOf} />
+        ) : (
+          <LeadPlanSection property={property} />
+        ))}
 
       {show('appointments') && appointments.length > 0 && (
         <Collapsible flat title="Appointments" count={appointments.length} defaultOpen>

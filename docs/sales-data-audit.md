@@ -75,6 +75,15 @@ field.
 - **Sales** (`deals` table, one row per lead, `deal_<property id>`): value,
   plan (id, name, and price at the time), rep, `won_at`, and — when a manager
   overrode it — who and why.
+- **A plan on every lead** (`properties.plan_id`, migration 028). Anyone who
+  may edit a lead can put it on a plan before it is sold — on the lead's Plan
+  section, phone or console. An open lead is then worth its plan's price in the
+  pipeline instead of its imported estimate; the console Leads table has a Plan
+  column and filter. A lead sold without a plan picked at the door is sold on
+  the plan it carries; "Not sure" at the door clears it.
+- **Deleting a plan** (console → Plans → Delete, after a confirmation that
+  says what it touches): leads on it go back to no plan; sales made on it keep
+  its name and price. Retire remains the gentler option.
 - **Opening a sale.** Any route to Won opens one: a Sold visit (the rep picks
   the plan at the door, or "Not sure — office sets it"), Won set by hand, or
   the office's bulk status change. Value = the plan's price; with no plan yet,
@@ -96,7 +105,7 @@ Where the money shows:
 | Screen | Value |
 |---|---|
 | Dashboard "… closed", rep table "Closed", Reports "Closed", Standings revenue | `daily_stats.pipeline_value` = SUM of standing sales won that day by that rep (`recomputeDailyStats`, `api/src/deals.ts`) |
-| Pipeline "won", Territories won value, Leads "Value", lead / map / row value, Overview, Team | `leadValue()` (`packages/core/src/deals.ts`): the sale's value on a Won lead, the imported estimate on every other lead |
+| Pipeline "won", Territories won value, Leads "Value", lead / map / row value, Overview, Team | `leadValue()` (`packages/core/src/deals.ts`): the sale's value on a Won lead; on any other lead its plan's price, or the imported estimate when it has no plan |
 | CSV export | `opportunity_value` (estimate) plus `sale_plan`, `sale_value`, `won_at` |
 
 Open leads are still valued only by the imported estimate — the only figure an
