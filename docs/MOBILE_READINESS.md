@@ -389,7 +389,7 @@ Nothing unnecessary is requested. No background location anywhere.
 `app.json`: name, slug, `version 0.1.0`, portrait, `scheme: allstar`, icon,
 adaptive icon (generated from `brand/`, alpha rule gated), splash, iOS bundle id
 and plist strings, Android package and permissions, `predictiveBackGestureEnabled: false`,
-`supportsTablet: false`, `ITSAppUsesNonExemptEncryption: false`, EAS project id,
+`supportsTablet: true` (iPad, every orientation on iPad, portrait on iPhone — `verify:ipad`), `ITSAppUsesNonExemptEncryption: false`, EAS project id,
 `runtimeVersion.policy: sdkVersion`, `updates.url`. **`expo-doctor` reports a
 schema failure** whose detail it did not print; run `npx expo config --type
 public` to surface the offending key before the first production build.
@@ -445,7 +445,7 @@ source; measure on a device before changing anything.
 ## 12. Store readiness
 
 Apple: bundle id ✓, `ascAppId` ✓, usage strings ✓, icon and splash from
-`brand/` ✓ (alpha rule gated), encryption declaration ✓, `supportsTablet: false` ✓.
+`brand/` ✓ (alpha rule gated), encryption declaration ✓, iPad supported (`supportsTablet: true`; the store listing then needs 13" iPad screenshots as well as iPhone) ✓.
 **Owed:** Privacy Policy URL and a link to it in the app; in-app account
 deletion (5.1.1(v)) — none exists, and `ManageUser.tsx:652` says a user cannot
 delete their own account; App Privacy declarations (precise location, photos,
