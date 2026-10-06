@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const api = resolve(here, '..')
-const PORT = Number(process.env.PORT || 8817)
+const PORT = Number(process.env.PORT || 8840)
 const BASE = `http://127.0.0.1:${PORT}`
 const SETUP_TOKEN = 'local-setup-token'
 const PEPPER = 'local-deals-pepper'
