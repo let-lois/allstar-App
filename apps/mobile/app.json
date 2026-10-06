@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.allstarhomesolutions.allstar",
-      "supportsTablet": false,
+      "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "All-Star uses your location to order your route from where you are standing and to place a lead on the house in front of you.",
         "NSCameraUsageDescription": "All-Star uses the camera so you can photograph a property from the door and attach it to the lead you are recording.",

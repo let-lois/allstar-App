@@ -352,6 +352,8 @@ export function VisitMode() {
       </header>
 
       <div className="scroll-pane px-4 pb-4 pt-4">
+        {/* One readable column on a tablet; the whole width on a phone. */}
+        <div className="content-col">
         {step === 'outcome' && (
           <>
             {property.lastVisitAt && (
@@ -513,6 +515,7 @@ export function VisitMode() {
             )}
           </div>
         )}
+        </div>
       </div>
 
       {/* Action bar pinned to the bottom — the same target every step. */}
@@ -526,7 +529,7 @@ export function VisitMode() {
               Pick when to come back, or choose “Nothing”.
             </p>
           )}
-          <div className="flex gap-2.5">
+          <div className="content-col flex gap-2.5">
             <Button
               variant="secondary"
               size="lg"
