@@ -1,7 +1,6 @@
 import { isStoreBuild } from '../lib/external'
 import { useEffect, useState } from 'react'
 import { describeError } from '../lib/errors'
-import { API_URL } from '../lib/api-url'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../components/nav/TopBar'
 import { SyncDetail, usePhotoSync, useSync } from '../components/sync/SyncBadge'
@@ -269,8 +268,8 @@ export function More() {
               the office has its own tour.
             */}
             <MoreLink label="Show the tutorial again" onClick={() => void replayTour()} />
-            <MoreHref label="Privacy policy" href={`${API_URL}/privacy`} />
-            <MoreHref label="Terms of use" href={`${API_URL}/terms`} />
+            <MoreHref label="Privacy policy" href={`${HELP_URL}/privacy`} />
+            <MoreHref label="Terms of use" href={`${HELP_URL}/terms`} />
           </MoreGroup>
 
           <section className="section">
