@@ -88,6 +88,31 @@ bucket_name = "allstar-addresses"
 [triggers]
 crons = ["*/5 * * * *", "17 7 * * *"]
 
+# Workers Logs, turned on in the dashboard and copied here as it asked: like
+# [vars], `wrangler deploy` replaces the dashboard's settings with whatever this
+# file says, so a setting that lives only in the dashboard is switched off again
+# by the next merge. Logs are kept and searchable under the Worker's
+# Observability tab, which is where to look when a deploy or a request goes
+# wrong. Traces stay off.
+[observability]
+enabled = false
+head_sampling_rate = 1
+redact_query_string = false
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
+
+[observability.traces]
+enabled = false
+head_sampling_rate = 1
+persist = true
+
+[observability.issues]
+enabled = true
+
 [vars]
 # Comma-separated. The console and the field app are the same origin today, but
 # local development is a second one.
