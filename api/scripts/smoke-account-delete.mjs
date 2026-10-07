@@ -119,17 +119,14 @@ try {
 
   /* ===== the public pages ================================================== */
   {
-    const p = await fetch(`${BASE}/privacy`)
-    const text = await p.text()
-    ok(p.status === 200 && /text\/html/.test(p.headers.get('content-type') ?? ''), 'the privacy policy is a public page, no sign-in')
-    ok(/Delete your account/.test(text) && /Google Maps Platform/.test(text) && /help@example\.com/.test(text), 'it says how to delete an account, who data is shared with, and where to write')
+    const HELP = 'https://help.allstarhomesolutions.com'
+    const p = await fetch(`${BASE}/privacy`, { redirect: 'manual' })
+    ok(p.status === 302 && p.headers.get('location') === `${HELP}/privacy`, 'the privacy policy redirects to the Help Center, its one home', `${p.status} ${p.headers.get('location')}`)
+    const t = await fetch(`${BASE}/terms`, { redirect: 'manual' })
+    ok(t.status === 302 && t.headers.get('location') === `${HELP}/terms`, 'and so do the terms of use', `${t.status} ${t.headers.get('location')}`)
     const s = await (await fetch(`${BASE}/support`)).text()
     ok(/mailto:help@example\.com/.test(s) && /Forgot password/.test(s), 'the support page gives the support address and the common answers')
-    const t = await fetch(`${BASE}/terms`)
-    const terms = await t.text()
-    ok(t.status === 200 && /text\/html/.test(t.headers.get('content-type') ?? ''), 'the terms of use are a public page too, for the App Store listing')
-    ok(/Licensed Application End User License Agreement/.test(terms) && /Do Not Contact/.test(terms) && /help@example\.com/.test(terms), "they name Apple's licence, the contact rules and where to write")
-    ok(/href="\/terms"/.test(text) && /href="\/terms"/.test(s), 'and the privacy and support pages link to them')
+    ok(s.includes(`href="${HELP}/privacy"`) && s.includes(`href="${HELP}/terms"`), 'and links the policy and terms where they live')
   }
 
   await call('/setup', {

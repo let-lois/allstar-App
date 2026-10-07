@@ -104,7 +104,7 @@ import {
 } from './integrations'
 import { checkLoginRate, clearFailures, recordFailure } from './ratelimit'
 import { directions } from './directions'
-import { invitePage, setupPage, privacyPage, supportPage, termsPage } from './pages'
+import { HELP_CENTER_URL, invitePage, setupPage, supportPage } from './pages'
 import { bootstrap } from './read'
 import type { Env, Mutation, Role, SessionUser } from './types'
 
@@ -398,10 +398,12 @@ export default {
       // has no password. The React app can't help with either.
       const appUrl = env.APP_URL ?? 'https://allstar.letlois.com'
 
-      // Public pages App Store Connect and the app link to.
-      if (path === '/privacy' && req.method === 'GET') return privacyPage({ supportEmail: env.SUPPORT_EMAIL })
+      // Public pages App Store Connect and the app link to. The policy and
+      // terms are the Help Center's; these addresses are kept because
+      // builds already installed on phones link to them.
+      if (path === '/privacy' && req.method === 'GET') return Response.redirect(`${HELP_CENTER_URL}/privacy`, 302)
       if (path === '/support' && req.method === 'GET') return supportPage({ supportEmail: env.SUPPORT_EMAIL })
-      if (path === '/terms' && req.method === 'GET') return termsPage({ supportEmail: env.SUPPORT_EMAIL })
+      if (path === '/terms' && req.method === 'GET') return Response.redirect(`${HELP_CENTER_URL}/terms`, 302)
 
       if (path === '/setup') {
         if (req.method === 'GET') {
