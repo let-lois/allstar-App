@@ -1,6 +1,5 @@
 import { isStoreBuild } from '../lib/external'
 import { useEffect, useState } from 'react'
-import { API_URL } from '../lib/api-url'
 import { HELP_URL } from '../lib/help'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
@@ -562,8 +561,8 @@ export function Login() {
           </p>
           <p className="mt-3 flex justify-center gap-5 text-[13px] font-medium">
             <a href={HELP_URL} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Help &amp; support</a>
-            <a href={`${API_URL}/privacy`} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Privacy policy</a>
-            <a href={`${API_URL}/terms`} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Terms</a>
+            <a href={`${HELP_URL}/privacy`} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Privacy policy</a>
+            <a href={`${HELP_URL}/terms`} target="_blank" rel="noopener noreferrer" className="focusable inline-flex min-h-[44px] items-center text-accent-strong">Terms</a>
           </p>
         </div>
       </div>

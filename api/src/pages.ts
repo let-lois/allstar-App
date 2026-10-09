@@ -231,7 +231,7 @@ function authShell(title: string, o: { heading: string; sub?: string; card: stri
   </div>
   <div class="card">${o.card}</div>
   ${o.foot ? `<p class="foot">${o.foot}</p>` : ''}
-  <p class="links"><a href="/support" target="_blank" rel="noopener noreferrer">Help &amp; support</a><a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a></p>
+  <p class="links"><a href="/support" target="_blank" rel="noopener noreferrer">Help &amp; support</a><a href="${HELP_CENTER_URL}/privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a></p>
 </main></div>
 <script>${AUTH_JS}</script>
 </body>
@@ -369,15 +369,20 @@ export function invitePage(opts: {
   })
 }
 
-/* --- privacy policy and support ------------------------------------------ */
+/* --- support ------------------------------------------------------------- */
 
 /*
-  Public, no sign-in: App Store Connect needs a Privacy Policy URL and a
-  Support URL that anyone can open, and the app links to both. The policy
-  says what this software actually collects and sends, and to whom — taken
-  from the code, not a template. Counsel should review the wording before
-  release (LAUNCH.md, blockers 6–9). The support address comes from the
-  SUPPORT_EMAIL setting; without it the page says to ask the company's office.
+  The privacy policy and terms of use live on the Help Center, which is
+  public and is the App Store listing's Privacy Policy URL. This Worker used
+  to serve its own copies; /privacy and /terms now redirect there, so there
+  is one policy rather than two that drift apart.
+*/
+export const HELP_CENTER_URL = 'https://help.allstarhomesolutions.com'
+
+/*
+  Public, no sign-in: App Store Connect needs a Support URL anyone can open.
+  The support address comes from the SUPPORT_EMAIL setting; without it the
+  page says to ask the company's office.
 */
 function docShell(title: string, body: string): Response {
   const res = shell(title, body)
@@ -385,50 +390,6 @@ function docShell(title: string, body: string): Response {
   const headers = new Headers(res.headers)
   headers.set('cache-control', 'public, max-age=300')
   return new Response(res.body, { headers })
-}
-
-export function privacyPage(opts: { supportEmail?: string }): Response {
-  const contact = opts.supportEmail
-    ? `<a href="mailto:${escapeHtml(opts.supportEmail)}">${escapeHtml(opts.supportEmail)}</a>`
-    : 'the office of the company that gave you your account'
-  return docShell('Privacy Policy', `
-<div class="mark">A</div>
-<h1>Privacy Policy</h1>
-<p class="sub">All Star field app · effective September 29, 2026</p>
-<div class="doc">
-<p>All Star is a field sales app used by home-improvement companies and their representatives. A company ("your company") creates accounts for its team; this policy explains what the app handles on your company's behalf.</p>
-<h2>What we collect</h2>
-<ul>
-<li><b>Your account:</b> name, email, phone number, job title, profile photo, your role and team, and a password (stored only as a salted hash).</li>
-<li><b>Your location:</b> precise location while the app is open, to show where you are on the map, to find nearby leads and to record where a visit took place. The app does not track you in the background.</li>
-<li><b>Photos:</b> pictures you take or choose for a lead, and your badge photo. Saving your badge writes an image to your photo library only when you choose to.</li>
-<li><b>Work records:</b> visits, outcomes, notes, appointments, tasks and routes you create.</li>
-<li><b>Homeowner information:</b> addresses and any contact details your company imports or you enter, including Do Not Contact requests.</li>
-<li><b>Technical data:</b> sign-in sessions and basic request logs used to keep the service working and secure.</li>
-</ul>
-<h2>How it is used</h2>
-<p>Only to run the service for your company: showing leads and maps, recording field work, verifying a representative's badge for a homeowner, sending account emails, and reporting to your company. We do not sell personal information and do not use it for advertising.</p>
-<h2>Who it is shared with</h2>
-<ul>
-<li><b>Your company</b>, which controls the data about its leads and team.</li>
-<li><b>Service providers</b> that run parts of the app: Cloudflare (hosting and storage), Google Maps Platform (map display, place search, Street View, directions), Resend (account email), and, where your company turns them on, GoHighLevel (its CRM) and Geocodio (turning a map location into a street address).</li>
-<li><b>Anyone who scans your badge QR code</b> sees your name, photo, company and whether your badge is current.</li>
-</ul>
-<p>Address data used to find houses in a territory comes from public and open datasets (Overture Maps, the U.S. National Address Database, and U.S. Census data). Postal town names for ZIP codes: © GeoNames, CC BY 4.0. City of Milwaukee addresses: © City of Milwaukee, CC BY.</p>
-<h2>How long it is kept</h2>
-<p>Your account data is kept while your account exists. Lead and work records belong to your company and are kept until your company deletes them. Homeowners who ask to be forgotten are erased, and stay erased.</p>
-<h2>Your choices</h2>
-<ul>
-<li><b>Delete your account</b> at any time in the app: More → Edit profile → Delete my account. This removes your sign-in, profile, badge and your own visits, notes and photos; leads you worked stay with your company.</li>
-<li>Location, camera and photo access can be turned off in your phone's Settings; parts of the app that need them will say so.</li>
-<li>Homeowners can ask the company that contacted them to stop contacting them or to erase their information.</li>
-</ul>
-<h2>Children</h2>
-<p>The app is for working adults and is not directed to children under 16.</p>
-<h2>Contact</h2>
-<p>Questions or requests: ${contact}.</p>
-<p><a href="/terms">Terms of Use</a></p>
-</div>`)
 }
 
 export function supportPage(opts: { supportEmail?: string }): Response {
@@ -448,51 +409,6 @@ ${email
 <li><b>Map or location not working:</b> check that location access is allowed for All Star in your phone's Settings.</li>
 <li><b>Verify a representative:</b> scan the QR code on their badge.</li>
 </ul>
-<p><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a></p>
-</div>`)
-}
-
-/*
-  Terms of Use, for the App Store listing's Terms field and the app's links.
-  Plain language, written from what the service actually is: a company's
-  internal field tool, with accounts the company issues. The App Store licence
-  itself is Apple's standard one, which this page names rather than replaces.
-  Like the privacy policy, counsel should review the wording before release.
-*/
-export function termsPage(opts: { supportEmail?: string }): Response {
-  const contact = opts.supportEmail
-    ? `<a href="mailto:${escapeHtml(opts.supportEmail)}">${escapeHtml(opts.supportEmail)}</a>`
-    : 'the office of the company that gave you your account'
-  return docShell('Terms of Use', `
-<div class="mark">A</div>
-<h1>Terms of Use</h1>
-<p class="sub">All Star field app · effective October 6, 2026</p>
-<div class="doc">
-<p>All Star is a field sales tool that a company ("your company") provides to its team. By signing in you agree to these terms. If you do not agree, do not use the app.</p>
-<h2>Your account</h2>
-<ul>
-<li>Accounts are created by your company, which decides who has access and what each person can do.</li>
-<li>Keep your password to yourself and tell your company if you think someone else has used your account.</li>
-<li>You can delete your own account at any time: More → Edit profile → Delete my account.</li>
-</ul>
-<h2>Using the app</h2>
-<ul>
-<li>Use the app only for your company's work, and only as your company allows.</li>
-<li>Follow the law when you contact people, including do-not-call, do-not-knock and solicitation rules where you work. Respect every Do Not Contact request; the app records them so they are kept.</li>
-<li>Enter information honestly. Visits, outcomes and locations are records your company relies on.</li>
-<li>Do not try to reach data you were not given, interfere with the service, or copy the app.</li>
-</ul>
-<h2>Data</h2>
-<p>Leads, visits and other work records belong to your company. How personal information is handled is explained in the <a href="/privacy">Privacy Policy</a>.</p>
-<h2>Licence</h2>
-<p>If you installed the app from Apple's App Store, your use of the app is also governed by Apple's <a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/">Licensed Application End User License Agreement</a>. Where it and these terms differ about the app itself, Apple's agreement applies.</p>
-<h2>Availability and changes</h2>
-<p>We work to keep the service running and your data safe, but the app is provided "as is", without guarantees that it will always be available or error-free. Maps, addresses and locations come from third-party and public sources and may be inaccurate — check before you rely on them. We may update the app and these terms; continuing to use the app after a change means you accept it.</p>
-<h2>Ending access</h2>
-<p>Your company can end your access at any time, and access ends if your company stops using All Star. Access may also be suspended for misuse.</p>
-<h2>Liability</h2>
-<p>To the extent the law allows, All Star is not liable for indirect or consequential losses, or for losses caused by inaccurate map or address data, lost signal, or how your company uses the service.</p>
-<h2>Contact</h2>
-<p>Questions: ${contact}.</p>
+<p><a href="${HELP_CENTER_URL}/privacy">Privacy Policy</a> · <a href="${HELP_CENTER_URL}/terms">Terms of Use</a></p>
 </div>`)
 }

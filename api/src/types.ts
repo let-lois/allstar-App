@@ -50,7 +50,7 @@ export interface Env {
   SETUP_TOKEN?: string
   /** Where the front end lives, for links on the Worker-served pages. */
   APP_URL?: string
-  /** Where people write for help; shown on /support and /privacy. */
+  /** Where people write for help; shown on /support. */
   SUPPORT_EMAIL?: string
   /**
    * Optional. Present means addresses are geocoded to the rooftop via Google;
