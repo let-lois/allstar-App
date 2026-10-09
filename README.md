@@ -490,15 +490,27 @@ and their next bootstrap stops returning those properties.
 
 ## Managing an account
 
-**Console → Team → Manage.** Reset a password, remove someone, or delete the
-account. Three operations, and the distinction between them is the whole design:
+**Console → Team → Manage.** Correct a name or sign-in email, send a password
+reset email, remove someone, or delete the account:
 
 | | What happens | When |
 |---|---|---|
-| **Set a password** | They sign in with it; **every session they hold dies** | A phone went missing |
-| **Reset link** | They choose their own; the admin never sees it | Normal password trouble |
+| **Edit name** | First and last name change; nothing else on the account does | A typo, a preferred name |
+| **Change email** | The sign-in address changes **immediately**, same id, same password; both addresses are emailed; links sent to the old address stop working | A new address, a typo at invite time |
+| **Send password reset email** | They get a single-use, two-day link and choose their own password; **the admin never sees the link or the password**; using it signs them out everywhere | Forgotten password, lost phone |
 | **Remove from team** | Can't sign in; sessions end now; **work stays** | Someone left |
 | **Delete permanently** | Row gone, and everything keyed on it cascades | Almost never |
+
+An admin never types, sees or hands over somebody else's password: the API
+refuses it (`403 not_self`), and the only password field on the sheet is your
+own. A reset email is refused for someone who has never set a password (send
+their invitation), for someone whose access is off (restore it first), within a
+minute of the last one (so a double click sends one email), and when no mail
+provider is configured. The response says where it went and when it expires —
+never the link. The link is `/reset#<token>`: the token rides in the URL
+fragment, which no server or request log ever sees, and the page checks and
+submits it in POST bodies. Email changes are unique per company, case-insensitive,
+and recorded in the audit log with both addresses.
 
 Deleting a user is genuinely destructive: `visits`, `notes`, `activity`, `tasks`,
 `routes` and `daily_stats` all cascade. That isn't a login, it's the company's
@@ -515,13 +527,16 @@ the write rather than a check before it — two admins deactivating each other a
 the same moment would both pass a separate check, since each still sees the other
 as active.
 
-Setting a password revokes every session for that user, including the admin's own
-if they changed their own. That's the point of a reset after a phone goes missing:
-the old credential has to stop working everywhere, not eventually.
+A new password — your own, changed from the sheet, or anybody's, set through a
+reset link — revokes every session for that user. That's the point of a reset
+after a phone goes missing: the old credential has to stop working everywhere,
+not eventually.
 
 ```bash
-cd api && npm run smoke:users   # 28 assertions, mostly about what is refused
-npm run verify:invite           # the panel, including the delete confirmation
+cd api && npm run smoke:users        # mostly about what is refused
+cd api && npm run smoke:user-admin   # reset email + email change, real Worker, stand-in mail provider, real browser on /reset
+npm run verify:invite                # the panel, including the delete confirmation
+npm run verify:user-admin            # the Manage sheet: dialogs, double clicks, validation, phone layout
 ```
 
 Role changes are still read-only.
@@ -1808,7 +1823,7 @@ Three styles because the first two versions each missed one, and each time the
 thing it had never looked at was the thing worth looking at. Version one knew
 only about equality checks, printed "every API route has decided who may call
 it", and had never seen `/api/users/:id/*` — the six most privileged operations
-in the product: set a password, mint a reset link, change a role, deactivate,
+in the product: set a password, email a reset link, change a role, deactivate,
 delete. Version two learned about `startsWith` and still could not see
 `/api/properties/:id/photos`, which is matched with a regex.
 

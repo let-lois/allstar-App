@@ -132,6 +132,9 @@ const TESTS = [
   { script: 'smoke:onboarding-schema', kind: 'hosted', port: 8861 },
   { script: 'smoke:onboarding-flow', kind: 'hosted', port: 8871 },
   { script: 'smoke:mail', kind: 'hosted', port: 8881 },
+  // The reset email and the sign-in email, against a stand-in provider and
+  // a real browser on the reset page. 8886, and 8887 for the stand-in.
+  { script: 'smoke:user-admin', kind: 'hosted', port: 8886 },
   { script: 'smoke:onboarding-steps', kind: 'hosted', port: 8891 },
   { script: 'smoke:export', kind: 'hosted', port: 8901 },
   { script: 'smoke:tiles', kind: 'hosted', port: 8911 },

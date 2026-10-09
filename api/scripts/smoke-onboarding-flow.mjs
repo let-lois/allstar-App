@@ -1,4 +1,5 @@
-import { execFileSync, spawn } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
+import { promisify } from 'node:util'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -248,24 +249,19 @@ try {
 
   /* ===== 8b. a live invite link, after the admin set a password ============== */
   //
-  // The one case where nothing but `acceptInvite`'s own refusal protects the
-  // password: the link is neither revoked nor accepted, and the account now has
-  // a password because an admin set one under Manage while the link was still
-  // in an inbox. Opening it must not offer to replace what the admin set.
+  // An admin cannot shortcut an invitation by typing a password for the
+  // person: that path is gone, and the person's link is untouched by trying.
+  // (The rule that a still-live invitation cannot replace a password that
+  // arrived some other way is section 6's: Riley, who joined by code.)
   {
     const FOUR = `quinn-${Date.now()}@example.com`
     r = await j(await call('/api/invites', { method: 'POST', body: JSON.stringify({ email: FOUR, role: 'field_rep', firstName: 'Quinn' }) }, A))
     const quinnLink = r.body.url
     const quinn = await rowFor(A, FOUR)
     r = await j(await call(`/api/users/${quinn.id}/password`, { method: 'POST', body: JSON.stringify({ password: 'set-by-the-admin-123', confirm: 'set-by-the-admin-123' }) }, A))
-    ok(r.status === 200, 'an admin sets a password for someone who never opened their link', `${r.status}`)
-    const live = await page(quinnLink)
-    ok(/already set up|already has a password/i.test(live) && !/name="password"/.test(live), 'the still-live invitation link now says they are already set up, with no password form')
-    // Typed twice, as the page asks: a real attempt, refused for the right reason.
-    const forged = await form(quinnLink, { password: 'from-a-forwarded-email', confirm: 'from-a-forwarded-email' })
-    ok(!/You're in|You&#39;re in/.test(await forged.text()), 'posting a password to it is refused')
-    ok((await login(FOUR, 'set-by-the-admin-123')).ok && !(await login(FOUR, 'from-a-forwarded-email')).ok, 'and the password the admin set is the one that works — the link could not replace it')
-    ok(/This link has expired/.test(await page(quinnLink)), 'the refusal spent the token, so it cannot be tried again')
+    ok(r.status === 403 && r.body.code === 'not_self', 'an admin cannot set a password for someone who never opened their link', `${r.status} ${r.body.code}`)
+    ok(!(await login(FOUR, 'set-by-the-admin-123')).ok, 'so no password the admin chose ever works')
+    ok(/name="password"/.test(await page(quinnLink)), 'and their invitation still offers them the form to choose their own')
   }
 
   /* ===== 9. guessing the code is bounded ===================================== */
@@ -305,14 +301,29 @@ try {
   //
   // The rule that an *invitation* must not overwrite a password must not have
   // broken the thing that is meant to: a reset link, for exactly that person.
-  r = await j(await call(`/api/users/${(await rowFor(A, ONE)).id}/reset-link`, { method: 'POST' }, A))
-  ok(r.status === 200, 'an admin makes a reset link for someone with a password')
-  // Worded as a reset since forgot-password shipped: "Reset your password",
-  // then "Password changed" — not the invitation's "Welcome" / "You're in".
-  ok(/Reset your password/.test(await page(r.body.url)), 'which opens a password form — it is a reset, not an invitation')
-  ok(/Password changed/.test(await (await form(r.body.url, { password: 'sams-new-password-456', confirm: 'sams-new-password-456' })).text()), 'and sets the new password')
-  ok((await login(ONE, 'sams-new-password-456')).ok && !(await login(ONE, ONE_PW)).ok, 'which is now the one that works')
-  ok((await rowFor(A, ONE))?.invitation === 'accepted', 'and the roster’s invitation status ignores reset links entirely', (await rowFor(A, ONE))?.invitation)
+  //
+  // Minted straight into the table — the same row an admin's reset email and
+  // "Forgot password?" make — because this run has no mail provider to carry
+  // it, and no route hands a reset token back (smoke-user-admin reads it out
+  // of the email itself).
+  {
+    const token = `smoke-reset-${Date.now()}-abcdefghijklmnop`
+    const hash = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(token)))].map((b) => b.toString(16).padStart(2, '0')).join('')
+    const sam = await rowFor(A, ONE)
+    // Asynchronously: the synchronous helper stalls this script's event loop,
+    // the dev server drops the idle keep-alive socket meanwhile, and the next
+    // request fails on a connection that is already closed.
+    await promisify(execFile)(wrangler, ['d1', 'execute', 'allstar-db', '--local', '--persist-to', STATE, '-c', config, '-y', '--command', `INSERT INTO invites (token_hash, user_id, created_by, created_at, expires_at, kind) VALUES ('${hash}', '${sam.id}', '${sam.id}', ${Date.now()}, ${Date.now() + 86_400_000}, 'reset')`], { cwd: api })
+    const samSession = (await j(await login(ONE, ONE_PW))).body.token
+    const url = `${BASE}/invite/${token}`
+    // Worded as a reset since forgot-password shipped: "Reset your password",
+    // then "Password changed" — not the invitation's "Welcome" / "You're in".
+    ok(/Reset your password/.test(await page(url)), 'a reset link opens a password form — it is a reset, not an invitation')
+    ok(/Password changed/.test(await (await form(url, { password: 'sams-new-password-456', confirm: 'sams-new-password-456' })).text()), 'and sets the new password')
+    ok((await login(ONE, 'sams-new-password-456')).ok && !(await login(ONE, ONE_PW)).ok, 'which is now the one that works')
+    ok((await call('/api/bootstrap', {}, samSession)).status === 401, 'and the sessions held before the reset are signed out')
+    ok((await rowFor(A, ONE))?.invitation === 'accepted', 'and the roster’s invitation status ignores reset links entirely', (await rowFor(A, ONE))?.invitation)
+  }
 
   /* ===== 13. the audit trail ================================================ */
   {

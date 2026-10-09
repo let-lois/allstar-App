@@ -14,10 +14,12 @@ import { fileURLToPath } from 'node:url'
  *   - "Forgot password?" answers a real address and a made-up one with the
  *     same body and the same status, and mints a reset row only for the real
  *     one — the difference is in the database, never on the wire;
- *   - an admin making a link afterwards leaves the rep exactly one live link;
+ *   - an admin's reset email that the provider refuses is reported as not
+ *     sent, carries no link, and leaves nothing new live; a rep cannot send one;
  *   - the link's page is a reset, not a welcome; two boxes that disagree, or
  *     a short password, keep the old password; two that agree replace it;
- *   - the old password stops working, the new one works, and the link is dead;
+ *   - the old password stops working, the new one works, the old sessions
+ *     are signed out, and the link is dead;
  *   - with no email provider the route says so (501) rather than promising.
  *
  * The mail provider is configured with a key that cannot work, on purpose:
@@ -182,14 +184,32 @@ try {
   const strangers = await query(config, `SELECT count(*) AS n FROM invites WHERE kind = 'reset' AND user_id NOT IN ('${repId}')`)
   ok(Number(strangers[0]?.n) === 0, 'and nothing was minted for the address nobody has', JSON.stringify(strangers))
 
-  console.log('\n--- an admin link replaces it, and the page is a reset ---')
-  const made = await (await call(`/api/users/${repId}/reset-link`, { method: 'POST' }, owner.body.token)).json()
-  ok(typeof made.url === 'string', 'the admin can still make a reset link', made.url && made.url.replace(/invite\/.*/, 'invite/…'))
-  const after = await query(config, `SELECT count(*) AS n FROM invites WHERE user_id = '${repId}' AND kind = 'reset' AND revoked_at IS NULL AND accepted_at IS NULL`)
-  ok(Number(after[0]?.n) === 1, 'which leaves the rep one live link, not two', JSON.stringify(after))
-  const path = new URL(made.url).pathname
+  console.log('\n--- an admin sends a reset email; the admin never sees the link ---')
+  // The forgot requests above were seconds ago; age them past the one-minute
+  // cooldown so this is the admin's own send, not a duplicate of the rep's.
+  await query(config, `UPDATE invites SET created_at = created_at - 120000 WHERE user_id = '${repId}' AND kind = 'reset'`)
+  const sent = await call(`/api/users/${repId}/reset-email`, { method: 'POST' }, owner.body.token)
+  const sentText = await sent.text()
+  // This run's provider cannot deliver (see the note at the top), so the
+  // honest answer is a failure — and the link nobody received must not stay live.
+  ok(sent.status === 502 && /mail_failed/.test(sentText), 'a reset email the provider refuses is reported as not sent', `${sent.status}`)
+  ok(!/\/invite\//.test(sentText) && !/"url"/.test(sentText), 'and the response carries no link or token either way')
+  const afterSend = await query(config, `SELECT count(*) AS n FROM invites WHERE user_id = '${repId}' AND kind = 'reset' AND revoked_at IS NULL AND accepted_at IS NULL`)
+  ok(Number(afterSend[0]?.n) === 1, 'the failed send left nothing new live — the rep’s earlier link is still the one', JSON.stringify(afterSend))
+  const rogue = await call(`/api/users/${repId}/reset-email`, { method: 'POST' }, first.body.token)
+  ok(rogue.status === 403, 'a rep cannot send anybody a reset email', `${rogue.status}`)
+
+  // The link itself, minted the way every reset is — a hashed single-use row —
+  // because no route hands a token back to be followed here.
+  const token = `e2e-reset-${stamp}-abcdefghijklmnopqrstuv`
+  const { createHash } = await import('node:crypto')
+  await query(config, `UPDATE invites SET revoked_at = ${Date.now()} WHERE user_id = '${repId}' AND kind = 'reset' AND revoked_at IS NULL AND accepted_at IS NULL`)
+  await query(config, `INSERT INTO invites (token_hash, user_id, created_by, created_at, expires_at, kind) VALUES ('${createHash('sha256').update(token).digest('hex')}', '${repId}', '${repId}', ${Date.now()}, ${Date.now() + 2 * 86_400_000}, 'reset')`)
+  const path = `/invite/${token}`
   const page = await (await fetch(`${API}${path}`)).text()
   ok(/<h1>Reset your password<\/h1>/.test(page) && /name="confirm"/.test(page) && !/Welcome/.test(page), 'the link opens a reset page with two boxes, not a welcome')
+  const garbage = await (await fetch(`${API}/invite/not-a-real-token-at-all`)).text()
+  ok(/This link has expired/.test(garbage) && !/name="password"/.test(garbage), 'a made-up link is refused with no form')
 
   console.log('\n--- wrong, short, right ---')
   const mismatch = await (await form(path, { password: REP.next, confirm: 'Bea-new-password-0000' })).text()
@@ -201,6 +221,7 @@ try {
   ok(/Password changed/.test(done) && /old one no longer works/.test(done), 'two that agree change it, and the page says the old one is gone')
   ok((await login(REP.email, REP.password)).status === 401, 'the old password is refused')
   ok((await login(REP.email, REP.next)).status === 200, 'and the new one signs the rep in')
+  ok((await call('/api/bootstrap', {}, first.body.token)).status === 401, 'and the session held before the reset is signed out')
   const dead = await (await fetch(`${API}${path}`)).text()
   ok(/This link has expired/.test(dead), 'the link worked once and is dead')
   const again = await (await form(path, { password: 'Bea-third-password-9999', confirm: 'Bea-third-password-9999' })).text()
@@ -212,7 +233,12 @@ try {
   const nomail = await call('/api/auth/forgot', { method: 'POST', body: JSON.stringify({ email: REP.email }) })
   const nomailBody = await nomail.json().catch(() => ({}))
   ok(nomail.status === 501 && nomailBody.code === 'mail_not_configured', 'the route says a link cannot be sent from here, rather than promising one', `${nomail.status} ${nomailBody.code}`)
-  ok(/administrator/.test(nomailBody.error ?? ''), 'and points at the admin, who can make one by hand')
+  ok(/administrator/.test(nomailBody.error ?? ''), 'and points at the admin')
+  const owner2 = await login(OWNER.email, OWNER.password)
+  const adminNoMail = await call(`/api/users/${repId}/reset-email`, { method: 'POST' }, owner2.body.token)
+  const adminNoMailText = await adminNoMail.text()
+  ok(adminNoMail.status === 501 && /mail_not_configured/.test(adminNoMailText), 'an admin’s reset email is refused the same way, rather than promised', `${adminNoMail.status}`)
+  ok(!/\/(invite|reset)[/#]/.test(adminNoMailText), 'and hands back no link to send by hand')
 } catch (err) {
   ok(false, `the walk did not finish: ${err instanceof Error ? err.message : String(err)}`)
 } finally {

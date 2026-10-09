@@ -1,6 +1,9 @@
 import { PBKDF2_ITERATIONS, hashPassword, randomId, safeEqual } from './auth'
 import { record } from './audit'
 import { canInvite, grantableRoles, revokeLiveInvites } from './invites'
+import { mailConfigured, sendMail } from './mail'
+import { emailChangedEmail, resetEmail } from './mailTemplates'
+import { displayName } from './onboarding'
 import { regenerateBadgeFor, renewBadgeDates } from './onboardingFlow'
 import type { Env, Role, SessionUser } from './types'
 
@@ -15,7 +18,9 @@ import type { Env, Role, SessionUser } from './types'
  *                 keyed on a user cascades: visits, notes, activity, tasks,
  *                 routes, daily stats. That isn't just their login, it's the
  *                 company's reporting history with a hole in it.
- *   set password— they can sign in again with something the admin chose.
+ *   reset email — they choose a new password from a link sent to their own
+ *                 inbox. An admin never types, sees or hands over somebody
+ *                 else's password; the only password an admin sets is their own.
  *
  * Collapsing those into one "delete" button is how a company loses a quarter of
  * its numbers because a rep quit.
@@ -29,8 +34,8 @@ interface Actorable {
   userId: string
 }
 
-type Failure = { error: string; status: number }
-const fail = (error: string, status: number): Failure => ({ error, status })
+type Failure = { error: string; status: number; code?: string }
+const fail = (error: string, status: number, code?: string): Failure => (code ? { error, status, code } : { error, status })
 
 /**
  * Shared preflight. Every one of these operations can lock a company out of its
@@ -115,13 +120,26 @@ async function revokeAll(env: Env, userId: string): Promise<void> {
 
 /* --- set a password ------------------------------------------------------- */
 
+/**
+ * Your own password only.
+ *
+ * This used to let an admin type a password for somebody else. That meant the
+ * admin knew it, had to pass it on by phone or text, and the person could
+ * later say — truthfully — that their manager could sign in as them. The
+ * office's tool for a forgotten password is `sendResetEmail`: the person
+ * chooses the new one, and nobody else ever sees it.
+ *
+ * Self-service stays: possession of a valid session already proves control of
+ * the account, so requiring the old password would only lock out the one
+ * person who can't be reset by anybody else.
+ */
 export async function setPassword(
   a: Actorable,
   password: string,
 ): Promise<{ ok: true; iterations: number } | Failure> {
-  // Self-service is allowed: possession of a valid session already proves
-  // control of the account, so requiring the old password would only lock out
-  // the one person who can't be reset by anybody else.
+  if (a.userId !== a.actor.id) {
+    return fail('An administrator can’t set someone else’s password. Send them a password reset email instead.', 403, 'not_self')
+  }
   const g = await guard(a, { allowSelf: true, selfServe: true })
   if ('error' in g) return g
 
@@ -134,13 +152,10 @@ export async function setPassword(
   /*
     A first password switches the account on; a replacement does not.
 
-    An invited person is `active = 0` until they accept, and only `acceptInvite`
-    flipped that — so an admin setting a password for somebody who never opened
-    their link produced an account with a working password that still could not
-    sign in, while the Manage sheet promised it would. The CASE reads the *old*
-    hash: NULL means this is their first password and they were only ever
-    waiting; anything else means a reset, and a reset must never quietly undo a
-    deactivation somebody chose.
+    Only the account's owner reaches this now, and they hold a session, so in
+    practice this is always a replacement. The CASE stays as the rule written
+    down: it reads the *old* hash, and a changed password must never quietly
+    undo a deactivation somebody chose.
   */
   await a.env.DB.prepare(
     `UPDATE users
@@ -169,51 +184,299 @@ export async function setPassword(
   return { ok: true, iterations: PBKDF2_ITERATIONS }
 }
 
-/* --- a link they use themselves ------------------------------------------- */
+/* --- a reset email, sent from the office ---------------------------------- */
+
+const RESET_DAYS = 2
+/**
+ * How soon a second reset email may follow the first. Long enough that a
+ * double click, a retry after a slow network, or two admins pressing the same
+ * button make one email rather than three; short enough that "it never came"
+ * can be retried while the person is still on the phone.
+ */
+export const RESET_COOLDOWN_MS = 60_000
 
 /**
- * The safer half of the pair. The admin never learns the password, so a rep
- * can't later claim their manager signed in as them — and nothing has to be read
- * aloud over a phone.
+ * Email somebody a link to choose a new password.
+ *
+ * The admin never sees the link, the token or the password: the response says
+ * where it went and when it expires, and nothing else. The token is stored
+ * only as a hash, works once, lasts two days, and is the same 'reset' row the
+ * sign-in screen's "Forgot password?" makes — so the page it opens, the rules
+ * it checks and the way it dies are one implementation, not two.
+ *
+ * Their current password keeps working until they choose a new one. Choosing
+ * one signs them out everywhere (`acceptInvite`), which is the point when a
+ * phone has gone missing.
+ *
+ * Refused, with a reason the console shows, when it cannot help: no password
+ * yet (that person needs their invitation), access switched off (a reset must
+ * never be a back door past a deactivation), no email provider, or a reset
+ * email already sent in the last minute.
  */
-export async function createResetLink(
+export async function sendResetEmail(
   a: Actorable,
+  /** The Worker's own origin — it serves the page the link opens. */
   origin: string,
-): Promise<{ url: string; email: string; expiresAt: number } | Failure> {
-  const g = await guard(a, { allowSelf: true })
+  /** Where the app lives, for the email's closing line. */
+  appUrl: string,
+): Promise<{ ok: true; email: string; expiresAt: number } | Failure> {
+  const g = await guard(a, {})
   if ('error' in g) return g
 
-  const token = randomId(24)
-  const now = Date.now()
-  const expiresAt = now + 2 * 86_400_000
-  const hashed = await sha256(token)
-
-  // Reuses the invite table: an invite and a reset are the same object — a
-  // one-time token that lets exactly one person choose exactly one password.
-  // Marked 'reset' so the console never reports it as a pending invitation,
-  // and so `acceptInvite` knows this one is allowed to replace a password.
-  // Earlier unused reset links die here: one live link per person.
-  await revokeLiveInvites(a.env, g.target.id, 'reset')
-  await a.env.DB.prepare(
-    `INSERT INTO invites (token_hash, user_id, created_by, created_at, expires_at, kind)
-     VALUES (?1, ?2, ?3, ?4, ?5, 'reset')`,
+  const state = await a.env.DB.prepare(
+    'SELECT password_hash IS NOT NULL AS has_password, active FROM users WHERE id = ?1',
   )
-    .bind(hashed, g.target.id, a.actor.id, now, expiresAt)
+    .bind(g.target.id)
+    .first<{ has_password: number; active: number }>()
+  if (!state?.has_password) {
+    return fail(`${g.target.name} hasn’t set a password yet. Send their invitation instead.`, 409, 'pending')
+  }
+  if (!state.active) {
+    return fail(`${g.target.name}’s access is switched off. Restore access first, then send the reset email.`, 409, 'inactive')
+  }
+  if (!mailConfigured(a.env)) {
+    return fail('Email is not set up on this deployment, so a reset email cannot be sent.', 501, 'mail_not_configured')
+  }
+
+  const token = randomId(24)
+  const hashed = await sha256(token)
+  const now = Date.now()
+  const expiresAt = now + RESET_DAYS * 86_400_000
+
+  /*
+    The cooldown is part of the write, not a check before it. Two clicks that
+    arrive together would both pass a separate SELECT; as one conditional
+    INSERT the second one finds the first one's row and inserts nothing.
+  */
+  const minted = await a.env.DB.prepare(
+    `INSERT INTO invites (token_hash, user_id, created_by, created_at, expires_at, kind)
+     SELECT ?1, ?2, ?3, ?4, ?5, 'reset'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM invites
+         WHERE user_id = ?2 AND kind = 'reset' AND revoked_at IS NULL AND created_at > ?6
+      )`,
+  )
+    .bind(hashed, g.target.id, a.actor.id, now, expiresAt, now - RESET_COOLDOWN_MS)
+    .run()
+  if (!minted.meta.changes) {
+    return fail(
+      `A reset email went to ${g.target.email} less than a minute ago. Give it a minute to arrive before sending another.`,
+      429,
+      'too_soon',
+    )
+  }
+
+  const sent = await sendMail(
+    a.env,
+    resetEmail({
+      to: { email: g.target.email, name: g.target.name || undefined },
+      clientName: a.actor.clientName,
+      url: `${origin}/reset#${token}`,
+      expiresAt,
+      appUrl,
+      requestedBy: a.actor.name,
+    }),
+  )
+  if (!sent.sent) {
+    // A link nobody received must not stay live. Their earlier link, if they
+    // had one, is left alone: it is still the one in their inbox.
+    await a.env.DB.prepare('UPDATE invites SET revoked_at = ?2 WHERE token_hash = ?1').bind(hashed, Date.now()).run()
+    return fail(sent.error, 502, 'mail_failed')
+  }
+
+  // One live link per person: the email that just went out is the one that works.
+  await a.env.DB.prepare(
+    `UPDATE invites SET revoked_at = ?3
+      WHERE user_id = ?1 AND kind = 'reset' AND token_hash != ?2
+        AND accepted_at IS NULL AND revoked_at IS NULL`,
+  )
+    .bind(g.target.id, hashed, Date.now())
     .run()
 
   await record(a.env, a.actor, {
-    action: 'user.reset_link',
+    action: 'user.reset_email_sent',
     targetType: 'user',
     targetId: g.target.id,
     targetLabel: g.target.name,
+    detail: { to: g.target.email },
   })
 
-  return { url: `${origin}/invite/${token}`, email: g.target.email, expiresAt }
+  return { ok: true, email: g.target.email, expiresAt }
 }
 
 async function sha256(text: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/* --- the address they sign in with ----------------------------------------- */
+
+export const MAX_EMAIL = 254
+/**
+ * Something that can receive mail: one @, a dot in the domain, no spaces.
+ * Deliberately not RFC 5322 — the point is to catch "jane@gmail" and a pasted
+ * "Jane <jane@x.com>", not to argue with addresses that are legal and odd.
+ */
+const EMAIL_SHAPE = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[^\s@<>(),;:".]{2,}$/
+
+export function emailError(email: string): string | null {
+  if (!email) return 'Enter an email address.'
+  if (email.length > MAX_EMAIL) return 'That email address is too long.'
+  if (!EMAIL_SHAPE.test(email)) return 'Enter a valid email address, like name@company.com.'
+  return null
+}
+
+/**
+ * Change the address somebody signs in with.
+ *
+ * ## One row, so nothing to drift
+ *
+ * The `users` row is both the sign-in record and the profile: there is no
+ * separate identity provider holding its own copy. So this is one UPDATE of
+ * one column, guarded by tenant — the id, role, team, sessions, visits,
+ * badge and every relationship are untouched, because none of them is keyed
+ * on the address. It either happens or it doesn't.
+ *
+ * ## Immediate, not verified
+ *
+ * There is no confirmation step: the company owns these accounts, an admin is
+ * the one vouching for the address, and a person waiting on a verification
+ * email to reach an inbox they can't yet sign in with is a support call. The
+ * new address works from the next sign-in; the password does not change and
+ * nobody is signed out. Both addresses are told — the old one because it is
+ * the alarm if the change was not expected, the new one so the person knows
+ * which address to type.
+ *
+ * ## Links in the old inbox die
+ *
+ * Any live invitation or reset link was mailed to the old address. Those are
+ * revoked, so whoever reads that inbox — possibly not this person any more —
+ * cannot use them. For somebody still pending, that means sending a fresh
+ * invitation, which now goes to the new address.
+ *
+ * ## Unique per company
+ *
+ * Another account here with the address is refused, case-insensitively. The
+ * same address at a *different* company is allowed, as it is everywhere else:
+ * one person can work for two contractors. The unique index is the final word,
+ * so a race with an invitation for the same address fails cleanly too.
+ */
+export async function setEmail(
+  a: Actorable,
+  raw: unknown,
+  appUrl: string,
+): Promise<
+  | { ok: true; email: string; previous: string; invitesRevoked: number; notified: { previous: boolean; next: boolean } }
+  | Failure
+> {
+  const g = await guard(a, { allowSelf: true })
+  if ('error' in g) return g
+
+  const email = typeof raw === 'string' ? raw.trim() : ''
+  const bad = emailError(email)
+  if (bad) return fail(bad, 400, 'invalid_email')
+  if (email === g.target.email) return fail(`That is already ${g.target.name}’s email.`, 400, 'unchanged')
+
+  const clash = await a.env.DB.prepare(
+    'SELECT 1 AS taken FROM users WHERE client_id = ?1 AND lower(email) = lower(?2) AND id != ?3',
+  )
+    .bind(a.actor.clientId, email, g.target.id)
+    .first()
+  if (clash) return fail('Someone else on this team already signs in with that email.', 409, 'email_taken')
+
+  try {
+    await a.env.DB.prepare('UPDATE users SET email = ?3 WHERE id = ?1 AND client_id = ?2')
+      .bind(g.target.id, a.actor.clientId, email)
+      .run()
+  } catch (err) {
+    if (/UNIQUE/i.test(err instanceof Error ? err.message : String(err))) {
+      return fail('Someone else on this team already signs in with that email.', 409, 'email_taken')
+    }
+    throw err
+  }
+
+  const invitesRevoked =
+    (await revokeLiveInvites(a.env, g.target.id, 'invite')) + (await revokeLiveInvites(a.env, g.target.id, 'reset'))
+
+  await record(a.env, a.actor, {
+    action: 'user.email_changed',
+    targetType: 'user',
+    targetId: g.target.id,
+    targetLabel: g.target.name,
+    detail: { from: g.target.email, to: email, invitesRevoked },
+  })
+
+  /*
+    Told only once they have an account to sign in to. Somebody still pending
+    has never used either address with us; their next email is the fresh
+    invitation, and a notice ahead of it is noise.
+  */
+  const notified = { previous: false, next: false }
+  const live = await a.env.DB.prepare('SELECT password_hash IS NOT NULL AS has_password FROM users WHERE id = ?1')
+    .bind(g.target.id)
+    .first<{ has_password: number }>()
+  if (live?.has_password && mailConfigured(a.env)) {
+    const common = {
+      clientName: a.actor.clientName,
+      changedBy: a.actor.id === g.target.id ? undefined : a.actor.name,
+      previous: g.target.email,
+      next: email,
+      appUrl,
+    }
+    const name = g.target.name || undefined
+    const [prev, next] = await Promise.all([
+      sendMail(a.env, emailChangedEmail({ ...common, to: { email: g.target.email, name }, side: 'previous' })),
+      sendMail(a.env, emailChangedEmail({ ...common, to: { email, name }, side: 'next' })),
+    ])
+    notified.previous = prev.sent
+    notified.next = next.sent
+  }
+
+  return { ok: true, email, previous: g.target.email, invitesRevoked, notified }
+}
+
+/* --- their name ------------------------------------------------------------- */
+
+export const MAX_NAME_PART = 60
+
+/**
+ * First and last name, from the office — for the typo on the roster, or the
+ * person who goes by their middle name. The same columns the person fills in
+ * during onboarding, and the same rule: a badge needs a name, so both cannot
+ * be empty. Nothing else on the row is touched.
+ */
+export async function setName(
+  a: Actorable,
+  input: { firstName?: unknown; lastName?: unknown },
+): Promise<{ ok: true; name: string; firstName: string | null; lastName: string | null } | Failure> {
+  const g = await guard(a, { allowSelf: true })
+  if ('error' in g) return g
+
+  const tidy = (v: unknown) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '')
+  const first = tidy(input.firstName)
+  const last = tidy(input.lastName)
+  if (!first && !last) return fail('Enter a first or last name.', 400, 'invalid_name')
+  if (first.length > MAX_NAME_PART || last.length > MAX_NAME_PART) {
+    return fail(`Keep each name under ${MAX_NAME_PART} characters.`, 400, 'invalid_name')
+  }
+
+  const name = displayName({ first_name: first, last_name: last, email: g.target.email })
+  await a.env.DB.prepare(
+    'UPDATE users SET first_name = ?3, last_name = ?4, name = ?5 WHERE id = ?1 AND client_id = ?2',
+  )
+    .bind(g.target.id, a.actor.clientId, first || null, last || null, name)
+    .run()
+
+  if (name !== g.target.name) {
+    await record(a.env, a.actor, {
+      action: 'user.profile_updated',
+      targetType: 'user',
+      targetId: g.target.id,
+      targetLabel: name,
+      detail: { from: g.target.name, to: name, by: a.actor.id === g.target.id ? 'self' : 'admin' },
+    })
+  }
+  return { ok: true, name, firstName: first || null, lastName: last || null }
 }
 
 /* --- switch access on and off --------------------------------------------- */
@@ -242,8 +505,10 @@ export async function setActive(
   if (!done.meta.changes) return fail(LAST_ADMIN_MESSAGE, 400)
 
   // Switching someone off has to end the session they're holding right now,
-  // otherwise "deactivated" means "deactivated in thirty days".
+  // otherwise "deactivated" means "deactivated in thirty days". A reset link
+  // already in their inbox dies too: it must not be a way back in.
   await revokeAll(a.env, g.target.id)
+  await revokeLiveInvites(a.env, g.target.id, 'reset')
 
   await record(a.env, a.actor, {
     action: 'user.deactivated',

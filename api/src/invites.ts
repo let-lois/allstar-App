@@ -530,16 +530,27 @@ export async function acceptInvite(
   const salt = randomId(16)
   const hash = await hashPassword(password, salt, env.SESSION_PEPPER ?? '')
 
+  /*
+    An invitation switches the account on; a reset never does. A reset only
+    replaces a password, so it must not quietly undo a deactivation somebody
+    chose — and it signs the person out everywhere, because "my phone is gone"
+    is the reason half of these links exist, and a new password that leaves
+    the old sessions alive doesn't answer it.
+  */
+  const reset = row.kind === 'reset'
   await env.DB.batch([
     env.DB.prepare(
-      'UPDATE users SET password_hash = ?2, password_salt = ?3, active = 1 WHERE id = ?1',
-    ).bind(row.user_id, hash, salt),
+      `UPDATE users SET password_hash = ?2, password_salt = ?3,
+              active = CASE WHEN ?4 = 1 THEN active ELSE 1 END
+        WHERE id = ?1`,
+    ).bind(row.user_id, hash, salt, reset ? 1 : 0),
     // Single use, marked in the same batch so a double submit can't set two
     // different passwords.
     env.DB.prepare('UPDATE invites SET accepted_at = ?2 WHERE token_hash = ?1').bind(
       hashOfToken,
       Date.now(),
     ),
+    env.DB.prepare('UPDATE sessions SET revoked = 1 WHERE user_id = ?1 AND ?2 = 1').bind(row.user_id, reset ? 1 : 0),
   ])
 
   return { ok: true }
@@ -586,7 +597,7 @@ const RESET_DAYS = 2
  *
  * ## One link per account, two days
  *
- * The same row an admin's reset link makes (`users.createResetLink`): a
+ * The same row an admin's reset email makes (`users.sendResetEmail`): a
  * single-use 'reset' invite, replacing any live one, so a person who presses
  * the button twice holds one working link, not two. `created_by` is the
  * account itself — nobody else asked.
@@ -605,7 +616,7 @@ export async function requestPasswordReset(
       status: 501,
       body: {
         error:
-          'Email is not set up for this app, so a reset link cannot be sent from here. Ask your administrator for one — they can create it from Team → Manage.',
+          'Email is not set up for this app, so a reset link cannot be sent. Ask your administrator to help you get back in.',
         code: 'mail_not_configured',
       },
     }
@@ -644,7 +655,7 @@ export async function requestPasswordReset(
       resetEmail({
         to: { email: row.email, name: row.name || undefined },
         clientName: row.client_name,
-        url: `${origin}/invite/${token}`,
+        url: `${origin}/reset#${token}`,
         expiresAt,
         appUrl,
       }),

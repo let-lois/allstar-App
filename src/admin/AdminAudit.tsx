@@ -29,7 +29,7 @@ const GROUPS = [
   {
     key: 'access',
     label: 'Access',
-    actions: ['user.password_set', 'user.reset_link', 'user.role_changed'],
+    actions: ['user.password_set', 'user.reset_link', 'user.reset_email_sent', 'user.email_changed', 'user.role_changed'],
   },
   {
     key: 'people',
@@ -57,6 +57,9 @@ const WEIGHT: Record<string, 'high' | 'medium' | 'low'> = {
   'user.password_set': 'medium',
   'user.deactivated': 'medium',
   'user.reset_link': 'medium',
+  'user.reset_email_sent': 'medium',
+  // The address is the sign-in: changing it is an access change.
+  'user.email_changed': 'high',
   'user.invited': 'low',
   'user.reactivated': 'low',
   'territory.assigned': 'low',
@@ -226,6 +229,18 @@ function describe(e: AuditRowDTO): React.ReactNode {
       )
     case 'user.reset_link':
       return <>{who} created a password reset link for {target}</>
+    case 'user.reset_email_sent':
+      return (
+        <>
+          {who} sent {target} a password reset email{d.to ? ` at ${String(d.to)}` : ''}
+        </>
+      )
+    case 'user.email_changed':
+      return (
+        <>
+          {who} changed {target}’s sign-in email from {String(d.from ?? '—')} to {String(d.to ?? '—')}
+        </>
+      )
     case 'user.role_changed':
       return (
         <>
