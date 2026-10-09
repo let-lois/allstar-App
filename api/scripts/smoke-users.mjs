@@ -96,13 +96,10 @@ ok(
   ok(!(await login(REP.email, 'admin-chose-this-one')).ok, 'the password the admin typed does not work')
   ok((await login(REP.email, REP.password)).ok, 'and the rep’s own password is untouched')
 }
-{
-  // This smoke runs without an email provider: the honest answer is that a
-  // reset email cannot be sent, not a promise that one was.
-  const r = await call(`/api/users/${repId}/reset-email`, { method: 'POST' })
-  ok(r.status === 501 && r.body.code === 'mail_not_configured', 'with no email set up, a reset email is refused rather than promised', `${r.status} ${r.body.code}`)
-  ok(!('url' in r.body) && !JSON.stringify(r.body).includes('/invite/'), 'and no link comes back to the admin either way')
-}
+// The reset email itself — sent, refused, and refused for want of a mail
+// provider — is smoke:user-admin's and verify:reset-e2e's. Not driven here:
+// its 501 on this mail-less Worker would count as a server failure in the
+// health figure smoke:observe reads next.
 
 /* --- the rep changes their own ------------------------------------------- */
 ok(
@@ -480,13 +477,10 @@ ok(
   ok(!!del?.detail?.email, 'with enough detail to identify them later')
 
   const selfChange = audit.entries.find((e) => e.action === 'user.password_set' && e.detail?.self)
-  const adminChange = audit.entries.find(
-    (e) => e.action === 'user.password_set' && e.detail?.self === false,
-  )
   ok(!!selfChange, 'a self-service change is marked as one')
   ok(
-    !!adminChange,
-    'and an admin setting someone else’s password is distinguishable from it',
+    !audit.entries.some((e) => e.action === 'user.password_set' && e.detail?.self === false),
+    'and there is no entry for an admin setting someone else’s password — there is no such action',
   )
 
   ok(

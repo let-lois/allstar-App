@@ -234,6 +234,11 @@ try {
   const nomailBody = await nomail.json().catch(() => ({}))
   ok(nomail.status === 501 && nomailBody.code === 'mail_not_configured', 'the route says a link cannot be sent from here, rather than promising one', `${nomail.status} ${nomailBody.code}`)
   ok(/administrator/.test(nomailBody.error ?? ''), 'and points at the admin')
+  const owner2 = await login(OWNER.email, OWNER.password)
+  const adminNoMail = await call(`/api/users/${repId}/reset-email`, { method: 'POST' }, owner2.body.token)
+  const adminNoMailText = await adminNoMail.text()
+  ok(adminNoMail.status === 501 && /mail_not_configured/.test(adminNoMailText), 'an admin’s reset email is refused the same way, rather than promised', `${adminNoMail.status}`)
+  ok(!/\/(invite|reset)[/#]/.test(adminNoMailText), 'and hands back no link to send by hand')
 } catch (err) {
   ok(false, `the walk did not finish: ${err instanceof Error ? err.message : String(err)}`)
 } finally {
