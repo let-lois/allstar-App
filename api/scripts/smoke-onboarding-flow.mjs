@@ -1,4 +1,5 @@
-import { execFileSync, spawn } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
+import { promisify } from 'node:util'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -309,7 +310,10 @@ try {
     const token = `smoke-reset-${Date.now()}-abcdefghijklmnop`
     const hash = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(token)))].map((b) => b.toString(16).padStart(2, '0')).join('')
     const sam = await rowFor(A, ONE)
-    d1(config, ['--command', `INSERT INTO invites (token_hash, user_id, created_by, created_at, expires_at, kind) VALUES ('${hash}', '${sam.id}', '${sam.id}', ${Date.now()}, ${Date.now() + 86_400_000}, 'reset')`])
+    // Asynchronously: the synchronous helper stalls this script's event loop,
+    // the dev server drops the idle keep-alive socket meanwhile, and the next
+    // request fails on a connection that is already closed.
+    await promisify(execFile)(wrangler, ['d1', 'execute', 'allstar-db', '--local', '--persist-to', STATE, '-c', config, '-y', '--command', `INSERT INTO invites (token_hash, user_id, created_by, created_at, expires_at, kind) VALUES ('${hash}', '${sam.id}', '${sam.id}', ${Date.now()}, ${Date.now() + 86_400_000}, 'reset')`], { cwd: api })
     const samSession = (await j(await login(ONE, ONE_PW))).body.token
     const url = `${BASE}/invite/${token}`
     // Worded as a reset since forgot-password shipped: "Reset your password",
