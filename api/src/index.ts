@@ -35,7 +35,9 @@ import { parseTilePath, tileFor } from './tiles'
 import { createList, deleteList, listsFor, setReps, updateList, updateMembers } from './lists'
 import { readAudit, record as recordAudit } from './audit'
 import {
-  createResetLink,
+  sendResetEmail,
+  setEmail,
+  setName,
   deleteUser,
   deleteOwnAccount,
   footprint,
@@ -104,7 +106,7 @@ import {
 } from './integrations'
 import { checkLoginRate, clearFailures, recordFailure } from './ratelimit'
 import { directions } from './directions'
-import { HELP_CENTER_URL, invitePage, setupPage, supportPage } from './pages'
+import { HELP_CENTER_URL, invitePage, resetPage, setupPage, supportPage } from './pages'
 import { bootstrap } from './read'
 import type { Env, Mutation, Role, SessionUser } from './types'
 
@@ -471,6 +473,32 @@ export default {
           if (result.ok) return invitePage({ token, appUrl, done: true, kind: before?.kind })
           return invitePage({ token, invite: before ?? undefined, error: result.error, appUrl })
         }
+      }
+
+      /*
+        A password reset, with the token kept out of every URL (pages.ts,
+        `resetPage`, says why). The page reads it from the fragment; the
+        check and the form both carry it in the body. Only 'reset' tokens are
+        honoured here — an invitation has its own page.
+      */
+      if (path === '/reset' && req.method === 'GET') return resetPage({ appUrl })
+      if (path === '/api/reset/check' && req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+        const token = typeof body.token === 'string' ? body.token : ''
+        const invite = token ? await readInvite(env, token) : null
+        if (!invite || invite.kind !== 'reset') return json({ valid: false }, 200, cors)
+        return json({ valid: true, email: invite.email, clientName: invite.clientName }, 200, cors)
+      }
+      if (path === '/reset' && req.method === 'POST') {
+        const form = await req.formData()
+        const token = String(form.get('token') ?? '')
+        const password = String(form.get('password') ?? '')
+        const before = token ? await readInvite(env, token) : null
+        if (!before || before.kind !== 'reset') return invitePage({ token: '', appUrl })
+        const pair = passwordPairError(password, String(form.get('confirm') ?? ''))
+        const result = pair ? { ok: false as const, error: pair } : await acceptInvite(env, token, password)
+        if (result.ok) return invitePage({ token: '', appUrl, done: true, kind: 'reset' })
+        return invitePage({ token, invite: before, error: result.error, appUrl, viaReset: true })
       }
 
       /* --- self test ------------------------------------------------------ */
@@ -1157,15 +1185,30 @@ export default {
             a,
             typeof body.password === 'string' ? body.password : '',
           )
-          if ('error' in result) return json({ error: result.error }, result.status, cors)
+          if ('error' in result) return json({ error: result.error, code: result.code }, result.status, cors)
           return json(result, 200, cors)
         }
 
-        if (action === 'reset-link' && req.method === 'POST') {
-          // The Worker serves the page the link points at, so it carries the
-          // Worker's origin — not the app's.
-          const result = await createResetLink(a, url.origin)
-          if ('error' in result) return json({ error: result.error }, result.status, cors)
+        if (action === 'reset-email' && req.method === 'POST') {
+          // The link points at the page the Worker serves, so it carries the
+          // Worker's own origin; the app's address is only the email's
+          // closing line. The response names where it went — never the link.
+          const result = await sendResetEmail(a, url.origin, appUrl)
+          if ('error' in result) return json({ error: result.error, code: result.code }, result.status, cors)
+          return json(result, 200, cors)
+        }
+
+        if (action === 'email' && req.method === 'POST') {
+          const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+          const result = await setEmail(a, body.email, appUrl)
+          if ('error' in result) return json({ error: result.error, code: result.code }, result.status, cors)
+          return json(result, 200, cors)
+        }
+
+        if (action === 'name' && req.method === 'POST') {
+          const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+          const result = await setName(a, { firstName: body.firstName, lastName: body.lastName })
+          if ('error' in result) return json({ error: result.error, code: result.code }, result.status, cors)
           return json(result, 200, cors)
         }
 

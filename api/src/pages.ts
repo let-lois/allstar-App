@@ -210,7 +210,7 @@ const AUTH_JS = `
   });
 `
 
-function authShell(title: string, o: { heading: string; sub?: string; card: string; foot?: string }): Response {
+function authShell(title: string, o: { heading: string; sub?: string; card: string; foot?: string; script?: string }): Response {
   return new Response(
     `<!doctype html>
 <html lang="en">
@@ -233,7 +233,7 @@ function authShell(title: string, o: { heading: string; sub?: string; card: stri
   ${o.foot ? `<p class="foot">${o.foot}</p>` : ''}
   <p class="links"><a href="/support" target="_blank" rel="noopener noreferrer">Help &amp; support</a><a href="${HELP_CENTER_URL}/privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a></p>
 </main></div>
-<script>${AUTH_JS}</script>
+<script>${AUTH_JS}${o.script ?? ''}</script>
 </body>
 </html>`,
     { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } },
@@ -303,6 +303,12 @@ export function invitePage(opts: {
    */
   kind?: 'invite' | 'reset'
   appUrl: string
+  /**
+   * The form posts to `/reset` with the token in the body rather than in the
+   * address. Set when the page is answering a POST to `/reset`, so a second
+   * try after a typo keeps the token out of every URL — see `resetPage`.
+   */
+  viaReset?: boolean
 }): Response {
   const reset = (opts.kind ?? opts.invite?.kind) === 'reset'
   /*
@@ -356,8 +362,9 @@ export function invitePage(opts: {
     sub: reset
       ? `Choose a new password for your ${client} account.`
       : `${first ? `Welcome, ${first}. ` : 'Welcome. '}Set a password for your ${client} account to get started.`,
-    card: `<form method="POST" action="/invite/${escapeHtml(opts.token)}" data-kind="${reset ? 'reset' : 'invite'}"
+    card: `<form method="POST" action="${opts.viaReset ? '/reset' : `/invite/${escapeHtml(opts.token)}`}" data-kind="${reset ? 'reset' : 'invite'}"
                  data-busy="${reset ? 'Changing password…' : 'Creating your account…'}">
+       ${opts.viaReset ? `<input type="hidden" name="token" value="${escapeHtml(opts.token)}">` : ''}
        <label><span>Email</span>
          <span class="field"><input value="${escapeHtml(opts.invite.email)}" readonly autocomplete="username" inputmode="email"></span></label>
        ${passwordField({ name: 'password', label: reset ? 'New password' : 'Choose a password', placeholder: 'At least 10 characters', autofocus: true })}
@@ -366,6 +373,85 @@ export function invitePage(opts: {
        <button type="submit" class="primary">${reset ? 'Change password' : 'Create account'}</button>
      </form>`,
     foot: 'Only you will know this password. Nobody at your company can see it.',
+  })
+}
+
+/* --- a password reset, with the token out of every address ---------------- */
+
+/*
+  Reads the token from the fragment, takes it out of the address bar, and asks
+  the Worker whether it is live — in a POST body, never a URL. Then it shows
+  either the form (with the token in a hidden field) or the expired message.
+*/
+const RESET_JS = `
+  (function () {
+    var token = (location.hash || '').replace(/^#/, '');
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    var wait = document.getElementById('reset-wait');
+    var form = document.getElementById('reset-form');
+    var dead = document.getElementById('reset-dead');
+    var heading = document.querySelector('h1');
+    function expired() {
+      wait.hidden = true; form.hidden = true; dead.hidden = false;
+      heading.textContent = 'This link has expired';
+      document.title = 'Link unavailable · All Star';
+    }
+    if (!/^[A-Za-z0-9_-]{16,128}$/.test(token)) return expired();
+    fetch('/api/reset/check', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: token }) })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (v) {
+        if (!v || !v.valid) return expired();
+        form.querySelector('input[name="token"]').value = token;
+        form.querySelector('input[autocomplete="username"]').value = v.email;
+        document.getElementById('reset-client').textContent = v.clientName;
+        wait.hidden = true; form.hidden = false;
+        var first = form.querySelector('input[name="password"]'); if (first) first.focus();
+      })
+      .catch(function () {
+        wait.textContent = 'Could not check your link. Check your connection and reload this page.';
+      });
+  })();
+`
+
+/**
+ * Where a password reset email sends people: `/reset#<token>`.
+ *
+ * ## Why the token is after the #
+ *
+ * A browser never sends the fragment to the server. A token in the path —
+ * the shape invitations still use — is written into every request log on the
+ * way: Cloudflare's invocation logs record the URL of each request, and so
+ * does anything between the phone and the Worker. A reset link is a key to
+ * somebody's account for two days; it belongs in a request *body*, which none
+ * of those record. So this page arrives empty, reads the token in the browser,
+ * clears it from the address bar, and checks it with a POST; the form posts it
+ * back the same way. The app's own log never had it (`routeOf` masks
+ * `/invite/:token`), and now the platform's doesn't either.
+ *
+ * Without JavaScript the page cannot read its own link, and says so.
+ */
+export function resetPage(opts: { appUrl: string }): Response {
+  return authShell('Reset your password', {
+    heading: 'Reset your password',
+    sub: 'Choose a new password for your <span id="reset-client">Allstar</span> account.',
+    card: `<p class="status" role="status" id="reset-wait">Checking your link…</p>
+     <noscript><p class="alert" role="alert">This page needs JavaScript to read your reset link. Open the link in your phone’s or computer’s web browser.</p></noscript>
+     <form method="POST" action="/reset" id="reset-form" data-kind="reset" data-busy="Changing password…" hidden>
+       <input type="hidden" name="token" value="">
+       <label><span>Email</span>
+         <span class="field"><input value="" readonly autocomplete="username" inputmode="email"></span></label>
+       ${passwordField({ name: 'password', label: 'New password', placeholder: 'At least 10 characters' })}
+       ${passwordField({ name: 'confirm', label: 'Type it again', placeholder: 'The same password' })}
+       <button type="submit" class="primary">Change password</button>
+     </form>
+     <div id="reset-dead" hidden>
+       <p class="status" role="status">Links here work once. A password reset lasts two days, and stops working the moment a newer one is made.</p>
+       ${signInButton(opts.appUrl)}
+       <p class="note">Already have a password? Sign in with it. Forgotten it? Press <strong>Forgot password?</strong>
+       on the sign-in screen for a fresh link, or ask your administrator to send you one.</p>
+     </div>`,
+    foot: 'Only you will know this password. Nobody at your company can see it.',
+    script: RESET_JS,
   })
 }
 

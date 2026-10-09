@@ -36,6 +36,7 @@
     "smoke:onboarding-schema": "node scripts/smoke-onboarding-schema.mjs",
     "smoke:onboarding-flow": "node scripts/smoke-onboarding-flow.mjs",
     "smoke:mail": "node scripts/smoke-mail.mjs",
+    "smoke:user-admin": "node scripts/smoke-user-admin.mjs",
     "smoke:onboarding-steps": "node scripts/smoke-onboarding-steps.mjs",
     "smoke:export": "node scripts/smoke-export.mjs",
     "backup": "node scripts/backup.mjs",

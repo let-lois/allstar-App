@@ -77,7 +77,7 @@ inactive; login for an email that exists in two companies.
 
 - **Team → People**: Name, Role · title, Team / office, Invitation (Not sent / Pending / Opened / Accepted / Expired / Revoked), Account (Active / Invite pending / Deactivated), Onboarding (Not started / In progress / Complete / Update required), Badge (Not created / Awaiting confirmation / Active / Expired), Last active, Date added. Filters: Invite open, Still setting up, Badge not active, Removed from team; search by name, email or team.
 - **Team → Performance**: the previous table (today, doors, contact rate, won, range).
-- **Manage a person**: re-send / revoke invite, team, title, reset onboarding, renew / regenerate badge, role, access, password / reset link, delete. Actions appear only where the server would allow them; managers see statuses but hold none of the admin levers.
+- **Manage a person**: re-send / revoke invite, team, title, reset onboarding, renew / regenerate badge, role, access, name and sign-in email, password reset email (never a password the admin types), delete. Actions appear only where the server would allow them; managers see statuses but hold none of the admin levers.
 - **Settings → Company**: logo, website (with a live sample badge), self sign-up code and link (change / turn off / turn on), teams (add / rename / delete).
 - **Add team member**: email required; first, last, title, team optional; says whether the invite was emailed or only linked.
 

@@ -58,6 +58,11 @@ const ROUTES = {
   // the same whether or not the address is anyone's, and every request spends
   // a sign-in attempt on the same buckets so it cannot fill an inbox.
   "/api/auth/forgot|POST": { how: 'ratelimited', fn: 'requestPasswordReset', file: 'invites.ts' },
+  // The reset page asking whether the token in its fragment is live. The token
+  // is the credential — 192 random bits, so there is nothing to guess — and the
+  // answer is what the old /invite/:token page already printed: the address
+  // and the company. Public because the person is locked out by definition.
+  "/api/reset/check|POST": { how: 'public' },
   // A homeowner checking the badge they were shown. No login exists for them.
   "/api/verify|GET": { how: 'ratelimited', fn: 'verifyBadge', file: 'verify.ts' },
   // The code itself is a credential for making accounts; reading it is
@@ -183,7 +188,7 @@ const ROUTES = {
  * These were the hole in the first version of this gate. It matched
  * `path === '/api/...'` literals only, printed "every API route has decided who
  * may call it", and had never looked at /api/users/:id/* — the six most
- * privileged operations in the product: set a password, mint a reset link,
+ * privileged operations in the product: set a password, email a reset link,
  * change a role, deactivate, delete. A gate whose claim is broader than its
  * coverage is worse than no gate, because it answers the question people would
  * otherwise go and check by hand.
@@ -193,7 +198,7 @@ const FAMILIES = {
     // Every action resolves its target through one `guard`, which is checked
     // separately below. Listing them individually so a new action added to the
     // subtree has to be added here too.
-    actions: ['onboarding-reset', 'badge-renew', 'badge-regenerate', 'team', 'title', 'footprint', 'password', 'reset-link', 'role', 'active', ''],
+    actions: ['onboarding-reset', 'badge-renew', 'badge-regenerate', 'team', 'title', 'footprint', 'password', 'reset-email', 'email', 'name', 'role', 'active', ''],
     file: 'users.ts',
     fns: {
       'onboarding-reset': 'resetOnboarding',
@@ -203,7 +208,9 @@ const FAMILIES = {
       title: 'setUserTitle',
       footprint: 'footprint',
       password: 'setPassword',
-      'reset-link': 'createResetLink',
+      'reset-email': 'sendResetEmail',
+      email: 'setEmail',
+      name: 'setName',
       role: 'setRole',
       active: 'setActive',
       '': 'deleteUser',

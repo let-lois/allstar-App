@@ -237,26 +237,16 @@ ok(
   await page.waitForTimeout(600)
   const sheet = async () => (await page.locator('body').innerText()).replace(/\s+/g, ' ')
 
-  /* ---- password ---- */
-  ok(/signs .* out of every device/i.test(await sheet()), 'a reset is described as ending every session')
-  const pwInput = page.locator('input[autocomplete="new-password"]')
-  await pwInput.fill('short')
+  /* ---- password: never typed for somebody else ---- */
+  // The full reset-email flow is verify:user-admin's; here, the rule.
+  ok((await page.locator('input[autocomplete="new-password"]').count()) === 0, 'there is no box to type a password for somebody else')
+  ok((await page.getByRole('button', { name: /Create a reset link/ }).count()) === 0, 'and no reset link to copy and pass on')
   ok(
-    await page.getByRole('button', { name: /^Set$/ }).isDisabled(),
-    'a too-short password cannot be submitted',
+    await page.getByTestId('manage-reset-email').isDisabled(),
+    'a reset email is not offered to someone who has never set a password',
   )
-  await pwInput.fill('a-proper-long-password')
-  await page.getByRole('button', { name: /^Set$/ }).click()
-  await page.waitForTimeout(700)
-  ok(passwordPosted?.password === 'a-proper-long-password', 'the new password reaches the server')
-
-  /* ---- the safer alternative is offered ---- */
-  await manageRow('Marcus Vance').click()
-  await page.waitForTimeout(600)
-  ok(
-    /never see it/i.test(await sheet()),
-    'the reset-link option says the admin never learns the password',
-  )
+  ok(/hasn’t set a password yet — send their invitation instead/.test(await sheet()), 'and the sheet says to send their invitation instead')
+  ok(passwordPosted === null, 'nothing was posted to the password route')
 
   /* ---- deactivate is the prominent action, delete is not ---- */
   ok(/Remove from team/.test(await sheet()), 'removing someone is offered as the ordinary action')

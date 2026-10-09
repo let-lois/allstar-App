@@ -1,5 +1,5 @@
-import { invitePage } from '../api/src/pages.ts'
-import { resetEmail } from '../api/src/mailTemplates.ts'
+import { invitePage, resetPage } from '../api/src/pages.ts'
+import { emailChangedEmail, resetEmail } from '../api/src/mailTemplates.ts'
 import { passwordPairError } from '../api/src/invites.ts'
 
 /**
@@ -71,17 +71,49 @@ console.log('\n--- the email ---')
 const mail = resetEmail({
   to: { email: 'rep@ridgeline.test', name: 'Marcus Vance' },
   clientName: 'Ridgeline Roofing',
-  url: 'https://allstar-api.example.workers.dev/invite/t0k',
+  url: 'https://allstar-api.example.workers.dev/reset#t0k',
   expiresAt: Date.UTC(2026, 8, 26, 15, 30),
   appUrl: APP,
 })
 ok(/Ridgeline Roofing/.test(mail.subject), 'the subject names the company, because one address can have several')
-ok(mail.text.includes('/invite/t0k') && mail.html.includes('/invite/t0k'), 'the link is in both the text and the HTML')
+ok(mail.text.includes('/reset#t0k') && mail.html.includes('/reset#t0k'), 'the link is in both the text and the HTML')
 ok(/works once/.test(mail.text) && /expires on/.test(mail.text), 'it says the link is single-use and when it dies')
 ok(/current password keeps working/.test(mail.text), 'and that nothing has changed yet')
 ok(/ignore/.test(mail.text), 'and tells somebody who did not ask to ignore it')
 ok(!/no account|not found|does not exist|unknown/i.test(mail.text + mail.html), 'and never hints at whether an address was known')
 ok(!/<script/i.test(mail.html), 'no script in the mail')
+
+const fromAdmin = resetEmail({
+  to: { email: 'rep@ridgeline.test', name: 'Marcus Vance' },
+  clientName: 'Ridgeline Roofing',
+  url: 'https://allstar-api.example.workers.dev/reset#t0k',
+  expiresAt: Date.UTC(2026, 8, 26, 15, 30),
+  appUrl: APP,
+  requestedBy: 'Nadia Petrov',
+})
+ok(/Nadia Petrov, an administrator at Ridgeline Roofing, sent you this link/.test(fromAdmin.text) && /Nadia Petrov/.test(fromAdmin.html), 'sent from Team → Manage, it names the admin who sent it')
+ok(!/hopefully you/.test(fromAdmin.text) && /let Nadia Petrov know/.test(fromAdmin.text), 'and does not pretend the person asked for it')
+const hostile = resetEmail({ to: { email: 'x@y.z' }, clientName: '<b>Co</b>', url: 'https://a.example/reset#t', expiresAt: 0, appUrl: APP, requestedBy: '<img src=x onerror=alert(1)>' })
+ok(!/<img src=x/.test(hostile.html) && !/<b>Co<\/b>/.test(hostile.html) && /&lt;img src=x/.test(hostile.html), 'and escapes the names it prints')
+
+console.log('\n--- the sign-in email changed ---')
+const common = { clientName: 'Ridgeline Roofing', changedBy: 'Nadia Petrov', previous: 'old@ridgeline.test', next: 'new@ridgeline.test', appUrl: APP }
+const toOld = emailChangedEmail({ ...common, to: { email: 'old@ridgeline.test', name: 'Marcus Vance' }, side: 'previous' })
+const toNew = emailChangedEmail({ ...common, to: { email: 'new@ridgeline.test', name: 'Marcus Vance' }, side: 'next' })
+ok(/was changed/.test(toOld.subject) && /new@ridgeline\.test/.test(toOld.text) && /Nadia Petrov/.test(toOld.text), 'the old address is told the new one and who changed it')
+ok(/didn't expect this/.test(toOld.text), 'and what to do if it was not expected')
+ok(/now signs in with this address/.test(toNew.text) && /password has not changed/i.test(toNew.text), 'the new address is told it is the sign-in now, password unchanged')
+ok(![toOld, toNew].some((m) => /\/invite\/|\/reset#|confirm your/i.test(m.text + m.html)), 'neither carries a link to act on or asks for a confirmation')
+
+console.log('\n--- the page a reset email opens ---')
+const shell = await html(resetPage({ appUrl: APP }))
+ok(/<h1>Reset your password<\/h1>/.test(shell) && /id="reset-form"[^>]*hidden/.test(shell), 'it arrives as a reset page with the form held back until the link is checked')
+ok(/<form method="POST" action="\/reset"/.test(shell) && /type="hidden" name="token"/.test(shell), 'the form posts to /reset with the token in its body')
+ok(/location\.hash/.test(shell) && /history\.replaceState/.test(shell), 'the token is read from the fragment and cleared from the address bar')
+ok(/fetch\('\/api\/reset\/check', \{ method: 'POST'/.test(shell), 'and checked with a POST, never a URL')
+ok(/<noscript>/.test(shell), 'without JavaScript it says why it cannot work')
+const retry = await html(invitePage({ token: 't0k', invite: resetView, appUrl: APP, error: 'The two passwords do not match.', viaReset: true }))
+ok(/<form method="POST" action="\/reset"/.test(retry) && /name="token" value="t0k"/.test(retry), 'a retry after a typo keeps the token in the body, not the address')
 
 console.log('\n--- the route keeps its one answer ---')
 const { readFileSync } = await import('node:fs')

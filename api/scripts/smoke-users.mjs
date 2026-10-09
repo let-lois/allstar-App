@@ -74,55 +74,66 @@ ok(
   'a field rep cannot delete an account',
 )
 ok(
-  (await call('/api/users/u_from_another_company/password', {
+  (await call('/api/users/u_from_another_company/email', {
     method: 'POST',
-    body: JSON.stringify({ password: 'not-my-tenant-at-all', confirm: 'not-my-tenant-at-all' }),
+    body: JSON.stringify({ email: 'not-my-tenant@example.com' }),
   })).status === 404,
   'a user in another tenant reads as not found, not as forbidden — existence is not leaked',
 )
 
-/* --- setting a password --------------------------------------------------- */
+/* --- an admin never sets somebody else's password ------------------------- */
+//
+// The admin's tool is a reset email (smoke-user-admin drives it against a
+// stand-in mail provider). Typing a password for somebody else is refused
+// outright, whatever it is, and changes nothing.
+{
+  const refused = await call(`/api/users/${repId}/password`, {
+    method: 'POST',
+    body: JSON.stringify({ password: 'admin-chose-this-one', confirm: 'admin-chose-this-one' }),
+  })
+  ok(refused.status === 403 && refused.body.code === 'not_self', 'an admin cannot set a rep’s password', `${refused.status} ${refused.body.code}`)
+  ok(/reset email/i.test(refused.body.error ?? ''), 'and is pointed at the reset email instead')
+  ok(!(await login(REP.email, 'admin-chose-this-one')).ok, 'the password the admin typed does not work')
+  ok((await login(REP.email, REP.password)).ok, 'and the rep’s own password is untouched')
+}
+{
+  // This smoke runs without an email provider: the honest answer is that a
+  // reset email cannot be sent, not a promise that one was.
+  const r = await call(`/api/users/${repId}/reset-email`, { method: 'POST' })
+  ok(r.status === 501 && r.body.code === 'mail_not_configured', 'with no email set up, a reset email is refused rather than promised', `${r.status} ${r.body.code}`)
+  ok(!('url' in r.body) && !JSON.stringify(r.body).includes('/invite/'), 'and no link comes back to the admin either way')
+}
+
+/* --- the rep changes their own ------------------------------------------- */
 ok(
   (await call(`/api/users/${repId}/password`, {
     method: 'POST',
     body: JSON.stringify({ password: 'short', confirm: 'short' }),
-  })).status === 400,
+  }, repSession.token)).status === 400,
   'a too-short password is refused',
 )
 
-const NEW_PASSWORD = 'admin-chose-this-one'
+const CHOSEN = 'the-rep-chose-this-one'
 ok(
   (await call(`/api/users/${repId}/password`, {
     method: 'POST',
-    body: JSON.stringify({ password: NEW_PASSWORD, confirm: NEW_PASSWORD }),
-  })).status === 200,
-  'an admin can set a rep’s password',
+    body: JSON.stringify({ password: CHOSEN, confirm: CHOSEN }),
+  }, repSession.token)).status === 200,
+  'a rep can change their own password',
 )
-ok((await login(REP.email, NEW_PASSWORD)).ok, 'the rep can sign in with the new password')
+const chosen = await login(REP.email, CHOSEN)
+ok(chosen.ok, 'the rep can sign in with the new password')
 ok(!(await login(REP.email, REP.password)).ok, 'the old password stops working')
 
-/* --- THE assertion: a reset must end the sessions it replaces ------------ */
+/* --- THE assertion: a change must end the sessions it replaces ----------- */
 //
-// This is the whole reason an admin resets a password: a phone went missing in
-// a customer's hedge. If the session on that phone survives, the reset achieved
-// nothing at all.
+// This is the whole reason a password is changed in a hurry: a phone went
+// missing in a customer's hedge. If the session on that phone survives, the
+// change achieved nothing at all.
 ok(
   (await api('/api/bootstrap', {}, repSession.token)).status === 401,
-  'the session held before the reset is dead — a lost phone loses access immediately',
+  'the session held before the change is dead — a lost phone loses access immediately',
 )
-
-/* --- a reset link the admin never reads ---------------------------------- */
-const linkRes = await call(`/api/users/${repId}/reset-link`, { method: 'POST' })
-ok(linkRes.status === 200 && !!linkRes.body.url, 'an admin can create a reset link')
-const CHOSEN = 'the-rep-chose-this-one'
-await fetch(linkRes.body.url, {
-  method: 'POST',
-  headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams({ password: CHOSEN, confirm: CHOSEN }),
-})
-const chosen = await login(REP.email, CHOSEN)
-ok(chosen.ok, 'the rep sets their own password through the link')
-ok(!(await login(REP.email, NEW_PASSWORD)).ok, 'the password the admin set no longer works')
 const repSession2 = await chosen.json()
 
 /* --- access -------------------------------------------------------------- */
@@ -663,8 +674,12 @@ ok(
     'nor delete one',
   )
   ok(
-    (await call(`/api/users/${saId}/reset-link`, { method: 'POST' }, ca.token)).status === 403,
-    'nor create a reset link for one',
+    (await call(`/api/users/${saId}/reset-email`, { method: 'POST' }, ca.token)).status === 403,
+    'nor send one a reset email',
+  )
+  ok(
+    (await call(`/api/users/${saId}/email`, { method: 'POST', body: JSON.stringify({ email: `taken-over-${stamp}@example.com` }) }, ca.token)).status === 403,
+    'nor change one’s sign-in email — that is a takeover by another road',
   )
 
   /* ---- promotion follows the same rule ---- */

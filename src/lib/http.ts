@@ -533,10 +533,35 @@ export function apiForgotPassword(email: string) {
   return request<{ ok: true }>('/api/auth/forgot', { method: 'POST', body: { email }, timeoutMs: 30_000 })
 }
 
-export function apiResetLink(token: string, userId: string) {
-  return request<{ url: string; email: string; expiresAt: number }>(
-    `/api/users/${userId}/reset-link`,
-    { method: 'POST', token },
+/**
+ * Email somebody a link to choose a new password. The answer says where it
+ * went and when the link expires — never the link: an admin has no use for
+ * it, and a token that reaches a screen can reach a screenshot.
+ */
+export function apiSendResetEmail(token: string, userId: string) {
+  return request<{ ok: true; email: string; expiresAt: number }>(`/api/users/${userId}/reset-email`, {
+    method: 'POST',
+    token,
+    // A mail provider is given eight seconds by the Worker; leave room for it.
+    timeoutMs: 30_000,
+  })
+}
+
+/** Change the address somebody signs in with. Takes effect at their next sign-in. */
+export function apiSetUserEmail(token: string, userId: string, email: string) {
+  return request<{
+    ok: true
+    email: string
+    previous: string
+    invitesRevoked: number
+    notified: { previous: boolean; next: boolean }
+  }>(`/api/users/${userId}/email`, { method: 'POST', body: { email }, token, timeoutMs: 30_000 })
+}
+
+export function apiSetUserName(token: string, userId: string, name: { firstName: string; lastName: string }) {
+  return request<{ ok: true; name: string; firstName: string | null; lastName: string | null }>(
+    `/api/users/${userId}/name`,
+    { method: 'POST', body: name, token },
   )
 }
 

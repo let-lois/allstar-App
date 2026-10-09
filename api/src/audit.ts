@@ -25,7 +25,12 @@ import type { Env, SessionUser } from './types'
 export type AuditAction =
   | 'user.invited'
   | 'user.password_set'
+  /* Kept so entries written before reset links became emails still type-check. */
   | 'user.reset_link'
+  /* An admin had a password reset link emailed to somebody. Never the link itself. */
+  | 'user.reset_email_sent'
+  /* The address somebody signs in with, changed from the office. Holds both. */
+  | 'user.email_changed'
   | 'user.deactivated'
   | 'user.reactivated'
   | 'user.deleted'

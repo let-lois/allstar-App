@@ -43,11 +43,21 @@ export function ConfirmDialog({
   useEffect(() => {
     // Cancel takes focus, never Confirm: Enter must not be the second tap.
     boxRef.current?.querySelector<HTMLButtonElement>('[data-testid$="-cancel"]')?.focus()
+    /*
+      Escape belongs to the topmost layer. A dialog opened from inside a
+      BottomSheet shares `window` with the sheet's own Escape handler, and both
+      fired: backing out of "Send a reset email?" also threw away the Manage
+      sheet behind it. Listening in the capture phase runs this first, and
+      stopping it there leaves the sheet alone — including while a request is
+      in flight, when Escape does nothing at all.
+    */
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onCancel()
+      if (e.key !== 'Escape') return
+      e.stopImmediatePropagation()
+      if (!busy) onCancel()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [busy, onCancel])
 
   return (
