@@ -491,10 +491,45 @@ ${email
 <h2>Common questions</h2>
 <ul>
 <li><b>Forgot your password?</b> Tap “Forgot password” on the sign-in screen and follow the email.</li>
-<li><b>Delete your account:</b> More → Edit profile → Delete my account.</li>
+<li><b>Delete your account:</b> More → Edit profile → Delete my account — or see <a href="/delete-account">every way to delete it</a>, including without the app.</li>
 <li><b>Map or location not working:</b> check that location access is allowed for All Star in your phone's Settings.</li>
 <li><b>Verify a representative:</b> scan the QR code on their badge.</li>
 </ul>
 <p><a href="${HELP_CENTER_URL}/privacy">Privacy Policy</a> · <a href="${HELP_CENTER_URL}/terms">Terms of Use</a></p>
+</div>`)
+}
+
+/*
+  Public, no sign-in: Google Play's Data safety form asks for a web page where
+  people can delete their account, and their data, without reinstalling the
+  app. Everything it promises is what `deleteOwnAccount` and `deleteUser`
+  actually do; change one and change the other.
+*/
+export function deleteAccountPage(opts: { appUrl: string; supportEmail?: string }): Response {
+  const email = opts.supportEmail
+  const app = escapeHtml(opts.appUrl)
+  return docShell('Delete your account', `
+<div class="mark">A</div>
+<h1>Delete your account</h1>
+<p class="sub">All Star field app</p>
+<div class="doc">
+<p>You can delete your All Star account at any time. It takes effect immediately and cannot be undone.</p>
+<h2>Three ways to do it</h2>
+<ul>
+<li><b>In the app:</b> More → Edit profile → Delete my account. Enter your password and type DELETE to confirm.</li>
+<li><b>On the web, without the app:</b> sign in at <a href="${app}/profile#delete-account">${app}</a>, open Edit profile, and choose Delete my account.</li>
+<li><b>If you cannot sign in:</b> ask an administrator at the company that gave you your account. They can delete it from the console (Team → Manage → Delete permanently).${email ? ` Or email <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a> from the address you sign in with, and include your company name.` : ''}</li>
+</ul>
+<h2>What is deleted</h2>
+<p>Your account and sign-in, every session on every device, your profile and badge photo, and the records tied to you: your visits, notes, tasks, routes, activity and daily totals.</p>
+<h2>What your company keeps</h2>
+<ul>
+<li>The leads you worked — addresses and homeowner details — belong to your company. They stay with the company, unassigned.</li>
+<li>Photos of a property stay with that property's record.</li>
+<li>One audit-log entry recording that the account was deleted, with your name, email and role, so the company can see who removed what.</li>
+<li>Encrypted disaster-recovery backups taken before the deletion are stored separately and are not used to restore deleted accounts.</li>
+</ul>
+<p>If you are your company's only administrator, make another team member an administrator first.</p>
+<p><a href="/support">Support</a> · <a href="${HELP_CENTER_URL}/privacy">Privacy Policy</a></p>
 </div>`)
 }
