@@ -32,7 +32,7 @@ npm run verify:shellandroid      # boots the exported bundle the way Android doe
 
 ## B. Build
 
-- ✅ First production AAB triggered on EAS: build `e3129f4a-ea0b-4a93-9f2e-490a72759823` (1.0.0, version code 2) — result recorded in `GOOGLE_PLAY_HANDOFF.md`
+- ✅ First production AAB built on EAS: build `e3129f4a-ea0b-4a93-9f2e-490a72759823`, 1.0.0 (version code 2), target SDK 36 / min SDK 24, `BUILD SUCCESSFUL`, signed (`:app:signReleaseBundle`), 73.0 MB — link in `GOOGLE_PLAY_HANDOFF.md`
 - ☐ Download a copy of the upload keystore from EAS into the company password manager (someone with Expo account access)
 - For later releases:
 
