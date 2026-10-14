@@ -101,6 +101,8 @@
     "verify:reset-e2e": "node scripts/verify-reset-e2e.mjs",
     "verify:invite": "node scripts/verify-invite.mjs",
     "verify:user-admin": "node scripts/verify-user-admin.mjs",
+    "verify:android-release": "node scripts/verify-android-release.mjs",
+    "verify:play-listing": "node scripts/verify-play-listing.mjs",
     "verify:avatar": "node scripts/verify-avatar.mjs",
     "verify:tour": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-tour.mjs",
     "verify:photos": "node scripts/verify-photos.mjs",

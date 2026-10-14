@@ -652,7 +652,7 @@ export function MapScreen() {
         */}
         <div
           className="pointer-events-none absolute left-3 flex flex-col items-start gap-2"
-          style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+          style={{ bottom: 'calc(96px + var(--safe-bottom))' }}
         >
           {!selected && nearest && (
             <button

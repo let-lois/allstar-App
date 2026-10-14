@@ -9,9 +9,10 @@
 import * as Linking from 'expo-linking'
 import * as Updates from 'expo-updates'
 import * as WebBrowser from 'expo-web-browser'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { AppState, BackHandler, Platform, StyleSheet, View } from 'react-native'
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import AllStarWeb, { type AllStarWebRef } from '@/components/allstar-web'
 import type { ApiRequest, ApiResponse } from '@/lib/api-bridge'
@@ -228,6 +229,24 @@ async function refreshUpdate(moment: OtaMoment) {
 export default function Index() {
   const shell = useRef<AllStarWebRef>(null)
   /*
+    The status bar and the gesture/navigation bar, measured by the phone.
+
+    Android only. Since Android 15/16 every app draws edge to edge, and
+    Android's webview often reports `env(safe-area-inset-*)` as 0 — so the
+    header slid under the status bar and the bottom dock under the gesture
+    bar. The web app takes the larger of `env()` and these (`--safe-top`,
+    `--safe-bottom` in index.css). iOS's webview already reports the real
+    values, so it is left exactly as it was.
+  */
+  const safe = useSafeAreaInsets()
+  const insetTop = Math.round(safe.top)
+  const insetBottom = Math.round(safe.bottom)
+  // Memoised: a new object every render would re-send the props to the webview.
+  const insets = useMemo(
+    () => (Platform.OS === 'android' ? { top: insetTop, bottom: insetBottom } : undefined),
+    [insetTop, insetBottom],
+  )
+  /*
     In a ref rather than state, and read inside the handler rather than closed
     over. The back handler is registered once; state would either re-register
     it on every navigation or capture a stale value and exit the app from the
@@ -293,6 +312,7 @@ export default function Index() {
         dictationStart={HAS_NATIVE_DICTATION ? dictationStart : undefined}
         dictationStop={HAS_NATIVE_DICTATION ? dictationStop : undefined}
         storeBuild={STORE_BUILD}
+        insets={insets}
         dom={{
           /*
             `react-native-webview`, not Expo's own `@expo/dom-webview`, which is
@@ -384,6 +404,24 @@ export default function Index() {
             and the page stays magnified after the rep navigates away.
           */
           setBuiltInZoomControls: false,
+
+          /*
+            Android's half of `scrollEnabled: false` above, which Android's
+            webview does not implement. Without it the whole page stretches
+            (Android 12+) when a rep drags past the end of a list, as if the
+            app itself were a scrolling page — on iOS the page never moves.
+          */
+          overScrollMode: 'never',
+
+          /*
+            Android scales every page by the phone's font-size setting unless
+            told otherwise, and Samsung phones ship above 100%. The app's
+            layout is sized in fixed steps (16px fields, fixed rows), so a
+            scaled page overflowed buttons and pushed rows off screen — while
+            the same app on iOS, whose webview does not do this, was fine.
+            100 makes Android draw it the way iOS does.
+          */
+          textZoom: 100,
 
           /*
             Expo's wrapper sets this to `__DEV__` and stops there, which leaves a

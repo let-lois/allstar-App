@@ -127,6 +127,15 @@ try {
     const s = await (await fetch(`${BASE}/support`)).text()
     ok(/mailto:help@example\.com/.test(s) && /Forgot password/.test(s), 'the support page gives the support address and the common answers')
     ok(s.includes(`href="${HELP}/privacy"`) && s.includes(`href="${HELP}/terms"`), 'and links the policy and terms where they live')
+    ok(s.includes('href="/delete-account"'), 'and links the public account-deletion page')
+    // Google Play's Data safety form wants a page anyone can open that says
+    // how to delete an account without reinstalling the app.
+    const d = await fetch(`${BASE}/delete-account`)
+    const dt = await d.text()
+    ok(d.status === 200 && /Delete your account/.test(dt), 'the account-deletion page is public', `${d.status}`)
+    ok(/\/profile#delete-account/.test(dt) && /without the app/.test(dt), 'it gives a way to delete on the web, without the app')
+    ok(/Team → Manage → Delete permanently/.test(dt) && /mailto:help@example\.com/.test(dt), 'and a way when you cannot sign in: an administrator, or the support address')
+    ok(/What is deleted/.test(dt) && /What your company keeps/.test(dt) && /audit-log entry/.test(dt), 'and says what is deleted and what is kept')
   }
 
   await call('/setup', {

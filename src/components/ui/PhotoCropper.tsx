@@ -272,7 +272,7 @@ export function PhotoCropper({
           </div>
 
           <div className="shrink-0 space-y-3 border-t border-line-soft px-4 pt-3"
-            style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
+            style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
             <p className="text-center text-[13px] text-ink-mute">
               Drag to move · pinch or slide to zoom · the dashed circle is your round photo
             </p>
@@ -334,7 +334,7 @@ export function PhotoCropper({
             </div>
           </div>
           <div className="shrink-0 space-y-3 border-t border-line-soft px-4 pt-3"
-            style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
+            style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
             {error && (
               <p role="alert" className="text-center text-[13.5px] font-medium text-bad">
                 {error}

@@ -106,7 +106,7 @@ import {
 } from './integrations'
 import { checkLoginRate, clearFailures, recordFailure } from './ratelimit'
 import { directions } from './directions'
-import { HELP_CENTER_URL, invitePage, resetPage, setupPage, supportPage } from './pages'
+import { HELP_CENTER_URL, deleteAccountPage, invitePage, resetPage, setupPage, supportPage } from './pages'
 import { bootstrap } from './read'
 import type { Env, Mutation, Role, SessionUser } from './types'
 
@@ -405,6 +405,7 @@ export default {
       // builds already installed on phones link to them.
       if (path === '/privacy' && req.method === 'GET') return Response.redirect(`${HELP_CENTER_URL}/privacy`, 302)
       if (path === '/support' && req.method === 'GET') return supportPage({ supportEmail: env.SUPPORT_EMAIL })
+      if (path === '/delete-account' && req.method === 'GET') return deleteAccountPage({ appUrl, supportEmail: env.SUPPORT_EMAIL })
       if (path === '/terms' && req.method === 'GET') return Response.redirect(`${HELP_CENTER_URL}/terms`, 302)
 
       if (path === '/setup') {

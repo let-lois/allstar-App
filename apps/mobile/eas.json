@@ -46,7 +46,8 @@
     "production": {
       "autoIncrement": true,
       "android": {
-        "image": "latest"
+        "image": "latest",
+        "buildType": "app-bundle"
       },
       "ios": {
         "image": "latest"
@@ -60,7 +61,8 @@
         "ascAppId": "6813645551"
       },
       "android": {
-        "track": "internal"
+        "track": "internal",
+        "releaseStatus": "draft"
       }
     },
     "testflight-preview": {

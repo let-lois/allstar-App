@@ -241,7 +241,7 @@ export function VisitMode() {
 
         <div
           className="shrink-0 space-y-2 px-4 pb-4 pt-2"
-          style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}
+          style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}
         >
           {nextProperty ? (
             <Button
@@ -522,7 +522,7 @@ export function VisitMode() {
       {step !== 'outcome' && (
         <div
           className="shrink-0 bg-surface px-4 pt-3.5 shadow-nav"
-          style={{ paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))' }}
+          style={{ paddingBottom: 'calc(14px + var(--safe-bottom))' }}
         >
           {step === 'next' && nextType !== 'none' && !nextAt && (
             <p className="pb-2.5 text-center text-[13px] font-semibold text-warn">

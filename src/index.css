@@ -52,7 +52,7 @@
      * own `76px`, and the first version of the dock landed underneath it,
      * because a second hand-written constant is a second thing to forget.
      */
-    --dock-space: calc(100px + env(safe-area-inset-bottom, 0px));
+    --dock-space: calc(100px + var(--safe-bottom));
 
     /**
      * The material, in one place.
@@ -205,7 +205,20 @@
      * property the value is still the real inset on a phone and can be given a
      * value in a test, which is how the banners below are measured.
      */
-    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-top: max(env(safe-area-inset-top, 0px), var(--shell-inset-top, 0px));
+
+    /*
+     * The phone's own bars, from the native shell, as a floor under `env()`.
+     *
+     * iOS's webview fills `env(safe-area-inset-*)` in; Android's often reports
+     * 0, and since Android 15/16 every app draws edge to edge, under the status
+     * bar and the gesture bar. So the Android shell measures the real insets
+     * and sets `--shell-inset-top/bottom` on the root (apps/mobile
+     * `allstar-web.tsx`), and these take whichever is larger — on iOS and in a
+     * browser the shell values are absent and this is `env()` exactly as
+     * before. Everything that clears the home indicator reads `--safe-bottom`.
+     */
+    --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--shell-inset-bottom, 0px));
   }
 
   @supports (height: 100dvh) {

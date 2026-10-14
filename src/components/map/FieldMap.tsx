@@ -1219,7 +1219,7 @@ export function FieldMap({
       <div className="pointer-events-none absolute inset-0">
         <div
           className="pointer-events-auto absolute right-3 flex flex-col items-center gap-2"
-          style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+          style={{ bottom: 'calc(96px + var(--safe-bottom))' }}
         >
           <div className="metal metal-map flex flex-col overflow-hidden rounded-pill">
             <button

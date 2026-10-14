@@ -268,7 +268,7 @@ export function AdminPage({
       className="mx-auto max-w-[1200px] px-4 py-4 md:p-6 xl:p-8"
       /* The field app's bottom bar is absent in here, but a phone still has a
          home indicator to clear at the end of a scroll. */
-      style={{ paddingBottom: 'calc(28px + env(safe-area-inset-bottom, 0px))' }}
+      style={{ paddingBottom: 'calc(28px + var(--safe-bottom))' }}
     >
       {/*
         The heading is 20px on a phone and 24 on a desktop, and never `font-black`

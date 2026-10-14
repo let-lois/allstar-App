@@ -16,6 +16,13 @@ expo-env.d.ts
 *.p8
 *.p12
 *.key
+# Android release signing and Play publishing. The upload keystore lives in
+# EAS's credential store and the Play service-account key in EAS submit
+# credentials — neither belongs in the repository, ever.
+*.keystore
+credentials.json
+*service-account*.json
+google-play-*.json
 *.mobileprovision
 
 # Metro

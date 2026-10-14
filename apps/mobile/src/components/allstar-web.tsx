@@ -195,6 +195,7 @@ export default function AllStarWeb({
   dictationStart,
   dictationStop,
   storeBuild,
+  insets,
   ref,
 }: {
   apiFetch: (req: ApiRequest) => Promise<ApiResponse>
@@ -207,6 +208,8 @@ export default function AllStarWeb({
   dictationStop?: () => Promise<void>
   /** A store build: the web app hides its testing aids. See `isStoreBuild` in `web/lib/external.ts`. */
   storeBuild?: boolean
+  /** Android only: the system bars in px, as a floor under `env(safe-area-inset-*)`. See `--safe-bottom` in index.css. */
+  insets?: { top: number; bottom: number }
   ref?: Ref<AllStarWebRef>
   dom?: import('expo/dom').DOMProps
 }) {
@@ -237,6 +240,13 @@ export default function AllStarWeb({
   if (storeBuild) {
     const w = window as Window & { __allstarShell?: ShellBridge }
     w.__allstarShell = { ...w.__allstarShell, storeBuild: true }
+  }
+  // Re-set on every render: the native side sends new props when the bars
+  // change (rotation, a keyboard, a gesture-bar setting).
+  if (insets) {
+    const root = document.documentElement.style
+    root.setProperty('--shell-inset-top', `${insets.top}px`)
+    root.setProperty('--shell-inset-bottom', `${insets.bottom}px`)
   }
 
   /*

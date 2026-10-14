@@ -75,7 +75,7 @@ export function BottomNav({ role }: { role: Role }) {
         behind the home indicator instead of standing clear of it.
       */
       className="nav-dock z-30 mx-3 shrink-0 md:hidden"
-      style={{ marginBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}
+      style={{ marginBottom: 'calc(var(--safe-bottom) + 10px)' }}
       aria-label="Primary"
     >
       <ul className="flex px-2 pb-2 pt-2.5">
