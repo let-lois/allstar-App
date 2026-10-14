@@ -318,7 +318,7 @@ export function Navigate() {
 
       <div
         className="shrink-0 bg-surface px-4 pt-3 shadow-nav"
-        style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
+        style={{ paddingBottom: 'calc(12px + var(--safe-bottom))' }}
       >
         {position ? (
           <>

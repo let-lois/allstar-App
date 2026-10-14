@@ -1090,7 +1090,7 @@ export function GoogleFieldMap({
       {/* Thumb-sized controls, bottom-right, matching the self-rendered map. */}
       <div
         className="absolute right-3 flex flex-col gap-2"
-        style={{ bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+        style={{ bottom: 'calc(96px + var(--safe-bottom))' }}
       >
         <button
           onClick={() => setSatellite((s) => !s)}

@@ -182,7 +182,7 @@ export function ScheduleNew() {
 
       <div
         className="shrink-0 bg-surface px-4 pt-3.5 shadow-nav"
-        style={{ paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))' }}
+        style={{ paddingBottom: 'calc(14px + var(--safe-bottom))' }}
       >
         <Button size="lg" full onClick={() => void save()} disabled={!selected || saving}>
           {saving ? 'Saving…' : 'Create appointment'}

@@ -158,7 +158,7 @@ export function BottomSheet({
           transition: dragging.current ? 'none' : 'height 180ms ease, transform 180ms ease',
           // The footer clears the home indicator itself; padding here as well
           // left a second, empty inset under every primary action.
-          paddingBottom: footer ? undefined : 'env(safe-area-inset-bottom, 0px)',
+          paddingBottom: footer ? undefined : 'var(--safe-bottom)',
         }}
       >
         {/* Grab area is deliberately tall — a 4px handle is not a touch target. */}
@@ -194,7 +194,7 @@ export function BottomSheet({
         {footer && (
           <div
             className="shrink-0 border-t border-line-soft bg-surface px-4 pt-3"
-            style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
+            style={{ paddingBottom: 'calc(12px + var(--safe-bottom))' }}
           >
             {footer}
           </div>
