@@ -18,7 +18,7 @@ One pass per release. ✅ = done and verified in this repository on 2026-10-13;
 - ✅ No keystore, upload key or Play service-account key in git; patterns in `apps/mobile/.gitignore` — `verify:android-release`
 - ✅ EAS Submit → internal track as draft (`eas.json`)
 - ✅ Public account-deletion page `GET /delete-account` (live after merge) — `smoke:account-delete`
-- ☐ Merge the Android release branch (Curtis/Sean approve) — deploys `/delete-account`
+- ✅ Android release branch merged (PR #194) — `/delete-account` is live
 
 Checks to run before every Android build:
 
@@ -45,10 +45,11 @@ npm run verify:shellandroid      # boots the exported bundle the way Android doe
 
 - ☐ Organization developer account verified (Company: D-U-N-S, legal name, address, website, contact, $25)
 - ☐ Users and permissions: Bea, Sean, (later) the EAS service account
-- ☐ Create app: Allstar Field, English (US), App, Free
+- ✅ Create app: Allstar Field, English (US), App, Free (draft)
 - ☐ Play App Signing: Google-generated app-signing key; EAS keystore as upload key (set by the first upload)
-- ☐ Internal testing release: upload the AAB by hand, release notes, testers, roll out
-- ☐ App content: privacy policy, app access (reviewer login), ads (No), content rating, target audience (18+), data safety, government/financial/health (No), account deletion URL
+- ✅ Internal testing release 3 (build `a21ac854`, version code 3) uploaded and live
+- ☐ Testers confirmed installing from Play (today: "Item not found" for one tester account)
+- ☐ App content: privacy policy, app access (reviewer login), ads (No), content rating, target audience (18+), data safety, government/financial/health (No), advertising ID (No), account deletion URL — exact values in `PLAY_CONSOLE_ENTRY_SHEET.md`
 - ☐ Main store listing: text from `PLAY_STORE_LISTING.md`, graphics from `assets/`
 - ☐ Store settings: category Business, contact email
 - ☐ Countries: United States (or as decided)
