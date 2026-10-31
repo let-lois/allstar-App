@@ -1,6 +1,7 @@
 # Google Play handoff — Allstar Field
 
-For Bea (Play Console), Sean and the company. State as of **2026-10-13**.
+For Bea (Play Console), Sean and the company. Build and Console status updated
+**2026-10-31**; the audit sections below are as of 2026-10-13.
 
 ## The short version
 
@@ -10,6 +11,15 @@ For Bea (Play Console), Sean and the company. State as of **2026-10-13**.
   `app-release.aab` 73.0 MB.
   Download: <https://expo.dev/artifacts/eas/vZ4JFd2U1ttvv5xhtkPnMXP8fpQwkUD4bDFWv9xbrto.aab>
   (Expo dashboard → all-star-app → Builds; the link expires 2026-11-12).
+- **Current build:** EAS build `a21ac854-d56c-44b7-a148-468f1f01bfd0`, 1.0.0
+  (version code 3), built from `main` after the Android display fixes. It is
+  uploaded to **Internal testing** (release 3, track Active). Download link
+  expires 2026-11-15. Version 2 above is superseded.
+- The Play app exists as a **draft** (temporary name "com.allstarhomesolutions.allstar
+  (unreviewed)" until setup is complete). Testers can opt in, but the Play Store
+  app answers "Item not found" for at least one account so far; until that clears,
+  testers use the direct preview APK (`ANDROID_TESTING_PLAN.md`).
+- The Console tasks, in order, with exact values: **`PLAY_CONSOLE_ENTRY_SHEET.md`**.
 - Store listing text, icon, feature graphic and screenshots are ready in this folder.
 - Data safety, content rating and app-access answers are written out in
   `GOOGLE_PLAY_COMPLIANCE_AUDIT.md`.
@@ -33,18 +43,19 @@ For Bea (Play Console), Sean and the company. State as of **2026-10-13**.
 | Signing | Upload key (EAS keystore) + Play App Signing | IN PROGRESS — keystore exists and signed the AAB; Play App Signing is chosen at first upload; a backup copy must be downloaded by someone with Expo access |
 | Build | Production AAB | COMPLETE — build `e3129f4a` |
 | Build | Install and run on a device / emulator | BLOCKED — no device or emulator here; internal testing |
-| Backend | Public `/delete-account` page | COMPLETE in branch; live after merge |
+| Backend | Public `/delete-account` page | COMPLETE — live (HTTP 200, checked 2026-10-31) |
 | Backend | `SUPPORT_EMAIL` on the Worker | BLOCKED — company provides the inbox |
 | Backend | Backup retention for deleted accounts | BLOCKED — ops decision |
 | Console | Developer account (organization) | BLOCKED — company: D-U-N-S, legal details, $25 |
-| Console | App created, App content, listing, internal release | NOT STARTED — Bea, after the account exists |
+| Console | App created, internal release | COMPLETE — draft app created; release 3 live on Internal testing |
+| Console | App content, store listing, contact details | NOT STARTED — Bea; values in `PLAY_CONSOLE_ENTRY_SHEET.md` |
 | Listing | Title, short + full description, release notes | COMPLETE (name pending) |
 | Assets | 512 icon, feature graphic, 8 phone + 8 7-inch + 8 10-inch screenshots | COMPLETE |
 | Compliance | Data safety, content rating, target audience, ads, app access answers | COMPLETE (to enter in the Console) |
 | Compliance | Privacy policy covers Android | BLOCKED — could not be opened from here; counsel to review |
 | Compliance | Reviewer login | BLOCKED — company creates the account |
 | Testing | Plan, device matrix, test cases, triage, rollout/rollback | COMPLETE |
-| Testing | Internal testing run | NOT STARTED |
+| Testing | Internal testing run | IN PROGRESS — opt-in works; Play Store shows "Item not found" for a tester account, cause not yet found; direct preview APK in use |
 | Automation | EAS build/submit commands documented; service-account setup documented | COMPLETE |
 | Automation | CI pipeline | NOT STARTED, deliberately — the repo has no CI (`scripts/verify-all.mjs`: "Not CI"); see below |
 
