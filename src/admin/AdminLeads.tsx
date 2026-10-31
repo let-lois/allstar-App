@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { describeError } from '../lib/errors'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AdminPage, FilterBar } from './AdminLayout'
@@ -263,6 +263,25 @@ export default function AdminLeads() {
   const page = rows.slice(0, shown)
 
   /*
+    A tick never outlives the row it was on.
+
+    Changing the search or a filter used to leave earlier ticks in place, so the
+    bar could say "5 selected" over a list that showed none of them — and Delete,
+    Reassign and Set status would act on leads the person could no longer see.
+    Selection is held to what the current filters show: narrowing drops the ticks
+    that fell out, widening keeps the rest. Sorting and background refreshes
+    change `rows` without changing which ids are in it, so they leave it alone.
+  */
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev
+      const visible = new Set(rows.map((p) => p.id))
+      const kept = [...prev].filter((id) => visible.has(id))
+      return kept.length === prev.size ? prev : new Set(kept)
+    })
+  }, [rows])
+
+  /*
     Which leads the drawn shape currently covers.
 
     Over `rows` — the filtered set — not every lead in the company. If somebody
@@ -301,6 +320,7 @@ export default function AdminLeads() {
   // Selection follows what's on screen: "select all" that silently picks up
   // three thousand filtered-out rows is how a bulk action goes wrong.
   const allOnPageSelected = page.length > 0 && page.every((p) => selected.has(p.id))
+  const someOnPageSelected = !allOnPageSelected && page.some((p) => selected.has(p.id))
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -1156,6 +1176,23 @@ export default function AdminLeads() {
         its select-all: reassigning a street's worth of leads is exactly the job
         somebody does from a phone after a rep quits.
       */}
+      {/*
+        Select all, before anything is ticked. The bulk bar (and its "Select all
+        matching") only appears once one lead is ticked, and the header checkbox
+        is a desktop column — on a phone there was no visible way to start. This
+        selects every lead the current search and filters match, on every page.
+      */}
+      {view === 'list' && selected.size === 0 && rows.length > 0 && (
+        <button
+          type="button"
+          className="focusable mb-1 min-h-tap self-start text-sm font-semibold text-accent"
+          data-testid="select-all-visible"
+          onClick={() => setSelected(new Set(rows.map((p) => p.id)))}
+        >
+          Select all {rows.length.toLocaleString()}
+          {query.trim() || activeFilterCount > 0 ? ' matching' : ''}
+        </button>
+      )}
       {view === 'list' && (
       <DataList
         rows={page}
@@ -1177,6 +1214,9 @@ export default function AdminLeads() {
           <input
             type="checkbox"
             checked={allOnPageSelected}
+            ref={(el) => {
+              if (el) el.indeterminate = someOnPageSelected
+            }}
             aria-label="Select everything on this page"
             onChange={() =>
               setSelected((prev) => {

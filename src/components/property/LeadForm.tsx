@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Field } from '../ui/Input'
 import { AddressAutocomplete, type PickedAddress } from './AddressAutocomplete'
 import { useAppStore, useMyLists } from '../../store/useAppStore'
@@ -46,6 +46,7 @@ export function useLeadDraft({
   at,
   onSaved,
   onPick,
+  defaultListId,
 }: {
   /**
    * A location the caller already has — the map's tapped point.
@@ -66,6 +67,16 @@ export function useLeadDraft({
    * with the neighbour's coordinates.
    */
   onPick?: (at: { lat: number; lng: number }) => void
+  /**
+   * The list the caller is working right now — the map's open list.
+   *
+   * Ticked for the rep when the form opens, so a lead added while working a
+   * re-knock list lands on it without a second step. Only a list this person may
+   * add to is used (see `canEditList`): an office-assigned list is theirs to work
+   * and not to change, and the server would refuse the add. A list that cannot be
+   * used is reported through `defaultListBlocked`, never silently dropped.
+   */
+  defaultListId?: string | null
 }) {
   const [address, setAddress] = useState('')
   const [picked, setPickedState] = useState<PickedAddress | null>(null)
@@ -78,6 +89,8 @@ export function useLeadDraft({
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [locating, setLocating] = useState(!at)
   const [saving, setSaving] = useState(false)
+  /** Synchronous twin of `saving`: a second tap lands before the re-render that disables the button. */
+  const savingRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
   /*
     Which lists the new lead should land on, chosen before it exists.
@@ -89,8 +102,23 @@ export function useLeadDraft({
     page uses, so there is one rule for who may put a house on which list.
     `newListName` is the "start one" path, exactly as on the lead page.
   */
-  const [listIds, setListIds] = useState<string[]>([])
+  const user = useAppStore((s) => s.user)
+  const allLists = useAppStore((s) => s.leadLists)
+  const mine = useMyLists()
+  const defaultList = useMemo(
+    () => (defaultListId ? mine.find((l) => l.id === defaultListId && canEditList(user, l)) : undefined),
+    [defaultListId, mine, user],
+  )
+  const defaultKey = defaultList?.id ?? null
+  /** Set once the rep has ticked or unticked a list themselves; after that the default stops following the map. */
+  const listsTouched = useRef(false)
+  const [listIds, setListIds] = useState<string[]>(() => (defaultKey ? [defaultKey] : []))
   const [newListName, setNewListName] = useState('')
+  useEffect(() => {
+    if (listsTouched.current) return
+    const want = defaultKey ? [defaultKey] : []
+    setListIds((ids) => (ids.length === want.length && ids.every((x, i) => x === want[i]) ? ids : want))
+  }, [defaultKey])
   /*
     What the map said was here, and whether the rep has since disagreed.
 
@@ -190,7 +218,7 @@ export function useLeadDraft({
   const pin = at ?? (picked ? { lat: picked.lat, lng: picked.lng } : coords)
 
   const save = async () => {
-    if (!address.trim() || !pin) return
+    if (savingRef.current || !address.trim() || !pin) return
     /*
       The same door twice.
 
@@ -206,6 +234,7 @@ export function useLeadDraft({
       setError(`${same.address1} is already a lead. Open it from the map or the Leads list, or add the unit number if this is a different unit.`)
       return
     }
+    savingRef.current = true
     setSaving(true)
     setError(null)
     haptic('confirm')
@@ -274,6 +303,7 @@ export function useLeadDraft({
           ? 'This phone is out of space, so the lead was not saved. Free some up and try again.'
           : 'The lead could not be saved on this phone. Try again.',
       )
+      savingRef.current = false
       setSaving(false)
       return
     }
@@ -327,6 +357,7 @@ export function useLeadDraft({
       Cleared before `onSaved`, which is what closes the sheet: the form has to
       be usable again even if the caller throws.
     */
+    savingRef.current = false
     setSaving(false)
     setAddress('')
     setPicked(null)
@@ -336,8 +367,10 @@ export function useLeadDraft({
     setFilled(false)
     setError(null)
     // The list choice too: the next house tapped is not on tonight's list
-    // just because the last one was.
-    setListIds([])
+    // just because the last one was. Back to the map's open list, which is the
+    // rep's own standing choice rather than something they ticked for one lead.
+    listsTouched.current = false
+    setListIds(defaultKey ? [defaultKey] : [])
     setNewListName('')
     touched.current = false
 
@@ -366,8 +399,14 @@ export function useLeadDraft({
     saving,
     error,
     listIds,
-    toggleList: (id: string) =>
-      setListIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id])),
+    toggleList: (id: string) => {
+      listsTouched.current = true
+      setListIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]))
+    },
+    /** The open list this form pre-ticked, if the rep may add to it. */
+    defaultListId: defaultKey,
+    /** The open list the rep may not add to, so the form can say why it was not ticked. */
+    defaultListBlocked: defaultListId && !defaultList ? (allLists[defaultListId] ?? null) : null,
     newListName,
     setNewListName,
     canSave: !!address.trim() && !!pin && !saving,
@@ -611,9 +650,18 @@ function LeadListChoice({ draft }: { draft: LeadDraft }) {
           aria-expanded={open}
           className="focusable ml-auto min-h-[44px] rounded-lg px-2 text-[13px] font-semibold text-accent"
         >
-          {open ? 'Done' : 'Add to list'}
+          {open ? 'Done' : chosen.length > 0 ? 'Change' : 'Add to list'}
         </button>
       </div>
+      {/*
+        The map's open list that this person may not add to. Said out loud, because
+        the rep opened the map from that list and will expect the new house on it.
+      */}
+      {draft.defaultListBlocked && (
+        <p className="mt-1 text-[12.5px] text-ink-mute" data-testid="lead-list-blocked">
+          {draft.defaultListBlocked.name} is view-only for you, so this lead won't be added to it.
+        </p>
+      )}
 
       {open && (
         <div className="mt-2 space-y-2 rounded-field bg-surface-sunk px-3 py-2.5" data-testid="lead-list-picker">
@@ -633,7 +681,14 @@ function LeadListChoice({ draft }: { draft: LeadDraft }) {
                       disabled={saving}
                       onChange={() => toggleList(l.id)}
                     />
-                    <span className="min-w-0 flex-1 truncate">{l.name}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {l.name}
+                      {l.id === draft.defaultListId && (
+                        <span className="ml-1.5 text-[12px] text-ink-mute" data-testid="lead-list-current">
+                          current list
+                        </span>
+                      )}
+                    </span>
                     <span className="nums text-[12px] text-ink-mute">{l.leadIds.length}</span>
                   </label>
                 </li>
