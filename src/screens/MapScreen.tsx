@@ -280,10 +280,21 @@ export function MapScreen() {
       every Do Not Contact lead in the territory on a rep's map as a side effect
       of their adding one house. See `widenToShow`.
     */
+    /*
+      The open list is not widened away.
+
+      It is the rep's standing choice, not a side effect of the filters, and the
+      lead may have gone on a different list on purpose — widening would drop the
+      chip and re-frame the whole territory under them. So the list is left as
+      it was and only the other filters (status, visited, scope) are widened to
+      keep the pin on screen. A lead on another list has no pin on this one's
+      map, but selecting it below puts its own sheet up, which is the
+      confirmation.
+    */
     if (
-      !matchesMapFilter(p, filter, { onRoute: routeIds.has(p.id), onList: listIds.has(p.id), timezone })
+      !matchesMapFilter(p, { ...filter, list: undefined }, { onRoute: routeIds.has(p.id), onList: listIds.has(p.id), timezone })
     ) {
-      setFilter(widenToShow(p))
+      setFilter({ ...widenToShow(p), list: filter.list })
     }
     /*
       Close enough in that the new lead is its own dot rather than a number in a
@@ -309,6 +320,10 @@ export function MapScreen() {
   */
   const leadDraft = useLeadDraft({
     at: draftAt,
+    // The list the map is open on is the one being worked: the new lead goes on
+    // it unless the rep picks another. Choosing another here does not touch
+    // `filter.list`, so the map keeps showing the list it was opened on.
+    defaultListId: openList?.id,
     onSaved,
     onPick: (p) => {
       setDraftAt(p)
