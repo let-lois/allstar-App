@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { describeError } from '../lib/errors'
 import { AdminPage } from './AdminLayout'
-import { fitZoom } from '../components/map/FieldMap'
+import { fitZoom, type MapHandle } from '../components/map/FieldMap'
+import { FreehandLayer } from '../components/map/FreehandLayer'
+import type { OutlineResult } from '@allstar/core/freehand'
 import { AllStarMap } from '../components/map/AllStarMap'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
@@ -46,6 +48,33 @@ export function AdminTerritories() {
   const [draft, setDraft] = useState<{ points: { lat: number; lng: number }[] } | null>(null)
   const [draftName, setDraftName] = useState('')
   const [draftReps, setDraftReps] = useState<string[]>([])
+  /*
+    How the outline is drawn: by tapping its corners (how this screen always
+    worked, and still the default) or by dragging a finger round it. Either way
+    the result is the same list of points in `draft`, so the count, the name, the
+    reps and the create call below do not know which was used.
+  */
+  const [drawStyle, setDrawStyle] = useState<'tap' | 'freehand'>('tap')
+  /** What the last freehand stroke said, shown beneath the map where it cannot move it. */
+  const [freehandNote, setFreehandNote] = useState<string | null>(null)
+  const mapHandle = useRef<MapHandle | null>(null)
+  function chooseStyle(style: 'tap' | 'freehand') {
+    setDrawStyle(style)
+    setFreehandNote(null)
+    // Switching starts the shape again: a freehand line and a handful of tapped
+    // corners are not the same drawing, and mixing them gives a shape nobody drew.
+    draftStash.current = null
+    setDraft((d) => (d ? { points: [] } : d))
+    if (style === 'freehand') mapHandle.current?.prepareDraw()
+  }
+  function onFreehand(result: OutlineResult) {
+    if (result.ok) {
+      setDraft({ points: result.outline })
+      setFreehandNote(result.trimmed ? 'The end of the line crossed the start, so the extra bit was trimmed off.' : null)
+    } else {
+      setFreehandNote(result.message)
+    }
+  }
   /*
     On by default: the whole point of drawing round a block is the houses on
     it. A deployment with no address data says so in the result and the
@@ -505,8 +534,26 @@ export function AdminTerritories() {
             {/* Drawing tools, above the map. Fixed height: anything that grows
                 here moves the map under the finger that is drawing on it. */}
             <div className="px-4 py-3">
+              <div className="mb-2 flex overflow-hidden rounded-field border border-line" role="group" aria-label="How to draw">
+                {(['tap', 'freehand'] as const).map((style) => (
+                  <button
+                    key={style}
+                    type="button"
+                    onClick={() => chooseStyle(style)}
+                    aria-pressed={drawStyle === style}
+                    data-testid={`territory-style-${style}`}
+                    className={`focusable min-h-[40px] flex-1 px-3 text-sm font-semibold ${
+                      drawStyle === style ? 'bg-brand-500 text-ink-inverse' : 'bg-surface text-ink-soft'
+                    }`}
+                  >
+                    {style === 'tap' ? 'Tap corners' : 'Draw freehand'}
+                  </button>
+                ))}
+              </div>
               <p className="text-[13px] leading-snug text-ink-mute">
-                Tap the map to drop points. Three or more make the shape.
+                {drawStyle === 'tap'
+                  ? 'Tap the map to drop points. Three or more make the shape.'
+                  : 'Drag your finger to outline a territory. It closes itself when you let go.'}
               </p>
               <div className="mt-2 flex h-7 items-baseline gap-3 whitespace-nowrap">
                 <span className="nums text-[20px] font-semibold leading-none tracking-[-0.02em]">
@@ -518,15 +565,17 @@ export function AdminTerritories() {
                 </span>
               </div>
               <div className="mt-2 flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="whitespace-nowrap"
-                  disabled={draft.points.length === 0}
-                  onClick={() => setDraft((d) => (d ? { points: d.points.slice(0, -1) } : d))}
-                >
-                  Undo point
-                </Button>
+                {drawStyle === 'tap' && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="whitespace-nowrap"
+                    disabled={draft.points.length === 0}
+                    onClick={() => setDraft((d) => (d ? { points: d.points.slice(0, -1) } : d))}
+                  >
+                    Undo point
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   size="sm"
@@ -534,6 +583,7 @@ export function AdminTerritories() {
                   disabled={draft.points.length === 0}
                   onClick={() => {
                     draftStash.current = null
+                    setFreehandNote(null)
                     setDraft({ points: [] })
                   }}
                 >
@@ -556,7 +606,9 @@ export function AdminTerritories() {
                 </Button>
               </div>
               <p className="mt-2 text-[12.5px] text-ink-mute">
-                Tap the map to add a corner. Pan and zoom freely between taps; drag a corner to move it.
+                {drawStyle === 'tap'
+                  ? 'Tap the map to add a corner. Pan and zoom freely between taps; drag a corner to move it.'
+                  : 'Pan and zoom to frame the area first; the map holds still while you draw. Start over to draw it again.'}
               </p>
             </div>
 
@@ -564,12 +616,31 @@ export function AdminTerritories() {
               className="h-[min(440px,55svh)] md:h-[480px]"
               // Every lead while drawing: the point is to see what falls inside.
               properties={list}
-              draw={{
-                points: draft.points,
-                onAddPoint: (point) => setDraft((d) => (d ? { points: [...d.points, point] } : d)),
-                onMovePoint: (i, point) =>
-                  setDraft((d) => (d ? { points: d.points.map((p, n) => (n === i ? point : p)) } : d)),
-              }}
+              handleRef={mapHandle}
+              // The drawing surface, only while there is nothing drawn: once there is
+              // an outline the map is free to pan and zoom to check it.
+              surface={
+                drawStyle === 'freehand' && draft.points.length === 0 ? (
+                  <FreehandLayer toLatLng={(x, y) => mapHandle.current?.toLatLng(x, y) ?? null} onOutline={onFreehand} />
+                ) : undefined
+              }
+              draw={
+                drawStyle === 'freehand'
+                  ? {
+                      points: draft.points,
+                      // A tap on a finished freehand outline must not append a corner to it.
+                      onAddPoint: () => {},
+                      // No corner handles: a hand-drawn line has dozens, none worth dragging.
+                      showVertices: false,
+                      label: 'Territory outline',
+                    }
+                  : {
+                      points: draft.points,
+                      onAddPoint: (point) => setDraft((d) => (d ? { points: [...d.points, point] } : d)),
+                      onMovePoint: (i, point) =>
+                        setDraft((d) => (d ? { points: d.points.map((p, n) => (n === i ? point : p)) } : d)),
+                    }
+              }
               position={null}
               disableClustering={list.length <= 25}
               selectedId={null}
@@ -581,6 +652,15 @@ export function AdminTerritories() {
 
             {/* Below the map, so nothing here moves the map while drawing. */}
             <div className="space-y-4 px-4 py-4">
+              {drawStyle === 'freehand' && freehandNote && (
+                <p
+                  role={draft.points.length === 0 ? 'alert' : 'status'}
+                  className={`text-[13px] leading-snug ${draft.points.length === 0 ? 'font-medium text-bad' : 'text-ink-mute'}`}
+                  data-testid="territory-freehand-note"
+                >
+                  {freehandNote}
+                </p>
+              )}
               <Field
                 label="Territory name (required)"
                 value={draftName}

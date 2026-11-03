@@ -106,6 +106,19 @@ export interface MapHandle {
    * tall it is and where a coordinate falls inside it.
    */
   reveal: (at: { lat: number; lng: number }, covered: number) => void
+  /**
+   * The coordinate under a point on the screen, in client pixels.
+   *
+   * For the freehand layer, which records a finger's path as pixels and needs the
+   * map's own answer to turn it into a shape. Null until the map has a size.
+   */
+  toLatLng: (clientX: number, clientY: number) => { lat: number; lng: number } | null
+  /**
+   * Get the view into a state the freehand layer can convert from. The Google map
+   * can be rotated and tilted, where pixels no longer map to coordinates by
+   * simple arithmetic; this squares it up. A no-op here, which is always north-up.
+   */
+  prepareDraw: () => void
 }
 
 interface Props {
@@ -116,6 +129,22 @@ interface Props {
   onSelect: (id: string | null) => void
   /** Rendered over the map — filter chips, sheets, floating buttons. */
   overlay?: React.ReactNode
+  /**
+   * Rendered over the map but *under* its zoom and layer controls.
+   *
+   * `overlay` is last in the stack, so anything that covers the map there covers
+   * the buttons too. The freehand layer has to catch a finger anywhere on the map
+   * and still leave the buttons working, which only an earlier slot allows.
+   */
+  surface?: React.ReactNode
+  /**
+   * Leads to draw as chosen, with the same halo a tapped pin gets.
+   *
+   * The console's bulk selection lives outside the map; without this a lead
+   * ticked by tapping its pin, or swept up by an outline, looked exactly like one
+   * that was not. Held as a set so the caller passes the selection it already has.
+   */
+  markedIds?: ReadonlySet<string>
   className?: string
   initialCenter?: { lat: number; lng: number }
   /** Overrides the default field zoom — used to frame a whole territory. */
@@ -183,6 +212,12 @@ interface Props {
      * the map tell a screen reader the wrong thing about what a tap would do.
      */
     label?: string
+    /**
+     * Whether to draw a dot on every corner. On by default: a hand-placed shape
+     * has a dozen corners and each is a handle. A freehand outline has fifty or
+     * more, and a dot on each is noise over the very houses it is meant to show.
+     */
+    showVertices?: boolean
   }
   /**
    * Location picking — the tap that becomes a lead.
@@ -234,6 +269,8 @@ export function FieldMap({
   selectedId,
   onSelect,
   overlay,
+  surface,
+  markedIds,
   className = '',
   initialCenter,
   initialZoom,
@@ -477,8 +514,20 @@ export function FieldMap({
   )
 
   useEffect(() => {
-    if (handleRef) handleRef.current = { flyTo, reveal, fit }
-  }, [handleRef, flyTo, reveal, fit])
+    if (handleRef) {
+      handleRef.current = {
+        flyTo,
+        reveal,
+        fit,
+        toLatLng: (clientX, clientY) => {
+          const box = boxRef.current?.getBoundingClientRect()
+          if (!box || !size.w) return null
+          return toLatLng(clientX - box.left, clientY - box.top)
+        },
+        prepareDraw: () => {},
+      }
+    }
+  }, [handleRef, flyTo, reveal, fit, toLatLng, size.w])
 
   const onPointerDown = (e: React.PointerEvent) => {
     const hit = (e.target as Element).closest?.('[data-marker]') as HTMLElement | null
@@ -1009,7 +1058,7 @@ export function FieldMap({
               strokeLinejoin="round"
               strokeDasharray={drawClosed(drawn.pts) ? undefined : '6 5'}
             />
-            {drawn.pts.map((p, i) => (
+            {draw?.showVertices !== false && drawn.pts.map((p, i) => (
               <g key={i} data-marker={draw?.onMovePoint ? 'vertex' : undefined} data-index={i} className={draw?.onMovePoint ? 'cursor-grab' : undefined}>
                 {/* A finger-sized target around the dot, so a corner can be picked up on a phone. */}
                 {draw?.onMovePoint && <rect x={p.x - 18} y={p.y - 18} width={36} height={36} fill="transparent" />}
@@ -1084,7 +1133,7 @@ export function FieldMap({
 
         {/* individual properties */}
         {pins.map((pin, i) => {
-          const selected = pin.id === selectedId
+          const selected = pin.id === selectedId || !!markedIds?.has(pin.id)
           /*
             Status colours the dot; selection overrides it with the brand orange.
             Selection is a UI state rather than a property of the lead, and
@@ -1207,6 +1256,8 @@ export function FieldMap({
         */}
         {pickAt && <LocationPinSvg x={pickAt.x} y={pickAt.y} label={pick?.label} />}
       </svg>
+
+      {surface}
 
       {/*
         All map controls live in one bottom-right stack.

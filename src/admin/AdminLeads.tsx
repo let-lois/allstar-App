@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { describeError } from '../lib/errors'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AdminPage, FilterBar } from './AdminLayout'
@@ -17,6 +17,9 @@ import { money, relative } from '../lib/format'
 import type { LeadStatus, Property } from '../types'
 import { DataList } from './DataList'
 import { AllStarMap } from '../components/map/AllStarMap'
+import { FreehandLayer } from '../components/map/FreehandLayer'
+import type { MapHandle } from '../components/map/FieldMap'
+import { formatArea, pointsInside, type LatLng, type OutlineResult } from '@allstar/core/freehand'
 import { pointInPolygon } from '../lib/geo'
 import { VISITED_WINDOWS, matchesVisited, type VisitedWindow } from '../lib/leadFilter'
 import { FOLLOW_UP_FILTERS, matchesFollowUp, openTaskByLead, type FollowUpFilter } from '../lib/followups'
@@ -173,6 +176,17 @@ export default function AdminLeads() {
     a coordinate and show what has been drawn so far.
   */
   const [lasso, setLasso] = useState<{ lat: number; lng: number }[] | null>(null)
+  /*
+    What the map is being used for. Pins (and the tap-by-tap area above) is how
+    this screen always worked and stays the default; Draw territory is a freehand
+    outline — drag a finger round an area. Two tools rather than one blended
+    gesture because their touches mean opposite things: on the pins tool a drag
+    pans the map, on the drawing tool it draws.
+  */
+  const [mapTool, setMapTool] = useState<'pins' | 'territory'>('pins')
+  const [outline, setOutline] = useState<{ points: LatLng[]; areaSqMiles: number; trimmed: boolean } | null>(null)
+  const [outlineError, setOutlineError] = useState<string | null>(null)
+  const mapHandle = useRef<MapHandle | null>(null)
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignTo, setAssignTo] = useState('')
@@ -317,6 +331,50 @@ export default function AdminLeads() {
     })
     setLasso(null)
   }
+  /*
+    The leads inside the freehand outline — over `rows`, the filtered set, for the
+    same reason the tap-by-tap area is: somebody who narrowed to one rep's
+    follow-ups and then drew round a block means the follow-ups on that block.
+    Recomputed when the filters change, so the count under an outline that is on
+    screen never goes stale.
+  */
+  const inOutline = useMemo(() => (outline ? pointsInside(rows, outline.points) : []), [outline, rows])
+
+  function chooseTool(tool: 'pins' | 'territory') {
+    setMapTool(tool)
+    setOutline(null)
+    setOutlineError(null)
+    if (tool === 'territory') {
+      // The tap-by-tap shape and the freehand one are different drawings; keeping
+      // both half-made would leave two outlines to choose between.
+      setLasso(null)
+      // Square the view up (the Google map can be rotated or tilted) before any
+      // pixel is turned into a coordinate.
+      mapHandle.current?.prepareDraw()
+    }
+  }
+
+  function onFreehand(result: OutlineResult) {
+    if (result.ok) {
+      setOutline({ points: result.outline, areaSqMiles: result.areaSqMiles, trimmed: result.trimmed })
+      setOutlineError(null)
+    } else {
+      // Nothing is kept: the layer is still there, so the next drag is the retry.
+      setOutline(null)
+      setOutlineError(result.message)
+    }
+  }
+
+  /** Added to the selection, never replacing it — same rule, same reason, as `commitLasso`. */
+  function selectOutlined() {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      for (const p of inOutline) next.add(p.id)
+      return next
+    })
+    setOutline(null)
+  }
+
   // Selection follows what's on screen: "select all" that silently picks up
   // three thousand filtered-out rows is how a bulk action goes wrong.
   const allOnPageSelected = page.length > 0 && page.every((p) => selected.has(p.id))
@@ -669,7 +727,12 @@ export default function AdminLeads() {
                 setView(v)
                 // Leaving the map mid-shape would leave the draft hanging with
                 // nothing on screen able to finish or discard it.
-                if (v === 'list') setLasso(null)
+                if (v === 'list') {
+                  setLasso(null)
+                  setMapTool('pins')
+                  setOutline(null)
+                  setOutlineError(null)
+                }
               }}
               aria-pressed={view === v}
               className={`focusable min-h-[40px] px-3 text-sm font-semibold capitalize ${
@@ -1096,8 +1159,33 @@ export default function AdminLeads() {
             `verify:geo-parity`. What is new here is only where the answer goes:
             into the selection the checkboxes already feed.
           */}
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            {!lasso ? (
+          {/* A fixed minimum height: the Select button is taller than the tool
+              switch, so when an outline appears the row grew by two pixels and the
+              map moved under the finger that had just drawn on it. */}
+          <div className="mb-2 flex min-h-[44px] flex-wrap items-center gap-2">
+            {/*
+              Which tool the map is. Named for what a drag does, since that is
+              the difference: on Select pins it pans, on Draw territory it draws.
+              A segmented control like the list/map switch above — the active one
+              is a fill and a word, never colour alone.
+            */}
+            <div className="flex overflow-hidden rounded-field border border-line" role="group" aria-label="Map tool">
+              {(['pins', 'territory'] as const).map((tool) => (
+                <button
+                  key={tool}
+                  type="button"
+                  onClick={() => chooseTool(tool)}
+                  aria-pressed={mapTool === tool}
+                  data-testid={`map-tool-${tool}`}
+                  className={`focusable min-h-[40px] px-3 text-sm font-semibold ${
+                    mapTool === tool ? 'bg-brand-500 text-ink-inverse' : 'bg-surface text-ink-soft'
+                  }`}
+                >
+                  {tool === 'pins' ? 'Select pins' : 'Draw territory'}
+                </button>
+              ))}
+            </div>
+            {mapTool === 'pins' && (!lasso ? (
               <Button size="sm" variant="secondary" onClick={() => setLasso([])}>
                 Select an area
               </Button>
@@ -1134,8 +1222,57 @@ export default function AdminLeads() {
                   Cancel
                 </button>
               </>
-            )}
+            ))}
           </div>
+
+          {/*
+            What the drawing came to, in a block of fixed height.
+
+            It used to sit in the row above, which wrapped to a second and third
+            line on a phone the moment an outline appeared — and the map moved a
+            hundred pixels down just after the finger lifted, with the shape that
+            had just been drawn sliding away from it. The height is reserved for
+            the tallest thing it can hold (a count and three buttons on two lines),
+            so the empty, error and result states all take the same room and the map
+            stays where it was drawn on. Details that only some outlines have go
+            beneath the map, where nothing can be pushed.
+          */}
+          {mapTool === 'territory' && (
+            <div
+              className="mb-2 flex min-h-[76px] flex-wrap content-start items-center gap-x-2 gap-y-1.5 md:min-h-[44px] md:flex-nowrap"
+              data-testid="freehand-panel"
+            >
+              {outlineError && !outline && (
+                <p role="alert" className="text-sm font-medium text-bad" data-testid="freehand-error">
+                  {outlineError}
+                </p>
+              )}
+              {outline && (
+                <>
+                  <span className="w-full text-sm font-semibold md:w-auto" data-testid="freehand-count" aria-live="polite">
+                    {inOutline.length === 0
+                      ? 'No leads inside this outline'
+                      : `${inOutline.length.toLocaleString()} lead${inOutline.length === 1 ? '' : 's'} inside`}
+                    <span className="font-normal text-ink-mute"> · {formatArea(outline.areaSqMiles)}</span>
+                  </span>
+                  <Button size="sm" disabled={inOutline.length === 0} onClick={selectOutlined} data-testid="freehand-apply">
+                    Select {inOutline.length.toLocaleString()} lead{inOutline.length === 1 ? '' : 's'}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => setOutline(null)} data-testid="freehand-redraw">
+                    Redraw
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => chooseTool('pins')}
+                    className="focusable text-sm font-medium text-ink-mute underline"
+                    data-testid="freehand-cancel"
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {/*
             The filtered set, so what is on the map is what the list would show.
@@ -1145,8 +1282,30 @@ export default function AdminLeads() {
           <AllStarMap
             className="h-[min(520px,60svh)] rounded-card md:h-[520px]"
             properties={rows}
+            handleRef={mapHandle}
+            // Chosen leads look chosen. Before, tapping a pin changed the count and
+            // nothing on the map, so a selection could not be checked by eye.
+            markedIds={selected}
+            // Drawing territory: the finished outline is shown as a plain shape,
+            // with no dot on every corner of a line that has fifty.
+            surface={
+              mapTool === 'territory' && !outline ? (
+                <FreehandLayer
+                  toLatLng={(x, y) => mapHandle.current?.toLatLng(x, y) ?? null}
+                  // No `onStart` that clears the message: removing a line above the
+                  // map as a finger lands moves the map under it, and the first
+                  // corners of the stroke would be placed against the old layout.
+                  // The message is replaced when the stroke ends, by its result.
+                  onOutline={onFreehand}
+                />
+              ) : undefined
+            }
             draw={
-              lasso
+              mapTool === 'territory'
+                ? outline
+                  ? { points: outline.points, onAddPoint: () => {}, label: 'Territory outline', showVertices: false }
+                  : undefined
+                : lasso
                 ? {
                     points: lasso,
                     onAddPoint: (point) => setLasso((pts) => [...(pts ?? []), point]),
@@ -1164,9 +1323,15 @@ export default function AdminLeads() {
             onSelect={(id) => id && toggle(id)}
           />
           <p className="mt-1 text-xs text-ink-mute">
-            {lasso
-              ? 'Tap the map to add points. The shape closes itself.'
-              : 'Tap a pin to select it, or draw round several at once.'}
+            {mapTool === 'territory'
+              ? outline
+                ? `Pan and zoom to check the outline, then select the leads inside it.${
+                    outline.trimmed ? ' The end of the line crossed the start, so the extra bit was trimmed off.' : ''
+                  }`
+                : 'Drag across the map to trace the area. The shape closes itself when you let go.'
+              : lasso
+                ? 'Tap the map to add points. The shape closes itself.'
+                : 'Tap a pin to select it, or draw round several at once.'}
           </p>
         </section>
       )}
