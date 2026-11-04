@@ -1,3 +1,5 @@
+import { project, unproject } from '../../lib/geo'
+
 /**
  * The decisions both map renderers must make the same way.
  *
@@ -258,4 +260,38 @@ export function tapIntent(state: {
   if (state.drawing) return 'draw'
   if (state.picking && (state.pickExclusive || !state.hitMarker)) return 'pick'
   return state.hitMarker ? 'select' : 'deselect'
+}
+
+/**
+ * Which coordinate is under a pixel, from nothing but the map's visible bounds.
+ *
+ * The freehand layer records where a finger went in screen pixels and needs them
+ * back as coordinates. The self-rendered map has the arithmetic in hand; Google's
+ * map has it behind a projection object that needs the Maps API — which no gate
+ * here can load. Interpolating in Web Mercator between the visible corners gives
+ * the same answer for a north-up, untilted map (which is what the layer asks the
+ * renderer for, see `prepareDraw`), and being a plain function it is tested in
+ * Node against the self-rendered map's own projection.
+ *
+ * Interpolation is in Mercator world units, not in degrees: latitude is not linear
+ * on screen, and a straight blend of the corners would put a vertex near the top
+ * of a tall view several metres off. A view that crosses the antimeridian has its
+ * east edge numerically west of its west edge; it is unwrapped by one world.
+ */
+export function pixelToLatLng(
+  bounds: { north: number; south: number; east: number; west: number },
+  size: { w: number; h: number },
+  x: number,
+  y: number,
+): { lat: number; lng: number } | null {
+  if (!(size.w > 0) || !(size.h > 0)) return null
+  if (![bounds.north, bounds.south, bounds.east, bounds.west, x, y].every(Number.isFinite)) return null
+  const nw = project(bounds.north, bounds.west)
+  const se = project(bounds.south, bounds.east)
+  let spanX = se.x - nw.x
+  if (spanX <= 0) spanX += 1
+  const wx = nw.x + (x / size.w) * spanX
+  const wy = nw.y + (y / size.h) * (se.y - nw.y)
+  const at = unproject(((wx % 1) + 1) % 1, wy)
+  return Number.isFinite(at.lat) && Number.isFinite(at.lng) ? { lat: at.lat, lng: at.lng } : null
 }

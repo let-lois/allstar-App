@@ -19,6 +19,7 @@ import {
   MAP_MIN_ZOOM,
   drawOverlay,
   mapAriaLabel,
+  pixelToLatLng,
   tapIntent,
 } from './map-contract'
 import type { MapHandle } from './FieldMap'
@@ -96,6 +97,10 @@ interface Props {
   selectedId?: string | null
   onSelect: (id: string | null) => void
   overlay?: React.ReactNode
+  /** Over the map and under its controls — see `FieldMap`'s copy of this prop. */
+  surface?: React.ReactNode
+  /** Leads to draw as chosen — see `FieldMap`'s copy of this prop. */
+  markedIds?: ReadonlySet<string>
   className?: string
   initialCenter?: { lat: number; lng: number }
   initialZoom?: number
@@ -147,6 +152,8 @@ interface Props {
     onMovePoint?: (index: number, point: { lat: number; lng: number }) => void
     /** What the drawing is for, announced to a screen reader. */
     label?: string
+    /** A dot on every corner; off for a freehand outline. See `FieldMap`. */
+    showVertices?: boolean
   }
   /**
    * Location picking, matching `FieldMap`'s prop of the same name so the map
@@ -285,6 +292,8 @@ export function GoogleFieldMap({
   selectedId,
   onSelect,
   overlay,
+  surface,
+  markedIds,
   className = '',
   initialCenter,
   initialZoom,
@@ -565,14 +574,16 @@ export function GoogleFieldMap({
 
       for (const p of properties) {
         const existing = live.get(p.id)
+        // A lead the person has chosen looks like a tapped one. See `markedIds`.
+        const emphasised = p.id === selectedId || !!markedIds?.has(p.id)
         if (existing) {
-          existing.content = pinElement(STATUS_COLOR[p.status], p.id === selectedId)
-          existing.zIndex = p.id === selectedId ? 1000 : undefined
+          existing.content = pinElement(STATUS_COLOR[p.status], emphasised)
+          existing.zIndex = emphasised ? 1000 : undefined
           continue
         }
         const marker = new AdvancedMarkerElement({
           position: { lat: p.lat, lng: p.lng },
-          content: pinElement(STATUS_COLOR[p.status], p.id === selectedId),
+          content: pinElement(STATUS_COLOR[p.status], emphasised),
           title: p.address1,
           gmpClickable: true,
         })
@@ -675,7 +686,7 @@ export function GoogleFieldMap({
     return () => {
       cancelled = true
     }
-  }, [ready, properties, selectedId, disableClustering])
+  }, [ready, properties, selectedId, markedIds, disableClustering])
 
   /* --- the pin under the rep's finger ------------------------------------- */
   //
@@ -907,6 +918,9 @@ export function GoogleFieldMap({
       )) as google.maps.MarkerLibrary
       if (cancelled || !mapRef.current) return
       const movable = !!drawRefProp.current?.onMovePoint
+      // A freehand outline has dozens of corners; a handle on each is a marker
+      // per corner for no one to grab.
+      if (drawRefProp.current?.showVertices === false) return
       vertexRef.current = coords.map((at, i) => {
         const marker = new AdvancedMarkerElement({
           map: mapRef.current,
@@ -1028,7 +1042,29 @@ export function GoogleFieldMap({
   }, [ready, applyFit])
 
   useEffect(() => {
-    if (handleRef) handleRef.current = { flyTo, reveal, fit }
+    if (!handleRef) return
+    handleRef.current = {
+      flyTo,
+      reveal,
+      fit,
+      toLatLng: (clientX, clientY) => {
+        const map = mapRef.current
+        const box = boxRef.current?.getBoundingClientRect()
+        const b = map?.getBounds()?.toJSON()
+        if (!map || !box || !b) return null
+        // Only exact for a north-up, flat map: `prepareDraw` squares it up, and the
+        // freehand layer covers the map while it is being drawn on, so nothing can
+        // rotate or tilt it between the two.
+        if ((map.getHeading() ?? 0) !== 0 || (map.getTilt() ?? 0) !== 0) return null
+        return pixelToLatLng(b, { w: box.width, h: box.height }, clientX - box.left, clientY - box.top)
+      },
+      prepareDraw: () => {
+        const map = mapRef.current
+        if (!map) return
+        if ((map.getHeading() ?? 0) !== 0) map.setHeading(0)
+        if ((map.getTilt() ?? 0) !== 0) map.setTilt(0)
+      },
+    }
   }, [handleRef, flyTo, reveal, fit])
 
   const zoomBy = (d: number) => {
@@ -1063,6 +1099,8 @@ export function GoogleFieldMap({
         role="application"
         data-tour="map-canvas"
       />
+
+      {surface}
 
       {/*
         Something between "asked for a map" and "has a map".
