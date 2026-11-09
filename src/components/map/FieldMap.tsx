@@ -18,6 +18,8 @@ import {
   drawClosed,
   mapAriaLabel,
   tapIntent,
+  outlineOverlay,
+  type MapOutline,
 } from './map-contract'
 
 /** brand-500 — the one place on the map that is allowed to be teal by default. */
@@ -145,6 +147,12 @@ interface Props {
    * that was not. Held as a set so the caller passes the selection it already has.
    */
   markedIds?: ReadonlySet<string>
+  /**
+   * Saved territories to draw under the leads — several at once, the one the
+   * screen is about emphasised. Context only: never clickable, so a tap on a pin
+   * inside an outline still reaches the pin. See `MapOutline`.
+   */
+  outlines?: MapOutline[]
   className?: string
   initialCenter?: { lat: number; lng: number }
   /** Overrides the default field zoom — used to frame a whole territory. */
@@ -271,6 +279,7 @@ export function FieldMap({
   overlay,
   surface,
   markedIds,
+  outlines,
   className = '',
   initialCenter,
   initialZoom,
@@ -869,6 +878,29 @@ export function FieldMap({
   }, [path, toScreen, size.w])
 
   /* --- the territory being drawn ------------------------------------------ */
+  /* --- saved territories --------------------------------------------------- */
+  // Through `outlineOverlay`, the same decision the Google renderer applies, so a
+  // shape is an area (and styled) by one rule on both.
+  const outlinePaths = useMemo(() => {
+    if (!outlines?.length || !size.w) return []
+    return outlines
+      .map((o) => outlineOverlay(o))
+      .filter((o): o is NonNullable<typeof o> => !!o)
+      .map((o) => ({
+        id: o.id,
+        options: o.options,
+        d:
+          o.path
+            .map((p, i) => {
+              const at = toScreen(p.lat, p.lng)
+              return `${i ? 'L' : 'M'}${at.x.toFixed(1)} ${at.y.toFixed(1)}`
+            })
+            .join(' ') + ' Z',
+      }))
+      // Emphasised last, so its line is never under a neighbour's.
+      .sort((a, b) => a.options.zIndex - b.options.zIndex)
+  }, [outlines, toScreen, size.w])
+
   const drawn = useMemo(() => {
     if (!draw || !size.w) return null
     const pts = draw.points.map((p) => toScreen(p.lat, p.lng))
@@ -1039,6 +1071,29 @@ export function FieldMap({
                 </g>
               </g>
             )}
+          </g>
+        )}
+
+        {/*
+          Saved territories: first, so they are under the shape being drawn and
+          under every lead. `pointer-events: none` on the group, so a press on an
+          outline is a press on the map — and a pin inside one is still the pin.
+        */}
+        {outlinePaths.length > 0 && (
+          <g data-outlines="territories" pointerEvents="none">
+            {outlinePaths.map((o) => (
+              <path
+                key={o.id}
+                data-outline={o.id}
+                d={o.d}
+                fill={o.options.fillColor}
+                fillOpacity={o.options.fillOpacity}
+                stroke={o.options.strokeColor}
+                strokeOpacity={o.options.strokeOpacity}
+                strokeWidth={o.options.strokeWeight}
+                strokeLinejoin="round"
+              />
+            ))}
           </g>
         )}
 

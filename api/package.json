@@ -33,6 +33,7 @@
     "smoke:deadkey": "node scripts/smoke-geocode-dead-key.mjs",
     "smoke:lists": "node scripts/smoke-lists.mjs",
     "smoke:territory-reps": "node scripts/smoke-territory-reps.mjs",
+    "smoke:territory-reshape": "node scripts/smoke-territory-reshape.mjs",
     "smoke:onboarding-schema": "node scripts/smoke-onboarding-schema.mjs",
     "smoke:onboarding-flow": "node scripts/smoke-onboarding-flow.mjs",
     "smoke:mail": "node scripts/smoke-mail.mjs",

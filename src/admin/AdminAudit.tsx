@@ -36,7 +36,7 @@ const GROUPS = [
     label: 'People',
     actions: ['user.invited', 'user.deactivated', 'user.reactivated', 'user.deleted'],
   },
-  { key: 'leads', label: 'Leads', actions: ['territory.created', 'territory.renamed', 'territory.deleted', 'territory.assigned', 'territory.unassigned', 'territory.generated', 'territory.leads_moved', 'leads.imported', 'leads.exported', 'plan.created', 'plan.updated', 'plan.deleted'] },
+  { key: 'leads', label: 'Leads', actions: ['territory.created', 'territory.renamed', 'territory.reshaped', 'territory.deleted', 'territory.assigned', 'territory.unassigned', 'territory.generated', 'territory.leads_moved', 'leads.imported', 'leads.exported', 'plan.created', 'plan.updated', 'plan.deleted'] },
   {
     key: 'connections',
     label: 'Connections',

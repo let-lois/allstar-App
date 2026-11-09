@@ -108,6 +108,7 @@
     "verify:avatar": "node scripts/verify-avatar.mjs",
     "verify:tour": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-tour.mjs",
     "verify:photos": "node scripts/verify-photos.mjs",
+    "verify:territory-outlines": "node scripts/verify-territory-outlines.mjs",
     "verify:freehand-territory": "node scripts/verify-freehand-territory.mjs",
     "verify:freehand-ui": "node scripts/verify-freehand-ui.mjs",
     "verify:freehand": "node --import ./scripts/lib/ts-imports.mjs scripts/verify-freehand.mjs",

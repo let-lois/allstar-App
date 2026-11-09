@@ -3,7 +3,7 @@ import { describeError } from '../lib/errors'
 import { AdminPage } from './AdminLayout'
 import { fitZoom, type MapHandle } from '../components/map/FieldMap'
 import { FreehandLayer } from '../components/map/FreehandLayer'
-import type { OutlineResult } from '@allstar/core/freehand'
+import { buildOutline, type OutlineResult } from '@allstar/core/freehand'
 import { AllStarMap } from '../components/map/AllStarMap'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
@@ -136,6 +136,15 @@ export function AdminTerritories() {
     () => (draft && draft.points.length >= 3 ? polygonAreaSqMiles(draft.points) : 0),
     [draft],
   )
+
+  /*
+    Leads inside the new outline that are filed under another territory now.
+    Creating a patch takes them (that is how a downtown patch is carved out of a
+    city-wide one), so the panel says how many before anyone presses Create: a
+    reassignment somebody can see coming is a deliberate one.
+  */
+  const carving = useMemo(() => inside.filter((p) => !!p.territoryId && !!territories[p.territoryId]), [inside, territories])
+  const carvedFrom = useMemo(() => [...new Set(carving.map((p) => territories[p.territoryId!]!.name))], [carving, territories])
 
   const saveDraft = async () => {
     if (!draft || draft.points.length < 3) return
@@ -312,6 +321,20 @@ export function AdminTerritories() {
   const [busy, setBusy] = useState(false)
   const [manageError, setManageError] = useState<string | null>(null)
   const [managed, setManaged] = useState<string | null>(null)
+
+  /*
+    Editing a territory's outline.
+
+    Two ways, like drawing one: drag the corners of the line that is there, or
+    throw it away and redraw it freehand. A freehand outline has too many corners
+    to drag usefully, so one with more than `DRAG_CORNERS_MAX` opens on redraw.
+    Nothing is written until Save; Cancel puts the old line back untouched.
+  */
+  const reshapeTerritory = useAppStore((s) => s.reshapeTerritory)
+  const [outlineEdit, setOutlineEdit] = useState<{ id: string; points: { lat: number; lng: number }[]; style: 'corners' | 'freehand' } | null>(null)
+  const [outlineError, setOutlineError] = useState<string | null>(null)
+  const [outlineSaving, setOutlineSaving] = useState(false)
+  const detailHandle = useRef<MapHandle | null>(null)
   /*
     The delete confirmation is a separate note, and not because there are two
     kinds of good news.
@@ -402,6 +425,100 @@ export function AdminTerritories() {
       setBusy(false)
     }
   }
+
+  // Choosing another territory ends an edit of this one; the line would
+  // otherwise stay on a map now showing somebody else's patch.
+  useEffect(() => {
+    setOutlineEdit((e) => (e && e.id !== selected ? null : e))
+  }, [selected])
+
+  const DRAG_CORNERS_MAX = 60
+  function startOutlineEdit(id: string) {
+    const boundary = territories[id]?.boundary ?? []
+    setOutlineError(null)
+    setManaged(null)
+    setManageError(null)
+    const corners = boundary.length >= 3 && boundary.length <= DRAG_CORNERS_MAX
+    setOutlineEdit({ id, points: corners ? boundary : [], style: corners ? 'corners' : 'freehand' })
+    if (!corners) detailHandle.current?.prepareDraw()
+  }
+  function outlineStyle(style: 'corners' | 'freehand') {
+    setOutlineError(null)
+    setOutlineEdit((e) => {
+      if (!e) return e
+      const boundary = territories[e.id]?.boundary ?? []
+      // Corners start from the saved line; freehand starts from nothing.
+      if (style === 'corners') return { ...e, style, points: boundary.length <= DRAG_CORNERS_MAX ? boundary : [] }
+      return { ...e, style, points: [] }
+    })
+    if (style === 'freehand') detailHandle.current?.prepareDraw()
+  }
+  function onOutlineFreehand(result: OutlineResult) {
+    if (result.ok) {
+      setOutlineEdit((e) => (e ? { ...e, points: result.outline } : e))
+      setOutlineError(null)
+    } else {
+      setOutlineError(result.message)
+    }
+  }
+  /*
+    What saving would do, counted live over the leads on this device: leads in
+    no territory that the new line takes in, and this territory's own leads that
+    the new line leaves outside (they stay in it — see `reshapeTerritory`).
+  */
+  const outlineEffect = useMemo(() => {
+    if (!outlineEdit || outlineEdit.points.length < 3) return null
+    const pts = outlineEdit.points
+    let joining = 0
+    let outside = 0
+    for (const p of list) {
+      if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue
+      const isIn = pointInPolygon(p, pts)
+      if (!p.territoryId && isIn) joining++
+      else if (p.territoryId === outlineEdit.id && !isIn) outside++
+    }
+    return { joining, outside }
+  }, [outlineEdit, list])
+  async function saveOutline() {
+    if (!outlineEdit || outlineSaving) return
+    // Corners dragged across each other make a shape that crosses itself; the
+    // same check a freehand stroke gets, so a bad line is said, not stored.
+    const checked = buildOutline(outlineEdit.points, { trimOvershoot: outlineEdit.style === 'freehand' })
+    if (!checked.ok) {
+      setOutlineError(checked.message)
+      return
+    }
+    setOutlineSaving(true)
+    setOutlineError(null)
+    try {
+      const name = label(outlineEdit.id)
+      const res = await reshapeTerritory(outlineEdit.id, checked.outline)
+      const joined = res.joined ? ` ${res.joined.toLocaleString()} lead${res.joined === 1 ? '' : 's'} in no territory joined it.` : ''
+      const out = res.outside
+        ? ` ${res.outside.toLocaleString()} of its leads are now outside the line and stay in ${name}; move them from Leads if they belong elsewhere.`
+        : ''
+      setManaged(`Saved the new outline for ${name}.${joined}${out}`)
+      setOutlineEdit(null)
+    } catch (err) {
+      // The drawing stays on the map: a failed save must not cost the line.
+      setOutlineError(describeError(err, 'Could not save the outline. Try again.'))
+    } finally {
+      setOutlineSaving(false)
+    }
+  }
+
+  /*
+    Every saved territory, drawn under the leads so several can be seen at once.
+    The one selected is emphasised; the one whose outline is being edited is left
+    out, because its new line is the shape being drawn.
+  */
+  const outlines = useMemo(
+    () =>
+      Object.values(territories)
+        .filter((t) => (t.boundary?.length ?? 0) >= 3 && t.id !== outlineEdit?.id)
+        .map((t) => ({ id: t.id, points: t.boundary!, emphasis: t.id === selected && !draft })),
+    [territories, selected, outlineEdit?.id, draft],
+  )
 
   // Frame the selected territory rather than inheriting the rep's street-level
   // zoom, where the whole patch collapses into cluster bubbles.
@@ -641,6 +758,8 @@ export function AdminTerritories() {
                         setDraft((d) => (d ? { points: d.points.map((p, n) => (n === i ? point : p)) } : d)),
                     }
               }
+              // The territories already drawn, so a new one can be placed against its neighbours.
+              outlines={outlines}
               position={null}
               disableClustering={list.length <= 25}
               selectedId={null}
@@ -755,6 +874,11 @@ export function AdminTerritories() {
                     <p className="mt-2 text-[12.5px] leading-snug text-ink-mute" data-testid="territory-generate-note">
                       {inside.length.toLocaleString()} existing lead{inside.length === 1 ? '' : 's'} inside will join it
                       {mode === 'live' && draftGenerate ? '; the houses inside are looked up when you create it.' : '.'}
+                      {carving.length > 0 && (
+                        <span className="mt-1 block font-medium text-warn" data-testid="territory-carve-note">
+                          {carving.length.toLocaleString()} of them {carving.length === 1 ? 'is' : 'are'} in {carvedFrom.join(', ')} now and will move to this territory.
+                        </span>
+                      )}
                     </p>
                   )
                 )}
@@ -1066,6 +1190,11 @@ export function AdminTerritories() {
                   >
                     Rename
                   </Button>
+                  {(territories[selected!]?.boundary?.length ?? 0) >= 3 && !outlineEdit && (
+                    <Button size="sm" variant="secondary" onClick={() => startOutlineEdit(selected!)} data-testid="territory-edit-outline">
+                      Edit outline
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="secondary"
@@ -1077,6 +1206,65 @@ export function AdminTerritories() {
                     Delete
                   </Button>
                 </div>
+                {outlineEdit && outlineEdit.id === selected && (
+                  <div className="mt-3 rounded-field bg-surface-sunk px-3 py-2.5" data-testid="territory-outline-panel">
+                    <div className="mb-2 flex overflow-hidden rounded-field border border-line" role="group" aria-label="How to edit the outline">
+                      {(['corners', 'freehand'] as const).map((style) => (
+                        <button
+                          key={style}
+                          type="button"
+                          onClick={() => outlineStyle(style)}
+                          aria-pressed={outlineEdit.style === style}
+                          data-testid={`territory-outline-${style}`}
+                          disabled={style === 'corners' && (territories[outlineEdit.id]?.boundary?.length ?? 0) > DRAG_CORNERS_MAX}
+                          className={`focusable min-h-[40px] flex-1 px-3 text-sm font-semibold disabled:opacity-50 ${
+                            outlineEdit.style === style ? 'bg-brand-500 text-ink-inverse' : 'bg-surface text-ink-soft'
+                          }`}
+                        >
+                          {style === 'corners' ? 'Drag corners' : 'Redraw freehand'}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Room for the longest count, reserved: it changes while a corner
+                        is being dragged, and a line that wrapped mid-drag moved the
+                        map — and the corner — under the finger. */}
+                    <p className="min-h-[54px] text-[13px] leading-snug text-ink-soft md:min-h-[36px]" data-testid="territory-outline-effect">
+                      {outlineEffect
+                        ? `${outlineEffect.joining.toLocaleString()} lead${outlineEffect.joining === 1 ? '' : 's'} in no territory will join. ` +
+                          (outlineEffect.outside
+                            ? `${outlineEffect.outside.toLocaleString()} of its leads would sit outside the new line and stay in it.`
+                            : 'All of its leads stay inside.')
+                        : outlineEdit.style === 'freehand'
+                          ? 'Drag your finger round the area on the map below.'
+                          : 'Drag a corner on the map to move it.'}
+                    </p>
+                    {outlineError && (
+                      <p role="alert" className="mt-1 text-[13px] font-medium text-bad" data-testid="territory-outline-error">
+                        {outlineError}
+                      </p>
+                    )}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button size="sm" disabled={outlineEdit.points.length < 3 || outlineSaving} onClick={() => void saveOutline()} data-testid="territory-outline-save">
+                        {outlineSaving ? 'Saving…' : 'Save outline'}
+                      </Button>
+                      <Button size="sm" variant="secondary" disabled={outlineSaving} onClick={() => outlineStyle('freehand')} data-testid="territory-outline-redraw">
+                        Redraw
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={outlineSaving}
+                        onClick={() => {
+                          setOutlineEdit(null)
+                          setOutlineError(null)
+                        }}
+                        data-testid="territory-outline-cancel"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 </>
               )}
 
@@ -1107,7 +1295,31 @@ export function AdminTerritories() {
               point of the exercise is to see what falls inside the shape, and
               filtering first would hide exactly the leads being claimed.
             */
-            properties={shown}
+            // While its outline is being edited, every lead: the point is to see
+            // which ones the new line takes in and which it leaves out.
+            properties={outlineEdit ? list : shown}
+            outlines={outlines}
+            handleRef={detailHandle}
+            surface={
+              outlineEdit && outlineEdit.style === 'freehand' && outlineEdit.points.length === 0 ? (
+                <FreehandLayer toLatLng={(x, y) => detailHandle.current?.toLatLng(x, y) ?? null} onOutline={onOutlineFreehand} />
+              ) : undefined
+            }
+            draw={
+              outlineEdit && outlineEdit.points.length > 0
+                ? outlineEdit.style === 'corners'
+                  ? {
+                      points: outlineEdit.points,
+                      // Moving corners only: a tap appending a corner to a closed
+                      // line puts a spike wherever the last corner happens to be.
+                      onAddPoint: () => {},
+                      onMovePoint: (i, point) =>
+                        setOutlineEdit((e) => (e ? { ...e, points: e.points.map((p, n) => (n === i ? point : p)) } : e)),
+                      label: 'Territory outline',
+                    }
+                  : { points: outlineEdit.points, onAddPoint: () => {}, showVertices: false, label: 'Territory outline' }
+                : undefined
+            }
             // No follow-me here: an office user's own GPS is irrelevant to a
             // territory, and passing it would recenter the map off the patch.
             position={null}
@@ -1124,7 +1336,7 @@ export function AdminTerritories() {
               selection stopped being cleared, and a thousand pins with
               clustering switched off is a map nobody can draw on.
             */
-            disableClustering={shown.length <= 25}
+            disableClustering={(outlineEdit ? list : shown).length <= 25}
             selectedId={null}
             onSelect={() => {}}
             /* `key` forces a refit when the selection changes. While drawing it

@@ -287,7 +287,16 @@ export function trimClosingLoop(points: readonly LatLng[]): { points: LatLng[]; 
  * it ready to store: valid, free of crossings, with an area. A returned outline
  * always satisfies the server's checks for a territory.
  */
-export function buildOutline(raw: readonly LatLng[]): OutlineResult {
+export function buildOutline(
+  raw: readonly LatLng[],
+  /**
+   * `trimOvershoot: false` for a line that was not drawn in one stroke — corners
+   * dragged by hand. A crossing there is a mistake to point out, not the tail of
+   * a stroke that ran past its start, and cutting part of the shape off to make
+   * it valid would save something the person never drew.
+   */
+  opts: { trimOvershoot?: boolean } = {},
+): OutlineResult {
   if (!Array.isArray(raw)) return fail('invalid')
   const cleaned: LatLng[] = []
   for (const p of raw) {
@@ -311,7 +320,7 @@ export function buildOutline(raw: readonly LatLng[]): OutlineResult {
   const lngs = cleaned.map((p) => p.lng)
   if (Math.max(...lngs) - Math.min(...lngs) > 180) return fail('crosses_dateline')
 
-  const trimmed = trimClosingLoop(cleaned)
+  const trimmed = opts.trimOvershoot === false ? { points: cleaned, trimmed: false } : trimClosingLoop(cleaned)
   const outline = trimmed.points
   if (outline.length < 3) return fail('too_small')
   if (selfIntersects(outline)) return fail('crosses_itself')
