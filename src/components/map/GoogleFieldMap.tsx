@@ -19,8 +19,10 @@ import {
   MAP_MIN_ZOOM,
   drawOverlay,
   mapAriaLabel,
+  outlineOverlay,
   pixelToLatLng,
   tapIntent,
+  type MapOutline,
 } from './map-contract'
 import type { MapHandle } from './FieldMap'
 
@@ -101,6 +103,8 @@ interface Props {
   surface?: React.ReactNode
   /** Leads to draw as chosen — see `FieldMap`'s copy of this prop. */
   markedIds?: ReadonlySet<string>
+  /** Saved territories under the leads — see `FieldMap`'s copy of this prop. */
+  outlines?: MapOutline[]
   className?: string
   initialCenter?: { lat: number; lng: number }
   initialZoom?: number
@@ -294,6 +298,7 @@ export function GoogleFieldMap({
   overlay,
   surface,
   markedIds,
+  outlines,
   className = '',
   initialCenter,
   initialZoom,
@@ -318,6 +323,7 @@ export function GoogleFieldMap({
   const planeRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
   const pickRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
   const drawShapeRef = useRef<google.maps.Polygon | google.maps.Polyline | null>(null)
+  const outlineRef = useRef<google.maps.Polygon[]>([])
   const vertexRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([])
   const [ready, setReady] = useState(false)
   /*
@@ -877,6 +883,35 @@ export function GoogleFieldMap({
   // points, from an open dashed Polyline to a filled Polygon, and a code path
   // that sometimes swaps the object and sometimes updates it is how one of the
   // two ends up orphaned on the map. Taps are a human-speed event.
+  /*
+    Saved territories. Keyed on their content, not the array (a caller building
+    it inline would otherwise rebuild every polygon on each render), and decided
+    by `outlineOverlay` so the options — above all `clickable: false`, which keeps
+    a tap on a pin inside an outline from being swallowed by the polygon — are the
+    ones the Node gate checks. Polygons sit in Google's overlay pane, under the
+    advanced markers' pane, so the pins stay on top whatever the zIndex.
+  */
+  // Every coordinate, not a sample of them: dragging one corner of a territory
+  // keeps its id, its point count and its first point, and a key built from those
+  // left the old outline on the map after the new one was saved.
+  const outlinesKey = (outlines ?? [])
+    .map((o) => `${o.id}:${o.emphasis ? 1 : 0}:${o.points.map((p) => `${p.lat},${p.lng}`).join(';')}`)
+    .join('|')
+  const outlinesRef = useRef(outlines)
+  outlinesRef.current = outlines
+  useEffect(() => {
+    if (!ready || !mapRef.current) return
+    const map = mapRef.current
+    outlineRef.current = (outlinesRef.current ?? [])
+      .map((o) => outlineOverlay(o))
+      .filter((o): o is NonNullable<typeof o> => !!o)
+      .map((o) => new google.maps.Polygon({ map, paths: o.path, ...o.options }))
+    return () => {
+      for (const p of outlineRef.current) p.setMap(null)
+      outlineRef.current = []
+    }
+  }, [ready, outlinesKey])
+
   /*
     Keyed on the coordinates rather than on the prop.
 

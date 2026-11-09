@@ -358,3 +358,95 @@ export async function deleteTerritory(
 
   return { ok: true, released }
 }
+
+/**
+ * Change a territory's outline, keeping every lead where it is.
+ *
+ * Redrawing a patch is a correction to a line on a map, not a decision about
+ * which houses belong to whom — so this is deliberately *not* the same rule as
+ * drawing a new one:
+ *
+ *   **Leads already in this territory stay in it**, including ones the new line
+ *   leaves outside. Dropping them would silently empty a rep's patch because
+ *   somebody tidied a corner; the count is returned so the console can say how
+ *   many now sit outside, and moving them is a separate, deliberate action
+ *   (Leads → Move to territory).
+ *
+ *   **Leads in another territory are never taken.** Creating a patch may carve
+ *   houses out of a bigger one — the console says so before it does — but
+ *   reshaping one must not quietly reach into its neighbour.
+ *
+ *   **Leads in no territory that the new line takes in join it**, by the same
+ *   inside-or-on-the-line test creation uses, and a patch with exactly one rep
+ *   hands them to that rep if nobody is working them. That is what extending a
+ *   patch means to the person dragging its edge outward.
+ *
+ * The outline and the claims go in one batch (one D1 transaction), so a claim
+ * that fails cannot leave a new line over old leads.
+ */
+export async function reshapeTerritory(
+  env: Env,
+  actor: SessionUser,
+  id: string,
+  input: { boundary?: unknown },
+): Promise<{ territory: { id: string }; joined: number; outside: number } | { error: string; status: number }> {
+  if (actor.role === 'field_rep') return { error: 'Not permitted.', status: 403 }
+
+  const parsed = parsePolygon(input.boundary)
+  if ('error' in parsed) return parsed
+  const { boundary } = parsed
+
+  const existing = await env.DB.prepare('SELECT id, name FROM territories WHERE id = ?1 AND client_id = ?2')
+    .bind(id, actor.clientId)
+    .first<{ id: string; name: string }>()
+  if (!existing) return { error: 'No such territory.', status: 404 }
+
+  const reps = await env.DB.prepare('SELECT user_id FROM territory_reps WHERE territory_id = ?1')
+    .bind(id)
+    .all<{ user_id: string }>()
+  const repIds = (reps.results ?? []).map((r) => r.user_id)
+  const claimFor = repIds.length === 1 ? repIds[0] : null
+
+  const rows = await env.DB.prepare(
+    'SELECT id, lat, lng, territory_id FROM properties WHERE client_id = ?1 AND (territory_id IS NULL OR territory_id = ?2)',
+  )
+    .bind(actor.clientId, id)
+    .all()
+  const located = (rows.results as { id: string; lat: number; lng: number; territory_id: string | null }[]).filter(
+    (p) => Number.isFinite(p.lat) && Number.isFinite(p.lng),
+  )
+  const joining = located
+    .filter((p) => !p.territory_id && (inside(p, boundary) || metresToEdge(p, boundary) <= EDGE_TOUCH_METRES))
+    .map((p) => p.id)
+  const outside = located.filter(
+    (p) => p.territory_id === id && !inside(p, boundary) && metresToEdge(p, boundary) > EDGE_TOUCH_METRES,
+  ).length
+
+  const now = Date.now()
+  const claims = bindChunks(joining, 4).map((chunk) =>
+    env.DB.prepare(
+      `UPDATE properties
+          SET territory_id = ?1,
+              assigned_rep_id = COALESCE(assigned_rep_id, ?2),
+              updated_at = ?3
+        WHERE client_id = ?4 AND territory_id IS NULL AND id IN (${chunk.map((_, n) => `?${n + 5}`).join(',')})`,
+    ).bind(id, claimFor, now, actor.clientId, ...chunk),
+  )
+  const results = await env.DB.batch([
+    env.DB.prepare('UPDATE territories SET boundary = ?1 WHERE id = ?2 AND client_id = ?3')
+      .bind(JSON.stringify(boundary), id, actor.clientId),
+    ...claims,
+  ])
+  let joined = 0
+  for (const r of results.slice(1)) joined += r.meta.changes ?? 0
+
+  await record(env, actor, {
+    action: 'territory.reshaped',
+    targetType: 'territory',
+    targetId: id,
+    targetLabel: existing.name,
+    detail: { points: boundary.length, joined, outside },
+  })
+
+  return { territory: { id }, joined, outside }
+}

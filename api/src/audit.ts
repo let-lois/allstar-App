@@ -60,6 +60,7 @@ export type AuditAction =
   | 'territory.created'
   | 'territory.generated'
   | 'territory.renamed'
+  | 'territory.reshaped'
   | 'territory.deleted'
   | 'list.created'
   | 'list.assigned'

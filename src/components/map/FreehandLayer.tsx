@@ -90,6 +90,32 @@ export function FreehandLayer({
     setShape(null)
   }, [])
 
+  /*
+    iPhone and iPad: hold the page still under a stroke.
+
+    `touch-action: none` is the standard way to say "this drag is mine", and
+    WebKit honours it — but the app runs inside a WKWebView inside an admin page
+    that scrolls, and a drag the webview decides is a scroll arrives here as a
+    `pointercancel` halfway round the outline. A non-passive touch listener that
+    cancels the default is the belt to that pair of braces. It has to be added by
+    hand: React registers touch listeners as passive, where preventDefault is
+    ignored. Pointer events still fire, so the stroke is recorded exactly as on
+    any other device.
+  */
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    const hold = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault()
+    }
+    el.addEventListener('touchstart', hold, { passive: false })
+    el.addEventListener('touchmove', hold, { passive: false })
+    return () => {
+      el.removeEventListener('touchstart', hold)
+      el.removeEventListener('touchmove', hold)
+    }
+  }, [])
+
   // A layer unmounted mid-stroke must not leave a frame callback behind.
   useEffect(
     () => () => {
@@ -204,7 +230,17 @@ export function FreehandLayer({
       role="group"
       aria-label={FREEHAND_HINT}
       className={`absolute inset-0 cursor-crosshair touch-none select-none ${className}`}
-      style={{ touchAction: 'none' }}
+      /*
+        The WebKit-only parts: no long-press callout or magnifier when a finger
+        rests before it starts to move, no text selection, no grey tap flash.
+      */
+      style={{
+        touchAction: 'none',
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+        WebkitTapHighlightColor: 'transparent',
+      }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={(e) => release(e, true)}

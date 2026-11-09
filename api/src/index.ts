@@ -28,7 +28,7 @@ import { googleReverseGeocode, useGoogleBase } from './geocode-google'
 import { findProvider } from './geocode-providers'
 import { MAX_IMPORT_ROWS, canImport, importProperties, propertyIdFor, type ImportInput, type ImportRow } from './import'
 import { assignProperties, assignTerritory, moveToTerritory } from './assign'
-import { createTerritory, deleteTerritory, renameTerritory } from './territories'
+import { createTerritory, deleteTerritory, renameTerritory, reshapeTerritory } from './territories'
 import { generateLeadsForTerritory } from './addresses'
 import { streetViewAt, useStreetViewBase } from './streetview'
 import { parseTilePath, tileFor } from './tiles'
@@ -1972,6 +1972,17 @@ export default {
         if (m) {
           if (req.method === 'PATCH') {
             const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+            /*
+              A new outline, or a new name — one PATCH, told apart by what was
+              sent, so the route table stays one row per resource. An outline
+              never renames and a name never moves the line.
+            */
+            if ('boundary' in body) {
+              ctx.operation = 'territory.reshape'
+              const reshaped = await reshapeTerritory(env, user, m[1]!, { boundary: body.boundary })
+              if ('error' in reshaped) return json({ error: reshaped.error }, reshaped.status, cors)
+              return json(reshaped, 200, cors)
+            }
             const result = await renameTerritory(env, user, m[1]!, { name: body.name })
             if ('error' in result) return json({ error: result.error }, result.status, cors)
             return json(result, 200, cors)

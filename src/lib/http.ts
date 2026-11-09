@@ -931,6 +931,18 @@ export function apiRenameTerritory(token: string, id: string, name: string) {
   )
 }
 
+/**
+ * A new outline for a territory. Leads already in it stay in it, leads in other
+ * territories are never taken, and leads in none that the new line takes in join
+ * it — see `reshapeTerritory` in api/src/territories.ts for why.
+ */
+export function apiReshapeTerritory(token: string, id: string, boundary: { lat: number; lng: number }[]) {
+  return request<{ territory: { id: string }; joined: number; outside: number }>(
+    `/api/territories/${encodeURIComponent(id)}`,
+    { method: 'PATCH', body: { boundary }, token, timeoutMs: 30_000 },
+  )
+}
+
 /** What looking up the houses inside a territory did. */
 export interface GeneratedLeads {
   found: number

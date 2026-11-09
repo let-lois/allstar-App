@@ -295,3 +295,64 @@ export function pixelToLatLng(
   const at = unproject(((wx % 1) + 1) % 1, wy)
   return Number.isFinite(at.lat) && Number.isFinite(at.lng) ? { lat: at.lat, lng: at.lng } : null
 }
+
+/**
+ * Saved territories, drawn on the map beside the leads.
+ *
+ * Quieter than the shape being drawn (`DRAW_*`) so the two are never confused:
+ * a thin slate line with the faintest fill, and the territory somebody has
+ * selected in the brand teal. Always under the pins and never clickable — an
+ * outline is context, and a tap on a pin inside one must reach the pin.
+ */
+export interface MapOutline {
+  id: string
+  points: { lat: number; lng: number }[]
+  /** The territory the screen is about: drawn in teal, a little heavier. */
+  emphasis?: boolean
+}
+export const OUTLINE_STROKE = '#6E8BB8'
+export const OUTLINE_STROKE_WIDTH = 1.75
+export const OUTLINE_FILL_OPACITY = 0.07
+export const OUTLINE_EMPHASIS_STROKE_WIDTH = 2.5
+export const OUTLINE_EMPHASIS_FILL_OPACITY = 0.12
+/** Under every marker, and under the shape being drawn (`DRAW_Z_SHAPE`). */
+export const OUTLINE_Z = 10
+
+export interface OutlineOverlay {
+  id: string
+  path: { lat: number; lng: number }[]
+  options: {
+    clickable: false
+    strokeColor: string
+    strokeOpacity: number
+    strokeWeight: number
+    fillColor: string
+    fillOpacity: number
+    zIndex: number
+  }
+}
+
+/**
+ * The polygon options for one saved territory, as plain data — the same
+ * reasoning as `drawOverlay`: the Google renderer only applies it, and a Node
+ * gate can check it without a Maps key. Null for an outline that is not an area.
+ */
+export function outlineOverlay(outline: MapOutline): OutlineOverlay | null {
+  const path = (outline.points ?? []).filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lng))
+  if (path.length < DRAW_CLOSES_AT) return null
+  const strong = !!outline.emphasis
+  const color = strong ? DRAW_STROKE : OUTLINE_STROKE
+  return {
+    id: outline.id,
+    path: path.map((p) => ({ lat: p.lat, lng: p.lng })),
+    options: {
+      clickable: false,
+      strokeColor: color,
+      strokeOpacity: strong ? 1 : 0.9,
+      strokeWeight: strong ? OUTLINE_EMPHASIS_STROKE_WIDTH : OUTLINE_STROKE_WIDTH,
+      fillColor: color,
+      fillOpacity: strong ? OUTLINE_EMPHASIS_FILL_OPACITY : OUTLINE_FILL_OPACITY,
+      zIndex: OUTLINE_Z + (strong ? 1 : 0),
+    },
+  }
+}

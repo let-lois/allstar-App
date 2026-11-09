@@ -16,7 +16,7 @@ import {
 } from '../packages/core/src/freehand.ts'
 import { pointInPolygon as coreInside, polygonAreaSqMiles, project, unproject } from '../packages/core/src/geo.ts'
 import { pointInPolygon as workerInside } from '../api/src/geo.ts'
-import { pixelToLatLng } from '../src/components/map/map-contract.ts'
+import { OUTLINE_Z, DRAW_Z_SHAPE, outlineOverlay, pixelToLatLng } from '../src/components/map/map-contract.ts'
 
 /**
  * The geometry behind freehand territory drawing, without a browser.
@@ -166,6 +166,8 @@ const spiral = (c, r, perTurn, turns) =>
 
   const over = bad(overshoot(HOME, 0.003, 120))
   ok(over.ok && over.trimmed && !selfIntersects(over.outline), 'a loop closed by running past the start is trimmed back to a clean outline', over.ok ? `${over.outline.length} corners` : over.reason)
+  const noTrim = buildOutline(overshoot(HOME, 0.003, 120), { trimOvershoot: false })
+  ok(noTrim.reason === 'crosses_itself', 'with trimming off (corners dragged by hand) the same crossing is refused instead of cut away', noTrim.reason)
   const plain = bad(geoCircle(HOME, 0.003, 120, 0.96))
   ok(plain.ok && !plain.trimmed, 'a loop that stops short of the start needs nothing trimmed')
   const area = (r) => (r.ok ? r.areaSqMiles : 0)
@@ -294,6 +296,20 @@ ok(formatArea(0) === '0 acres' && formatArea(NaN) === '0 acres', 'and nothing is
   ok(Math.abs(mid.lat - 30.5) < 1e-7 && Math.abs(mid.lng + 97.7) < 1e-7, 'the middle of the screen is the middle of the map')
 }
 
+/* --- saved territories on the map ----------------------------------------- */
+
+{
+  const square4 = square()
+  const plain = outlineOverlay({ id: 't1', points: square4 })
+  const strong = outlineOverlay({ id: 't2', points: square4, emphasis: true })
+  ok(plain?.options.clickable === false && strong?.options.clickable === false, 'a saved outline never takes a tap, so a pin inside it still can')
+  ok(plain.options.zIndex < DRAW_Z_SHAPE && strong.options.zIndex < DRAW_Z_SHAPE && plain.options.zIndex >= OUTLINE_Z, 'it sits under the shape being drawn', `${plain.options.zIndex}, ${strong.options.zIndex} < ${DRAW_Z_SHAPE}`)
+  ok(strong.options.strokeColor === '#20C4D3' && plain.options.strokeColor !== strong.options.strokeColor, 'the selected territory is drawn in teal and the others are not')
+  ok(plain.options.fillOpacity > 0 && plain.options.fillOpacity < 0.2 && strong.options.fillOpacity < 0.2, 'with a faint fill, so the leads under it stay readable')
+  ok(outlineOverlay({ id: 'x', points: square4.slice(0, 2) }) === null, 'two points are not an area and draw nothing')
+  ok(outlineOverlay({ id: 'y', points: [...square4, { lat: NaN, lng: 1 }] })?.path.length === 4, 'a corner with no coordinates is left out rather than drawn at 0,0')
+}
+
 /* --- what the screens must keep doing -------------------------------------- */
 
 {
@@ -318,6 +334,13 @@ ok(formatArea(0) === '0 acres' && formatArea(NaN) === '0 acres', 'and nothing is
   ok(/touchAction:\s*'none'/.test(layer) && /touch-none/.test(layer), 'the layer stops the browser panning under a drag')
   ok(/onPointerCancel/.test(layer) && /size > 1/.test(layer), 'it drops a cancelled stroke and a second finger')
   ok(/requestAnimationFrame/.test(layer), 'and paints once a frame, not once a sample')
+  ok(/addEventListener\('touchmove', hold, \{ passive: false \}\)/.test(layer) && /addEventListener\('touchstart', hold, \{ passive: false \}\)/.test(layer), 'on iPhone and iPad the page is held still under a stroke by non-passive touch listeners')
+  ok(/WebkitTouchCallout: 'none'/.test(layer) && /WebkitUserSelect: 'none'/.test(layer), 'and a resting finger brings up no callout and selects no text')
+  for (const [name, src] of [['FieldMap', field], ['GoogleFieldMap', google]]) {
+    ok(/outlineOverlay\(/.test(src) && /outlines/.test(src), `${name} draws saved territories through the shared outline spec`)
+  }
+  ok(/o\.points\.map\(\(p\) => `\$\{p\.lat\},\$\{p\.lng\}`\)/.test(google), 'the Google map redraws an outline when any corner of it moves, not only the first')
+  ok(field.indexOf('data-outlines="territories"') < field.indexOf('{clusters.map(') && field.indexOf('data-outlines="territories"') < field.indexOf('{pins.map('), 'the self-rendered map draws outlines before the leads, so under them')
 
   const leads = read('src/admin/AdminLeads.tsx')
   ok(/Select pins/.test(leads) && /Draw territory/.test(leads), 'Admin Leads offers both tools')

@@ -39,6 +39,7 @@ import {
   apiLogin,
   apiLogout,
   apiRenameTerritory,
+  apiReshapeTerritory,
   apiSetListReps,
   apiUsers,
   apiJoin,
@@ -228,6 +229,12 @@ interface AppState {
    * arithmetic.
    */
   renameTerritory: (id: string, name: string) => Promise<void>
+  /**
+   * A new outline for an existing territory. Leads already in it stay (the count
+   * left outside the new line comes back as `outside`); leads in no territory
+   * that the new line takes in join it; leads in other territories are untouched.
+   */
+  reshapeTerritory: (id: string, boundary: { lat: number; lng: number }[]) => Promise<{ joined: number; outside: number }>
   deleteTerritory: (id: string) => Promise<{ released: number }>
   /**
    * Lead lists.
@@ -904,6 +911,41 @@ export const useAppStore = create<AppState>((set, get) => ({
     const territory: Territory = { ...existing, name: trimmed }
     await db.put('territories', territory)
     set((state) => ({ territories: { ...state.territories, [id]: territory } }))
+  },
+
+  async reshapeTerritory(id, boundary) {
+    if (boundary.length < 3) throw new Error('An area needs at least three points.')
+    const token = liveToken()
+
+    if (token) {
+      const res = await apiReshapeTerritory(token, id, boundary)
+      await get().refreshFromServer()
+      return { joined: res.joined, outside: res.outside }
+    }
+
+    /*
+      Demo: the same rule against what is on the device, written to IndexedDB
+      first. Only leads in no territory are taken in — the device's copy of the
+      Worker's rule — and nothing already filed here is let go.
+    */
+    const existing = get().territories[id]
+    if (!existing) throw new Error('No such territory.')
+    const repIds = existing.repIds ?? (existing.repId ? [existing.repId] : [])
+    const claimFor = repIds.length === 1 ? repIds[0] : undefined
+    const located = Object.values(get().properties).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+    const joining = located
+      .filter((p) => !p.territoryId && pointInPolygon(p, boundary))
+      .map((p) => ({ ...p, territoryId: id, assignedRepId: p.assignedRepId ?? claimFor, updatedAt: Date.now() }))
+    const outside = located.filter((p) => p.territoryId === id && !pointInPolygon(p, boundary)).length
+
+    const territory: Territory = { ...existing, boundary }
+    await db.put('territories', territory)
+    if (joining.length > 0) await db.putAll('properties', joining)
+    set((state) => ({
+      territories: { ...state.territories, [id]: territory },
+      properties: { ...state.properties, ...Object.fromEntries(joining.map((p) => [p.id, p])) },
+    }))
+    return { joined: joining.length, outside }
   },
 
   async generateTerritoryLeads(id) {
